@@ -1,0 +1,21 @@
+# What a public export leaves behind.
+#
+# `git archive` honours these; the files stay in this repository, which is
+# private. Nothing here is deleted or moved — the export simply does not
+# carry it.
+
+# 3372 Linux man pages, rendered to plain text. The man-pages project is a
+# patchwork of GPLv2+, BSD and verbatim-only licences, and almost all of them
+# require the notice to travel with the page. Rendering dropped those notices,
+# so this set cannot be redistributed as it stands.
+corpora/posix-api/ export-ignore
+
+# musl libc headers, copied out of a cross-toolchain include directory. musl is
+# MIT, but not one of these 215 files carries a notice and musl's COPYRIGHT is
+# not here — and a toolchain include dir is not guaranteed to hold only musl's
+# headers. Provenance first, then it can ship.
+corpora/musl-headers/ export-ignore
+
+# Build and download logs from one pod run. Evidence worth keeping, not source
+# anyone needs to clone.
+pod-artifacts-qwen3coder/ export-ignore

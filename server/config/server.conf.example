@@ -1,0 +1,74 @@
+# SPEAR inference server — deployment configuration.
+#
+# Copy to the real location and fill it in. The real file lives OUTSIDE the
+# Git checkout, because it names one machine:
+#
+#     ~/spear-runtime/config/server.conf
+#
+# Resolution, for every value below:
+#
+#     SPEAR_SERVER_<NAME> in the environment   >   this file   >   nothing
+#
+# The environment wins so that a one-off run ("serve the other quant once")
+# needs no edit. Where "nothing" is not an acceptable answer, serve.sh says
+# which value is missing and stops; it does not guess.
+#
+# The file is sourced by bash. Quote anything containing a space.
+
+# ---------------------------------------------------------------- required
+
+# The llama-server binary. Built by install-llamacpp.sh, which derives the
+# build location from this same value -- one variable, not two.
+SPEAR_SERVER_LLAMA_BIN=/srv/spear-runtime/llama.cpp/build/bin/llama-server
+
+# The GGUF to serve, absolute. For a sharded model name the FIRST shard:
+# llama.cpp opens it and finds its siblings beside it under their real names.
+SPEAR_SERVER_MODEL=/srv/spear-runtime/models/gguf/Model-Q8_0-00001-of-00004.gguf
+
+# Context window, in tokens. REQUIRED, and deliberately without a default.
+#
+# It is the one setting whose right value is a property of the machine and of
+# nothing else: what the VRAM holds, how long an agentic turn runs. Two
+# different numbers were in circulation here -- a running server at 98304 and
+# a restart script at 65536 -- and the script would silently have brought the
+# server back with a third of its context missing. A number no file states is
+# a number nobody chose.
+SPEAR_SERVER_CTX=32768
+
+# ---------------------------------------------------------------- optional
+
+# Interface and port. 127.0.0.1 keeps the server off the network: reach it
+# through an SSH tunnel rather than by binding a shared host's interface.
+SPEAR_SERVER_HOST=127.0.0.1
+SPEAR_SERVER_PORT=8080
+
+# Concurrent slots. One slot gives a single session the whole KV cache; more
+# slots share it, and they then compete for the same cells.
+SPEAR_SERVER_PARALLEL=1
+
+# Layers offloaded to the GPU. 99 means "all that fit".
+SPEAR_SERVER_NGL=99
+
+# Generation threads. Unset lets llama.cpp choose for the host it is on,
+# which is usually right; set it when sharing a machine.
+#SPEAR_SERVER_THREADS=
+
+# MoE experts kept on CPU/RAM. Unset auto-detects from the model filename:
+# a mixture-of-experts model offloads its experts, a dense one does not.
+# 0 forces everything onto the GPU.
+#SPEAR_SERVER_NCPUMOE=
+
+# LoRA adapter served on top of the base model. Unset, or "none", serves the
+# base alone.
+#SPEAR_SERVER_LORA=
+
+# Where fetch-model.sh puts downloaded weights, and which repository and file
+# it fetches. Only the fetch tooling reads these.
+SPEAR_SERVER_MODELS_DIR=/srv/spear-runtime/models/gguf
+#SPEAR_SERVER_MODEL_REPO=owner/Model-GGUF
+#SPEAR_SERVER_MODEL_FILE=Model-Q8_0-00001-of-00004.gguf
+
+# HF_HOME is the Hugging Face client's own variable, not one SPEAR invents.
+# On a shared machine, point it somewhere of your own rather than pouring
+# tens of gigabytes into an account-wide cache others depend on.
+#HF_HOME=/srv/spear-runtime/hf

@@ -1,0 +1,144 @@
+{
+  "lvgl": {
+    "path": "work/lvgl",
+    "kind": "generic",
+    "collection": "adhoc_5c4deede"
+  },
+  "so3": {
+    "path": "soo/so3/so3",
+    "kind": "generic",
+    "exclude": [
+      "lvgl",
+      "micropython"
+    ],
+    "corpora": [
+      "so3-doc"
+    ],
+    "collection": "adhoc_318388c5"
+  },
+  "so3-doc": {
+    "path": "soo/so3/doc",
+    "kind": "generic",
+    "collection": "adhoc_db60d9e2"
+  },
+  "u-boot": {
+    "path": "soo/so3/u-boot",
+    "kind": "generic",
+    "collection": "adhoc_d26f5f66"
+  },
+  "avz": {
+    "path": "soo/so3/avz",
+    "kind": "generic",
+    "collection": "adhoc_a7ff7f0a"
+  },
+  "qemu": {
+    "path": "soo/so3/qemu",
+    "kind": "generic",
+    "collection": "adhoc_ed53a086"
+  },
+  "atf": {
+    "path": "soo/so3/atf",
+    "kind": "generic",
+    "collection": "adhoc_c4da3b02"
+  },
+  "avz.back": {
+    "path": "soo/so3/avz.back",
+    "kind": "generic",
+    "collection": "adhoc_6e358561"
+  },
+  "lvgl-so3": {
+    "path": "soo/so3/so3/usr/lib/lvgl",
+    "kind": "generic",
+    "collection": "adhoc_b8e59a56"
+  },
+  "micropython-so3": {
+    "path": "soo/so3/so3/usr/src/micropython",
+    "kind": "generic",
+    "collection": "adhoc_33c63637"
+  },
+  "llama.cpp-next": {
+    "path": "spear/llama.cpp-next",
+    "kind": "generic",
+    "collection": "adhoc_827a0f88"
+  },
+  "qwen3-finetune": {
+    "path": "spear/qwen3-finetune",
+    "kind": "generic",
+    "collection": "adhoc_b7e0bf30"
+  },
+  "src": {
+    "path": "spear/src",
+    "kind": "generic",
+    "collection": "adhoc_94b40633"
+  },
+  "sye_sol-qemu": {
+    "path": "sye/sye_sol/qemu",
+    "kind": "generic",
+    "collection": "adhoc_63540ad4"
+  },
+  "sye_sol-so3": {
+    "path": "sye/sye_sol/so3",
+    "kind": "generic",
+    "collection": "adhoc_dab78ab9"
+  },
+  "sye_sol-u-boot": {
+    "path": "sye/sye_sol/u-boot",
+    "kind": "generic",
+    "collection": "adhoc_8ad88aa6"
+  },
+  "sye_sol": {
+    "path": "sye/sye_sol",
+    "kind": "generic",
+    "corpora": [
+      "sye_sol-so3",
+      "sye_sol-u-boot",
+      "musl-headers",
+      "posix-api"
+    ],
+    "bench": "sye_sol-ls.sh",
+    "collection": "adhoc_642237c4"
+  },
+  "posix-api": {
+    "path": "spear/corpora/posix-api",
+    "kind": "generic",
+    "collection": "adhoc_fb2588b6"
+  },
+  "musl-headers": {
+    "path": "spear/corpora/musl-headers",
+    "kind": "generic",
+    "collection": "adhoc_7e00e3ed"
+  },
+  "spear": {
+    "path": "spear/spear",
+    "kind": "generic",
+    "collection": "adhoc_b9ef0604"
+  },
+  "claude": {
+    "path": "spear/claude",
+    "kind": "generic",
+    "shared": true,
+    "collection": "claude_memories",
+    "exclude": [
+      "_originals_backup"
+    ]
+  },
+  "buildsystem-a": {
+    "path": "work/buildsystem-a",
+    "kind": "buildsystem",
+    "collection": "edgem1_verdin"
+  },
+  "buildsystem-b": {
+    "path": "work/buildsystem-b",
+    "kind": "buildsystem",
+    "collection": "edgem1_virt64"
+  },
+  "build-system": {
+    "path": "work/build-system",
+    "kind": "generic",
+    "corpora": [
+      "virt64",
+      "verdin"
+    ],
+    "collection": "adhoc_89fd8405"
+  }
+}

@@ -1,0 +1,31 @@
+# Inference host reached over an SSH tunnel by `--reds`.
+#
+# Copy this file to reds.conf and fill it in for your machine. reds.conf is
+# untracked on purpose: it names a host, a user and a key path, none of which
+# belong to the project.
+#
+# The launcher only opens a tunnel. It never installs, uploads or starts
+# anything on the remote host -- build and start the inference server there
+# first.
+
+# A ~/.ssh/config alias, or user@host. An alias keeps credentials out of this
+# file entirely and is the better choice where one exists.
+REDS_HOST=
+
+# Port the inference server listens on ON the remote host.
+REDS_PORT=8000
+
+# Model id advertised by that server: shown in the picker, sent in requests.
+REDS_MODEL=
+
+# Optional. A key path, if the host needs one this file must name. SPEAR_REDS_KEY
+# in the environment takes precedence, and an ~/.ssh/config entry needs neither.
+#
+# Hosts with a low MaxAuthTries need IdentitiesOnly, or ssh offers every key in
+# ~/.ssh and is disconnected before it reaches the right one.
+#
+# REDS_SSH_OPTS="-o IdentitiesOnly=yes -i $HOME/.ssh/your_key"
+
+# Per-machine overrides that should not be shared live here; the file is
+# untracked.
+[ -f "${BASH_SOURCE%/*}/reds.local.conf" ] && . "${BASH_SOURCE%/*}/reds.local.conf"

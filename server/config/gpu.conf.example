@@ -1,0 +1,17 @@
+# Which GPU this deployment may use.
+#
+# Copy to ~/spear-runtime/config/gpu.conf. Kept apart from server.conf
+# because on a shared machine the card is an allocation, granted and revoked
+# by whoever administers the host, while everything else is ours.
+#
+# By UUID, never by index: nvidia-smi and the CUDA runtime enumerate in
+# different orders on multi-GPU hosts, and an index also changes across a
+# reboot. `nvidia-smi --query-gpu=uuid,name --format=csv` lists them.
+#
+# Unset means unpinned. On a single-GPU machine that is correct. On a shared
+# one it means llama.cpp may spread layers across cards that belong to
+# somebody else, and --n-gpu-layers 99 makes that likely rather than possible.
+#
+# An already-exported CUDA_VISIBLE_DEVICES is the caller's decision and is
+# left alone.
+SPEAR_SERVER_GPU_UUID=GPU-00000000-0000-0000-0000-000000000000

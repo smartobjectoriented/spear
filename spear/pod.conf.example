@@ -1,0 +1,22 @@
+# Rented GPU pod serving a model over an SSH tunnel, used by `--remote`.
+#
+# Copy this file to pod.conf and fill it in. pod.conf is untracked: a pod's
+# address is per-rental, and most providers reassign the SSH port on every
+# restart.
+
+# user@host, or host:port. The launcher prompts for these when the pod is
+# unreachable, so leaving them blank is workable.
+POD_HOST=
+POD_PORT=
+
+# Key the provider registered for the pod.
+POD_KEY=$HOME/.ssh/id_pod
+
+# Model id the pod's server advertises.
+POD_MODEL=
+
+# Optional. A script that starts the inference server ON the pod -- it names a
+# model, a port and the server invocation, so it belongs to your deployment
+# rather than to SPEAR. If the pod is not already serving, --remote copies this
+# file across and runs it; unset, it says so and leaves the pod alone.
+#POD_SERVE_SCRIPT=$HOME/.local/bin/serve-pod.sh

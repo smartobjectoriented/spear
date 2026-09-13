@@ -1,0 +1,326 @@
+[
+ {
+  "kind": "prose",
+  "q": "comment ajouter un paquet au rootfs buildroot pour verdin",
+  "expect": [
+   "build/meta-rootfs/recipes-rootfs/buildroot/files/0001-buildroot-2024.11-r0/0002-verdin-imx8mp_defconfig.patch"
+  ],
+  "ident": null
+ },
+ {
+  "kind": "prose",
+  "q": "quelle classe bitbake construit le rootfs",
+  "expect": [
+   "build/meta-rootfs/classes/rootfs.bbclass"
+  ],
+  "ident": null
+ },
+ {
+  "kind": "prose",
+  "q": "comment nettoyer le noyau et supprimer les stamps de build",
+  "expect": [
+   "build/meta-linux/classes/linux.bbclass"
+  ],
+  "ident": null
+ },
+ {
+  "kind": "prose",
+  "q": "quelle recette compile u-boot 2024.07",
+  "expect": [
+   "build/meta-uboot/recipes-uboot/uboot/uboot_2024.07.bb"
+  ],
+  "ident": null
+ },
+ {
+  "kind": "prose",
+  "q": "ou sont configures ATF et OP-TEE",
+  "expect": [
+   "build/meta-atf/classes/atf.bbclass",
+   "build/meta-atf/recipes-atf/atf/atf_1.5.bb",
+   "build/meta-atf/recipes-atf/optee/optee_1.5.bb"
+  ],
+  "ident": null
+ },
+ {
+  "kind": "prose",
+  "q": "comment fonctionne la chaine de boot capsule e1c sur verdin imx8mp",
+  "expect": [
+   "build/meta-bsp/recipes-bsp/linux/files/its/verdin-imx8mp_avz.its",
+   "linux/target/verdin-imx8mp_e1c.its"
+  ],
+  "ident": null
+ },
+ {
+  "kind": "prose",
+  "q": "comment le rootfs cpio est-il monte puis repacke",
+  "expect": [
+   "build/meta-rootfs/classes/rootfs.bbclass"
+  ],
+  "ident": null
+ },
+ {
+  "kind": "prose",
+  "q": "quelle recette construit torizon os",
+  "expect": [
+   "build/meta-torizon/recipes-torizon/torizon_7.4.0.bb"
+  ],
+  "ident": null
+ },
+ {
+  "kind": "prose",
+  "q": "comment est genere le fichier ITB pour virt64",
+  "expect": [
+   "build/meta-bsp/recipes-bsp/linux/files/its/virt64.its",
+   "build/meta-e1c/recipes-e1c/common/its_helpers.inc"
+  ],
+  "ident": null
+ },
+ {
+  "kind": "prose",
+  "q": "comment le systeme de fichiers est-il initialise au build",
+  "expect": [
+   "build/meta-filesystem/classes/filesystem.bbclass"
+  ],
+  "ident": null
+ },
+ {
+  "kind": "identifier",
+  "q": "ou est defini __sys_empty ?",
+  "expect": [
+   "avz/kernel/syscalls.c"
+  ],
+  "ident": "__sys_empty"
+ },
+ {
+  "kind": "identifier",
+  "q": "dans quel fichier se trouve IB_BUILDROOT_DL_DIR ?",
+  "expect": [
+   "build/meta-rootfs/recipes-rootfs/buildroot/buildroot_2024.11.bb"
+  ],
+  "ident": "IB_BUILDROOT_DL_DIR"
+ },
+ {
+  "kind": "identifier",
+  "q": "a quoi sert IB_FILESYSTEM_DEVNAME ?",
+  "expect": [
+   "build/meta-filesystem/classes/fs_arm_common.bbclass"
+  ],
+  "ident": "IB_FILESYSTEM_DEVNAME"
+ },
+ {
+  "kind": "identifier",
+  "q": "montre moi la definition de IB_NO_AUTO_SWITCH",
+  "expect": [
+   "env.sh"
+  ],
+  "ident": "IB_NO_AUTO_SWITCH"
+ },
+ {
+  "kind": "identifier",
+  "q": "ou est defini do_build_torizon_os ?",
+  "expect": [
+   "build/meta-torizon/recipes-torizon/torizon_7.4.0.bb"
+  ],
+  "ident": "do_build_torizon_os"
+ },
+ {
+  "kind": "identifier",
+  "q": "dans quel fichier se trouve do_fs_init_storage ?",
+  "expect": [
+   "build/meta-filesystem/classes/filesystem.bbclass"
+  ],
+  "ident": "do_fs_init_storage"
+ },
+ {
+  "kind": "identifier",
+  "q": "a quoi sert __do_bare_linux_deploy_virt64 ?",
+  "expect": [
+   "build/meta-e1c/recipes-e1c/common/bsp_virt64.inc"
+  ],
+  "ident": "__do_bare_linux_deploy_virt64"
+ },
+ {
+  "kind": "identifier",
+  "q": "montre moi la definition de CONFIG_POSITION_INDEPENDENT",
+  "expect": [
+   "build/meta-uboot/recipes-uboot/uboot/uboot_2022.04.bb"
+  ],
+  "ident": "CONFIG_POSITION_INDEPENDENT"
+ },
+ {
+  "kind": "identifier",
+  "q": "ou est defini CONFIG_PRIORITY_SCHEDULER ?",
+  "expect": [
+   "avz/kernel/process.c"
+  ],
+  "ident": "CONFIG_PRIORITY_SCHEDULER"
+ },
+ {
+  "kind": "identifier",
+  "q": "dans quel fichier se trouve sys_do_futex ?",
+  "expect": [
+   "avz/kernel/thread.c"
+  ],
+  "ident": "sys_do_futex"
+ },
+ {
+  "kind": "identifier",
+  "q": "a quoi sert AVZ_SCHEDULER_FLIP ?",
+  "expect": [
+   "avz/soo/include/soo/uapi/soo.h"
+  ],
+  "ident": "AVZ_SCHEDULER_FLIP"
+ },
+ {
+  "kind": "identifier",
+  "q": "montre moi la definition de do_iptables_restore",
+  "expect": [
+   "scripts/qemu-ifup.sh"
+  ],
+  "ident": "do_iptables_restore"
+ },
+ {
+  "kind": "path",
+  "q": "montre moi le contenu de rootfs.bbclass",
+  "expect": [
+   "build/meta-rootfs/classes/rootfs.bbclass"
+  ],
+  "ident": null
+ },
+ {
+  "kind": "path",
+  "q": "montre moi le contenu de env.sh",
+  "expect": [
+   "env.sh"
+  ],
+  "ident": null
+ },
+ {
+  "kind": "path",
+  "q": "montre moi le contenu de verdin-imx8mp_avz.its",
+  "expect": [
+   "build/meta-bsp/recipes-bsp/linux/files/its/verdin-imx8mp_avz.its"
+  ],
+  "ident": null
+ },
+ {
+  "kind": "path",
+  "q": "montre moi le contenu de linux_6.6-verdin.bb",
+  "expect": [
+   "build/meta-linux/recipes-linux/linux/linux_6.6-verdin.bb"
+  ],
+  "ident": null
+ },
+ {
+  "kind": "prose",
+  "q": "comment sont generees les ITS des capsules e1c a partir d'un template a tokens",
+  "expect": [
+   "build/meta-e1c/recipes-e1c/common/its_helpers.inc"
+  ],
+  "ident": null
+ },
+ {
+  "kind": "prose",
+  "q": "quelles variables faut-il definir dans le layer.conf de chaque capsule",
+  "expect": [
+   "build/meta-e1c/recipes-e1c/common/its_helpers.inc"
+  ],
+  "ident": null
+ },
+ {
+  "kind": "prose",
+  "q": "comment est calcule le chemin de recherche des fichiers d'une recette",
+  "expect": [
+   "build/meta/classes/base.bbclass"
+  ],
+  "ident": null
+ },
+ {
+  "kind": "prose",
+  "q": "comment creer une image disque avec une partition bootloader et une rootfs",
+  "expect": [
+   "build/meta-filesystem/classes/filesystem.bbclass"
+  ],
+  "ident": null
+ },
+ {
+  "kind": "prose",
+  "q": "a quoi sert le mode de stockage soft par rapport au mode hard",
+  "expect": [
+   "build/meta-filesystem/classes/filesystem.bbclass"
+  ],
+  "ident": null
+ },
+ {
+  "kind": "prose",
+  "q": "comment configurer le pont reseau br0 pour qemu",
+  "expect": [
+   "scripts/qemu-ifup.sh"
+  ],
+  "ident": null
+ },
+ {
+  "kind": "prose",
+  "q": "quelle plage dhcp est utilisee par le reseau qemu",
+  "expect": [
+   "scripts/qemu-ifup.sh"
+  ],
+  "ident": null
+ },
+ {
+  "kind": "prose",
+  "q": "comment le PATH est-il nettoye quand on change d'arbre de build",
+  "expect": [
+   "env.sh"
+  ],
+  "ident": null
+ },
+ {
+  "kind": "prose",
+  "q": "ou sont exportes BUILDDIR et BBPATH au sourcing de l'environnement",
+  "expect": [
+   "env.sh"
+  ],
+  "ident": null
+ },
+ {
+  "kind": "prose",
+  "q": "comment sont organises les layers par capsule dans meta-e1c",
+  "expect": [
+   "memory/capsule-architecture.md"
+  ],
+  "ident": null
+ },
+ {
+  "kind": "prose",
+  "q": "quelle est l'architecture a deux ITB avz plus capsule",
+  "expect": [
+   "memory/avz-e1c-separate-itb.md"
+  ],
+  "ident": null
+ },
+ {
+  "kind": "prose",
+  "q": "ou est defini le chemin des ITB selon la chaine de boot",
+  "expect": [
+   "build/meta-bsp/classes/bsp.bbclass"
+  ],
+  "ident": null
+ },
+ {
+  "kind": "prose",
+  "q": "comment la chaine de boot est-elle assemblee en flash.bin",
+  "expect": [
+   "build/meta-bsp/classes/bsp.bbclass"
+  ],
+  "ident": null
+ },
+ {
+  "kind": "prose",
+  "q": "comment les patches sont-ils appliques sur les sources d'une recette",
+  "expect": [
+   "build/meta/classes/patch.bbclass"
+  ],
+  "ident": null
+ }
+]

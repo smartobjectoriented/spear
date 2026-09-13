@@ -1,0 +1,54 @@
+SPEAR documentation
+======================
+
+Sphinx documentation for the local LLM assistant infrastructure under
+/opt/llm. Layout and build targets mirror soo/so3/doc.
+
+Build
+-----
+
+    make html                 # -> build/html/index.html
+    make latexpdf             # -> build/latex/SPEAR.pdf
+    make clean
+
+Sphinx and the RTD theme come from the system Python (/usr/bin/sphinx-build),
+not from the spear virtualenv, which carries only the application's
+runtime dependencies.
+
+Diagrams
+--------
+
+    make diagrams             # regenerates source/img/spear.drawio AND the SVGs
+
+source/img/gen_spear_diagrams.py is the single description of every diagram.
+Running it writes two things from that one description:
+
+  * spear.drawio        the editable multi-page drawio document (one page per
+                        diagram) — open it in draw.io or the VS Code extension
+                        and every box is editable;
+  * spear_<page>.svg    the rendered diagrams the HTML build consumes.
+
+Keep structural changes in the generator: editing the .drawio by hand works,
+but a subsequent `make diagrams` regenerates it.
+
+Why the SVGs are not exported from the .drawio
+----------------------------------------------
+
+export_png.sh drives the drawio CLI and is kept for environments where that
+CLI works. On this machine it does not: the drawio snap 30.4.1 fails on every
+input with
+
+    Error reading file: <path>
+    ReferenceError: next is not defined
+        at processOneFile (.../app.asar/src/main/electron.js:1256:8)
+
+including a five-element minimal file and the SO3 documentation's own
+diagrams. Rendering the SVGs directly from the generator keeps the
+documentation build independent of that upstream bug, and SVG stays crisp at
+any zoom.
+
+The version string
+------------------
+
+conf.py derives `release` from spear/active-model.conf, so the served
+model appears in the page header and never has to be bumped by hand.

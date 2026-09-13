@@ -1,0 +1,62 @@
+{
+  "_comment": "Template. Copy to projects.json and point paths at THIS machine. Managed with `spear-corpus add/list/rm`. kind is a free label (it scopes skills and prints in the listing). What a corpus DOES is declared separately: indexer (buildsystem|generic), autoindex (build a missing index on sight), prompt_file (a domain prompt for this corpus), collection (name an existing index). Optional per-project keys: exclude (dir names skipped at indexing), include_build, corpora (federate these registered corpora into the session), shared (attach this corpus to EVERY session), collection (name the chroma collection instead of deriving it from the absolute path -- required when the index travels with the registry, as in the container), bench, and the command lists the harness runs to check its own work: build_commands, test_commands, lint_commands, acceptance_commands. A path is either ABSOLUTE (a tree of yours, genuinely machine-specific) or RELATIVE, in which case it is resolved against SPEAR_CORPUS_ROOT -- which defaults to the repository root, so a corpus living inside the repo is found wherever the repo is cloned. A container sets it to its mount root.",
+  "so3": {
+    "path": "/path/to/soo/so3/so3",
+    "kind": "generic",
+    "exclude": [
+      "lvgl",
+      "micropython"
+    ]
+  },
+  "lvgl": {
+    "path": "/path/to/lvgl",
+    "kind": "generic",
+    "_comment": "shows the command lists: what the harness runs to verify a change it made",
+    "build_commands": [
+      "cmake --build build"
+    ],
+    "test_commands": [
+      "ctest --test-dir build"
+    ],
+    "lint_commands": [
+      "clang-tidy"
+    ],
+    "acceptance_commands": []
+  },
+  "posix-api": {
+    "path": "/path/to/corpora/posix-api",
+    "kind": "generic",
+    "_comment": "cross-cutting reference: attached to every session",
+    "shared": true
+  },
+  "llama.cpp-next": {
+    "path": "llama.cpp-next",
+    "kind": "generic",
+    "_comment": "inside the repository: relative, so a clone anywhere finds it"
+  },
+  "buildsystem-a": {
+    "path": "/path/to/your/build-system/checkout",
+    "kind": "buildsystem",
+    "indexer": "buildsystem",
+    "autoindex": true,
+    "prompt_file": "/path/to/your/domain-prompt.md",
+    "_comment": "behaviour is declared, not implied by kind: a curated build-system walk, built on first sight, with its own domain prompt"
+  },
+  "buildsystem-b": {
+    "path": "/path/to/your/build-system/other-target",
+    "kind": "buildsystem",
+    "indexer": "buildsystem",
+    "autoindex": true,
+    "prompt_file": "/path/to/your/domain-prompt.md",
+    "_comment": "behaviour is declared, not implied by kind: a curated build-system walk, built on first sight, with its own domain prompt"
+  },
+  "build-system": {
+    "path": "/path/to/work/build-system",
+    "kind": "generic",
+    "_comment": "federates the two product trees: a build-system question reaches all three without switching session",
+    "corpora": [
+      "virt64",
+      "verdin"
+    ]
+  }
+}

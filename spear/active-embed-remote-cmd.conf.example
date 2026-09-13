@@ -1,0 +1,28 @@
+# The embedding worker command, as run ON the remote host.
+#
+# Copy this file to active-embed-remote-cmd.conf and fill in the path for your
+# deployment. That file is untracked on purpose: it is the remote account's
+# directory layout, which belongs to the host and not to the project. The code
+# ships no default -- one would be somebody's private filesystem presented as a
+# convenience, and correct on exactly one machine.
+#
+# Read together with active-embed-remote.conf, which names the ssh destination:
+#
+#   destination set, command set    -> indexing embeds on the remote host
+#   destination set, command unset  -> indexing FAILS, naming this file
+#   destination unset               -> indexing embeds locally, which is a
+#                                      valid deployment rather than a fallback
+#
+# A configured remote embedder is never silently replaced by local compute:
+# the two produce different vectors, and a collection filled from both is
+# wrong in a way no later query reports.
+#
+# SPEAR_EMBED_REMOTE_CMD in the environment takes precedence over this file.
+# An explicitly empty variable means "unset", not "use the file".
+#
+# One command line. Arguments are split as a shell would split them, so a path
+# containing a space is quoted here; a leading ~/ is expanded in the remote
+# account. Nothing else is interpreted remotely -- every word is quoted before
+# it reaches the far shell.
+#
+# /srv/inference/embed/venv/bin/python /srv/inference/embed/worker.py

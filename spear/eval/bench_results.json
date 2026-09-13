@@ -1,0 +1,70 @@
+{
+ "chroma-default": {
+  "dense": {
+   "prose": 0.5833333333333334,
+   "identifier": 0.5833333333333334,
+   "path": 0.5,
+   "global": 0.575,
+   "ms": 180.8882474899292
+  },
+  "hybrid": {
+   "prose": 0.6666666666666666,
+   "identifier": 1.0,
+   "path": 1.0,
+   "global": 0.8,
+   "ms": 211.9476020336151
+  },
+  "build_s": 0
+ },
+ "BAAI/bge-m3": {
+  "dense": {
+   "prose": 0.8333333333333334,
+   "identifier": 0.6666666666666666,
+   "path": 1.0,
+   "global": 0.8,
+   "ms": 2.4626076221466064
+  },
+  "hybrid": {
+   "prose": 0.875,
+   "identifier": 1.0,
+   "path": 1.0,
+   "global": 0.925,
+   "ms": 41.92824363708496
+  },
+  "build_s": 103
+ },
+ "Qwen/Qwen3-Embedding-0.6B": {
+  "dense": {
+   "prose": 0.75,
+   "identifier": 0.5833333333333334,
+   "path": 1.0,
+   "global": 0.725,
+   "ms": 2.57565975189209
+  },
+  "hybrid": {
+   "prose": 0.7916666666666666,
+   "identifier": 1.0,
+   "path": 1.0,
+   "global": 0.875,
+   "ms": 41.443806886672974
+  },
+  "build_s": 255
+ },
+ "intfloat/multilingual-e5-large": {
+  "dense": {
+   "prose": 0.6666666666666666,
+   "identifier": 0.08333333333333333,
+   "path": 0.5,
+   "global": 0.475,
+   "ms": 2.3217499256134033
+  },
+  "hybrid": {
+   "prose": 0.7083333333333334,
+   "identifier": 1.0,
+   "path": 1.0,
+   "global": 0.825,
+   "ms": 41.08061194419861
+  },
+  "build_s": 68
+ }
+}

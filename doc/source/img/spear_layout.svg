@@ -1,0 +1,185 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1100 920" width="1100" height="920" font-family="Helvetica,Arial,sans-serif">
+<defs><marker id="ah" markerWidth="10" markerHeight="8" refX="9" refY="4" orient="auto"><path d="M0,0 L10,4 L0,8 z" fill="#444444"/></marker></defs>
+<rect width="1100" height="920" fill="#ffffff"/>
+<text x="540.0" y="28.6" font-size="16" text-anchor="middle" xml:space="preserve" fill="#1a1a1a" font-weight="bold">/opt/llm/spear  —  directory layout</text>
+<rect x="40" y="50" width="380" height="34" rx="0" ry="0" fill="#f5f5f5" stroke="#999999" stroke-width="1.4"/>
+<text x="48.0" y="70.8" font-size="11" text-anchor="start" xml:space="preserve" fill="#1a1a1a" font-weight="bold">path</text>
+<rect x="420" y="50" width="110" height="34" rx="0" ry="0" fill="#f5f5f5" stroke="#999999" stroke-width="1.4"/>
+<text x="475.0" y="70.8" font-size="11" text-anchor="middle" xml:space="preserve" fill="#1a1a1a" font-weight="bold">size</text>
+<rect x="530" y="50" width="520" height="34" rx="0" ry="0" fill="#f5f5f5" stroke="#999999" stroke-width="1.4"/>
+<text x="538.0" y="70.8" font-size="11" text-anchor="start" xml:space="preserve" fill="#1a1a1a" font-weight="bold">content</text>
+<rect x="40" y="86" width="380" height="26" rx="0" ry="0" fill="#d5e8d4" stroke="#82b366" stroke-width="1.4"/>
+<text x="48.0" y="102.2" font-size="9" text-anchor="start" xml:space="preserve" fill="#1a1a1a">spear/</text>
+<rect x="420" y="86" width="110" height="26" rx="0" ry="0" fill="#ffffff" stroke="#666666" stroke-width="1.4"/>
+<text x="475.0" y="102.2" font-size="9" text-anchor="middle" xml:space="preserve" fill="#1a1a1a">9.6 G</text>
+<rect x="530" y="86" width="520" height="26" rx="0" ry="0" fill="#ffffff" stroke="#666666" stroke-width="1.4"/>
+<text x="538.0" y="102.2" font-size="9" text-anchor="start" xml:space="preserve" fill="#1a1a1a">the SPEAR client application AND its Python venv</text>
+<rect x="40" y="114" width="380" height="26" rx="0" ry="0" fill="#d5e8d4" stroke="#82b366" stroke-width="1.4"/>
+<text x="48.0" y="130.2" font-size="9" text-anchor="start" xml:space="preserve" fill="#1a1a1a">     rag_chat.py</text>
+<rect x="420" y="114" width="110" height="26" rx="0" ry="0" fill="#ffffff" stroke="#666666" stroke-width="1.4"/>
+<text x="475.0" y="130.2" font-size="9" text-anchor="middle" xml:space="preserve" fill="#1a1a1a">160 K</text>
+<rect x="530" y="114" width="520" height="26" rx="0" ry="0" fill="#ffffff" stroke="#666666" stroke-width="1.4"/>
+<text x="538.0" y="130.2" font-size="9" text-anchor="start" xml:space="preserve" fill="#1a1a1a">REPL, prompt assembly, retrieval, tool dispatch</text>
+<rect x="40" y="142" width="380" height="26" rx="0" ry="0" fill="#d5e8d4" stroke="#82b366" stroke-width="1.4"/>
+<text x="48.0" y="158.2" font-size="9" text-anchor="start" xml:space="preserve" fill="#1a1a1a">     tool_runtime.py</text>
+<rect x="420" y="142" width="110" height="26" rx="0" ry="0" fill="#ffffff" stroke="#666666" stroke-width="1.4"/>
+<text x="475.0" y="158.2" font-size="9" text-anchor="middle" xml:space="preserve" fill="#1a1a1a">80 K</text>
+<rect x="530" y="142" width="520" height="26" rx="0" ry="0" fill="#ffffff" stroke="#666666" stroke-width="1.4"/>
+<text x="538.0" y="158.2" font-size="9" text-anchor="start" xml:space="preserve" fill="#1a1a1a">policy, workspace, sandbox, resource control, audit</text>
+<rect x="40" y="170" width="380" height="26" rx="0" ry="0" fill="#d5e8d4" stroke="#82b366" stroke-width="1.4"/>
+<text x="48.0" y="186.2" font-size="9" text-anchor="start" xml:space="preserve" fill="#1a1a1a">     model_backend.py</text>
+<rect x="420" y="170" width="110" height="26" rx="0" ry="0" fill="#ffffff" stroke="#666666" stroke-width="1.4"/>
+<text x="475.0" y="186.2" font-size="9" text-anchor="middle" xml:space="preserve" fill="#1a1a1a">20 K</text>
+<rect x="530" y="170" width="520" height="26" rx="0" ry="0" fill="#ffffff" stroke="#666666" stroke-width="1.4"/>
+<text x="538.0" y="186.2" font-size="9" text-anchor="start" xml:space="preserve" fill="#1a1a1a">provider-neutral model turns</text>
+<rect x="40" y="198" width="380" height="26" rx="0" ry="0" fill="#d5e8d4" stroke="#82b366" stroke-width="1.4"/>
+<text x="48.0" y="214.2" font-size="9" text-anchor="start" xml:space="preserve" fill="#1a1a1a">     training*.py · sft_dataset.py</text>
+<rect x="420" y="198" width="110" height="26" rx="0" ry="0" fill="#ffffff" stroke="#666666" stroke-width="1.4"/>
+<text x="475.0" y="214.2" font-size="9" text-anchor="middle" xml:space="preserve" fill="#1a1a1a">—</text>
+<rect x="530" y="198" width="520" height="26" rx="0" ry="0" fill="#ffffff" stroke="#666666" stroke-width="1.4"/>
+<text x="538.0" y="214.2" font-size="9" text-anchor="start" xml:space="preserve" fill="#1a1a1a">the fine-tuning subsystem (15 modules)</text>
+<rect x="40" y="226" width="380" height="26" rx="0" ry="0" fill="#d5e8d4" stroke="#82b366" stroke-width="1.4"/>
+<text x="48.0" y="242.2" font-size="9" text-anchor="start" xml:space="preserve" fill="#1a1a1a">     tests/</text>
+<rect x="420" y="226" width="110" height="26" rx="0" ry="0" fill="#ffffff" stroke="#666666" stroke-width="1.4"/>
+<text x="475.0" y="242.2" font-size="9" text-anchor="middle" xml:space="preserve" fill="#1a1a1a">—</text>
+<rect x="530" y="226" width="520" height="26" rx="0" ry="0" fill="#ffffff" stroke="#666666" stroke-width="1.4"/>
+<text x="538.0" y="242.2" font-size="9" text-anchor="start" xml:space="preserve" fill="#1a1a1a">44 modules, 851 tests</text>
+<rect x="40" y="254" width="380" height="26" rx="0" ry="0" fill="#dae8fc" stroke="#6c8ebf" stroke-width="1.4"/>
+<text x="48.0" y="270.1" font-size="9" text-anchor="start" xml:space="preserve" fill="#1a1a1a">     server/inference/serve.sh</text>
+<rect x="420" y="254" width="110" height="26" rx="0" ry="0" fill="#ffffff" stroke="#666666" stroke-width="1.4"/>
+<text x="475.0" y="270.1" font-size="9" text-anchor="middle" xml:space="preserve" fill="#1a1a1a">4 K</text>
+<rect x="530" y="254" width="520" height="26" rx="0" ry="0" fill="#ffffff" stroke="#666666" stroke-width="1.4"/>
+<text x="538.0" y="270.1" font-size="9" text-anchor="start" xml:space="preserve" fill="#1a1a1a">llama-server launcher (model/adapter resolution)</text>
+<rect x="40" y="282" width="380" height="26" rx="0" ry="0" fill="#dae8fc" stroke="#6c8ebf" stroke-width="1.4"/>
+<text x="48.0" y="298.1" font-size="9" text-anchor="start" xml:space="preserve" fill="#1a1a1a">     spear-chat.sh</text>
+<rect x="420" y="282" width="110" height="26" rx="0" ry="0" fill="#ffffff" stroke="#666666" stroke-width="1.4"/>
+<text x="475.0" y="298.1" font-size="9" text-anchor="middle" xml:space="preserve" fill="#1a1a1a">7 K</text>
+<rect x="530" y="282" width="520" height="26" rx="0" ry="0" fill="#ffffff" stroke="#666666" stroke-width="1.4"/>
+<text x="538.0" y="298.1" font-size="9" text-anchor="start" xml:space="preserve" fill="#1a1a1a">chat launcher</text>
+<rect x="40" y="310" width="380" height="26" rx="0" ry="0" fill="#f5f5f5" stroke="#999999" stroke-width="1.4"/>
+<text x="48.0" y="326.1" font-size="9" text-anchor="start" xml:space="preserve" fill="#1a1a1a">     active-model.conf</text>
+<rect x="420" y="310" width="110" height="26" rx="0" ry="0" fill="#ffffff" stroke="#666666" stroke-width="1.4"/>
+<text x="475.0" y="326.1" font-size="9" text-anchor="middle" xml:space="preserve" fill="#1a1a1a">—</text>
+<rect x="530" y="310" width="520" height="26" rx="0" ry="0" fill="#ffffff" stroke="#666666" stroke-width="1.4"/>
+<text x="538.0" y="326.1" font-size="9" text-anchor="start" xml:space="preserve" fill="#1a1a1a">path of the served GGUF</text>
+<rect x="40" y="338" width="380" height="26" rx="0" ry="0" fill="#f5f5f5" stroke="#999999" stroke-width="1.4"/>
+<text x="48.0" y="354.1" font-size="9" text-anchor="start" xml:space="preserve" fill="#1a1a1a">     active-lora.conf</text>
+<rect x="420" y="338" width="110" height="26" rx="0" ry="0" fill="#ffffff" stroke="#666666" stroke-width="1.4"/>
+<text x="475.0" y="354.1" font-size="9" text-anchor="middle" xml:space="preserve" fill="#1a1a1a">—</text>
+<rect x="530" y="338" width="520" height="26" rx="0" ry="0" fill="#ffffff" stroke="#666666" stroke-width="1.4"/>
+<text x="538.0" y="354.1" font-size="9" text-anchor="start" xml:space="preserve" fill="#1a1a1a">LoRA adapter, or &#x27;none&#x27;</text>
+<rect x="40" y="366" width="380" height="26" rx="0" ry="0" fill="#f5f5f5" stroke="#999999" stroke-width="1.4"/>
+<text x="48.0" y="382.1" font-size="9" text-anchor="start" xml:space="preserve" fill="#1a1a1a">     pod.conf · reds.conf</text>
+<rect x="420" y="366" width="110" height="26" rx="0" ry="0" fill="#ffffff" stroke="#666666" stroke-width="1.4"/>
+<text x="475.0" y="382.1" font-size="9" text-anchor="middle" xml:space="preserve" fill="#1a1a1a">—</text>
+<rect x="530" y="366" width="520" height="26" rx="0" ry="0" fill="#ffffff" stroke="#666666" stroke-width="1.4"/>
+<text x="538.0" y="382.1" font-size="9" text-anchor="start" xml:space="preserve" fill="#1a1a1a">remote pod, REDS host (--remote / --reds)</text>
+<rect x="40" y="394" width="380" height="26" rx="0" ry="0" fill="#f5f5f5" stroke="#999999" stroke-width="1.4"/>
+<text x="48.0" y="410.1" font-size="9" text-anchor="start" xml:space="preserve" fill="#1a1a1a">     projects.json</text>
+<rect x="420" y="394" width="110" height="26" rx="0" ry="0" fill="#ffffff" stroke="#666666" stroke-width="1.4"/>
+<text x="475.0" y="410.1" font-size="9" text-anchor="middle" xml:space="preserve" fill="#1a1a1a">—</text>
+<rect x="530" y="394" width="520" height="26" rx="0" ry="0" fill="#ffffff" stroke="#666666" stroke-width="1.4"/>
+<text x="538.0" y="410.1" font-size="9" text-anchor="start" xml:space="preserve" fill="#1a1a1a">named workspaces the chat can open</text>
+<rect x="40" y="422" width="380" height="26" rx="0" ry="0" fill="#f5f5f5" stroke="#999999" stroke-width="1.4"/>
+<text x="48.0" y="438.1" font-size="9" text-anchor="start" xml:space="preserve" fill="#1a1a1a">     rules.d/ · skills/</text>
+<rect x="420" y="422" width="110" height="26" rx="0" ry="0" fill="#ffffff" stroke="#666666" stroke-width="1.4"/>
+<text x="475.0" y="438.1" font-size="9" text-anchor="middle" xml:space="preserve" fill="#1a1a1a">—</text>
+<rect x="530" y="422" width="520" height="26" rx="0" ry="0" fill="#ffffff" stroke="#666666" stroke-width="1.4"/>
+<text x="538.0" y="438.1" font-size="9" text-anchor="start" xml:space="preserve" fill="#1a1a1a">prompt fragments injected per task</text>
+<rect x="40" y="450" width="380" height="26" rx="0" ry="0" fill="#f5f5f5" stroke="#999999" stroke-width="1.4"/>
+<text x="48.0" y="466.1" font-size="9" text-anchor="start" xml:space="preserve" fill="#1a1a1a">     rules.d/corpora/</text>
+<rect x="420" y="450" width="110" height="26" rx="0" ry="0" fill="#ffffff" stroke="#666666" stroke-width="1.4"/>
+<text x="475.0" y="466.1" font-size="9" text-anchor="middle" xml:space="preserve" fill="#1a1a1a">—</text>
+<rect x="530" y="450" width="520" height="26" rx="0" ry="0" fill="#ffffff" stroke="#666666" stroke-width="1.4"/>
+<text x="538.0" y="466.1" font-size="9" text-anchor="start" xml:space="preserve" fill="#1a1a1a">per-corpus orientation maps</text>
+<rect x="40" y="478" width="380" height="26" rx="0" ry="0" fill="#f5f5f5" stroke="#999999" stroke-width="1.4"/>
+<text x="48.0" y="494.1" font-size="9" text-anchor="start" xml:space="preserve" fill="#1a1a1a">     tool-guide.md</text>
+<rect x="420" y="478" width="110" height="26" rx="0" ry="0" fill="#ffffff" stroke="#666666" stroke-width="1.4"/>
+<text x="475.0" y="494.1" font-size="9" text-anchor="middle" xml:space="preserve" fill="#1a1a1a">6 K</text>
+<rect x="530" y="478" width="520" height="26" rx="0" ry="0" fill="#ffffff" stroke="#666666" stroke-width="1.4"/>
+<text x="538.0" y="494.1" font-size="9" text-anchor="start" xml:space="preserve" fill="#1a1a1a">tool usage guide given to the model</text>
+<rect x="40" y="506" width="380" height="26" rx="0" ry="0" fill="#e1d5e7" stroke="#9673a6" stroke-width="1.4"/>
+<text x="48.0" y="522.1" font-size="9" text-anchor="start" xml:space="preserve" fill="#1a1a1a">     chromadb/</text>
+<rect x="420" y="506" width="110" height="26" rx="0" ry="0" fill="#ffffff" stroke="#666666" stroke-width="1.4"/>
+<text x="475.0" y="522.1" font-size="9" text-anchor="middle" xml:space="preserve" fill="#1a1a1a">—</text>
+<rect x="530" y="506" width="520" height="26" rx="0" ry="0" fill="#ffffff" stroke="#666666" stroke-width="1.4"/>
+<text x="538.0" y="522.1" font-size="9" text-anchor="start" xml:space="preserve" fill="#1a1a1a">vector store for the RAG corpus</text>
+<rect x="40" y="534" width="380" height="26" rx="0" ry="0" fill="#e1d5e7" stroke="#9673a6" stroke-width="1.4"/>
+<text x="48.0" y="550.1" font-size="9" text-anchor="start" xml:space="preserve" fill="#1a1a1a">     audit/</text>
+<rect x="420" y="534" width="110" height="26" rx="0" ry="0" fill="#ffffff" stroke="#666666" stroke-width="1.4"/>
+<text x="475.0" y="550.1" font-size="9" text-anchor="middle" xml:space="preserve" fill="#1a1a1a">—</text>
+<rect x="530" y="534" width="520" height="26" rx="0" ry="0" fill="#ffffff" stroke="#666666" stroke-width="1.4"/>
+<text x="538.0" y="550.1" font-size="9" text-anchor="start" xml:space="preserve" fill="#1a1a1a">tool-actions.jsonl, sessions, training-data</text>
+<rect x="40" y="562" width="380" height="26" rx="0" ry="0" fill="#e1d5e7" stroke="#9673a6" stroke-width="1.4"/>
+<text x="48.0" y="578.1" font-size="9" text-anchor="start" xml:space="preserve" fill="#1a1a1a">     rules-learned.md</text>
+<rect x="420" y="562" width="110" height="26" rx="0" ry="0" fill="#ffffff" stroke="#666666" stroke-width="1.4"/>
+<text x="475.0" y="578.1" font-size="9" text-anchor="middle" xml:space="preserve" fill="#1a1a1a">—</text>
+<rect x="530" y="562" width="520" height="26" rx="0" ry="0" fill="#ffffff" stroke="#666666" stroke-width="1.4"/>
+<text x="538.0" y="578.1" font-size="9" text-anchor="start" xml:space="preserve" fill="#1a1a1a">rules taught with /recall, every corpus</text>
+<rect x="40" y="590" width="380" height="26" rx="0" ry="0" fill="#e1d5e7" stroke="#9673a6" stroke-width="1.4"/>
+<text x="48.0" y="606.1" font-size="9" text-anchor="start" xml:space="preserve" fill="#1a1a1a">     history*.json(l)</text>
+<rect x="420" y="590" width="110" height="26" rx="0" ry="0" fill="#ffffff" stroke="#666666" stroke-width="1.4"/>
+<text x="475.0" y="606.1" font-size="9" text-anchor="middle" xml:space="preserve" fill="#1a1a1a">—</text>
+<rect x="530" y="590" width="520" height="26" rx="0" ry="0" fill="#ffffff" stroke="#666666" stroke-width="1.4"/>
+<text x="538.0" y="606.1" font-size="9" text-anchor="start" xml:space="preserve" fill="#1a1a1a">conversation transcripts</text>
+<rect x="40" y="618" width="380" height="26" rx="0" ry="0" fill="#ffe6cc" stroke="#d79b00" stroke-width="1.4"/>
+<text x="48.0" y="634.1" font-size="9" text-anchor="start" xml:space="preserve" fill="#1a1a1a">models/gguf/</text>
+<rect x="420" y="618" width="110" height="26" rx="0" ry="0" fill="#ffffff" stroke="#666666" stroke-width="1.4"/>
+<text x="475.0" y="634.1" font-size="9" text-anchor="middle" xml:space="preserve" fill="#1a1a1a">47 G</text>
+<rect x="530" y="618" width="520" height="26" rx="0" ry="0" fill="#ffffff" stroke="#666666" stroke-width="1.4"/>
+<text x="538.0" y="634.1" font-size="9" text-anchor="start" xml:space="preserve" fill="#1a1a1a">quantised GGUF models actually served</text>
+<rect x="40" y="646" width="380" height="26" rx="0" ry="0" fill="#ffe6cc" stroke="#d79b00" stroke-width="1.4"/>
+<text x="48.0" y="662.1" font-size="9" text-anchor="start" xml:space="preserve" fill="#1a1a1a">models/</text>
+<rect x="420" y="646" width="110" height="26" rx="0" ry="0" fill="#ffffff" stroke="#666666" stroke-width="1.4"/>
+<text x="475.0" y="662.1" font-size="9" text-anchor="middle" xml:space="preserve" fill="#1a1a1a">75 G</text>
+<rect x="530" y="646" width="520" height="26" rx="0" ry="0" fill="#ffffff" stroke="#666666" stroke-width="1.4"/>
+<text x="538.0" y="662.1" font-size="9" text-anchor="start" xml:space="preserve" fill="#1a1a1a">upstream HF checkpoints and conversions</text>
+<rect x="40" y="674" width="380" height="26" rx="0" ry="0" fill="#ffe6cc" stroke="#d79b00" stroke-width="1.4"/>
+<text x="48.0" y="690.1" font-size="9" text-anchor="start" xml:space="preserve" fill="#1a1a1a">llama.cpp-next/</text>
+<rect x="420" y="674" width="110" height="26" rx="0" ry="0" fill="#ffffff" stroke="#666666" stroke-width="1.4"/>
+<text x="475.0" y="690.1" font-size="9" text-anchor="middle" xml:space="preserve" fill="#1a1a1a">1.3 G</text>
+<rect x="530" y="674" width="520" height="26" rx="0" ry="0" fill="#ffffff" stroke="#666666" stroke-width="1.4"/>
+<text x="538.0" y="690.1" font-size="9" text-anchor="start" xml:space="preserve" fill="#1a1a1a">llama.cpp build providing llama-server</text>
+<rect x="40" y="702" width="380" height="26" rx="0" ry="0" fill="#f5f5f5" stroke="#999999" stroke-width="1.4"/>
+<text x="48.0" y="718.1" font-size="9" text-anchor="start" xml:space="preserve" fill="#1a1a1a">qwen3-finetune/</text>
+<rect x="420" y="702" width="110" height="26" rx="0" ry="0" fill="#ffffff" stroke="#666666" stroke-width="1.4"/>
+<text x="475.0" y="718.1" font-size="9" text-anchor="middle" xml:space="preserve" fill="#1a1a1a">5.6 G</text>
+<rect x="530" y="702" width="520" height="26" rx="0" ry="0" fill="#ffffff" stroke="#666666" stroke-width="1.4"/>
+<text x="538.0" y="718.1" font-size="9" text-anchor="start" xml:space="preserve" fill="#1a1a1a">trainers, pod scripts, the load preflight</text>
+<rect x="40" y="730" width="380" height="26" rx="0" ry="0" fill="#f5f5f5" stroke="#999999" stroke-width="1.4"/>
+<text x="48.0" y="746.1" font-size="9" text-anchor="start" xml:space="preserve" fill="#1a1a1a">src/</text>
+<rect x="420" y="730" width="110" height="26" rx="0" ry="0" fill="#ffffff" stroke="#666666" stroke-width="1.4"/>
+<text x="475.0" y="746.1" font-size="9" text-anchor="middle" xml:space="preserve" fill="#1a1a1a">351 M</text>
+<rect x="530" y="730" width="520" height="26" rx="0" ry="0" fill="#ffffff" stroke="#666666" stroke-width="1.4"/>
+<text x="538.0" y="746.1" font-size="9" text-anchor="start" xml:space="preserve" fill="#1a1a1a">submodule: exact copy of the pod&#x27;s ML packages</text>
+<rect x="40" y="758" width="380" height="26" rx="0" ry="0" fill="#f5f5f5" stroke="#999999" stroke-width="1.4"/>
+<text x="48.0" y="774.1" font-size="9" text-anchor="start" xml:space="preserve" fill="#1a1a1a">corpora/</text>
+<rect x="420" y="758" width="110" height="26" rx="0" ry="0" fill="#ffffff" stroke="#666666" stroke-width="1.4"/>
+<text x="475.0" y="774.1" font-size="9" text-anchor="middle" xml:space="preserve" fill="#1a1a1a">27 M</text>
+<rect x="530" y="758" width="520" height="26" rx="0" ry="0" fill="#ffffff" stroke="#666666" stroke-width="1.4"/>
+<text x="538.0" y="774.1" font-size="9" text-anchor="start" xml:space="preserve" fill="#1a1a1a">small vendored trees indexed as own corpora</text>
+<rect x="40" y="786" width="380" height="26" rx="0" ry="0" fill="#f5f5f5" stroke="#999999" stroke-width="1.4"/>
+<text x="48.0" y="802.1" font-size="9" text-anchor="start" xml:space="preserve" fill="#1a1a1a">docker/</text>
+<rect x="420" y="786" width="110" height="26" rx="0" ry="0" fill="#ffffff" stroke="#666666" stroke-width="1.4"/>
+<text x="475.0" y="802.1" font-size="9" text-anchor="middle" xml:space="preserve" fill="#1a1a1a">26 K</text>
+<rect x="530" y="786" width="520" height="26" rx="0" ry="0" fill="#ffffff" stroke="#666666" stroke-width="1.4"/>
+<text x="538.0" y="802.1" font-size="9" text-anchor="start" xml:space="preserve" fill="#1a1a1a">image, run wrapper, entrypoint, corpus registry</text>
+<rect x="40" y="814" width="380" height="26" rx="0" ry="0" fill="#f5f5f5" stroke="#999999" stroke-width="1.4"/>
+<text x="48.0" y="830.1" font-size="9" text-anchor="start" xml:space="preserve" fill="#1a1a1a">pod-artifacts-qwen3coder/</text>
+<rect x="420" y="814" width="110" height="26" rx="0" ry="0" fill="#ffffff" stroke="#666666" stroke-width="1.4"/>
+<text x="475.0" y="830.1" font-size="9" text-anchor="middle" xml:space="preserve" fill="#1a1a1a">111 K</text>
+<rect x="530" y="814" width="520" height="26" rx="0" ry="0" fill="#ffffff" stroke="#666666" stroke-width="1.4"/>
+<text x="538.0" y="830.1" font-size="9" text-anchor="start" xml:space="preserve" fill="#1a1a1a">remote pod recipes and artefacts</text>
+<rect x="40" y="842" width="380" height="26" rx="0" ry="0" fill="#f5f5f5" stroke="#999999" stroke-width="1.4"/>
+<text x="48.0" y="858.1" font-size="9" text-anchor="start" xml:space="preserve" fill="#1a1a1a">claude/</text>
+<rect x="420" y="842" width="110" height="26" rx="0" ry="0" fill="#ffffff" stroke="#666666" stroke-width="1.4"/>
+<text x="475.0" y="858.1" font-size="9" text-anchor="middle" xml:space="preserve" fill="#1a1a1a">1.9 M</text>
+<rect x="530" y="842" width="520" height="26" rx="0" ry="0" fill="#ffffff" stroke="#666666" stroke-width="1.4"/>
+<text x="538.0" y="858.1" font-size="9" text-anchor="start" xml:space="preserve" fill="#1a1a1a">working notes on the EDGE-M1 and AVZ trees</text>
+<rect x="40" y="870" width="380" height="26" rx="0" ry="0" fill="#ffffff" stroke="#666666" stroke-width="1.4"/>
+<text x="48.0" y="886.1" font-size="9" text-anchor="start" xml:space="preserve" fill="#1a1a1a">doc/</text>
+<rect x="420" y="870" width="110" height="26" rx="0" ry="0" fill="#ffffff" stroke="#666666" stroke-width="1.4"/>
+<text x="475.0" y="886.1" font-size="9" text-anchor="middle" xml:space="preserve" fill="#1a1a1a">—</text>
+<rect x="530" y="870" width="520" height="26" rx="0" ry="0" fill="#ffffff" stroke="#666666" stroke-width="1.4"/>
+<text x="538.0" y="886.1" font-size="9" text-anchor="start" xml:space="preserve" fill="#1a1a1a">this documentation (Sphinx)</text>
+</svg>

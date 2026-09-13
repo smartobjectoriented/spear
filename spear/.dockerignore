@@ -1,0 +1,29 @@
+# The build context must carry the code and the index, and nothing else. The
+# venv alone (bin/ lib/ share/) is several GB and is rebuilt inside the image
+# anyway; sending it would slow every build for nothing.
+bin/
+lib/
+lib64/
+include/
+share/
+pyvenv.cfg
+__pycache__/
+*.pyc
+.git/
+.gitignore
+.input_history
+
+# Session state: per-machine, sometimes large, never wanted in an image handed
+# to someone else.
+history*.json
+history-archive.jsonl
+trajectories.jsonl
+memories-*.md
+*.log
+audit/
+active-*.conf
+projects.json
+pod.conf
+reds.conf
+
+# chromadb/ is deliberately NOT ignored: the prebuilt index is the point.

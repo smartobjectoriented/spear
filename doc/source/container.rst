@@ -23,7 +23,8 @@ Everything about it lives in ``docker/`` at the repository root.
    * - ``entrypoint.sh``
      - Refuses to start on the two failures that are otherwise silent.
    * - ``projects.docker.json``
-     - The corpus registry, in **relative** paths.
+     - The corpus registry, in **relative** paths.  *Generated* by
+       ``gen-registry.py`` and not in the repository.
    * - ``README.md``
      - The short version, for whoever receives the image.
 
@@ -136,7 +137,7 @@ Two build contexts
    embedder layer.
 
 ``repo`` (named) → the repository root
-   Only ``corpora/``, ``docker/entrypoint.sh`` and
+   Only ``corpora/``, ``docker/entrypoint.sh`` and the generated
    ``docker/projects.docker.json`` are taken from it.  A named context is
    fetched lazily — BuildKit transfers only the paths actually ``COPY``-ed — so
    pointing it at a tree holding 122 GB of weights costs nothing.
@@ -198,9 +199,18 @@ follow.
 Relative corpus paths
 =====================
 
-``projects.docker.json`` registers every corpus **relative** to
-``SPEAR_CORPUS_ROOT`` (``/corpora`` in the image), where the workstation
-registry uses absolute paths under ``/home/operator``.  That is what makes one
+``projects.docker.json`` is **build output**: ``gen-registry.py`` derives it
+from this machine's ``projects.json`` on every build, and it is gitignored.  A
+committed copy would be a published map of one developer's disk — corpus names,
+federations and the collection hash of each — and stale the moment a corpus was
+added.  A clone with no ``projects.json`` gets an empty registry and an image
+that registers nothing, which is the honest answer: the operator registers
+their own trees.  The one registry the repository carries by hand is
+``spear/projects.example.json``, and it is a template.
+
+It registers every corpus **relative** to ``SPEAR_CORPUS_ROOT`` (``/corpora``
+in the image), where the workstation registry uses absolute paths under
+``/home/operator``.  That is what makes one
 image work for someone whose checkouts live elsewhere;
 ``resolve_corpus_path()`` leaves absolute paths untouched, so the workstation
 keeps behaving exactly as before (:doc:`retrieval`).

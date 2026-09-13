@@ -27,6 +27,11 @@ BUILD_SH = ROOT / "docker" / "build.sh"
 # The default build context, set by build.sh's last line.
 DEFAULT_CONTEXT = ROOT / "spear"
 
+# Produced by build.sh before it calls docker, and gitignored: a committed copy
+# would publish one machine's corpus graph and be stale besides. The COPY may
+# take it, but only because the builder guarantees it exists.
+GENERATED = {"docker/projects.docker.json"}
+
 COPY = re.compile(r"^COPY\s+(?P<rest>.*)$", re.MULTILINE)
 FROM = re.compile(r"--from=(?P<name>[A-Za-z0-9_-]+)")
 FLAG = re.compile(r"^--[a-z-]+(=\S*)?$")
@@ -68,6 +73,12 @@ class EveryMandatoryInputIsInTheRepository(unittest.TestCase):
     def _assert_available(self, root, source, where):
         pattern = source.rstrip("/")
 
+        if pattern in GENERATED:
+            self.assertIn(pattern, BUILD_SH.read_text(),
+                          f"{pattern} is declared generated but the builder "
+                          f"never mentions it")
+            return
+
         if any(ch in pattern for ch in "*?["):
             hits = list(root.glob(pattern))
             self.assertTrue(hits, f"{where}: {source} matches nothing in {root}")
@@ -100,6 +111,57 @@ class EveryMandatoryInputIsInTheRepository(unittest.TestCase):
                 self._assert_available(ROOT, source, "repo context")
 
 
+class NoHostRegistryIsPublished(unittest.TestCase):
+    """The image's registry is generated, never committed.
+
+    The first public snapshot shipped this machine's real one: twenty-four
+    corpora with their names, their federations and the collection hash of
+    each -- a readable map of one developer's disk, in a repository whose
+    whole point is that it carries no deployment.
+    """
+
+    def test_the_generated_registry_is_not_tracked(self):
+        for path in GENERATED:
+            with self.subTest(path=path):
+                self.assertNotIn(Path(path), tracked(),
+                                 f"{path} is build output; it must be "
+                                 f"gitignored, not committed")
+
+    def test_it_is_ignored_rather_than_merely_absent(self):
+        """Absent is one build away from committed by accident."""
+        for path in GENERATED:
+            with self.subTest(path=path):
+                done = subprocess.run(["git", "check-ignore", "-q", path],
+                                      cwd=ROOT)
+                self.assertEqual(done.returncode, 0,
+                                 f"{path} is not in .gitignore")
+
+    def test_exactly_one_registry_is_carried_by_hand(self):
+        """One canonical example, not two to keep in step."""
+        registries = sorted(p for p in tracked()
+                            if p.name.endswith(".json")
+                            and "projects" in p.name)
+        self.assertEqual(registries, [Path("spear/projects.example.json")])
+
+    def test_the_example_names_no_real_tree(self):
+        """A template full of placeholders, not a sanitised real registry."""
+        import json
+
+        example = json.loads(
+            (ROOT / "spear" / "projects.example.json").read_text())
+
+        for name, spec in example.items():
+            if not isinstance(spec, dict):
+                continue
+
+            path = spec["path"]
+
+            with self.subTest(corpus=name):
+                self.assertFalse(
+                    path.startswith("/") and not path.startswith("/path/to/"),
+                    f"{name}: {path} looks like a real absolute path")
+
+
 class EveryOptionalInputIsDeclaredOptional(unittest.TestCase):
     """A named context that build.sh does not resolve is a build failure."""
 
@@ -130,11 +192,21 @@ class EveryOptionalInputIsDeclaredOptional(unittest.TestCase):
 
 
 class NothingPrivateIsRequired(unittest.TestCase):
-    def test_the_builder_refuses_only_on_the_harness_itself(self):
-        """One precondition, and it is about the code, not about content."""
-        guards = re.findall(r"^\[ -[df] \"([^\"]+)\" \].*exit 1",
-                            BUILD_SH.read_text(), re.MULTILINE)
-        self.assertEqual(guards, ['$APP/rag_chat.py'])
+    def test_the_builder_refuses_on_nothing_a_clone_lacks(self):
+        """Every precondition is about code or build output, never content.
+
+        Matched across lines: a guard whose `exit 1` sits in a brace block on
+        the next line is still a guard, and an expression anchored to one line
+        would report a clean bill on a build.sh that refuses again.
+        """
+        script = BUILD_SH.read_text()
+        guards = re.findall(r"\[ -[df] \"([^\"]+)\" \][^\n]*\|\|[^{]*(?:\{[^}]*)?exit 1",
+                            script)
+        self.assertEqual(sorted(guards),
+                         ['$APP/rag_chat.py', '$REGISTRY'])
+
+        # and $REGISTRY is the generated file, not something a clone must have
+        self.assertIn('REGISTRY="$REPO/docker/projects.docker.json"', script)
 
     def test_no_copy_reaches_outside_the_repository(self):
         for context, source, _ in copies():

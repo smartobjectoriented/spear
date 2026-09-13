@@ -51,11 +51,17 @@ for spec in "${OPTIONAL[@]}"; do
     CONTEXTS+=(--build-context "$name=$dir")
 done
 
-# Regenerate the registry the image carries. Doing it here rather than by hand
-# is what stops it drifting from projects.json: a corpus added on the host
-# would otherwise be absent from the image with no sign but a "missing" line
-# at startup.
+# Generate the registry the image carries. It is BUILD OUTPUT and is not in the
+# repository: a committed copy would be one machine's corpus graph, published,
+# and stale the moment a corpus is added. Generating it here is also what stops
+# it drifting from projects.json — a corpus added on the host would otherwise be
+# absent from the image with no sign but a "missing" line at startup.
+REGISTRY="$REPO/docker/projects.docker.json"
 "$REPO/docker/gen-registry.py" || echo "   (some corpora were skipped, see above)" >&2
+[ -f "$REGISTRY" ] || {
+    echo "gen-registry.py produced no $REGISTRY — the image needs one" >&2
+    exit 1
+}
 
 echo "== building $TAG =="
 echo "   harness context : $APP"

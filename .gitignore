@@ -99,3 +99,9 @@ __pycache__/
 /server/config/server.conf
 /server/config/gpu.conf
 /server/config/*.local.conf
+
+# Build output, not source: docker/gen-registry.py regenerates it from this
+# machine's projects.json on every docker/build.sh run. A committed copy is
+# one machine's corpus graph — names, federations and collection hashes —
+# published for no benefit, and stale the moment a corpus is added.
+/docker/projects.docker.json

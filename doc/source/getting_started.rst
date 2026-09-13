@@ -20,11 +20,17 @@ the only prerequisite:
    $ docker/build.sh                        # ~20 min, mostly the embedder
    $ docker/spear-docker.sh --reds --auto   # opens the tunnel, then chats
 
-That image carries the harness, the embedder and a **prebuilt retrieval
-index**; you mount your own source trees and it talks to the model served on
-the inference host over an SSH tunnel.  :doc:`container` describes what is
-baked, what is mounted, and the two ``--security-opt`` flags without which the
-harness refuses to run any command at all.
+That image carries the harness and the embedder; you mount your own source
+trees and it talks to the model served on the inference host over an SSH
+tunnel.  :doc:`container` describes what is baked, what is mounted, and the two
+``--security-opt`` flags without which the harness refuses to run any command
+at all.
+
+It also bakes in whatever **retrieval index**, rules, skills and benches the
+building host has — and a fresh clone has none of them, so the build says which
+it found and produces a working image that simply carries less
+(:ref:`optional-build-inputs`).  Filling that index is the first thing worth
+doing, for the reason below.
 
 The clone location is free
 ==========================

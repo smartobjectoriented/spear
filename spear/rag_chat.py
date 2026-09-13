@@ -198,7 +198,25 @@ ROOT_DIR = os.path.dirname(APP_DIR)
 
 LLAMA_SERVER_URL = os.environ.get("SPEAR_API_BASE", "http://127.0.0.1:8080/v1")
 DB_PATH = os.environ.get("SPEAR_DB_PATH") or f"{APP_DIR}/chromadb"
-RULES_DIR = f"{APP_DIR}/rules.d"
+
+
+def resource_dir(env_var, name):
+    """A SHIPPED resource directory, relocatable by environment.
+
+    rules.d/, skills/ and benches/ are content, not code: a deployment's own
+    rules, its learned skills and the bench that rates it are exactly the
+    material that must not sit in a public tree, and pinning them to APP_DIR
+    left the only copy outside the checkout unreachable with no way to say so.
+
+    The default is the in-tree directory, so a plain checkout behaves exactly
+    as before and no default ever points outside it. An empty value counts as
+    unset -- an exported-but-empty variable is a mistake, not a request to
+    read the filesystem root.
+    """
+    return os.environ.get(env_var) or f"{APP_DIR}/{name}"
+
+
+RULES_DIR = resource_dir("SPEAR_RULES_DIR", "rules.d")
 
 # Everything the session ACCUMULATES -- history, memories, trajectories, the
 # audit trail, the input history -- against everything the session SHIPS with:
@@ -2987,7 +3005,7 @@ TRAJECTORY_FILE = os.environ.get(
 # project should not have to carry the test rig that rates the assistant, and
 # a bench a project owns is a bench the assistant can edit.
 
-BENCH_DIR = os.environ.get("SPEAR_BENCH_DIR", f"{APP_DIR}/benches")
+BENCH_DIR = resource_dir("SPEAR_BENCH_DIR", "benches")
 
 
 def project_bench():
@@ -3276,7 +3294,7 @@ def archive_entry(entry):
 # a task. Stored as files + embedded in a dedicated ChromaDB collection;
 # the most similar skills are injected into the prompt on each turn.
 
-SKILLS_DIR = f"{APP_DIR}/skills"
+SKILLS_DIR = resource_dir("SPEAR_SKILLS_DIR", "skills")
 SKILLS_COLLECTION = "edgem_skills"
 ARCHIVE_COLLECTION = "edgem_archive"
 
@@ -6279,7 +6297,10 @@ def handle_corpus_command(args, current=None):
 # An in-tree .edgem-rules.md still WINS when present. That is deliberate: a
 # tree someone else owns may carry its own map, and theirs should beat ours.
 
-SHIPPED_CORPUS_RULES = f"{APP_DIR}/rules.d/corpora"
+# Derived from RULES_DIR, not from APP_DIR: a deployment that relocates its
+# rules relocates the per-corpus maps with them. They are one body of content.
+
+SHIPPED_CORPUS_RULES = f"{RULES_DIR}/corpora"
 
 
 def load_corpus_rules():

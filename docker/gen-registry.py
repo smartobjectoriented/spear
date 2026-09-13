@@ -48,10 +48,32 @@ def collection_of(spec, resolved):
     return "adhoc_" + hashlib.md5(os.path.realpath(resolved).encode()).hexdigest()[:8]
 
 
+def host_registry():
+    """What this machine has registered, or nothing.
+
+    projects.json is per-machine and gitignored, so a clean clone does not have
+    one -- and the example beside it is a template full of `/path/to/...`
+    placeholders, which would bake fictional corpora into the image. An empty
+    registry is the honest answer: the image carries the harness and whatever
+    index the host had, and the operator registers their own trees.
+    """
+    live = os.path.join(REPO, "spear", "projects.json")
+
+    if not os.path.isfile(live):
+        print("   registry: no spear/projects.json — image ships no corpora",
+              file=sys.stderr)
+        return {}
+
+    return json.load(open(live))
+
+
 def main():
-    src = json.load(open(os.path.join(REPO, "spear", "projects.json")))
+    src = host_registry()
     out, skipped = {}, []
     for name, spec in src.items():
+        if not isinstance(spec, dict):
+            continue                           # the template's own _comment
+
         raw = spec["path"]
         rel = container_path(raw)
         if rel is None:

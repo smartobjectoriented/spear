@@ -107,13 +107,16 @@ What is baked, and what is not
      - fetching it on first run is a surprise on a machine that may have no
        Hugging Face access at all
    * - ChromaDB index
-     - image, 4.5 G
+     - image *if the building host has one*, 4.5 G
      - re-indexing takes hours *and* needs every corpus tree present — the one
        thing a newcomer does not have
-   * - ``claude/`` + ``corpora/``
+   * - rules, skills, benches, notes corpus
+     - image *if present*
+     - a deployment's own content; see below
+   * - ``corpora/``
      - image, 38 M
-     - a shared retrieval corpus, attached to every session without duplicating
-       the notes into each project index
+     - cross-cutting references, attached to every session without duplicating
+       them into each project index
    * - source trees
      - **mounted**
      - working copies that change daily; an image would be stale the next
@@ -133,12 +136,62 @@ Two build contexts
    embedder layer.
 
 ``repo`` (named) → the repository root
-   Only ``claude/``, ``corpora/``, ``docker/entrypoint.sh`` and
+   Only ``corpora/``, ``docker/entrypoint.sh`` and
    ``docker/projects.docker.json`` are taken from it.  A named context is
    fetched lazily — BuildKit transfers only the paths actually ``COPY``-ed — so
    pointing it at a tree holding 122 GB of weights costs nothing.
 
 A bare ``docker build`` therefore fails on the missing ``--from=repo``.
+
+.. _optional-build-inputs:
+
+The optional inputs
+===================
+
+Five of the things the image would like to carry are **not in the repository
+and cannot be**: the retrieval index is built on the host and gitignored, and
+the rules, the skills, the benches and the shared notes corpus are a
+deployment's own content.  Requiring them meant the documented build failed on
+a clean clone — on the first missing one, with a message about a directory the
+reader had no way to produce.
+
+Each is now a named context of its own, resolved by ``build.sh`` in three
+steps: the environment variable, else the in-tree directory, else an **empty
+directory**.
+
+.. list-table::
+   :header-rows: 1
+   :widths: 16 30 54
+
+   * - Context
+     - Override
+     - In-tree default
+   * - ``index``
+     - ``SPEAR_INDEX_DIR``
+     - ``spear/chromadb``
+   * - ``rules``
+     - ``SPEAR_RULES_DIR``
+     - ``spear/rules.d``
+   * - ``skills``
+     - ``SPEAR_SKILLS_DIR``
+     - ``spear/skills``
+   * - ``benches``
+     - ``SPEAR_BENCH_DIR``
+     - ``spear/benches``
+   * - ``notes``
+     - ``SPEAR_NOTES_DIR``
+     - ``claude/``
+
+``build.sh`` prints which of the five it found and which it did not, so an
+image that carries less says so at build time rather than at the first
+question.  An empty context still creates the directory, so the harness finds
+an empty directory rather than no directory — which is the difference between
+"no rules" and a stack trace.
+
+The first four variables are the same ones the harness itself reads at runtime
+(:ref:`resource-directories`), so a deployment that keeps its rules outside the
+checkout points one variable at them and both the native run and the image
+follow.
 
 .. _relative-corpus-paths:
 

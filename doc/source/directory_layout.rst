@@ -160,6 +160,44 @@ Configuration
        optionally opening with a ``SKILL.md`` frontmatter block read by
        ``skill_library.py`` (:doc:`retrieval`).
 
+.. _resource-directories:
+
+Content the deployment owns
+===========================
+
+``rules.d/``, ``skills/`` and ``benches/`` are *content*, not code — and a
+deployment's own rules, its learned skills and the bench that rates it are
+exactly the material that does not belong in a public tree.  Each therefore
+answers to an environment variable:
+
+.. list-table::
+   :header-rows: 1
+   :widths: 26 30 44
+
+   * - Variable
+     - Default
+     - What it holds
+   * - ``SPEAR_RULES_DIR``
+     - ``<app>/rules.d``
+     - the always-injected rules, and ``corpora/<name>.md`` under it
+   * - ``SPEAR_SKILLS_DIR``
+     - ``<app>/skills``
+     - the skill library, read *and written* — ``save_skill`` lands here
+   * - ``SPEAR_BENCH_DIR``
+     - ``<app>/benches``
+     - the acceptance benches a project declares by bare name
+
+The default is the in-tree directory, so a plain checkout behaves exactly as it
+did; **no default points outside the checkout**, which is what keeps a private
+path out of public source.  An empty value counts as unset rather than naming
+the filesystem root.
+
+The failure mode these replace is quiet: ``load_rules()`` returns ``""`` for a
+directory that is not there and the skill library returns ``[]``, so a session
+whose content had moved ran with none of it and said nothing.  The same three
+variables are read by ``docker/build.sh`` when it bakes an image
+(:ref:`optional-build-inputs`), so one setting covers both.
+
 Persistent state
 ================
 

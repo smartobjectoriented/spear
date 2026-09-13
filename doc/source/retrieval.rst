@@ -350,6 +350,95 @@ silently — the operator is told to trim, because deciding which rule stops
 being injected is not a decision to take automatically.  ``/recall`` with no
 argument prints what has been taught so far.
 
+.. _embedding-offload:
+
+Embedding on another machine
+============================
+
+Corpus embedding is the one stage worth moving.  Measured on identical real
+chunks (median 1533 characters): 28 chunks/s on the laptop's RTX 4060 against
+279 on an RTX PRO 6000.  Reading and chunking 984 files takes 0.17 s, so
+indexing *is* embedding.  Only the compute moves — chunking and the Chroma
+writes stay local, so there is no source tree to mirror and no index to copy
+back.
+
+Queries are never offloaded: one sentence per turn embeds in 44 ms here
+against 58 ms there plus the round trip, so the laptop wins.
+
+The client sends the semantics; the worker executes
+---------------------------------------------------
+
+The client and the worker speak a versioned protocol, defined in
+``server/embed/protocol.py``.  Every field that decides what a vector *means*
+travels in the request:
+
+.. list-table::
+   :header-rows: 1
+   :widths: 34 22 44
+
+   * - Decision
+     - Decided by
+     - Why
+   * - model, prefix, sequence cap, normalisation, batch size
+     - **client**
+     - they define the collection, and the client owns the collection
+   * - device, which card, dtype
+     - **server**
+     - properties of the machine, which a laptop cannot know
+
+The worker has **no model registry**, no default prefix and no per-model
+branch.  That is the correction this protocol exists to make: the worker it
+replaces imported the client's module on the GPU host and read the client's
+registry from whichever copy was installed there, so the document prefix, the
+cap and the normalisation were decided by a file nobody was comparing against
+the client's.  A collection filled with two different prefixes is inconsistent
+in a way no later query reports — results merely get worse.
+
+``spear_embed_protocol`` is carried and checked in both directions.  A
+mismatch is refused, naming both numbers, and is never negotiated down: two
+sides that still parse each other's bytes while disagreeing about who applies
+the prefix would produce vectors that are subtly wrong and perfectly
+well-formed.
+
+``server/embed/README.md`` is the deployment contract — what to copy, how to
+configure it, and how to verify it without indexing anything.
+
+A configured destination is required, never preferred
+-----------------------------------------------------
+
+.. list-table::
+   :header-rows: 1
+   :widths: 40 60
+
+   * - Configuration
+     - Behaviour
+   * - no destination
+     - local embedding, a valid deployment
+   * - destination configured
+     - remote, **or an error**.  Never a local substitute.
+
+Falling back to local compute when the remote embedder fails looks like a
+kindness — a slower index beats a failed one.  It is not.  The two devices
+load the same weights and do not produce the same vectors, so a collection
+half-filled from each is quietly inconsistent.  ``RemoteEmbeddingError`` is
+raised and never swallowed.
+
+Before a deployment switches workers, ``spear/tests/test_embed_equivalence.py``
+runs both on real weights and requires the vectors to be **bit-identical** —
+not merely close.  Measured on ``BAAI/bge-m3``, max absolute difference **0.0**
+for documents and for queries, on CPU/fp32 and on CUDA/fp16 alike.
+
+The tolerance question is not hand-waved.  The same texts embedded singly and
+in one batch differ by padding alone: ~2e-07 on CPU/fp32 and ~4.9e-04 on
+CUDA/fp16.  A tolerance loose enough to cover the GPU figure would be large
+enough to hide a genuinely different encoding, so bit-exactness is the
+criterion — and it is available precisely because both paths reduce to the
+same call.
+
+That second number is worth knowing operationally too: **changing the batch
+size changes the vectors**, on fp16 well above float32 noise, though at cosine
+0.999999 it is far below anything retrieval can notice.
+
 Retrieval budget
 ================
 

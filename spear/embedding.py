@@ -232,6 +232,23 @@ def _device(for_indexing):
 REMOTE_CONF = os.path.join(APP_DIR, "active-embed-remote.conf")
 REMOTE_CMD_CONF = os.path.join(APP_DIR, "active-embed-remote-cmd.conf")
 
+# ── the wire to the server-side worker ───────────────────────────────
+# The format is defined once, in server/embed/protocol.py, and implemented
+# twice: here and there. Not shared code, deliberately -- the worker is
+# installed on a different machine, with only server/embed/ copied to it and
+# none of this tree, so neither side can import the other even if the boundary
+# allowed it. A contract test holds the two readers to the same bytes.
+#
+# What travels is everything that decides what a vector MEANS. The worker
+# applies it verbatim and has no registry of its own, so the two sides cannot
+# disagree about who prefixes a document. The worker this replaces imported
+# THIS module on the GPU host and read its registry from whatever copy was
+# installed there -- which is how a collection could be filled with two
+# different prefixes and say nothing about it.
+
+EMBED_PROTOCOL_VERSION = 1
+PROTOCOL_KEY = "spear_embed_protocol"
+
 
 class RemoteEmbeddingError(RuntimeError):
     """A configured remote embedder produced no vectors.
@@ -339,13 +356,113 @@ def _remote_word(word):
     return shlex.quote(word)
 
 
+def document_semantics(model, batch_size):
+    """Everything the encoding needs, decided HERE.
+
+    Gathered in one function because it is the answer to "what does this
+    collection mean": the same values the local path applies below, so the two
+    cannot drift. A reader comparing local and remote embedding should be able
+    to see at a glance that they are the same encoding on a different machine.
+    """
+    return {
+        "model": model,
+        "prefix": MODELS[model][0],
+        "max_seq_length": MAX_SEQ,
+        "normalize": True,
+        "batch_size": batch_size,
+        "trust_remote_code": MODELS[model][2],
+    }
+
+
+def _worker_diagnosis(proc):
+    """What the worker said about its own failure, in its own words."""
+    import json
+
+    head, _, _ = proc.stdout.partition(b"\n")
+
+    try:
+        header = json.loads(head.decode("utf-8"))
+        message = header["error"]
+    except Exception:
+        return proc.stderr.decode("utf-8", "replace").strip()[:200] or \
+            "no diagnosis on stdout or stderr"
+
+    return f"{header.get('kind', 'error')}: {message}"
+
+
+def _protocol_request(texts, semantics):
+    """One request, as bytes. See server/embed/protocol.py for the format."""
+    import json
+
+    return json.dumps(dict(semantics, **{PROTOCOL_KEY: EMBED_PROTOCOL_VERSION,
+                                         "texts": list(texts)})).encode("utf-8")
+
+
+def _protocol_response(raw, expected, target):
+    """Vectors from a worker's stdout, or RemoteEmbeddingError.
+
+    Every check here is about a specific way a collection gets quietly
+    corrupted: a header from something that is not a worker, a version that
+    does not match ours, a body that arrived short, a count that does not line
+    up with the texts we sent -- accepting that last one would misalign every
+    chunk from there on.
+    """
+    import json, struct
+
+    head, newline, body = raw.partition(b"\n")
+
+    if not newline:
+        raise RemoteEmbeddingError(
+            f"remote embedding on {target} returned no protocol header — the "
+            f"command ran, but it is not a SPEAR embedding worker")
+
+    try:
+        header = json.loads(head.decode("utf-8"))
+    except (UnicodeDecodeError, ValueError):
+        raise RemoteEmbeddingError(
+            f"remote embedding on {target} returned no protocol header — the "
+            f"command ran, but it is not a SPEAR embedding worker") from None
+
+    if not isinstance(header, dict) or PROTOCOL_KEY not in header:
+        raise RemoteEmbeddingError(
+            f"remote embedding on {target} returned no protocol header — the "
+            f"command ran, but it is not a SPEAR embedding worker")
+
+    if header[PROTOCOL_KEY] != EMBED_PROTOCOL_VERSION:
+        raise RemoteEmbeddingError(
+            f"protocol version mismatch with the worker on {target}: it "
+            f"speaks version {header[PROTOCOL_KEY]!r} and this client speaks "
+            f"version {EMBED_PROTOCOL_VERSION}. Deploy them together.")
+
+    if header.get("status") != "ok":
+        raise RemoteEmbeddingError(
+            f"remote embedding on {target} failed "
+            f"({header.get('kind', 'error')}): {header.get('error', header)}")
+
+    count, dim = header.get("count"), header.get("dim")
+
+    if len(body) != header.get("byte_count") or count != expected:
+        raise RemoteEmbeddingError(
+            f"remote embedding on {target} returned {count} vectors of "
+            f"{dim} dimensions in {len(body)} bytes, for {expected} "
+            f"texts — truncated or out of protocol")
+
+    # Unpack ONCE. Calling struct.unpack inside the loop re-decoded the whole
+    # 8 MB payload per vector, turning a 16 s round trip into 128 s and making
+    # the offload slower than computing locally.
+
+    flat = struct.unpack(f"<{count * dim}f", body)
+
+    return [list(flat[j * dim:(j + 1) * dim]) for j in range(count)]
+
+
 def _embed_remote(texts, model, target, batch_size, progress):
     """Send texts to the GPU host, read float32 vectors back.
 
     Batched so memory stays bounded on both ends and a long index reports
     progress. Every failure raises: see RemoteEmbeddingError.
     """
-    import json, struct, subprocess
+    import subprocess
 
     argv = remote_command()
 
@@ -366,11 +483,11 @@ def _embed_remote(texts, model, target, batch_size, progress):
     # comfortable on both ends, and cuts the loads to a handful.
 
     step = int(os.environ.get("SPEAR_EMBED_REMOTE_BATCH", "20000"))
+    semantics = document_semantics(model, batch_size)
 
     for i in range(0, len(texts), step):
         part = texts[i:i + step]
-        payload = json.dumps({"model": model, "texts": part,
-                              "batch": batch_size}).encode()
+        payload = _protocol_request(part, semantics)
 
         try:
             proc = subprocess.run(ssh + [target, command],
@@ -381,32 +498,15 @@ def _embed_remote(texts, model, target, batch_size, progress):
                 f"remote embedding on {target} could not be run: {exc}") from exc
 
         if proc.returncode != 0:
-            err = proc.stderr.decode("utf-8", "replace").strip()[:200]
+            # The worker reports structurally on stdout before it exits, so
+            # prefer that: stderr on a failed ssh is as likely to be the
+            # remote shell's complaint as the worker's diagnosis, and a
+            # traceback there is indistinguishable from "not a worker".
             raise RemoteEmbeddingError(
-                f"remote embedding on {target} failed "
-                f"(exit {proc.returncode}): {err}")
+                f"remote embedding on {target} failed (exit "
+                f"{proc.returncode}): {_worker_diagnosis(proc)}")
 
-        head, _, body = proc.stdout.partition(b"\n")
-
-        try:
-            n, dim = (int(x) for x in head.split())
-        except ValueError:
-            raise RemoteEmbeddingError(
-                f"remote embedding on {target} returned no header — the "
-                f"command ran, but it is not an embedding worker") from None
-
-        if len(body) != n * dim * 4 or n != len(part):
-            raise RemoteEmbeddingError(
-                f"remote embedding on {target} returned {n} vectors of "
-                f"{dim} dimensions in {len(body)} bytes, for {len(part)} "
-                f"texts — truncated or out of protocol")
-
-        # Unpack ONCE. Calling struct.unpack inside the loop re-decoded the
-        # whole 8 MB payload per vector, turning a 16 s round trip into 128 s
-        # and making the offload slower than computing locally.
-
-        flat = struct.unpack(f"<{n * dim}f", body)
-        out.extend(list(flat[j * dim:(j + 1) * dim]) for j in range(n))
+        out.extend(_protocol_response(proc.stdout, len(part), target))
 
         if progress:
             print(f"  embedded {min(i + step, len(texts))}/{len(texts)} "
@@ -439,11 +539,13 @@ def embed_documents(texts, model=None, batch_size=16, progress=False):
         return _embed_remote(texts, model, target, batch_size,
                              progress) if texts else []
 
-    pfx = MODELS[model][0]
+    semantics = document_semantics(model, batch_size)
     st = _st(model, _device(for_indexing=True))
 
-    return st.encode([pfx + t for t in texts], batch_size=batch_size,
-                     normalize_embeddings=True, show_progress_bar=progress,
+    return st.encode([semantics["prefix"] + t for t in texts],
+                     batch_size=semantics["batch_size"],
+                     normalize_embeddings=semantics["normalize"],
+                     show_progress_bar=progress,
                      convert_to_numpy=True).tolist()
 
 

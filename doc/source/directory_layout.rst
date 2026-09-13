@@ -142,6 +142,11 @@ Configuration
    * - ``reds.conf``
      - Host, port and model for the REDS server (RTX PRO 6000) used by
        ``spear-chat --reds``.  Stable host: the launcher only tunnels to it.
+   * - ``machine.env``
+     - Settings specific to THIS machine, untracked: the ``SPEAR_*`` path
+       overrides a deployment needs and nothing a clone should inherit.  Every
+       ``spear-*`` launcher sources it if it is there, and runs on the defaults
+       if it is not.
    * - ``active-backend.conf``
      - The backend chosen last, preselected by the startup picker.  Runtime
        state, not versioned.
@@ -267,7 +272,10 @@ These are on ``PATH`` (via ``~/.local/bin``):
    Manages the ``projects.json`` registry: ``add`` a tree, or ``scan`` a
    workspace into per-component corpora by file count.  A wrapper around
    ``rag_chat.handle_corpus_command``, which is also what ``/corpus`` calls
-   inside the chat: one registry deserves one implementation.
+   inside the chat: one registry deserves one implementation — and one
+   environment, so it reads ``machine.env`` exactly as ``spear-chat`` does.
+   Without that the CLI resolved relative corpus paths against a different
+   root than the session that would later read them.
    A deprecated alias existed before the rename; it was retired with the
    old command names.
 

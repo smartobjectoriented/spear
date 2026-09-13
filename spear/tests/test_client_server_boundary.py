@@ -145,20 +145,35 @@ class TheLauncherMayStartTheServer(unittest.TestCase):
                 self.assertIn(name, body)
 
 
-class TheRemoteEmbeddingConfigurationIsUntouched(unittest.TestCase):
-    """E.3 reorganised directories. It did not move the deployed worker.
+class TheEmbeddingWorkerLivesOnTheServerSide(unittest.TestCase):
+    """The generic worker exists, and the boundary survived its arrival.
 
-    The worker on the GPU host still speaks the old contract and still lives
-    at the old path, so the client must still invoke exactly that. The
-    replacement lands with the deployment, not before it.
+    The worker is the one piece of the server that the client drives directly,
+    so it is the likeliest place for the two trees to grow back together. They
+    speak a protocol instead: defined in server/embed/protocol.py, implemented
+    separately on each side, and held to the same bytes by a contract test.
+    Not shared code -- the worker is installed on a different machine with
+    none of this tree beside it, so an import could not work even if the
+    boundary allowed one.
     """
 
-    def test_the_legacy_worker_stays_where_the_client_expects_it(self):
-        self.assertTrue((ROOT / "deploy" / "embed_worker.py").is_file())
+    def test_the_server_carries_the_protocol_and_the_worker(self):
+        self.assertTrue((REPO / "server" / "embed" / "protocol.py").is_file())
+        self.assertTrue((REPO / "server" / "embed" / "worker.py").is_file())
 
-    def test_no_worker_was_added_under_server(self):
-        self.assertFalse((REPO / "server" / "embed" / "worker.py").exists())
-        self.assertFalse((REPO / "server" / "embed" / "protocol.py").exists())
+    def test_the_client_speaks_the_protocol_without_importing_it(self):
+        import embedding
+
+        source = (ROOT / "embedding.py").read_text(encoding="utf-8")
+
+        self.assertTrue(hasattr(embedding, "EMBED_PROTOCOL_VERSION"))
+        self.assertNotIn("from server", source)
+        self.assertNotIn("import protocol", source)
+
+    def test_the_legacy_worker_is_kept_until_the_deployment_moves(self):
+        """Deleting it would strand the GPU host mid-migration, and the
+        equivalence gate needs it to have something to compare against."""
+        self.assertTrue((ROOT / "deploy" / "embed_worker.py").is_file())
 
     def test_the_client_still_ships_no_remote_command(self):
         """The command remains deployment configuration, as E.0 made it."""

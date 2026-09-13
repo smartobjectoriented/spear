@@ -51,13 +51,22 @@ VECTORS = [[0.5, -0.25, 0.125, 0.0]]
 
 
 def reply(vectors):
-    """A worker's answer: the header line, then raw little-endian float32."""
-    import struct
+    """A worker's answer: the JSON header line, then raw little-endian float32.
+
+    Written by hand rather than through the server's writer: this file is
+    about the client's POLICY, and it must keep working if the two ever part
+    company. The contract between the two writers is held elsewhere, by
+    test_embed_protocol.
+    """
+    import json, struct
 
     flat = [value for vector in vectors for value in vector]
     body = struct.pack(f"<{len(flat)}f", *flat)
+    header = json.dumps({"spear_embed_protocol": 1, "status": "ok",
+                         "count": len(vectors), "dim": len(vectors[0]),
+                         "dtype": "float32", "byte_count": len(body)})
 
-    return f"{len(vectors)} {len(vectors[0])}\n".encode() + body
+    return (header + "\n").encode() + body
 
 
 class Configured(unittest.TestCase):
@@ -278,7 +287,7 @@ class ADestinationMakesTheRemoteRequired(Configured):
             run.return_value = subprocess.CompletedProcess([], 0, b"hello\n", b"")
             embedding.embed_documents(["one"], model="BAAI/bge-m3")
 
-        self.assertIn("no header", str(raised.exception))
+        self.assertIn("no protocol header", str(raised.exception))
 
     def test_a_truncated_payload_is_a_protocol_failure(self):
         self.destination()
@@ -287,7 +296,7 @@ class ADestinationMakesTheRemoteRequired(Configured):
         with patch("subprocess.run") as run, \
              self.assertRaises(embedding.RemoteEmbeddingError) as raised:
             run.return_value = subprocess.CompletedProcess(
-                [], 0, b"1 4\n" + b"\0" * 8, b"")
+                [], 0, reply(VECTORS)[:-4], b"")
             embedding.embed_documents(["one"], model="BAAI/bge-m3")
 
         self.assertIn("out of protocol", str(raised.exception))
@@ -391,12 +400,13 @@ class TheRemoteShellReadsExactlyWhatWasConfigured(Configured):
         self.assertEqual(""""$HOME"/'my embed/python' /srv/w.py""", sent)
 
 
-class TheWireIsUnchanged(Configured):
-    """The worker deployed today is the one from before this change, so the
-    request it receives must be the request it already understands.
+class TheWireCarriesTheClientsSemantics(Configured):
+    """What goes up the ssh channel is the client's whole decision.
 
-    A new protocol belongs with the new worker, in one step, so that a client
-    and a worker can never disagree about who applies the document prefix.
+    The worker this replaced read the client's registry on the GPU host, so
+    the prefix, the cap and the normalisation were whatever the copy installed
+    there happened to say. Now they travel with every request, and the worker
+    has no registry to disagree with.
     """
 
     def sent_payload(self):
@@ -411,19 +421,34 @@ class TheWireIsUnchanged(Configured):
 
         return json.loads(run.call_args.kwargs["input"])
 
-    def test_the_request_keys_are_the_ones_the_current_worker_reads(self):
-        self.assertEqual({"model", "texts", "batch"}, set(self.sent_payload()))
+    def test_the_request_carries_every_semantic_field(self):
+        self.assertEqual(
+            {"spear_embed_protocol", "model", "texts", "prefix",
+             "max_seq_length", "normalize", "batch_size", "trust_remote_code"},
+            set(self.sent_payload()))
 
-    def test_the_values_are_the_ones_it_expects(self):
+    def test_the_values_are_the_ones_this_client_decided(self):
         payload = self.sent_payload()
+
         self.assertEqual("BAAI/bge-m3", payload["model"])
         self.assertEqual(["one"], payload["texts"])
-        self.assertEqual(8, payload["batch"])
+        self.assertEqual(8, payload["batch_size"])
+        self.assertEqual(embedding.MODELS["BAAI/bge-m3"][0], payload["prefix"])
+        self.assertEqual(embedding.MAX_SEQ, payload["max_seq_length"])
+        self.assertIs(True, payload["normalize"])
 
-    def test_the_client_does_not_yet_send_retrieval_semantics(self):
-        """Today's worker applies the prefix itself. Sending one as well would
-        apply it twice."""
-        self.assertNotIn("prefix", self.sent_payload())
+    def test_the_request_is_versioned(self):
+        """A worker that speaks a different version must refuse it rather
+        than encode something subtly different."""
+        self.assertEqual(embedding.EMBED_PROTOCOL_VERSION,
+                         self.sent_payload()["spear_embed_protocol"])
+
+    def test_the_documents_are_not_prefixed_before_they_are_sent(self):
+        """The prefix travels beside the texts, not inside them. Doing both
+        would apply it twice, and nothing downstream would say so."""
+        payload = self.sent_payload()
+
+        self.assertEqual(["one"], payload["texts"])
 
     def test_ssh_is_never_interactive(self):
         """A wrong key must fail the index, not sit on a password prompt."""
@@ -436,6 +461,108 @@ class TheWireIsUnchanged(Configured):
             embedding.embed_documents(["one"], model="BAAI/bge-m3")
 
         self.assertIn("BatchMode=yes", run.call_args[0][0])
+
+
+class LongInputsTravelInBoundedBatches(Configured):
+    """One ssh invocation per batch, and every vector comes back in order.
+
+    The batch size is a client decision with two costs pulling against each
+    other: each invocation is a fresh process that loads the model, so small
+    batches spend the whole index loading weights; and a batch is held in
+    memory on both ends, so large ones exhaust the smaller machine. Neither
+    is the server's business.
+    """
+
+    def batched(self, texts, step):
+        self.destination()
+        self.command(*WORKER)
+        os.environ["SPEAR_EMBED_REMOTE_BATCH"] = str(step)
+        sent = []
+
+        def answer(argv, **kwargs):
+            request = json.loads(kwargs["input"])
+            sent.append(request["texts"])
+
+            return subprocess.CompletedProcess(
+                [], 0, reply([[float(len(t)), 0.0, 0.0, 0.0]
+                              for t in request["texts"]]), b"")
+
+        with patch("subprocess.run", side_effect=answer):
+            vectors = embedding.embed_documents(texts, model="BAAI/bge-m3")
+
+        return sent, vectors
+
+    def test_the_texts_are_split_at_the_configured_size(self):
+        sent, _ = self.batched(["a", "bb", "ccc", "dddd", "eeeee"], 2)
+
+        self.assertEqual(sent, [["a", "bb"], ["ccc", "dddd"], ["eeeee"]])
+
+    def test_the_vectors_come_back_in_the_order_they_went_out(self):
+        """A reordering here would attach every chunk to the wrong text, and
+        the collection would be wrong with no symptom but worse answers."""
+        _sent, vectors = self.batched(["a", "bb", "ccc", "dddd", "eeeee"], 2)
+
+        self.assertEqual([v[0] for v in vectors], [1.0, 2.0, 3.0, 4.0, 5.0])
+
+    def test_one_batch_is_one_invocation(self):
+        sent, _ = self.batched(["a", "bb", "ccc"], 10)
+
+        self.assertEqual(len(sent), 1)
+
+    def test_the_encoder_batch_size_is_separate_from_the_transfer_batch(self):
+        """SPEAR_EMBED_REMOTE_BATCH bounds the ssh payload; batch_size bounds
+        the forward pass. Conflating them would tie transfer size to VRAM."""
+        self.destination()
+        self.command(*WORKER)
+        os.environ["SPEAR_EMBED_REMOTE_BATCH"] = "2"
+
+        with patch("subprocess.run") as run:
+            run.return_value = subprocess.CompletedProcess(
+                [], 0, reply(VECTORS * 2), b"")
+            embedding.embed_documents(["a", "b"], model="BAAI/bge-m3",
+                                      batch_size=64)
+
+        self.assertEqual(json.loads(run.call_args.kwargs["input"])["batch_size"],
+                         64)
+
+
+class AWorkerFailureIsReportedInItsOwnWords(Configured):
+    """The worker answers structurally on stdout before it exits non-zero.
+
+    Reading only stderr would throw that away: on a failed ssh, stderr is as
+    likely to hold the remote shell's complaint as the worker's diagnosis.
+    """
+
+    def failure(self, stdout, stderr, status=4):
+        self.destination()
+        self.command(*WORKER)
+
+        with patch("subprocess.run") as run, \
+             self.assertRaises(embedding.RemoteEmbeddingError) as raised:
+            run.return_value = subprocess.CompletedProcess(
+                [], status, stdout, stderr)
+            embedding.embed_documents(["one"], model="BAAI/bge-m3")
+
+        return str(raised.exception)
+
+    def test_a_structured_diagnosis_is_preferred_over_stderr(self):
+        header = json.dumps({"spear_embed_protocol": 1, "status": "error",
+                             "kind": "encoding",
+                             "error": "CUDA out of memory"}) + "\n"
+        message = self.failure(header.encode(), b"ssh: some noise")
+
+        self.assertIn("CUDA out of memory", message)
+        self.assertIn("encoding", message)
+
+    def test_stderr_is_used_when_there_is_nothing_structured(self):
+        message = self.failure(b"", b"Permission denied (publickey).")
+
+        self.assertIn("Permission denied", message)
+
+    def test_a_silent_failure_still_says_something(self):
+        message = self.failure(b"", b"")
+
+        self.assertIn("no diagnosis", message)
 
 
 class NothingHereReachesAnybodysMachine(unittest.TestCase):

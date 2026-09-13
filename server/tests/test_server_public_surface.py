@@ -147,27 +147,49 @@ class AssetsLiveOutsideTheCheckout(unittest.TestCase):
         self.assertEqual(shipped, {"server.conf.example", "gpu.conf.example"})
 
 
-class TheEmbeddingDebtIsRecorded(unittest.TestCase):
-    """server/embed/ is a statement of intent until the worker lands.
+class TheEmbeddingWorkerStaysGeneric(unittest.TestCase):
+    """server/embed/ carries a worker now. It must never carry a client.
 
-    The test exists so that the directory cannot quietly acquire a worker that
-    imports the client harness -- which is the coupling it was created to
-    remove.
+    The coupling this directory exists to remove was an import: the worker it
+    replaces pulled in the client's module on the GPU host, and with it the
+    client's model registry. The scan is textual and blunt on purpose -- a
+    comment that merely mentions the shape is caught too, because a scan that
+    made an exception for prose would be no scan at all.
     """
 
+    def modules(self):
+        return [p for p in files()
+                if p.parent.name == "embed" and p.suffix == ".py"]
+
+    def test_the_directory_actually_holds_the_worker(self):
+        """A scan over an empty list passes for the wrong reason."""
+        self.assertEqual({p.name for p in self.modules()},
+                         {"protocol.py", "worker.py"})
+
     def test_no_worker_imports_the_client(self):
-        for path in files():
-            if path.parent.name != "embed" or path.suffix != ".py":
-                continue
+        for path in self.modules():
             body = text_of(path)
+
             with self.subTest(module=path.name):
                 self.assertNotIn("import embedding", body)
                 self.assertNotIn("sys.path.insert", body)
 
-    def test_the_debt_is_written_down(self):
+    def test_the_protocol_needs_no_machine_learning_stack(self):
+        """It must be readable where there is nothing installed."""
+        body = text_of(SERVER / "embed" / "protocol.py")
+
+        for heavy in ("torch", "sentence_transformers", "numpy",
+                      "transformers"):
+            with self.subTest(dependency=heavy):
+                self.assertNotIn(heavy, body)
+
+    def test_the_deployment_contract_is_written_down(self):
         readme = (SERVER / "embed" / "README.md").read_text(encoding="utf-8")
-        self.assertIn("embed_worker.py", readme)
-        self.assertIn("protocol", readme.lower())
+
+        for subject in ("protocol", "spear_embed_protocol", "requirements.txt",
+                        "SPEAR_EMBED_REMOTE_CMD", "SPEAR_GPU_UUID"):
+            with self.subTest(subject=subject):
+                self.assertIn(subject, readme)
 
 
 if __name__ == "__main__":

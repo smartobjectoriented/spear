@@ -1,8 +1,11 @@
 # SPEAR harness, self-contained enough to hand to a colleague.
 #
-# The embedder (bge-m3, 4.3 GB) and the ChromaDB index (8.5 GB) are BAKED IN:
-# retrieval works the moment the container starts, with no re-indexing -- which
-# takes hours and needs every corpus tree present. Only the source trees are
+# The embedder (bge-m3, 4.3 GB) is always baked in. The ChromaDB index is baked
+# in WHEN THE BUILDING HOST HAS ONE: retrieval then works the moment the
+# container starts, with no re-indexing -- which takes hours and needs every
+# corpus tree present. The index is built on the host and is not in the
+# repository, so a clean clone produces an image that starts and answers, with
+# retrieval empty until `spear-index` fills it. Only the source trees are
 # mounted, because they are the user's own working copies and change daily.
 #
 # Corpora are addressed RELATIVE to SPEAR_CORPUS_ROOT (see projects.docker.json)
@@ -68,20 +71,29 @@ SentenceTransformer('BAAI/bge-m3')" \
 # even to query it (WAL, migrations), so an index owned by root is unusable the
 # moment the container runs as the host user -- which it must, or every file it
 # leaves on a mounted volume is root-owned.
-COPY --chmod=0777 chromadb/ $APP/chromadb/
+COPY --chmod=0777 --from=index . $APP/chromadb/
 COPY *.py *.md $APP/
-COPY rules.d/ $APP/rules.d/
-COPY skills/ $APP/skills/
-COPY benches/ $APP/benches/
+# rules.d/, skills/ and benches/ are CONTENT, and a deployment's own copy is
+# usually not in the repository -- see build.sh, which resolves each to the
+# in-tree directory, to its SPEAR_*_DIR, or to an empty one. An empty context
+# still creates the directory, so the harness finds a directory with nothing
+# in it rather than no directory at all.
+COPY --from=rules . $APP/rules.d/
+COPY --from=skills . $APP/skills/
+COPY --from=benches . $APP/benches/
 COPY eval/ $APP/eval/
 COPY deploy/ $APP/deploy/
 COPY --from=repo docker/projects.docker.json $APP/projects.json
 
 # The cross-cutting parts of the spear repo, baked so the image is useful to
-# someone who has not cloned it: `claude/` is a shared retrieval corpus, and
-# `corpora/` holds the two API references. They come from a
-# NAMED BUILD CONTEXT rather than the main one, which keeps the build context
-# at spear/ and therefore keeps the expensive layers above cached.
+# someone who has not cloned it: the shared notes corpus, and `corpora/`, which
+# holds the API references. They come from NAMED BUILD CONTEXTS rather than the
+# main one, which keeps the build context at spear/ and therefore keeps the
+# expensive layers above cached.
+#
+# The notes corpus is a deployment's own writing and is not in this repository;
+# `notes` is empty unless build.sh found one, and the corpus is then simply
+# absent from the image.
 #
 # Deliberately NOT baked: llama.cpp-next, qwen3-finetune and src -- gigabytes
 # of venvs and build artefacts whose retrieval value is small -- and models/
@@ -89,7 +101,7 @@ COPY --from=repo docker/projects.docker.json $APP/projects.json
 #
 # A bind mount on /corpora/spear shadows all of this, which is the intended
 # behaviour: someone who HAS the repo works from their own copy.
-COPY --from=repo claude/ /corpora/spear/claude/
+COPY --from=notes . /corpora/spear/claude/
 COPY --from=repo corpora/ /corpora/spear/corpora/
 # NOT in /usr/local/bin: the host's copy of that directory is mounted over
 # it (189 toolchain symlinks that ib.md tells the operator to put there),

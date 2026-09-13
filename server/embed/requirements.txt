@@ -1,0 +1,14 @@
+# Server-side embedding worker.
+#
+# Everything needed to load a sentence-transformer and encode, and nothing
+# else. In particular NOT chromadb and NOT the client's dependency set: the
+# collection, the chunking and the retrieval semantics stay on the client, so
+# the machine that only encodes should not carry a vector database to do it.
+#
+# Unpinned on purpose. Pinning belongs with the worker that is tested against
+# these versions, and that worker does not exist yet -- see README.md. A
+# lockfile written before the code would be a claim nobody has checked.
+sentence-transformers
+torch
+transformers
+numpy

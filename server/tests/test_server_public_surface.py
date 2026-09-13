@@ -1,0 +1,174 @@
+"""The server tree is public, and nothing in it names a machine.
+
+Two properties, checked by reading the tree rather than by remembering.
+
+NAMES. Hostnames, addresses, accounts, key paths, GPU identifiers and model
+paths are deployment facts. They live in ~/spear-runtime/config/, which is
+outside the checkout, so no `git add` can reach them. This tree was assembled
+partly from scripts that ran on one particular GPU host, and those scripts did
+carry such values -- which is exactly why the check exists rather than the
+intention.
+
+ASSETS. Weights, CUDA build trees and caches are not in Git and not under it.
+A script that resolves them relative to its own location would quietly put
+80 GB inside a repository meant to be cloned.
+"""
+
+from __future__ import annotations
+
+import re
+import subprocess
+import unittest
+from pathlib import Path
+
+SERVER = Path(__file__).resolve().parent.parent
+REPO = SERVER.parent
+
+
+def files():
+    """Every file of the server tree: what Git has AND what is on disk.
+
+    The union, not one or the other. Taking Git's listing alone would scan a
+    partially staged tree -- which is the run where a private value is most
+    likely to slip through -- and taking the filesystem alone would miss a
+    file staged from elsewhere. Neither omission is acceptable in a check
+    whose whole job is to be exhaustive.
+    """
+    tracked = subprocess.run(["git", "ls-files", "server"], cwd=REPO,
+                             capture_output=True, text=True).stdout.split()
+    paths = {REPO / name for name in tracked}
+    paths |= {p for p in SERVER.rglob("*")}
+
+    return sorted(p for p in paths
+                  if p.is_file() and "__pycache__" not in p.parts)
+
+
+def text_of(path):
+    try:
+        return path.read_text(encoding="utf-8")
+    except (UnicodeDecodeError, OSError):
+        return ""
+
+
+class NothingHereNamesAMachine(unittest.TestCase):
+    #: Assembled from fragments: spelled out, they would appear in this file
+    #: and the scan below would find its own evidence.
+    PRIVATE = {
+        "retired platform name":  ("edgem" + "-ai", "EDGEM" + "-AI"),
+        "the organisation":       ("edgem" + "tech", "EDGEM" + "Tech"),
+        "its product line":       ("edgem" + "1",),
+        "its infrastructure":     ("Infra" + "base",),
+        "a private network":      ("10." + "190.",),
+        "a private account path": ("/home/re" + "ds-ml",),
+        "a private host":         ("re" + "ds-ml@",),
+        "a private key":          ("id_pod" + "_gpu",),
+    }
+
+    def test_no_private_value_reaches_the_public_tree(self):
+        found = {}
+
+        for path in files():
+            body = text_of(path)
+
+            for label, needles in self.PRIVATE.items():
+                for needle in needles:
+                    if needle in body:
+                        found.setdefault(str(path.relative_to(REPO)),
+                                         []).append(f"{needle} ({label})")
+
+        self.assertEqual(found, {}, f"private values in server/: {found}")
+
+    def test_no_gpu_identifier_is_a_real_one(self):
+        """A UUID may appear as an example. A real card's may not."""
+        real = re.compile(r"GPU-(?!0{8}-0{4}-0{4}-0{4}-0{12})[0-9a-f]{8}-[0-9a-f-]+")
+        named = {str(p.relative_to(REPO)): real.findall(text_of(p))
+                 for p in files() if real.search(text_of(p))}
+
+        self.assertEqual(named, {})
+
+    def test_no_address_or_bare_hostname_is_configured(self):
+        """Only the loopback address, which is a policy and not a machine:
+        the server binds it so that reaching it needs a tunnel."""
+        address = re.compile(r"\b(?:\d{1,3}\.){3}\d{1,3}\b")
+        allowed = {"127.0.0.1", "0.0.0.0"}
+        found = {}
+
+        for path in files():
+            hits = {a for a in address.findall(text_of(path))} - allowed
+            if hits:
+                found[str(path.relative_to(REPO))] = sorted(hits)
+
+        self.assertEqual(found, {})
+
+
+class AssetsLiveOutsideTheCheckout(unittest.TestCase):
+    def scripts(self):
+        return [p for p in files() if p.suffix == ".sh"]
+
+    def test_no_script_resolves_an_asset_against_its_own_location(self):
+        """`$(dirname $0)/../..` is how a build tree ends up inside a clone.
+
+        Locating a SIBLING SCRIPT that way is fine and expected -- the tree
+        knows its own shape. Locating weights or a build tree that way is not.
+        """
+        offenders = {}
+
+        for path in self.scripts():
+            for line in text_of(path).splitlines():
+                if line.lstrip().startswith("#"):
+                    continue
+                if "BASH_SOURCE" not in line and "$HERE" not in line:
+                    continue
+                if any(word in line for word in ("gguf", "GGUF", "models",
+                                                 "llama.cpp", "build/bin",
+                                                 "hf", "cache")):
+                    offenders.setdefault(str(path.relative_to(REPO)),
+                                         []).append(line.strip())
+
+        self.assertEqual(offenders, {})
+
+    def test_every_script_is_syntactically_valid(self):
+        for path in self.scripts():
+            with self.subTest(script=path.name):
+                proc = subprocess.run(["bash", "-n", str(path)],
+                                      capture_output=True, text=True)
+                self.assertEqual(proc.returncode, 0, proc.stderr)
+
+    def test_every_script_is_executable(self):
+        for path in self.scripts():
+            with self.subTest(script=path.name):
+                self.assertTrue(path.stat().st_mode & 0o111, path)
+
+    def test_the_examples_are_examples(self):
+        """config/ ships *.example only: a real server.conf here would be a
+        deployment committed by accident."""
+        shipped = {p.name for p in files() if p.parent.name == "config"}
+
+        self.assertEqual(shipped, {"server.conf.example", "gpu.conf.example"})
+
+
+class TheEmbeddingDebtIsRecorded(unittest.TestCase):
+    """server/embed/ is a statement of intent until the worker lands.
+
+    The test exists so that the directory cannot quietly acquire a worker that
+    imports the client harness -- which is the coupling it was created to
+    remove.
+    """
+
+    def test_no_worker_imports_the_client(self):
+        for path in files():
+            if path.parent.name != "embed" or path.suffix != ".py":
+                continue
+            body = text_of(path)
+            with self.subTest(module=path.name):
+                self.assertNotIn("import embedding", body)
+                self.assertNotIn("sys.path.insert", body)
+
+    def test_the_debt_is_written_down(self):
+        readme = (SERVER / "embed" / "README.md").read_text(encoding="utf-8")
+        self.assertIn("embed_worker.py", readme)
+        self.assertIn("protocol", readme.lower())
+
+
+if __name__ == "__main__":
+    unittest.main()

@@ -1,0 +1,2 @@
+- [2026-06-05] La commande pour builder une capsule est ./scripts/build.sh -x e1c-<nom> (le nom de recette active la couche automatiquement)
+- [2026-06-05] La plateforme de production est verdin-imx8mp (Toradex Verdin iMX8M Plus SoM), tandis que virt64 sert uniquement aux tests QEMU avec networking slirp (pas besoin de sudo).

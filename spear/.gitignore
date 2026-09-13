@@ -1,0 +1,5 @@
+
+# Recorded agentic trajectories: per-machine training data, often large.
+trajectories.jsonl
+audit/training-data/
+training-execution.json

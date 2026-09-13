@@ -1,0 +1,78 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1100 564" width="1100" height="564" font-family="Helvetica,Arial,sans-serif">
+<defs><marker id="ah" markerWidth="10" markerHeight="8" refX="9" refY="4" orient="auto"><path d="M0,0 L10,4 L0,8 z" fill="#444444"/></marker></defs>
+<rect width="1100" height="564" fill="#ffffff"/>
+<text x="540.0" y="28.6" font-size="16" text-anchor="middle" xml:space="preserve" fill="#1a1a1a" font-weight="bold">Security model  —  modes, capabilities, fail-closed</text>
+<rect x="30" y="55" width="1040" height="210" rx="8" ry="8" fill="none" stroke="#444444" stroke-width="1.4"/>
+<text x="550.0" y="73.0" font-size="12" text-anchor="middle" xml:space="preserve" fill="#1a1a1a" font-weight="bold">DEFAULT_CAPABILITY_POLICY</text>
+<rect x="60" y="90" width="350" height="32" rx="0" ry="0" fill="#f5f5f5" stroke="#999999" stroke-width="1.4"/>
+<text x="235.0" y="109.8" font-size="11" text-anchor="middle" xml:space="preserve" fill="#1a1a1a" font-weight="bold">capability</text>
+<rect x="420" y="90" width="190" height="32" rx="0" ry="0" fill="#f5f5f5" stroke="#999999" stroke-width="1.4"/>
+<text x="515.0" y="109.8" font-size="11" text-anchor="middle" xml:space="preserve" fill="#1a1a1a" font-weight="bold">SAFE</text>
+<rect x="620" y="90" width="190" height="32" rx="0" ry="0" fill="#f5f5f5" stroke="#999999" stroke-width="1.4"/>
+<text x="715.0" y="109.8" font-size="11" text-anchor="middle" xml:space="preserve" fill="#1a1a1a" font-weight="bold">ASK</text>
+<rect x="820" y="90" width="190" height="32" rx="0" ry="0" fill="#f5f5f5" stroke="#999999" stroke-width="1.4"/>
+<text x="915.0" y="109.8" font-size="11" text-anchor="middle" xml:space="preserve" fill="#1a1a1a" font-weight="bold">AUTO</text>
+<rect x="60" y="126" width="350" height="30" rx="0" ry="0" fill="#ffffff" stroke="#666666" stroke-width="1.4"/>
+<text x="235.0" y="144.5" font-size="10" text-anchor="middle" xml:space="preserve" fill="#1a1a1a">filesystem:read</text>
+<rect x="420" y="126" width="190" height="30" rx="0" ry="0" fill="#d5e8d4" stroke="#82b366" stroke-width="1.4"/>
+<text x="515.0" y="144.5" font-size="10" text-anchor="middle" xml:space="preserve" fill="#1a1a1a">yes</text>
+<rect x="620" y="126" width="190" height="30" rx="0" ry="0" fill="#d5e8d4" stroke="#82b366" stroke-width="1.4"/>
+<text x="715.0" y="144.5" font-size="10" text-anchor="middle" xml:space="preserve" fill="#1a1a1a">yes</text>
+<rect x="820" y="126" width="190" height="30" rx="0" ry="0" fill="#d5e8d4" stroke="#82b366" stroke-width="1.4"/>
+<text x="915.0" y="144.5" font-size="10" text-anchor="middle" xml:space="preserve" fill="#1a1a1a">yes</text>
+<rect x="60" y="159" width="350" height="30" rx="0" ry="0" fill="#ffffff" stroke="#666666" stroke-width="1.4"/>
+<text x="235.0" y="177.5" font-size="10" text-anchor="middle" xml:space="preserve" fill="#1a1a1a">workspace:write</text>
+<rect x="420" y="159" width="190" height="30" rx="0" ry="0" fill="#f8cecc" stroke="#b85450" stroke-width="1.4"/>
+<text x="515.0" y="177.5" font-size="10" text-anchor="middle" xml:space="preserve" fill="#1a1a1a">no</text>
+<rect x="620" y="159" width="190" height="30" rx="0" ry="0" fill="#d5e8d4" stroke="#82b366" stroke-width="1.4"/>
+<text x="715.0" y="177.5" font-size="10" text-anchor="middle" xml:space="preserve" fill="#1a1a1a">yes</text>
+<rect x="820" y="159" width="190" height="30" rx="0" ry="0" fill="#d5e8d4" stroke="#82b366" stroke-width="1.4"/>
+<text x="915.0" y="177.5" font-size="10" text-anchor="middle" xml:space="preserve" fill="#1a1a1a">yes</text>
+<rect x="60" y="192" width="350" height="30" rx="0" ry="0" fill="#ffffff" stroke="#666666" stroke-width="1.4"/>
+<text x="235.0" y="210.5" font-size="10" text-anchor="middle" xml:space="preserve" fill="#1a1a1a">shell:complex</text>
+<rect x="420" y="192" width="190" height="30" rx="0" ry="0" fill="#f8cecc" stroke="#b85450" stroke-width="1.4"/>
+<text x="515.0" y="210.5" font-size="10" text-anchor="middle" xml:space="preserve" fill="#1a1a1a">no</text>
+<rect x="620" y="192" width="190" height="30" rx="0" ry="0" fill="#d5e8d4" stroke="#82b366" stroke-width="1.4"/>
+<text x="715.0" y="210.5" font-size="10" text-anchor="middle" xml:space="preserve" fill="#1a1a1a">yes</text>
+<rect x="820" y="192" width="190" height="30" rx="0" ry="0" fill="#d5e8d4" stroke="#82b366" stroke-width="1.4"/>
+<text x="915.0" y="210.5" font-size="10" text-anchor="middle" xml:space="preserve" fill="#1a1a1a">yes</text>
+<rect x="60" y="225" width="350" height="30" rx="0" ry="0" fill="#ffffff" stroke="#666666" stroke-width="1.4"/>
+<text x="235.0" y="243.5" font-size="10" text-anchor="middle" xml:space="preserve" fill="#1a1a1a">network</text>
+<rect x="420" y="225" width="190" height="30" rx="0" ry="0" fill="#f8cecc" stroke="#b85450" stroke-width="1.4"/>
+<text x="515.0" y="243.5" font-size="10" text-anchor="middle" xml:space="preserve" fill="#1a1a1a">no</text>
+<rect x="620" y="225" width="190" height="30" rx="0" ry="0" fill="#d5e8d4" stroke="#82b366" stroke-width="1.4"/>
+<text x="715.0" y="243.5" font-size="10" text-anchor="middle" xml:space="preserve" fill="#1a1a1a">yes</text>
+<rect x="820" y="225" width="190" height="30" rx="0" ry="0" fill="#f8cecc" stroke="#b85450" stroke-width="1.4"/>
+<text x="915.0" y="243.5" font-size="10" text-anchor="middle" xml:space="preserve" fill="#1a1a1a">no</text>
+<text x="560.0" y="276.5" font-size="10" text-anchor="middle" xml:space="preserve" fill="#1a1a1a">gpu · ssh · remote:write · container-runtime · secrets  —  declared but not implemented: build_argv() refuses them before execution</text>
+<rect x="30" y="300" width="1040" height="240" rx="8" ry="8" fill="none" stroke="#444444" stroke-width="1.4"/>
+<text x="550.0" y="318.0" font-size="12" text-anchor="middle" xml:space="preserve" fill="#1a1a1a" font-weight="bold">Authorization pipeline</text>
+<rect x="60" y="345" width="180" height="62" rx="0" ry="0" fill="#f8cecc" stroke="#b85450" stroke-width="1.4"/>
+<text x="150.0" y="372.9" font-size="10" text-anchor="middle" xml:space="preserve" fill="#1a1a1a">model proposes</text>
+<text x="150.0" y="386.1" font-size="10" text-anchor="middle" xml:space="preserve" fill="#1a1a1a">a tool call</text>
+<rect x="262" y="345" width="180" height="62" rx="0" ry="0" fill="#d5e8d4" stroke="#82b366" stroke-width="1.4"/>
+<text x="352.0" y="372.9" font-size="10" text-anchor="middle" xml:space="preserve" fill="#1a1a1a">CommandPolicy</text>
+<text x="352.0" y="386.1" font-size="10" text-anchor="middle" xml:space="preserve" fill="#1a1a1a">classify argv</text>
+<rect x="464" y="345" width="180" height="62" rx="0" ry="0" fill="#d5e8d4" stroke="#82b366" stroke-width="1.4"/>
+<text x="554.0" y="372.9" font-size="10" text-anchor="middle" xml:space="preserve" fill="#1a1a1a">capability</text>
+<text x="554.0" y="386.1" font-size="10" text-anchor="middle" xml:space="preserve" fill="#1a1a1a">intersection</text>
+<rect x="666" y="345" width="180" height="62" rx="0" ry="0" fill="#d5e8d4" stroke="#82b366" stroke-width="1.4"/>
+<text x="756.0" y="372.9" font-size="10" text-anchor="middle" xml:space="preserve" fill="#1a1a1a">confirmation</text>
+<text x="756.0" y="386.1" font-size="10" text-anchor="middle" xml:space="preserve" fill="#1a1a1a">(ASK mode)</text>
+<rect x="868" y="345" width="172" height="62" rx="0" ry="0" fill="#fff2cc" stroke="#d6b656" stroke-width="1.4"/>
+<text x="954.0" y="372.9" font-size="10" text-anchor="middle" xml:space="preserve" fill="#1a1a1a">sandboxed</text>
+<text x="954.0" y="386.1" font-size="10" text-anchor="middle" xml:space="preserve" fill="#1a1a1a">execution</text>
+<rect x="464" y="445" width="380" height="70" rx="0" ry="0" fill="#f8cecc" stroke="#b85450" stroke-width="1.4"/>
+<text x="654.0" y="476.9" font-size="10" text-anchor="middle" xml:space="preserve" fill="#1a1a1a">DENIED  —  any of: unknown classification, capability not granted,</text>
+<text x="654.0" y="490.1" font-size="10" text-anchor="middle" xml:space="preserve" fill="#1a1a1a">sandbox unavailable, resource control unavailable, user refusal</text>
+<rect x="60" y="445" width="380" height="70" rx="0" ry="0" fill="#ffffff" stroke="#999999" stroke-width="1.4"/>
+<text x="68.0" y="461.0" font-size="10" text-anchor="start" xml:space="preserve" fill="#1a1a1a">Fail-closed is the rule everywhere:</text>
+<text x="68.0" y="474.2" font-size="10" text-anchor="start" xml:space="preserve" fill="#1a1a1a">an unavailable mechanism is an error, never a downgrade to a</text>
+<text x="68.0" y="487.4" font-size="10" text-anchor="start" xml:space="preserve" fill="#1a1a1a">less confined execution.</text>
+<path d="M240.0,376.0 L251.0,376.0 L251.0,376.0 L262.0,376.0" fill="none" stroke="#444444" stroke-width="1.4" marker-end="url(#ah)"/>
+<path d="M442.0,376.0 L453.0,376.0 L453.0,376.0 L464.0,376.0" fill="none" stroke="#444444" stroke-width="1.4" marker-end="url(#ah)"/>
+<path d="M644.0,376.0 L655.0,376.0 L655.0,376.0 L666.0,376.0" fill="none" stroke="#444444" stroke-width="1.4" marker-end="url(#ah)"/>
+<path d="M846.0,376.0 L857.0,376.0 L857.0,376.0 L868.0,376.0" fill="none" stroke="#444444" stroke-width="1.4" marker-end="url(#ah)"/>
+<path d="M554.0,407.0 L554.0,426.0 L654.0,426.0 L654.0,445.0" fill="none" stroke="#444444" stroke-width="1.4" marker-end="url(#ah)"/>
+<path d="M756.0,407.0 L756.0,426.0 L654.0,426.0 L654.0,445.0" fill="none" stroke="#444444" stroke-width="1.4" marker-end="url(#ah)"/>
+</svg>

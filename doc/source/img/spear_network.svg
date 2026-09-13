@@ -1,0 +1,88 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1100 664" width="1100" height="664" font-family="Helvetica,Arial,sans-serif">
+<defs><marker id="ah" markerWidth="10" markerHeight="8" refX="9" refY="4" orient="auto"><path d="M0,0 L10,4 L0,8 z" fill="#444444"/></marker></defs>
+<rect width="1100" height="664" fill="#ffffff"/>
+<text x="540.0" y="28.6" font-size="16" text-anchor="middle" xml:space="preserve" fill="#1a1a1a" font-weight="bold">NETWORK backend  —  timing-independent slirp4netns attachment</text>
+<rect x="40" y="55" width="34" height="28" rx="0" ry="0" fill="#f5f5f5" stroke="#999999" stroke-width="1.4"/>
+<text x="57.0" y="72.5" font-size="10" text-anchor="middle" xml:space="preserve" fill="#1a1a1a" font-weight="bold">#</text>
+<rect x="84" y="55" width="160" height="28" rx="0" ry="0" fill="#f5f5f5" stroke="#999999" stroke-width="1.4"/>
+<text x="164.0" y="72.5" font-size="10" text-anchor="middle" xml:space="preserve" fill="#1a1a1a" font-weight="bold">actor</text>
+<rect x="254" y="55" width="806" height="28" rx="0" ry="0" fill="#f5f5f5" stroke="#999999" stroke-width="1.4"/>
+<text x="657.0" y="72.5" font-size="10" text-anchor="middle" xml:space="preserve" fill="#1a1a1a" font-weight="bold">step</text>
+<rect x="40" y="90" width="34" height="28" rx="0" ry="0" fill="#f5f5f5" stroke="#999999" stroke-width="1.4"/>
+<text x="57.0" y="107.5" font-size="10" text-anchor="middle" xml:space="preserve" fill="#1a1a1a" font-weight="bold">1</text>
+<rect x="84" y="90" width="160" height="28" rx="0" ry="0" fill="#d5e8d4" stroke="#82b366" stroke-width="1.4"/>
+<text x="164.0" y="107.2" font-size="9" text-anchor="middle" xml:space="preserve" fill="#1a1a1a">supervisor</text>
+<rect x="254" y="90" width="806" height="28" rx="0" ry="0" fill="#ffffff" stroke="#666666" stroke-width="1.4"/>
+<text x="657.0" y="107.5" font-size="10" text-anchor="middle" xml:space="preserve" fill="#1a1a1a">spawn bwrap with --unshare-net, passing info-fd / block-fd / sync-fd</text>
+<rect x="40" y="126" width="34" height="28" rx="0" ry="0" fill="#f5f5f5" stroke="#999999" stroke-width="1.4"/>
+<text x="57.0" y="143.5" font-size="10" text-anchor="middle" xml:space="preserve" fill="#1a1a1a" font-weight="bold">2</text>
+<rect x="84" y="126" width="160" height="28" rx="0" ry="0" fill="#fff2cc" stroke="#d6b656" stroke-width="1.4"/>
+<text x="164.0" y="143.2" font-size="9" text-anchor="middle" xml:space="preserve" fill="#1a1a1a">bwrap</text>
+<rect x="254" y="126" width="806" height="28" rx="0" ry="0" fill="#ffffff" stroke="#666666" stroke-width="1.4"/>
+<text x="657.0" y="143.5" font-size="10" text-anchor="middle" xml:space="preserve" fill="#1a1a1a">reports JSON on info-fd:  child-pid, net-namespace inode</text>
+<rect x="40" y="162" width="34" height="28" rx="0" ry="0" fill="#f5f5f5" stroke="#999999" stroke-width="1.4"/>
+<text x="57.0" y="179.5" font-size="10" text-anchor="middle" xml:space="preserve" fill="#1a1a1a" font-weight="bold">3</text>
+<rect x="84" y="162" width="160" height="28" rx="0" ry="0" fill="#d5e8d4" stroke="#82b366" stroke-width="1.4"/>
+<text x="164.0" y="179.2" font-size="9" text-anchor="middle" xml:space="preserve" fill="#1a1a1a">supervisor</text>
+<rect x="254" y="162" width="806" height="28" rx="0" ry="0" fill="#fff2cc" stroke="#d6b656" stroke-width="1.4"/>
+<text x="657.0" y="179.5" font-size="10" text-anchor="middle" xml:space="preserve" fill="#1a1a1a">PIN  open(/proc/&lt;child&gt;/ns/net, O_RDONLY|O_CLOEXEC)</text>
+<rect x="40" y="198" width="34" height="28" rx="0" ry="0" fill="#f5f5f5" stroke="#999999" stroke-width="1.4"/>
+<text x="57.0" y="215.5" font-size="10" text-anchor="middle" xml:space="preserve" fill="#1a1a1a" font-weight="bold">4</text>
+<rect x="84" y="198" width="160" height="28" rx="0" ry="0" fill="#d5e8d4" stroke="#82b366" stroke-width="1.4"/>
+<text x="164.0" y="215.2" font-size="9" text-anchor="middle" xml:space="preserve" fill="#1a1a1a">supervisor</text>
+<rect x="254" y="198" width="806" height="28" rx="0" ry="0" fill="#fff2cc" stroke="#d6b656" stroke-width="1.4"/>
+<text x="657.0" y="215.5" font-size="10" text-anchor="middle" xml:space="preserve" fill="#1a1a1a">VERIFY  st_ino == reported net-namespace   else fail closed</text>
+<rect x="40" y="234" width="34" height="28" rx="0" ry="0" fill="#f5f5f5" stroke="#999999" stroke-width="1.4"/>
+<text x="57.0" y="251.5" font-size="10" text-anchor="middle" xml:space="preserve" fill="#1a1a1a" font-weight="bold">5</text>
+<rect x="84" y="234" width="160" height="28" rx="0" ry="0" fill="#d5e8d4" stroke="#82b366" stroke-width="1.4"/>
+<text x="164.0" y="251.2" font-size="9" text-anchor="middle" xml:space="preserve" fill="#1a1a1a">supervisor</text>
+<rect x="254" y="234" width="806" height="28" rx="0" ry="0" fill="#fff2cc" stroke="#d6b656" stroke-width="1.4"/>
+<text x="657.0" y="251.5" font-size="10" text-anchor="middle" xml:space="preserve" fill="#1a1a1a">TYPE  NS_GET_NSTYPE == CLONE_NEWNET   else fail closed</text>
+<rect x="40" y="270" width="34" height="28" rx="0" ry="0" fill="#f5f5f5" stroke="#999999" stroke-width="1.4"/>
+<text x="57.0" y="287.5" font-size="10" text-anchor="middle" xml:space="preserve" fill="#1a1a1a" font-weight="bold">6</text>
+<rect x="84" y="270" width="160" height="28" rx="0" ry="0" fill="#d5e8d4" stroke="#82b366" stroke-width="1.4"/>
+<text x="164.0" y="287.1" font-size="9" text-anchor="middle" xml:space="preserve" fill="#1a1a1a">supervisor</text>
+<rect x="254" y="270" width="806" height="28" rx="0" ry="0" fill="#fff2cc" stroke="#d6b656" stroke-width="1.4"/>
+<text x="657.0" y="287.5" font-size="10" text-anchor="middle" xml:space="preserve" fill="#1a1a1a">DERIVE  owner = ioctl(net_fd, NS_GET_USERNS)</text>
+<rect x="40" y="306" width="34" height="28" rx="0" ry="0" fill="#f5f5f5" stroke="#999999" stroke-width="1.4"/>
+<text x="57.0" y="323.5" font-size="10" text-anchor="middle" xml:space="preserve" fill="#1a1a1a" font-weight="bold">7</text>
+<rect x="84" y="306" width="160" height="28" rx="0" ry="0" fill="#d5e8d4" stroke="#82b366" stroke-width="1.4"/>
+<text x="164.0" y="323.1" font-size="9" text-anchor="middle" xml:space="preserve" fill="#1a1a1a">supervisor</text>
+<rect x="254" y="306" width="806" height="28" rx="0" ry="0" fill="#fff2cc" stroke="#d6b656" stroke-width="1.4"/>
+<text x="657.0" y="323.5" font-size="10" text-anchor="middle" xml:space="preserve" fill="#1a1a1a">TYPE  NS_GET_NSTYPE == CLONE_NEWUSER   else fail closed</text>
+<rect x="40" y="342" width="34" height="28" rx="0" ry="0" fill="#f5f5f5" stroke="#999999" stroke-width="1.4"/>
+<text x="57.0" y="359.5" font-size="10" text-anchor="middle" xml:space="preserve" fill="#1a1a1a" font-weight="bold">8</text>
+<rect x="84" y="342" width="160" height="28" rx="0" ry="0" fill="#d5e8d4" stroke="#82b366" stroke-width="1.4"/>
+<text x="164.0" y="359.1" font-size="9" text-anchor="middle" xml:space="preserve" fill="#1a1a1a">supervisor</text>
+<rect x="254" y="342" width="806" height="28" rx="0" ry="0" fill="#ffffff" stroke="#666666" stroke-width="1.4"/>
+<text x="657.0" y="359.5" font-size="10" text-anchor="middle" xml:space="preserve" fill="#1a1a1a">open pidfd on child-pid   (process identity, a distinct role)</text>
+<rect x="40" y="378" width="34" height="28" rx="0" ry="0" fill="#f5f5f5" stroke="#999999" stroke-width="1.4"/>
+<text x="57.0" y="395.5" font-size="10" text-anchor="middle" xml:space="preserve" fill="#1a1a1a" font-weight="bold">9</text>
+<rect x="84" y="378" width="160" height="28" rx="0" ry="0" fill="#d5e8d4" stroke="#82b366" stroke-width="1.4"/>
+<text x="164.0" y="395.1" font-size="9" text-anchor="middle" xml:space="preserve" fill="#1a1a1a">supervisor</text>
+<rect x="254" y="378" width="806" height="28" rx="0" ry="0" fill="#ffffff" stroke="#666666" stroke-width="1.4"/>
+<text x="657.0" y="395.5" font-size="10" text-anchor="middle" xml:space="preserve" fill="#1a1a1a">spawn slirp: --netns-type=path --userns-path=/proc/self/fd/&lt;owner&gt;</text>
+<rect x="40" y="414" width="34" height="28" rx="0" ry="0" fill="#f5f5f5" stroke="#999999" stroke-width="1.4"/>
+<text x="57.0" y="431.5" font-size="10" text-anchor="middle" xml:space="preserve" fill="#1a1a1a" font-weight="bold">10</text>
+<rect x="84" y="414" width="160" height="28" rx="0" ry="0" fill="#ffe6cc" stroke="#d79b00" stroke-width="1.4"/>
+<text x="164.0" y="431.1" font-size="9" text-anchor="middle" xml:space="preserve" fill="#1a1a1a">slirp4netns</text>
+<rect x="254" y="414" width="806" height="28" rx="0" ry="0" fill="#ffffff" stroke="#666666" stroke-width="1.4"/>
+<text x="657.0" y="431.5" font-size="10" text-anchor="middle" xml:space="preserve" fill="#1a1a1a">signals ready-fd; the supervisor then closes both namespace handles</text>
+<rect x="40" y="450" width="34" height="28" rx="0" ry="0" fill="#f5f5f5" stroke="#999999" stroke-width="1.4"/>
+<text x="57.0" y="467.5" font-size="10" text-anchor="middle" xml:space="preserve" fill="#1a1a1a" font-weight="bold">11</text>
+<rect x="84" y="450" width="160" height="28" rx="0" ry="0" fill="#d5e8d4" stroke="#82b366" stroke-width="1.4"/>
+<text x="164.0" y="467.1" font-size="9" text-anchor="middle" xml:space="preserve" fill="#1a1a1a">supervisor</text>
+<rect x="254" y="450" width="806" height="28" rx="0" ry="0" fill="#ffffff" stroke="#666666" stroke-width="1.4"/>
+<text x="657.0" y="467.5" font-size="10" text-anchor="middle" xml:space="preserve" fill="#1a1a1a">RELEASE  os.write(sync_fd, b&quot;x&quot;)  —  the only release primitive</text>
+<rect x="40" y="486" width="34" height="28" rx="0" ry="0" fill="#f5f5f5" stroke="#999999" stroke-width="1.4"/>
+<text x="57.0" y="503.5" font-size="10" text-anchor="middle" xml:space="preserve" fill="#1a1a1a" font-weight="bold">12</text>
+<rect x="84" y="486" width="160" height="28" rx="0" ry="0" fill="#fff2cc" stroke="#d6b656" stroke-width="1.4"/>
+<text x="164.0" y="503.1" font-size="9" text-anchor="middle" xml:space="preserve" fill="#1a1a1a">bwrap</text>
+<rect x="254" y="486" width="806" height="28" rx="0" ry="0" fill="#ffffff" stroke="#666666" stroke-width="1.4"/>
+<text x="657.0" y="503.5" font-size="10" text-anchor="middle" xml:space="preserve" fill="#1a1a1a">COMMAND finally executes: DNS 10.0.2.3, host loopback blocked</text>
+<rect x="40" y="540" width="1020" height="100" rx="0" ry="0" fill="#ffffff" stroke="#999999" stroke-width="1.4"/>
+<text x="48.0" y="556.0" font-size="10" text-anchor="start" xml:space="preserve" fill="#1a1a1a">Why the pin matters — bwrap performs --unshare-user in two steps: it creates a first user namespace to build the sandbox, then a second, nested one to drop privileges. A helper that</text>
+<text x="48.0" y="569.2" font-size="10" text-anchor="start" xml:space="preserve" fill="#1a1a1a">resolves /proc/&lt;pid&gt;/ns/user even 20 ms later joins the nested namespace and no longer has authority over the netns owner, so setns(CLONE_NEWNET) returns EPERM. Measured: a deliberate</text>
+<text x="48.0" y="582.4" font-size="10" text-anchor="start" xml:space="preserve" fill="#1a1a1a">20 ms delay failed 40 runs out of 40 with the PID-based form, and 0 out of 160 with the pinned form. The owning user namespace is derived from the netns object itself, which never</text>
+<text x="48.0" y="595.6" font-size="10" text-anchor="start" xml:space="preserve" fill="#1a1a1a">changes.</text>
+</svg>

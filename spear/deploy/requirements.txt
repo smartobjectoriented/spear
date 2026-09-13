@@ -1,0 +1,25 @@
+# Direct dependencies of the spear RAG stack.
+#
+# torch is NOT here: it must come from the CUDA index matching the target GPU,
+# not from PyPI. On the original workstation that is torch 2.12.0+cu130
+# (RTX 4060, sm_89); a Blackwell needs cu130 at minimum.
+chromadb==1.5.9
+sentence-transformers==5.5.1
+transformers==5.9.0
+huggingface_hub==1.20.1
+tokenizers==0.22.2
+numpy==2.4.6
+onnxruntime==1.26.0          # Chroma's default embedder (GPU-less fallback)
+openai==2.38.0               # OpenAI-compatible backends (llama-server, vLLM)
+anthropic==0.122.0           # Anthropic backend
+ddgs==9.14.4                 # search_internet tool
+# fetch_url. requests and lxml arrive transitively today (kubernetes,
+# ddgs) and are pinned here because this code imports them DIRECTLY:
+# a transitive dependency is someone else's decision to drop.
+requests==2.34.2             # fetch_url: the request itself
+lxml==6.1.1                  # fetch_url: HTML -> text
+pypdf==6.17.0                # fetch_url: PDF -> text
+pyfiglet==1.0.4              # banner
+Pygments==2.20.0
+rich==15.0.0
+httpx==0.28.1

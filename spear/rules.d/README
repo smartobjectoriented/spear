@@ -1,0 +1,16 @@
+rules.d/ — project rules, concatenated into the system prompt
+
+Every *.md here is injected verbatim, in alphabetical order, on every turn.
+Numeric prefixes give that order a meaning: 10-, 20-, 30-.
+
+Because they are always present, they cost context on every request. Keep
+them short, factual and about THIS tree: conventions a reader could not infer
+from the code, build invariants, the shape of the repository. Anything a
+retrieval could find belongs in a skill or a corpus instead.
+
+corpora/<name>.md is read only when that corpus is the session's, which is
+where per-project rules go.
+
+This directory ships with no rules. They describe a particular organisation's
+code and conventions, so they are yours to write and yours to keep -- outside
+the repository, or in your own downstream.

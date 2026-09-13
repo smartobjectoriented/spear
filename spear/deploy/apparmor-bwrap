@@ -1,0 +1,23 @@
+# AppArmor profile letting bubblewrap create user namespaces.
+#
+# Ubuntu 24.04+ sets kernel.apparmor_restrict_unprivileged_userns=1, which
+# stops any unconfined binary from opening a userns. bwrap needs one for
+# EVERYTHING: without it even `bwrap --dev-bind / / true` fails with
+#   bwrap: setting up uid map: Permission denied
+# and the networked mode with
+#   bwrap: loopback: Failed RTM_NEWADDR: Operation not permitted
+#
+# We grant the capability to bwrap ALONE rather than resetting the sysctl to 0
+# — that would lift the protection for the whole machine, which is not
+# acceptable on a shared host.
+#
+# Install:
+#   sudo install -m 0644 apparmor-bwrap /etc/apparmor.d/bwrap
+#   sudo apparmor_parser -r /etc/apparmor.d/bwrap
+abi <abi/4.0>,
+include <tunables/global>
+
+profile bwrap /usr/bin/bwrap flags=(unconfined) {
+  userns,
+  include if exists <local/bwrap>
+}

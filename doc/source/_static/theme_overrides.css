@@ -1,0 +1,47 @@
+/* SPEAR documentation — small readability overrides on the RTD theme. */
+
+/* Wide tables are the norm here (capability matrices, measurement tables):
+   let them use the full body width instead of scrolling in a narrow box. */
+.wy-table-responsive table td,
+.wy-table-responsive table th {
+    white-space: normal;
+}
+.wy-table-responsive {
+    overflow: visible;
+}
+
+/* Diagrams are SVG and scale; keep them from overflowing on narrow screens. */
+.rst-content img,
+.rst-content object[type="image/svg+xml"] {
+    max-width: 100%;
+    height: auto;
+}
+
+/* Figures get a light frame so a white-background diagram does not bleed into
+   the page background. */
+.rst-content div.figure,
+.rst-content figure {
+    border: 1px solid #e1e4e5;
+    padding: 8px;
+    background: #ffffff;
+}
+
+.rst-content div.figure p.caption,
+.rst-content figure figcaption {
+    font-style: normal;
+    color: #555;
+    padding-top: 6px;
+}
+
+/* Inline literals appear constantly (flag names, ioctl constants); make them
+   read as code without shouting. */
+.rst-content code.literal {
+    color: #b3401f;
+    background: #fbf7f4;
+    border-color: #f0e4dc;
+}
+
+/* Admonitions used for the fail-closed rules. */
+.rst-content .admonition-title {
+    font-weight: 600;
+}

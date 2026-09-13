@@ -1,0 +1,5 @@
+# Generated: sampled model answers and assembled pairs. They are data, not
+# source, and they belong beside the private traces under SPEAR_STATE_DIR.
+synthetic_samples.json
+preference_train.jsonl
+__pycache__/

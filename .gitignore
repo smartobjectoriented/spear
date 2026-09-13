@@ -1,0 +1,101 @@
+# ─────────────────────────────────────────────────────────────────────────
+# Poids de modèles — plusieurs dizaines de Go, jamais dans git.
+# ─────────────────────────────────────────────────────────────────────────
+/models/
+# Served GGUFs. The first name is the directory this deployment still has
+# on disk (47 GB): renaming the RULE without moving the DIRECTORY is how
+# 47 GB becomes visible to `git add -A`. The second is where the server
+# layout puts them.
+/edgem-gguf/
+/models/gguf/
+
+# ─────────────────────────────────────────────────────────────────────────
+# Environnements virtuels Python.
+# spear est à la fois l'application ET son venv : le code est versionné,
+# l'arborescence du venv ne l'est pas (5,4 Go).
+# ─────────────────────────────────────────────────────────────────────────
+/spear/bin/
+/spear/include/
+/spear/lib/
+/spear/lib64
+/spear/share/
+/spear/pyvenv.cfg
+/qwen3-finetune/.venv/
+
+# ─────────────────────────────────────────────────────────────────────────
+# Caches reconstructibles : index vectoriel (index_corpus.py) et cache
+# HuggingFace datasets du fine-tuning (fichiers .arrow, répertoires hachés).
+# ─────────────────────────────────────────────────────────────────────────
+/spear/chromadb/
+/qwen3-finetune/models/datasets/
+
+# ─────────────────────────────────────────────────────────────────────────
+# Données d'exécution : transcriptions de conversation et journal d'audit.
+# Elles grossissent à chaque session et figeraient le contenu des échanges
+# dans l'historique git. Le code qui les produit est versionné, lui.
+# ─────────────────────────────────────────────────────────────────────────
+/spear/history*.json
+/spear/history*.jsonl
+/spear/audit/
+/spear/standards/
+# Canonical training episodes/drafts are local evidence and may contain
+# redacted task content.  Keep this explicit even though audit/ is ignored.
+/spear/audit/training-data/
+/spear/llama-server.log
+/spear/.input_history
+
+# ─────────────────────────────────────────────────────────────────────────
+# Clone upstream de llama.cpp : porte son propre dépôt git (ggml-org/llama.cpp)
+# et son répertoire de build.
+# ─────────────────────────────────────────────────────────────────────────
+/llama.cpp-next/
+
+# ─────────────────────────────────────────────────────────────────────────
+# Sorties générées.
+# ─────────────────────────────────────────────────────────────────────────
+/doc/build/
+# Rendered PNGs: export_png.sh makes them from the tracked SVGs on demand, for
+# a slide or an issue. The SVG is the artifact worth versioning -- it is what
+# the documentation embeds, and it stays crisp at any zoom.
+/doc/source/img/*.png
+__pycache__/
+*.pyc
+*.pyo
+
+# État runtime : dernier backend choisi, réécrit à chaque lancement.
+/spear/active-backend.conf
+
+# GPU epingle sur machine partagee — voir embedding.py
+/spear/active-gpu.conf
+# reglages d'endpoint propres a la machine — voir spear-chat.sh
+/spear/machine.env
+
+# Backend endpoints: a host, a user and a key path, per machine and per
+# rental. The tracked *.example files carry the schema and nothing else.
+/spear/reds.conf
+/spear/reds.local.conf
+/spear/pod.conf
+
+# Per-machine configuration: these hold ABSOLUTE paths, so tracking them means
+# every sync overwrites the target machine's settings with the author's. That
+# is exactly what happened on reds-ml — a git reset --hard silently repointed
+# all 15 corpora at /home/operator paths that do not exist there, and at a
+# model file on the wrong host. See projects.example.json for the schema.
+/spear/projects.json
+/spear/active-model.conf
+
+# GPU offload target for indexing — per machine, holds an ssh destination
+/spear/active-embed-remote.conf
+
+# …and the command that runs the worker THERE. Per machine for the same
+# reason: it is the remote account's directory layout, which the tracked code
+# deliberately knows nothing about. See reds.conf.example for the shape.
+/spear/active-embed-remote-cmd.conf
+
+# A real server deployment config placed in the checkout instead of
+# ~/spear-runtime/config/. It names one machine -- host, card, model paths --
+# and server/config/ ships only *.example on purpose. Ignored so that putting
+# it here by mistake cannot become a commit.
+/server/config/server.conf
+/server/config/gpu.conf
+/server/config/*.local.conf

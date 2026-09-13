@@ -1,0 +1,416 @@
+"""Confined, rebuildable vector index for canonical standard source units."""
+
+from __future__ import annotations
+
+import hashlib
+import json
+import math
+import os
+from dataclasses import dataclass
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import Protocol, Sequence
+
+from standard_schema import (
+    StandardVectorIndexManifest, canonical_json, sha256_json,
+)
+from standard_store import StandardStore, StandardStoreError
+
+
+VECTOR_INDEX_VERSION = 1
+EMBEDDING_CONFIG_VERSION = "standard-retrieval-text-v1"
+
+
+class LocalStandardEmbedder(Protocol):
+    model_id: str
+    model_revision: str
+
+    def embed_documents(self, texts: Sequence[str]) -> list[list[float]]: ...
+
+    def embed_query(self, text: str) -> list[float]: ...
+
+
+def retrieval_text(unit) -> str:
+    """Visible semantic metadata only; identity and storage metadata are excluded."""
+
+    return "\n".join(part for part in (
+        f"Section {unit.section}" if unit.section else "",
+        " > ".join(unit.heading_path), unit.text,
+    ) if part)
+
+
+@dataclass
+class SentenceTransformerStandardEmbedder:
+    """Strictly local adapter around SPEAR's configured embedding models."""
+
+    model_id: str
+    model_revision: str
+
+    def __post_init__(self) -> None:
+        import embedding
+
+        # A standard's vector index is part of its identity, so the model must
+        # be named outright: the default could change under it.
+
+        if self.model_id == embedding.DEFAULT:
+            raise ValueError("standards require an explicit local SentenceTransformer model")
+
+        model_path = Path(self.model_id).expanduser()
+
+        if self.model_id not in embedding.MODELS and not model_path.exists():
+            raise ValueError("unsupported standard embedding model ID")
+
+        # Refused up front rather than discovered as a download attempt during
+        # a rebuild: indexing a licensed standard stays entirely local.
+
+        if not model_path.exists() and not embedding._is_cached(self.model_id):
+            raise RuntimeError("standard embedding model is not present in the local cache")
+
+        self._document_prefix, self._query_prefix, self._trust = embedding.MODELS.get(
+            self.model_id, ("", "", False))
+        self._model = None
+
+    def _load(self):
+        """Load the model on first use, offline and pinned to its revision."""
+
+        if self._model is None:
+            # Set before the import: the hub client reads these at import time,
+            # and the point is that no request ever leaves this machine.
+
+            os.environ.setdefault("HF_HUB_OFFLINE", "1")
+            os.environ.setdefault("HF_HUB_DISABLE_XET", "1")
+
+            from sentence_transformers import SentenceTransformer
+
+            self._model = SentenceTransformer(
+                self.model_id, revision=self.model_revision,
+                device=os.environ.get("SPEAR_STANDARD_EMBED_DEVICE", "cpu"),
+                trust_remote_code=self._trust, local_files_only=True,
+            )
+
+        return self._model
+
+    def embed_documents(self, texts: Sequence[str]) -> list[list[float]]:
+        return self._load().encode(
+            [self._document_prefix + text for text in texts],
+            normalize_embeddings=True, convert_to_numpy=True,
+            show_progress_bar=False,
+        ).tolist()
+
+    def embed_query(self, text: str) -> list[float]:
+        return self._load().encode(
+            [self._query_prefix + text], normalize_embeddings=True,
+            convert_to_numpy=True, show_progress_bar=False,
+        )[0].tolist()
+
+
+LICENSED_ORIGIN = "LICENSED_STANDARD"
+
+
+@dataclass
+class OffloadedStandardEmbedder:
+    """Documents embedded on the GPU host; queries never leave this machine.
+
+    The offload exists because bge-m3 over a corpus is minutes of saturated CPU
+    here and seconds on the RTX 6000 there. It is refused for a licensed
+    standard and allowed for a public one, because the two are not the same
+    act: indexing sends the STANDARD'S TEXT to another machine — one shared
+    under a common login — while answering sends only the user's question,
+    which is why embed_query stays local whatever the origin.
+
+    The pinned revision is enforced on both ends. The remote worker takes a
+    model name and no revision, so it loads whatever that host's cache resolves
+    `main` to; unchecked, the fingerprint this index is stamped with would name
+    a revision the vectors were not produced by.
+    """
+
+    model_id: str
+    model_revision: str
+    target: str
+
+    @property
+    def compute_label(self) -> str:
+        return f"offload:{self.target}"
+
+    def __post_init__(self) -> None:
+        self._local = SentenceTransformerStandardEmbedder(
+            self.model_id, self.model_revision)
+        remote = remote_model_revision(self.model_id, self.target)
+
+        if remote != self.model_revision:
+            raise RuntimeError(
+                f"{self.target} resolves {self.model_id} to {remote or 'nothing'}, "
+                f"not the pinned {self.model_revision}: the vectors would not "
+                f"match the fingerprint they are stamped with")
+
+    def embed_documents(self, texts: Sequence[str]) -> list[list[float]]:
+        import embedding
+
+        vectors = embedding._embed_remote(
+            list(texts), self.model_id, self.target, 16, True)
+
+        if vectors is None:
+            raise RuntimeError(
+                f"embedding on {self.target} failed; refusing to fall back to "
+                f"local CPU for a corpus this size — fix the host or unset "
+                f"SPEAR_STANDARD_EMBED_REMOTE")
+
+        return vectors
+
+    def embed_query(self, text: str) -> list[float]:
+        return self._local.embed_query(text)
+
+
+def remote_model_revision(model_id: str, target: str) -> str | None:
+    """What `main` resolves to for this model in the GPU host's cache."""
+    import subprocess
+
+    import embedding
+
+    slug = "models--" + model_id.replace("/", "--")
+    command = ["ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=15"]
+    command += embedding.remote_ssh_opts()
+    command += [target, f"cat ~/.cache/huggingface/hub/{slug}/refs/main"]
+
+    try:
+        done = subprocess.run(command, capture_output=True, text=True, timeout=45)
+    except (OSError, subprocess.SubprocessError) as exc:
+        raise RuntimeError(f"cannot reach {target}: {exc}") from exc
+
+    return done.stdout.strip() or None
+
+
+DISCLOSURE_FILE = "offload-disclosure.json"
+
+
+def offload_disclosures(store, standard_id: str, revision: str) -> list:
+    """Every time this LICENSED corpus's text was sent to another machine."""
+    path = store.revision_dir(standard_id, revision) / DISCLOSURE_FILE
+
+    if not path.exists() or path.is_symlink():
+        return []
+
+    try:
+        return list(json.loads(path.read_text("utf-8")))
+    except (OSError, ValueError):
+        return []
+
+
+def record_offload_disclosure(store, standard_id: str, revision: str, *,
+                              target: str, unit_count: int, model_id: str,
+                              at: str | None = None) -> None:
+    """Append the fact that a licensed corpus left this machine.
+
+    Not part of any fingerprint, deliberately: the same model and revision
+    produce the same vectors wherever they run, so where they ran must not
+    change the index's identity. It is not an index property at all — it is a
+    disclosure, and the question it answers ("was this licensed text ever sent
+    anywhere?") has to survive the next rebuild, which is why it appends.
+    """
+    entries = offload_disclosures(store, standard_id, revision)
+    entries.append({
+        "target": target, "unit_count": unit_count, "model_id": model_id,
+        "at": at or datetime.now(timezone.utc).isoformat(timespec="seconds"),
+    })
+    path = store.revision_dir(standard_id, revision) / DISCLOSURE_FILE
+    path.write_text(json.dumps(entries, indent=2, sort_keys=True), "utf-8")
+
+
+def configured_embedder(source_origin: str = LICENSED_ORIGIN, *,
+                        allow_offload: bool = False):
+    """The embedder for a standard of this origin, or None if none is set up.
+
+    No model configured is not an error: vector search is optional, and
+    retrieval falls back to lexical.
+
+    `allow_offload` is the operator saying, for this one command, that this
+    licensed corpus may be embedded on the GPU host anyway. It is a flag and
+    not a stored property on purpose: relabelling the corpus PUBLIC would buy
+    the same offload and would also tell training governance the text is
+    exportable, which is a different and much larger claim.
+    """
+    model_id = os.environ.get("SPEAR_STANDARD_EMBED_MODEL")
+
+    if not model_id:
+        return None
+
+    # An unpinned revision is an error: the index fingerprint would otherwise
+    # depend on whatever the cache happened to hold.
+
+    revision = os.environ.get("SPEAR_STANDARD_EMBED_REVISION")
+
+    if not revision:
+        raise ValueError("SPEAR_STANDARD_EMBED_REVISION must pin the local model revision")
+
+    target = (os.environ.get("SPEAR_STANDARD_EMBED_REMOTE") or "").strip()
+
+    if target and (source_origin != LICENSED_ORIGIN or allow_offload):
+        return OffloadedStandardEmbedder(model_id, revision, target)
+
+    return SentenceTransformerStandardEmbedder(model_id, revision)
+
+
+def configured_local_embedder() -> SentenceTransformerStandardEmbedder | None:
+    """Strictly local, whatever the origin. Kept for callers that must not
+    offload under any circumstance."""
+
+    return configured_embedder(LICENSED_ORIGIN)
+
+
+UNIT_NORM_TOLERANCE = 1e-6
+
+
+def _validated(vector: Sequence[float], *, dimension: int | None = None) -> list[float]:
+    values = [float(value) for value in vector]
+
+    if not values or (dimension is not None and len(values) != dimension):
+        raise StandardStoreError("vector dimension mismatch")
+
+    if not all(math.isfinite(value) for value in values):
+        raise StandardStoreError("vector contains a non-finite value")
+
+    return values
+
+
+def _normalized(vector: Sequence[float], *, dimension: int | None = None) -> list[float]:
+    values = _validated(vector, dimension=dimension)
+    norm = math.sqrt(sum(value * value for value in values))
+
+    if norm <= 0:
+        raise StandardStoreError("zero-length vector is invalid")
+
+    return [value / norm for value in values]
+
+
+def _already_normalized(vector: Sequence[float], *,
+                        dimension: int | None = None) -> list[float]:
+    """Accept a stored vector verbatim; never re-derive one that is already unit length.
+
+    Dividing an already-normalized float32-derived vector by its float64 norm shifts
+    its last representable digits, which would change the vector index fingerprint --
+    and so the StandardBinding -- on a rebuild that changed nothing.
+    """
+
+    values = _validated(vector, dimension=dimension)
+    norm = math.sqrt(sum(value * value for value in values))
+
+    if abs(norm - 1.0) > UNIT_NORM_TOLERANCE:
+        raise StandardStoreError("cached vector is not unit-normalized")
+
+    return values
+
+
+def rebuild_vector_index(
+    store: StandardStore, standard_id: str, revision: str,
+    embedder: LocalStandardEmbedder, *, created_at: str | None = None,
+) -> StandardVectorIndexManifest:
+    source = store.verify_corpus(standard_id, revision)
+    units = [unit for unit in store.load_units(standard_id, revision)
+             if unit.retrievable]
+
+    if not units:
+        raise StandardStoreError("canonical corpus has no retrievable units")
+
+    texts = [retrieval_text(unit) for unit in units]
+
+    # WHERE the model ran belongs in the config, because it changes the answer.
+    # Measured on NISTIR 6556 with bge-m3 at one pinned revision: vectors from
+    # the GPU host differ from vectors computed here by up to 2.8e-4 per
+    # component — reduced precision, not float32 rounding. Left out, the
+    # fingerprint would claim two materially different indexes are the same
+    # one, and a rebuild that moved between machines would look like a no-op.
+    config = {
+        "version": EMBEDDING_CONFIG_VERSION,
+        "model_id": embedder.model_id,
+        "model_revision": embedder.model_revision,
+        "compute": getattr(embedder, "compute_label", "local"),
+        "normalization": "l2-unit",
+    }
+    config_fingerprint = sha256_json(config)
+    cache_dir = store.revision_dir(standard_id, revision) / "indexes" / "embedding-cache"
+
+    if cache_dir.exists() and cache_dir.is_symlink():
+        raise StandardStoreError("embedding cache path uses a symlink")
+
+    vectors: list[list[float] | None] = [None] * len(units)
+    from_cache = [False] * len(units)
+    missing_indexes: list[int] = []
+
+    for position, text in enumerate(texts):
+        key = sha256_json({"config": config_fingerprint,
+                           "retrieval_text_sha256": hashlib.sha256(
+                               text.encode("utf-8")).hexdigest()})
+        path = cache_dir / f"{key}.json"
+
+        if path.exists() and not path.is_symlink():
+            try:
+                cached = store._read_json(path)
+                vectors[position] = _already_normalized(cached["vector"])
+            except Exception:
+                # A corrupt or non-unit cache entry is re-embedded, never trusted.
+
+                vectors[position] = None
+            else:
+                from_cache[position] = True
+                continue
+
+        missing_indexes.append(position)
+
+    if missing_indexes:
+        generated = embedder.embed_documents([texts[index] for index in missing_indexes])
+
+        if len(generated) != len(missing_indexes):
+            raise StandardStoreError("embedding backend returned a short result")
+
+        for position, vector in zip(missing_indexes, generated):
+            vectors[position] = list(vector)
+
+    dimension = len(vectors[0] or ())
+    entries = {}
+    text_hashes = {}
+
+    for position, (unit, text, raw_vector) in enumerate(zip(units, texts, vectors)):
+        cached = from_cache[position]
+        vector = (_already_normalized(raw_vector or (), dimension=dimension) if cached
+                  else _normalized(raw_vector or (), dimension=dimension))
+        entries[unit.source_id] = vector
+        text_hash = hashlib.sha256(text.encode("utf-8")).hexdigest()
+        text_hashes[unit.source_id] = text_hash
+
+        if cached:
+            continue
+
+        key = sha256_json({"config": config_fingerprint,
+                           "retrieval_text_sha256": text_hash})
+        store._atomic_write(cache_dir / f"{key}.json", canonical_json({
+            "schema_version": 1, "vector": vector,
+        }))
+
+    index = {
+        "schema_version": 1, "standard_id": standard_id, "revision": revision,
+        "embedding_config": config, "dimension": dimension,
+        "entries": dict(sorted(entries.items())),
+        "retrieval_text_sha256": dict(sorted(text_hashes.items())),
+    }
+    fingerprint = sha256_json({
+        "vector_index_version": VECTOR_INDEX_VERSION,
+        "source_corpus_sha256": source.corpus_manifest_sha256,
+        "index": index,
+    })
+    manifest = StandardVectorIndexManifest(
+        standard_id, revision, source.source_pdf_sha256,
+        source.corpus_manifest_sha256, embedder.model_id,
+        embedder.model_revision, dimension, "l2-unit", "canonical-json-float-v1",
+        VECTOR_INDEX_VERSION, len(entries), config_fingerprint, fingerprint,
+        created_at or datetime.now(timezone.utc).isoformat(timespec="seconds"),
+    )
+    store.save_vector_index(manifest, index)
+
+    return manifest
+
+
+def cosine_similarity(left: Sequence[float], right: Sequence[float]) -> float:
+    if len(left) != len(right):
+        raise StandardStoreError("vector dimension mismatch")
+
+    return sum(float(a) * float(b) for a, b in zip(left, right))

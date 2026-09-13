@@ -1,10 +1,15 @@
 #!/usr/bin/env python3
 """Derive docker/projects.docker.json from the host registry.
 
-Run by build.sh, not by hand: this file must be regenerated whenever
-projects.json changes, and a hand-maintained copy drifts silently -- a corpus
-added on the host would simply be absent from the image, and the entrypoint
-would report it missing without anyone knowing why.
+Run by build.sh, not by hand. Its output is BUILD OUTPUT and is gitignored:
+this file must be regenerated whenever projects.json changes, and a committed
+copy would be both stale -- a corpus added on the host would simply be absent
+from the image, and the entrypoint would report it missing without anyone
+knowing why -- and a publication of one machine's corpus graph, with its
+project names, its federations and its collection hashes.
+
+The repository therefore carries exactly one registry by hand, and it is an
+example: spear/projects.example.json. There is no second one to keep in step.
 
 Two rewrites happen here, and both are about things that move:
 

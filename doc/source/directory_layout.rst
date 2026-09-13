@@ -192,6 +192,8 @@ Persistent state
    * - ``llama-server.log``
      - Server log for the currently running unit.
 
+.. _entry-points:
+
 Entry points
 ============
 
@@ -244,6 +246,7 @@ This documentation
 
    doc/
      Makefile                       make html | latexpdf | diagrams | …
+     requirements.txt               pinned Sphinx toolchain (local and CI)
      source/
        conf.py                      Sphinx configuration
        *.rst                        the chapters
@@ -282,4 +285,17 @@ Building
 
 Sphinx and the RTD theme come from the system Python (``/usr/bin/sphinx-build``),
 not from the ``spear`` virtualenv, which deliberately carries only the
-application's runtime dependencies.
+application's runtime dependencies.  ``doc/requirements.txt`` pins the versions
+for anyone who prefers an isolated environment:
+
+.. code-block:: console
+
+   $ pip install -r doc/requirements.txt
+
+The same file is what ``.github/workflows/docs.yml`` installs.  That workflow
+builds these pages on every push to ``main`` and publishes them to GitHub
+Pages, so the published site is always the documentation of the current
+``main``; a pull request builds the documentation but never publishes it.  The
+build must stay dependency-free with respect to the application — the
+documentation imports no project module, which is why a Sphinx toolchain and a
+checkout are the whole of what CI needs.

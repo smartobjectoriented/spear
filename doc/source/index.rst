@@ -29,6 +29,8 @@ refusal, not a shortcut.
    :caption: Contents
 
    introduction
+   getting_started
+   usage
    directory_layout
    architecture
    final_harness_audit
@@ -41,11 +43,17 @@ refusal, not a shortcut.
    resource_control
    testing
    training
+   model_history
    operations
    container
 
 Reading order
 =============
+
+If you only want to run it, :doc:`getting_started` is four commands and the
+one measurement that explains why the retrieval index is not optional, and
+:doc:`usage` is the tour of the command line, the in-chat commands and the
+guards.
 
 If you are new to the project, read :doc:`introduction` and
 :doc:`directory_layout` first: together they explain what runs where.
@@ -58,6 +66,10 @@ of subtlety.
 
 If you are debugging a failure, :doc:`operations` lists the observable states
 and where each one is reported.
+
+If you want to know why this model and not another — and what the fine-tuning
+experiments actually measured, including the one that cost a rented B200 —
+that is :doc:`model_history`.
 
 If you are here for the fine-tuning side — how the harness turns its own usage
 into a governed dataset, and what it takes to run a job on the card that also

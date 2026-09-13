@@ -1,0 +1,7 @@
+# Build dependencies for the SPEAR Sphinx documentation.
+#
+# Pinned so that a CI build and a local build render the same pages; the
+# harness itself is not imported by the documentation build, so nothing else
+# from the project is needed here.
+sphinx==7.2.6
+sphinx-rtd-theme==3.0.2

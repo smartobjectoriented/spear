@@ -136,6 +136,24 @@ Logs and audit
 ``history*.json``
    Conversation transcripts, per project.
 
+Runtime tracing
+---------------
+
+Tracing is **disabled by default**.  Enable provider-neutral JSONL traces for a
+benchmark run with:
+
+.. code-block:: console
+
+   $ SPEAR_TRACE=1 spear-chat
+
+Events are appended to ``audit/runtime-trace.jsonl``; ``SPEAR_TRACE_FILE``
+chooses another location.  Traces record timing, counts, provider and model
+identifiers, normalized outcomes and safe tool metadata.  They do **not** record
+raw prompts, model responses, command strings, tool content, query or note
+values, environment variables, or authorization data.  Workspace-relative file
+paths and tool argument *names* are kept, because without them a trace cannot
+be used to debug or to analyse a benchmark run.
+
 Known environment quirks
 ========================
 

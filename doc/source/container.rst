@@ -140,6 +140,8 @@ Two build contexts
 
 A bare ``docker build`` therefore fails on the missing ``--from=repo``.
 
+.. _relative-corpus-paths:
+
 Relative corpus paths
 =====================
 

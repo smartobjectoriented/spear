@@ -57,6 +57,45 @@ The flags that matter
    One slot.  This is a single-user assistant; concurrency would only fragment
    the KV cache.
 
+The launcher holds no flag values
+=================================
+
+``server/inference/serve.sh`` contains no context size, no model path, no port
+and no thread count.  Those come from ``server/config/server.conf``, or from
+``SPEAR_SERVER_*`` in the environment; ``server/config/server.conf.example``
+documents every key.  The script itself contributes only what is a property of
+the *build* rather than of a deployment:
+
+``--cache-type-k q8_0 --cache-type-v q8_0``
+   the quantised KV cache;
+
+``--flash-attn``
+   unconditional;
+
+``--jinja``
+   required for the chat template and therefore for tool calling;
+
+``--n-cpu-moe``
+   for a mixture-of-experts model, unless a deployment says otherwise.
+
+Context size has no built-in default at all.  It is the one value two earlier
+implementations disagreed about, so it must be stated by the deployment rather
+than inherited from whichever launcher happened to run.
+
+Sampling
+========
+
+Sampling is a client-side decision and lives in ``rag_chat.py``: temperature
+0.7, ``top_p`` 0.8, ``top_k`` 20, ``repeat_penalty`` 1.05.  Lower temperatures
+are not safer here — they drive this model into repetition death-loops.  A
+stream circuit-breaker truncates them when they happen anyway.
+
+To survive a session, run the server as a transient unit:
+
+.. code-block:: console
+
+   $ sudo systemd-run --unit=spear-llm server/inference/serve.sh --lora <adapter>
+
 Model and adapter switching
 ===========================
 

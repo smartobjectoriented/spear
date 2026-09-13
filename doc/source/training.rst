@@ -168,6 +168,8 @@ assistant message; every earlier assistant message is context with
 hard error — that is how a model learns to reproduce the mistake it later
 recovered from.
 
+.. _the-moe-lesson:
+
 The MoE lesson
 ==============
 

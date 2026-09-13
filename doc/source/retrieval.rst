@@ -135,6 +135,8 @@ unusable and refused by the command policy.  Absolute paths outside the
 workspace are readable (:doc:`security_model`), so what the model is shown is
 what it can open.
 
+.. _retrieval-measured-effect:
+
 Measured effect
 ---------------
 

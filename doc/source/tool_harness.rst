@@ -7,6 +7,8 @@ provider-neutral lifecycle above it is split between ``ToolRegistry``,
 ``ToolRouter``, ``AgentRuntime`` and ``TaskController``; none imports
 ``rag_chat``.  The substrate remains independently testable.
 
+.. _the-web-pair:
+
 The web pair
 ============
 

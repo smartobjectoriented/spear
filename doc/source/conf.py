@@ -85,7 +85,7 @@ html_show_sourcelink = False
 html_show_sphinx = False
 html_show_copyright = True
 html_file_suffix = None
-htmlhelp_basename = 'edgemaidoc'
+htmlhelp_basename = 'speardoc'
 
 # -- Options for LaTeX output ----------------------------------------------
 

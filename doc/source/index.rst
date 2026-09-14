@@ -35,6 +35,7 @@ refusal, not a shortcut.
    architecture
    final_harness_audit
    model_serving
+   runtime_bootstrap
    retrieval
    tool_harness
    security_model

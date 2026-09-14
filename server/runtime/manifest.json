@@ -1,0 +1,103 @@
+{
+  "spear_runtime_manifest": 1,
+
+  "profile": {
+    "name": "qwen3-coder-next-q8-cuda13",
+    "description": "The deployment this manifest was measured against: one 96 GB Blackwell card, CUDA 13, a Q8_0 Qwen3-Coder-Next served at 98304 tokens, and a bge-m3 embedding worker whose vectors were shown bit-identical to the worker it replaced.",
+    "validated": "2026-09-14",
+    "notes": "A profile, not a requirement. Nothing here names a host, an account, a card or a filesystem path: the machine-specific values (root, GPU UUID, port) are supplied to bootstrap-runtime.sh, never written here."
+  },
+
+  "layout": {
+    "directories": ["llama.cpp", "models/gguf", "embed", "config", "log"],
+    "excluded": {
+      "reason": "Reconstructible runtime only. These exist in some deployments as the sediment of past migrations; they are deliberately NOT part of what a bootstrap rebuilds, and not versioned.",
+      "patterns": ["S1-*", "S3-*", "staging", "log/*", "*.rollback", "config/*.local"]
+    }
+  },
+
+  "llama_cpp": {
+    "repository": "https://github.com/ggml-org/llama.cpp",
+    "revision": "dc64a1620e8ae6f01fb33f09470b7160f69fd0f2",
+    "describe": "b10524-9-gdc64a1620",
+    "build_number": 10533,
+    "commit_short": "dc64a1620",
+    "committed": "2026-08-20",
+    "binary": "build/bin/llama-server",
+    "cmake": {
+      "GGML_CUDA": "ON",
+      "BUILD_SHARED_LIBS": "ON",
+      "CMAKE_BUILD_TYPE": "Release"
+    },
+    "cuda_architecture": "120",
+    "cuda_minimum": "12.8",
+    "revision_policy": "An immutable commit, never a branch. A moving ref is not a reproducibility contract: the binary that serves today would differ from the one measured, with nothing recording that it changed."
+  },
+
+  "model": {
+    "family": "qwen3-coder-next",
+    "quantisation": "Q8_0",
+    "architecture": "qwen3next",
+    "repository": "Qwen/Qwen3-Coder-Next-GGUF",
+    "directory": "Qwen3-Coder-Next-Q8_0",
+    "first_shard": "Qwen3-Coder-Next-Q8_0-00001-of-00004.gguf",
+    "total_bytes": 84812055968,
+    "shards": [
+      {
+        "name": "Qwen3-Coder-Next-Q8_0-00001-of-00004.gguf",
+        "size": 26190321568,
+        "sha256": "30b7554fc0c846a5dc3ecf585884c77471f73e3da698a8ba4fabd8e7868c6533"
+      },
+      {
+        "name": "Qwen3-Coder-Next-Q8_0-00002-of-00004.gguf",
+        "size": 26212935584,
+        "sha256": "3f96379de5a5c4655cb378710ea571d5e9cc96f260120a44a6477198efcdc27d"
+      },
+      {
+        "name": "Qwen3-Coder-Next-Q8_0-00003-of-00004.gguf",
+        "size": 26047157792,
+        "sha256": "5dd1ce07eaae95ee430331dc9c6f3120ff88e4211ad3a0cceeaa963f25328504"
+      },
+      {
+        "name": "Qwen3-Coder-Next-Q8_0-00004-of-00004.gguf",
+        "size": 6361641024,
+        "sha256": "76730702c630bf76305139165cb85421858604030851dfd64fe96a5e67cda99d"
+      }
+    ],
+    "integrity_policy": "Size is the cheap check and runs every time; sha256 reads 79 GB and runs only when asked for. The hashes are the publisher's own, recorded so a shard can be proven rather than assumed -- a truncated or half-resumed download has the wrong size, but a corrupted one does not."
+  },
+
+  "embedding": {
+    "requirements": "server/embed/requirements.txt",
+    "constraints": "server/embed/constraints-reds-tested.txt",
+    "protocol_version": 1,
+    "protocol_key": "spear_embed_protocol",
+    "venv": "embed/venv",
+    "launcher": "embed/run-worker.sh",
+    "python_minimum": "3.12",
+    "torch_index": "https://download.pytorch.org/whl/cu130",
+    "torch_pin": "torch==2.12.0+cu130",
+    "probe": {
+      "model": "BAAI/bge-m3",
+      "dimension": 1024,
+      "max_seq_length": 1024
+    },
+    "semantics": "The CLIENT owns model, prefix, cap, normalisation and batching; the server owns device, dtype and loading. The probe values are what this profile's client asks for, recorded so a bootstrap can verify the answer has the right shape."
+  },
+
+  "server_defaults": {
+    "SPEAR_SERVER_CTX": "98304",
+    "SPEAR_SERVER_PARALLEL": "1",
+    "SPEAR_SERVER_NGL": "99",
+    "SPEAR_SERVER_THREADS": "16",
+    "SPEAR_SERVER_HOST": "127.0.0.1",
+    "SPEAR_SERVER_PORT": "8010",
+    "SPEAR_SERVER_NCPUMOE": "0",
+    "SPEAR_SERVER_LORA": "none"
+  },
+
+  "server_fixed_flags": {
+    "reason": "Decided by server/inference/serve.sh for every deployment, listed here so verification can prove the launcher still emits them rather than trusting that it does.",
+    "flags": ["--flash-attn on", "--cache-type-k q8_0", "--cache-type-v q8_0", "--jinja"]
+  }
+}

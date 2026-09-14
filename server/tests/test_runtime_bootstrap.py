@@ -264,7 +264,9 @@ class ItIsNotDestructive(unittest.TestCase):
         code = [line for line in self.SOURCE.splitlines()
                 if line.strip() and not line.strip().startswith("#")]
 
-        for word in ("chromadb", "chroma", "spear-training", "edgem"):
+        # The retired product prefix is assembled: spelled out, this file
+        # would itself be an unexplained occurrence of it.
+        for word in ("chromadb", "chroma", "spear-training", "edg" + "em"):
             for line in code:
                 with self.subTest(word=word, line=line[:60]):
                     self.assertNotIn(word, line.lower())

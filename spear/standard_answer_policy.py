@@ -35,6 +35,7 @@ import diagram_geometry
 import evidence_bootstrap
 import evidence_progress
 import evidence_recovery
+import normative_claims
 import normative_precedence
 import provenance_guard
 from evidence_guard import EvidenceLedger, guard as evidence_guard_answer
@@ -106,6 +107,12 @@ class StandardAnswerPolicy:
         default_factory=provenance_guard.ProvenanceLedger)
     clauses: conformance_guard.ClauseLedger = field(
         default_factory=conformance_guard.ClauseLedger)
+
+    # The same retrievals, kept with their words, their modality and their
+    # type. The clause ledger holds section numbers: it answers "was it
+    # retrieved?" and cannot answer "does it agree?".
+    claim_evidence: normative_claims.NormativeEvidence = field(
+        default_factory=normative_claims.NormativeEvidence)
     code: conformance_mode.CodeReadLedger = field(
         default_factory=conformance_mode.CodeReadLedger)
 
@@ -141,6 +148,8 @@ class StandardAnswerPolicy:
     replaced_verdicts: list = field(default_factory=list)
     provenance_fired: bool = False
     precedence_fired: bool = False
+    claims_fired: bool = False
+    claim_findings: list = field(default_factory=list)
     precedence_findings: list = field(default_factory=list)
     replaced_requirements: list = field(default_factory=list)
     guard_violations: list = field(default_factory=list)
@@ -169,6 +178,7 @@ class StandardAnswerPolicy:
 
         if isinstance(payload, dict) and not payload.get("error"):
             self.clauses.observe(payload, text)
+            self.claim_evidence.observe(payload)
 
         if isinstance(payload, dict) and not payload.get("error"):
             if name == "standard.get_structure":
@@ -346,6 +356,17 @@ class StandardAnswerPolicy:
         self.precedence_fired = precedence_fired
         self.precedence_findings = list(requirements)
         self.replaced_requirements = list(replaced_requirements)
+
+        # What the answer CLAIMS, against what the evidence SAYS. The guards
+        # above establish that a supporting clause was retrieved; none of them
+        # asks whether it agrees, and three distinct failures walked through
+        # them on that. Before the provenance guard, because what this writes
+        # is built from the ledger and must not then be stripped of sources.
+
+        guarded, claim_problems, claims_fired = normative_claims.guard(
+            guarded, self.claim_evidence, question=self.question)
+        self.claims_fired = claims_fired
+        self.claim_findings = list(claim_problems)
 
         cleaned, problems, removed, fired = provenance_guard.guard(
             guarded, self.provenance)

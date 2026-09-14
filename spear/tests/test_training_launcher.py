@@ -1,3 +1,4 @@
+import re
 import subprocess
 import tempfile
 import unittest
@@ -5,6 +6,7 @@ from pathlib import Path
 
 from tests.test_training_jobs import job
 from tests.deployment_fixture import HOST, REMOTE_ROOT, deployment
+import training_launcher
 from training_launcher import (
     SSHTrainingLauncher, TrainingExecutionConfiguration, TrainingLauncherError,
 )
@@ -86,6 +88,54 @@ class SSHTrainingLauncherTests(unittest.TestCase):
         value = SSHTrainingLauncher._parse_metrics(
             "SPEAR_LOG:{'loss': 1.25, 'learning_rate': 2e-5, 'epoch': 0.5, 'step': 12}\n")
         self.assertEqual(value["step"], 12); self.assertEqual(value["loss"], 1.25)
+
+
+class RemoteJobMarkerTests(unittest.TestCase):
+    """The launcher stamps a marker file into each remote job directory and
+    re-reads it before every step that could touch somebody else's run. Writer
+    and readers embed the name in six separate shell heredocs, so a rename that
+    missed one would pass every test here and fail on the training host, at the
+    first destructive step -- with the job directory already created."""
+
+    MARKER = ".spear-training-job"
+
+    def emitted_scripts(self):
+        """One script per entry point that names the marker."""
+        scripts = {}
+
+        def record(name, call):
+            launcher = SSHTrainingLauncher(deployment(), RecordingRunner())
+            call(launcher)
+            scripts[name] = launcher.runner.calls[-1][1]
+
+        started = job(); started.remote_process_identity = {"pgid": "4242"}
+        record("prepare", lambda l: l._prepare_remote(job()))
+        record("logs", lambda l: l.logs(job(), 50))
+        record("status", lambda l: l.status(job()))
+        record("stop", lambda l: l.stop(started))
+        record("start", lambda l: l.start(job(), Path("bundle"), "axolotl-sft.yml"))
+
+        return scripts
+
+    def test_writer_and_readers_agree_on_one_marker_name(self):
+        names = {}
+
+        for entry, script in self.emitted_scripts().items():
+            found = set(re.findall(r"\.[A-Za-z0-9_-]+-training-job", script))
+            self.assertEqual(len(found), 1, f"{entry} names {found or 'no marker'}")
+            names[entry] = found.pop()
+
+        self.assertEqual(set(names.values()), {self.MARKER}, names)
+
+    def test_no_occurrence_in_the_module_diverges(self):
+        """preflight emits its script only after a successful probe, so the
+        behavioural check above cannot reach it. Every literal in the module
+        must still agree."""
+
+        source = Path(training_launcher.__file__).read_text()
+        found = set(re.findall(r"\.[A-Za-z0-9_-]+-training-job", source))
+        self.assertEqual(found, {self.MARKER})
+        self.assertEqual(source.count(self.MARKER), 6)
 
 
 if __name__ == "__main__": unittest.main()

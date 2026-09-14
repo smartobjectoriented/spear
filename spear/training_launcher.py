@@ -398,7 +398,7 @@ root=$1; job=$2; remote=$3
 case "$remote" in "$root"/jobs/"$job") ;; *) exit 41;; esac
 umask 077
 mkdir -p "$remote/bundle" "$remote/output" "$remote/logs" "$remote/state"
-printf '%s\n' "$job" > "$remote/.edgem-training-job"
+printf '%s\n' "$job" > "$remote/.spear-training-job"
 '''
 
         return self._ssh(script, (self.configuration.remote_root, job.job_id, remote))
@@ -453,7 +453,7 @@ printf '%s\n' "$job" > "$remote/.edgem-training-job"
         script = r'''set -eu
 root=$1; job=$2; remote=$3; ax=$4; config=$5; examples=$6; bundle_sum=$7; visible=$8
 case "$remote" in "$root"/jobs/"$job") ;; *) exit 41;; esac
-test "$(cat "$remote/.edgem-training-job")" = "$job"
+test "$(cat "$remote/.spear-training-job")" = "$job"
 cd "$remote/bundle"
 if test -n "$visible"; then export CUDA_VISIBLE_DEVICES="$visible"; fi
 actual=$(sha256sum checksums.sha256 | awk '{print $1}')
@@ -479,7 +479,7 @@ sha256sum -c checksums.sha256
         script = r'''set -eu
         root=$1; job=$2; remote=$3; ax=$4; config=$5; visible=$6
 case "$remote" in "$root"/jobs/"$job") ;; *) exit 41;; esac
-test "$(cat "$remote/.edgem-training-job")" = "$job"
+test "$(cat "$remote/.spear-training-job")" = "$job"
 cat > "$remote/run.sh" <<'SPEAR_RUN'
 #!/bin/sh
 set -u
@@ -540,7 +540,7 @@ printf 'pid=%s\npgid=%s\n' "$pid" "$pid"
         script = r'''set -eu
 root=$1; job=$2; remote=$3; expected=$4
 case "$remote" in "$root"/jobs/"$job") ;; *) exit 41;; esac
-test "$(cat "$remote/.edgem-training-job" 2>/dev/null || true)" = "$job" || { printf 'identity=invalid\n'; exit 0; }
+test "$(cat "$remote/.spear-training-job" 2>/dev/null || true)" = "$job" || { printf 'identity=invalid\n'; exit 0; }
 test -f "$remote/state/started_at" && printf 'started_at=%s\n' "$(cat "$remote/state/started_at")"
 if test -f "$remote/state/exit_code"; then
  printf 'terminal=1\nexit_code=%s\n' "$(cat "$remote/state/exit_code")"
@@ -617,7 +617,7 @@ tail -n 50 "$remote/logs/train.log" 2>/dev/null | sed 's/^/SPEAR_LOG:/' || true
         script = r'''set -eu
 root=$1; job=$2; remote=$3; expected=$4; timeout=$5
 case "$remote" in "$root"/jobs/"$job") ;; *) exit 41;; esac
-test "$(cat "$remote/.edgem-training-job")" = "$job"
+test "$(cat "$remote/.spear-training-job")" = "$job"
 actual=$(cat "$remote/state/pgid")
 test "$actual" = "$expected"
 case "$actual" in ''|*[!0-9]*) exit 42;; esac
@@ -646,7 +646,7 @@ if kill -0 -- "-$actual" 2>/dev/null; then printf 'running=1\n'; else printf 'st
         script = r'''set -eu
 root=$1; job=$2; remote=$3; lines=$4
 case "$remote" in "$root"/jobs/"$job") ;; *) exit 41;; esac
-test "$(cat "$remote/.edgem-training-job")" = "$job"
+test "$(cat "$remote/.spear-training-job")" = "$job"
 tail -n "$lines" "$remote/logs/train.log" 2>/dev/null || true
 '''
         result = self._ssh(script, (self.configuration.remote_root, job.job_id,

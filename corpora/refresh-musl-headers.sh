@@ -6,12 +6,26 @@
 # its index silently answers nothing. The header set is an API surface that
 # only changes with the toolchain version, so a copy is the honest form.
 #
-# Re-run after a toolchain rebuild, then reindex:
-#   spear-index /opt/llm/spear/corpora/musl-headers
+# Re-run after a toolchain rebuild, then reindex whatever it wrote:
+#   ./refresh-musl-headers.sh
+#   spear-index "$(./refresh-musl-headers.sh --where)"
+#
+#   refresh-musl-headers.sh [toolchain-include-dir] [destination]
+#
+# The destination defaults to musl-headers/ beside this script, which is where
+# a plain checkout keeps it. It is a PARAMETER and not a fixed location: a
+# corpus does not have to live inside the repository, and a deployment that
+# keeps its corpora elsewhere should not have to edit tracked source to say
+# so. SPEAR_MUSL_HEADERS_DIR sets it too, for when the caller is a cron line
+# rather than a person.
 set -euo pipefail
 
 SRC="${1:-$HOME/sye/sye_sol/build/tmp/toolchains/arm-linux-musleabihf/arm-linux-musleabihf/include}"
-DST="$(dirname "$(readlink -f "$0")")/musl-headers"
+DST="${2:-${SPEAR_MUSL_HEADERS_DIR:-$(dirname "$(readlink -f "$0")")/musl-headers}}"
+
+# `--where` prints the destination and exits, so the reindex command above can
+# name it without the caller repeating the default.
+if [ "${1:-}" = "--where" ]; then echo "$DST"; exit 0; fi
 
 [ -d "$SRC" ] || { echo "toolchain headers not found: $SRC" >&2; exit 1; }
 

@@ -24,12 +24,18 @@ import normative_claims as nc
 
 
 def evidence(*units):
-    """units: (text, modality, content_type, section)"""
+    """units: (text, modality, content_type, section)
+
+    Driven through `observe`, the way production feeds it. Appending to
+    `.units` directly left the provision ledger empty, so the checks that
+    resolve citations saw nothing and passed for the wrong reason.
+    """
     found = nc.NormativeEvidence()
-    for text, modality, content_type, section in units:
-        found.units.append(nc.EvidenceUnit(
-            section=section, source_id="std-" + "0" * 32,
-            modality=modality, content_type=content_type, text=text))
+    for index, (text, modality, content_type, section) in enumerate(units):
+        found.observe({"section": section,
+                       "source_id": f"std-{index:032d}",
+                       "modality": modality, "content_type": content_type,
+                       "text": text})
     return found
 
 
@@ -432,3 +438,40 @@ class OneFieldMaySpellItselfTwoWays(unittest.TestCase):
                                        evidence(self.SPELLINGS))
 
         self.assertEqual([item["identifier"] for item in found], ["Req-Q"])
+
+
+class AnAmbiguousCitationWithholdsTheAnswer(unittest.TestCase):
+    """The document numbers each kind independently, so a bare label may name
+    a Rule and a Recommendation with different modality. Choosing one quietly
+    is how a `should` became a `shall`."""
+
+    COLLIDING = (("Rule 6.1-1: A Gadget shall emit one frame.",
+                  "SHALL", "REQUIREMENT", "6.1"),
+                 ("Recommendation 6.1-1: A Gadget should emit promptly.",
+                  "SHOULD", "RECOMMENDATION", "6.1"))
+
+    def test_a_bare_colliding_citation_is_reported(self):
+        found = nc.ambiguity_findings("Per 6.1-1 a Gadget emits one frame.",
+                                      evidence(*self.COLLIDING))
+
+        self.assertEqual(len(found), 1)
+        self.assertEqual(sorted(found[0]["candidates"]),
+                         ["Recommendation 6.1-1", "Rule 6.1-1"])
+
+    def test_an_explicit_citation_is_not_ambiguous(self):
+        self.assertEqual(
+            nc.ambiguity_findings("Per Rule 6.1-1 a Gadget shall emit one.",
+                                  evidence(*self.COLLIDING)), [])
+
+    def test_the_gate_withholds_on_ambiguity(self):
+        out, problems, fired = nc.guard("Per 6.1-1 a Gadget emits one frame.",
+                                        evidence(*self.COLLIDING))
+
+        self.assertTrue(fired)
+        self.assertIn("names more than one provision", out)
+
+    def test_a_unique_bare_citation_still_works(self):
+        one = (("Rule 6.2-1: A Gadget shall stop.", "SHALL", "REQUIREMENT", "6.2"),)
+
+        self.assertEqual(nc.ambiguity_findings("Per 6.2-1 it stops.",
+                                               evidence(*one)), [])

@@ -291,8 +291,6 @@ class NoStaleProductPrefixEscapes(unittest.TestCase):
         "spear/index_corpus.py":
             "derives the collection name that produced the two build-system "
             "indexes; the literal IS their identity",
-        "spear/tool_runtime.py":
-            "the systemd scope and slirp prefixes that live units carry",
         ".gitignore":
             "guards a 47 GB directory this deployment still has on disk; "
             "renaming the rule without moving the directory exposes it",

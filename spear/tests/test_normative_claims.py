@@ -423,7 +423,7 @@ class OneFieldMaySpellItselfTwoWays(unittest.TestCase):
     an answer may pick either. Comparing literal spellings flagged three real
     fields as fabricated and withheld a correct answer."""
 
-    SPELLINGS = ("The Controllee reads ReqV, ReqX and ReqS from the field.",
+    SPELLINGS = ("The handler reads ReqV, ReqX and ReqS from the field.",
                  "NONE", "TABLE", "4.9")
 
     def test_the_hyphenated_spelling_is_grounded_by_the_joined_one(self):

@@ -1934,7 +1934,7 @@ class SystemdScopeRunner:
     is needed.
     """
 
-    UNIT_PREFIX = "edgem-tool-"
+    UNIT_PREFIX = "spear-tool-"
 
     def __init__(
         self,
@@ -2980,7 +2980,7 @@ class BubblewrapSandbox:
         scope_unit: str | None = None
 
         try:
-            with tempfile.TemporaryDirectory(prefix="edgem-slirp-") as temporary:
+            with tempfile.TemporaryDirectory(prefix="spear-slirp-") as temporary:
                 network_files = self._network_files(Path(temporary))
                 info_read, info_write = os.pipe()
                 block_read, release_write = os.pipe()

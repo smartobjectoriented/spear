@@ -80,7 +80,7 @@ alive means sampling while the command runs:
 
 .. code-block:: console
 
-   $ watch -n0.1 "systemctl --user list-units --all 'edgem-tool-*' --no-legend"
+   $ watch -n0.1 "systemctl --user list-units --all 'spear-tool-*' --no-legend"
 
    # from a known bwrap pid
    $ cat /proc/<pid>/cgroup
@@ -95,7 +95,7 @@ Cleaning up after an interrupted session
 
 .. code-block:: console
 
-   $ systemctl --user list-units --all 'edgem-tool-*' --no-legend
+   $ systemctl --user list-units --all 'spear-tool-*' --no-legend
    $ systemctl --user kill --kill-whom=all --signal=KILL <unit>
 
    $ pgrep -a bwrap

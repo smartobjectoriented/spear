@@ -284,8 +284,6 @@ class NoStaleProductPrefixEscapes(unittest.TestCase):
         "edgem_skills",         # Chroma collection, the skill library
         "edgem_archive",        # Chroma collection, the conversation archive
         ".edgem-rules.md",      # written by hand in users' own trees
-        "edgem-tool-",          # systemd scope prefix live scopes carry
-        "edgem-slirp-",         # temporary directory prefix, same runtime
     )
 
     JUSTIFIED = {

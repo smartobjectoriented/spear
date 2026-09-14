@@ -15,7 +15,7 @@
 <text x="661.5" y="115.2" font-size="9" text-anchor="middle" xml:space="preserve" fill="#1a1a1a">backend_select.py — 222 l.</text>
 <text x="661.5" y="127.1" font-size="9" text-anchor="middle" xml:space="preserve" fill="#1a1a1a">startup backend picker</text>
 <rect x="790" y="92" width="233" height="52" rx="0" ry="0" fill="#dae8fc" stroke="#6c8ebf" stroke-width="1.4"/>
-<text x="906.5" y="115.2" font-size="9" text-anchor="middle" xml:space="preserve" fill="#1a1a1a">rag_chat.py — 7 737 l.</text>
+<text x="906.5" y="115.2" font-size="9" text-anchor="middle" xml:space="preserve" fill="#1a1a1a">rag_chat.py — 7 758 l.</text>
 <text x="906.5" y="127.1" font-size="9" text-anchor="middle" xml:space="preserve" fill="#1a1a1a">session · corpora · UI · handlers</text>
 <rect x="55" y="150" width="233" height="52" rx="0" ry="0" fill="#dae8fc" stroke="#6c8ebf" stroke-width="1.4"/>
 <text x="171.5" y="173.2" font-size="9" text-anchor="middle" xml:space="preserve" fill="#1a1a1a">index_corpus.py — 445 l.</text>
@@ -24,7 +24,7 @@
 <text x="416.5" y="173.2" font-size="9" text-anchor="middle" xml:space="preserve" fill="#1a1a1a">index_dir.py — 262 l.</text>
 <text x="416.5" y="185.1" font-size="9" text-anchor="middle" xml:space="preserve" fill="#1a1a1a">generic tree indexer</text>
 <rect x="545" y="150" width="233" height="52" rx="0" ry="0" fill="#dae8fc" stroke="#6c8ebf" stroke-width="1.4"/>
-<text x="661.5" y="173.2" font-size="9" text-anchor="middle" xml:space="preserve" fill="#1a1a1a">embedding.py — 522 l.</text>
+<text x="661.5" y="173.2" font-size="9" text-anchor="middle" xml:space="preserve" fill="#1a1a1a">embedding.py — 624 l.</text>
 <text x="661.5" y="185.1" font-size="9" text-anchor="middle" xml:space="preserve" fill="#1a1a1a">bge-m3, one definition</text>
 <rect x="790" y="150" width="233" height="52" rx="0" ry="0" fill="#dae8fc" stroke="#6c8ebf" stroke-width="1.4"/>
 <text x="906.5" y="173.2" font-size="9" text-anchor="middle" xml:space="preserve" fill="#1a1a1a">memory_store.py — 382 l.</text>

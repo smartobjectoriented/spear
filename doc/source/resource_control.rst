@@ -94,7 +94,7 @@ One scope per sandboxed command, named from a UUID only:
 .. code-block:: text
 
    /usr/bin/systemd-run --user --scope --quiet --collect
-       --unit=edgem-tool-<uuid4 hex>.scope
+       --unit=spear-tool-<uuid4 hex>.scope
        -p MemoryMax=…  -p MemorySwapMax=…  -p TasksMax=…  -p CPUQuota=…%
        -- /usr/bin/bwrap … /usr/bin/prlimit … -- COMMAND
 
@@ -122,7 +122,7 @@ Why ``--collect``
 Without it, a failed or OOM-killed scope lingers in ``failed`` state and the
 units accumulate.  With it, units are released as soon as they finish.
 Verified after ``exit 7``, after an OOM kill and after a forced stop: zero
-residual ``edgem-tool-*`` units.  No ``reset-failed`` sweep is needed.
+residual ``spear-tool-*`` units.  No ``reset-failed`` sweep is needed.
 
 Availability and the user bus
 =============================

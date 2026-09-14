@@ -2131,7 +2131,7 @@ class Slirp4netnsNetworkTests(unittest.TestCase):
     def assert_no_test_process(self, marker):
         processes = subprocess.check_output(["ps", "-eo", "args="], text=True)
         self.assertNotIn(str(marker), processes)
-        self.assertNotIn("/tmp/edgem-slirp-", processes)
+        self.assertNotIn("/tmp/spear-slirp-", processes)
 
     def run_with_tracked_pidfd(self, argv, *, sandbox_kwargs=None):
         return self.sandbox(timeout_seconds=1, **(sandbox_kwargs or {})).run(
@@ -3898,7 +3898,22 @@ class SystemdScopeRunnerTests(unittest.TestCase):
         names = {SystemdScopeRunner.unit_name() for _ in range(200)}
         self.assertEqual(len(names), 200)
         for name in names:
-            self.assertRegex(name, r"^edgem-tool-[0-9a-f]{32}\.scope$")
+            self.assertRegex(name, r"^spear-tool-[0-9a-f]{32}\.scope$")
+
+    def test_runtime_generated_names_carry_the_product_name(self):
+        """The scope prefix and the slirp temporary-directory prefix are the
+        two names this runtime leaves where an operator or another tool can
+        see them -- `systemctl list-units`, a cgroup path, /tmp. They were
+        renamed off the old product name together; nothing parses either one
+        back, so the only way a half-rename shows up is here.  The absence of
+        the old prefixes is the public boundary scan's job, not this one's --
+        asserting it here would only plant the stale literals it looks for."""
+
+        self.assertEqual(SystemdScopeRunner.UNIT_PREFIX, "spear-tool-")
+        self.assertTrue(SystemdScopeRunner.unit_name().startswith("spear-tool-"))
+
+        source = Path(tool_runtime.__file__).read_text()
+        self.assertIn('prefix="spear-slirp-"', source)
 
     def test_unit_name_never_embeds_caller_data(self):
         name = SystemdScopeRunner.unit_name()
@@ -3916,7 +3931,7 @@ class SystemdScopeRunnerTests(unittest.TestCase):
         runner = self.available_runner()
         limits = CgroupLimits(memory_max_bytes=268435456, memory_swap_max_bytes=0,
                               tasks_max=64, cpu_quota_percent=200)
-        unit = "edgem-tool-00000000000000000000000000000000.scope"
+        unit = "spear-tool-00000000000000000000000000000000.scope"
         self.assertEqual(
             runner.wrap(["/usr/bin/bwrap", "--die-with-parent", "/bin/true"],
                         limits, unit=unit),
@@ -4030,11 +4045,11 @@ class SystemdScopeRunnerTests(unittest.TestCase):
         runner = self.available_runner()
         with patch("tool_runtime.subprocess.run") as run:
             run.return_value = subprocess.CompletedProcess([], 0, "", "")
-            runner.terminate("edgem-tool-abc.scope")
+            runner.terminate("spear-tool-abc.scope")
         run.assert_called_once()
         self.assertEqual(run.call_args.args[0], [
             "/usr/bin/systemctl", "--user", "kill", "--kill-whom=all",
-            "--signal=KILL", "edgem-tool-abc.scope",
+            "--signal=KILL", "spear-tool-abc.scope",
         ])
         self.assertFalse(run.call_args.kwargs["shell"])
         self.assertIsNotNone(run.call_args.kwargs["timeout"])
@@ -4043,7 +4058,7 @@ class SystemdScopeRunnerTests(unittest.TestCase):
         runner = self.available_runner()
         with patch("tool_runtime.subprocess.run") as run:
             run.return_value = subprocess.CompletedProcess([], 0, "", "")
-            runner.terminate("edgem-tool-abc.scope")
+            runner.terminate("spear-tool-abc.scope")
         rendered = " ".join(run.call_args.args[0])
         for forbidden in ("pkill", "pgrep", "cgroup.kill", "cgroup.procs"):
             self.assertNotIn(forbidden, rendered)
@@ -4059,7 +4074,7 @@ class SystemdScopeRunnerTests(unittest.TestCase):
                         run.return_value = effect
                     else:
                         run.side_effect = effect
-                    self.assertIsInstance(runner.terminate("edgem-tool-abc.scope"), bool)
+                    self.assertIsInstance(runner.terminate("spear-tool-abc.scope"), bool)
 
 
 class CgroupIntegrationContractTests(unittest.TestCase):
@@ -4248,7 +4263,7 @@ class CgroupIntegrationContractTests(unittest.TestCase):
         self.assertEqual(result.status, "timeout")
         terminate.assert_called_once()
         unit = terminate.call_args.args[0]
-        self.assertRegex(unit, r"^edgem-tool-[0-9a-f]{32}\.scope$")
+        self.assertRegex(unit, r"^spear-tool-[0-9a-f]{32}\.scope$")
         # The very unit that was spawned, not a glob or a discovered one.
         self.assertIn(f"--unit={unit}", popen.call_args.args[0])
 
@@ -4355,9 +4370,9 @@ class OptInRealCgroupTests(unittest.TestCase):
     def assert_no_residual_units(self):
         listed = subprocess.run(
             ["/usr/bin/systemctl", "--user", "list-units", "--all", "--no-legend",
-             "edgem-tool-*"], capture_output=True, text=True, timeout=15)
+             "spear-tool-*"], capture_output=True, text=True, timeout=15)
         self.assertEqual(listed.stdout.strip(), "",
-                         "residual edgem-tool-*.scope unit(s) left behind")
+                         "residual spear-tool-*.scope unit(s) left behind")
 
     def sandbox(self, **kwargs):
         return tool_runtime.BubblewrapSandbox(**kwargs)
@@ -4554,9 +4569,9 @@ class OptInRealCgroupTests(unittest.TestCase):
         self.assertNotIn("slirp4netns", comms, members)
         self.assertNotIn(str(os.getpid()), pids, "the supervisor joined the scope")
         self.assertIn("slirp_cgroup", observed, "slirp4netns was never observed")
-        self.assertNotIn("edgem-tool-", observed["slirp_cgroup"])
+        self.assertNotIn("spear-tool-", observed["slirp_cgroup"])
         supervisor = Path("/proc/self/cgroup").read_text().strip().split(":")[-1]
-        self.assertNotIn("edgem-tool-", supervisor)
+        self.assertNotIn("spear-tool-", supervisor)
 
     def test_I_exit_seven_and_oom_leave_no_residual_unit(self):
         seven = self.sandbox().run(self.workspace, ["/bin/sh", "-c", "exit 7"],

@@ -40,6 +40,8 @@ anything.
 from __future__ import annotations
 
 import re
+
+import provision_identity
 from dataclasses import dataclass, field
 
 UNSCOPED_VERDICT = "UNSCOPED_VERDICT"
@@ -235,6 +237,10 @@ class ClauseLedger:
 
     sections: set = field(default_factory=set)
 
+    provisions: provision_identity.ProvisionLedger = field(
+
+        default_factory=provision_identity.ProvisionLedger)
+
     def observe(self, payload, text=""):
         """One tool result. Sections come from the payload's own metadata
         first -- the retrieval names its section -- and from clause
@@ -244,6 +250,9 @@ class ClauseLedger:
 
         if text:
             self.sections |= clauses_in(text)
+
+        if isinstance(payload, dict):
+            self.provisions.observe(payload)
 
         return self
 
@@ -271,6 +280,19 @@ class ClauseLedger:
         elif isinstance(node, list):
             for item in node:
                 self._walk(item)
+
+    def covers_provision(self, key):
+        """Was THIS provision retrieved?
+
+        Provision-level grounding. `covers` below is section-level and must
+        never stand in for this: a section holds many provisions, and on the
+        bound standard 38% of bare labels name more than one of them.
+        """
+        return self.provisions.has(key)
+
+    def kinds_sharing(self, section, ordinal):
+        """Every provision kind retrieved under one section and ordinal."""
+        return self.provisions.kinds_for(section, ordinal)
 
     def covers(self, section):
         """A retrieval of §8.4.1 covers a verdict on Rule 8.4.1-2, and a

@@ -38,10 +38,13 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass, field
 
+import provision_identity
+
 UNGROUNDED_IDENTIFIER = "UNGROUNDED_IDENTIFIER"
 STRENGTHENED_MODALITY = "STRENGTHENED_MODALITY"
 INCOHERENT_CONCLUSION = "INCOHERENT_CONCLUSION"
 UNSUPPORTED_CARDINALITY = "UNSUPPORTED_CARDINALITY"
+AMBIGUOUS_CITATION = "AMBIGUOUS_CITATION"
 
 #: informative < permission < recommendation < requirement. A conclusion may
 #: sit at or below the level of its evidence, never above it.
@@ -176,9 +179,16 @@ class NormativeEvidence:
 
     units: list = field(default_factory=list)
 
+    #: The same retrievals at PROVISION granularity. A unit is the container:
+    #: one of them carries a Permission, an Observation and a Rule sharing an
+    #: ordinal, and a claim about one of those is not grounded by the others.
+    provisions: provision_identity.ProvisionLedger = field(
+        default_factory=provision_identity.ProvisionLedger)
+
     def observe(self, payload):
         """Collect units from one tool result. The payload is not mutated."""
         self._walk(payload)
+        self.provisions.observe(payload)
         return self
 
     def _walk(self, node):
@@ -230,20 +240,21 @@ class NormativeEvidence:
     def states_a_bound(self):
         return any(_STATES_BOUND.search(unit.text) for unit in self.units)
 
-    def cited_units(self, citations):
-        """The units the answer actually points at."""
-        def names(unit, item):
-            if " " in item:
-                return re.search(re.escape(item).replace(r"\ ", r"\s+"),
-                                 unit.text, re.I) is not None
-            return item in unit.text
+    def cited_provisions(self, answer):
+        """The provisions an answer cites, and the citations that name more
+        than one. Substring matching against unit text cannot do this: the
+        Rule and the Recommendation share a label and often a unit."""
+        return self.provisions.references_in(answer or "")
 
-        return [unit for unit in self.units
-                if any(names(unit, item) for item in citations)]
+    def cited_units(self, answer):
+        """The provision RECORDS the answer points at, as evidence."""
+        resolved, _ = self.cited_provisions(answer)
+        found = [self.provisions.get(key) for key in resolved]
+
+        return [record for record in found if record is not None]
 
     def level_for(self, citations):
-        """The level of the units the answer cites, or of everything when it
-        cites nothing identifiable."""
+        """Deprecated shape kept for the unit tests that drive it directly."""
         # A kinded citation must match kind AND number; a bare number may
         # match anything carrying it.
         def names(unit, item):
@@ -398,7 +409,15 @@ def modality_findings(answer, evidence, *, question=""):
     if claimed is None:
         return []
 
-    supported = evidence.level_for(_citations(answer))
+    cited = evidence.cited_units(answer)
+
+    if cited:
+        # The provision's own words, not its container's. The unit carrying a
+        # Permission is stored SHALL when a Rule sits beside it.
+        supported = max(_STORED.get(record.modality.upper(), INFORMATIVE)
+                        for record in cited)
+    else:
+        supported = evidence.level_for(_citations(answer))
 
     if claimed <= supported:
         return []
@@ -448,10 +467,14 @@ def coherence_findings(answer, evidence, *, question=""):
     # An answer that rests on a permission is entitled to say yes.
 
     if affirmed:
-        cited = evidence.cited_units(_citations(answer))
+        cited = evidence.cited_units(answer)
 
-        if cited and all(_RESTRICTIVE.search(unit.text)
-                         and unit.level >= REQUIREMENT for unit in cited):
+        def restricts(record):
+            return (_RESTRICTIVE.search(record.text)
+                    and _STORED.get(record.modality.upper(),
+                                    INFORMATIVE) >= REQUIREMENT)
+
+        if cited and all(restricts(record) for record in cited):
             return [{"kind": INCOHERENT_CONCLUSION, "sentence": sentence,
                      "contradicted_by": cited[0].text[:200],
                      "source": cited[0].source_id or cited[0].section}]
@@ -486,8 +509,27 @@ def cardinality_findings(answer, evidence, *, question=""):
 
 # ── the gate ─────────────────────────────────────────────────────────
 
+def ambiguity_findings(answer, evidence):
+    """A citation that names more than one provision.
+
+    The document numbers each kind independently, so a bare `8.3.1.5-2` may
+    name a Rule AND a Recommendation with different modality. Picking one
+    silently is how a `should` became a `shall`; the reference is reported
+    instead, and the answer is withheld.
+    """
+    if not evidence.knows_anything():
+        return []
+
+    _, ambiguous = evidence.cited_provisions(answer)
+
+    return [{"kind": AMBIGUOUS_CITATION, "reference": problem.reference,
+             "candidates": [str(key) for key in problem.candidates]}
+            for problem in ambiguous]
+
+
 def findings(answer, evidence, *, question="", permitted=()):
-    return (identifier_findings(answer, evidence, permitted=permitted)
+    return (ambiguity_findings(answer, evidence)
+            + identifier_findings(answer, evidence, permitted=permitted)
             + modality_findings(answer, evidence, question=question)
             + coherence_findings(answer, evidence, question=question)
             + cardinality_findings(answer, evidence, question=question))
@@ -510,6 +552,10 @@ def _note(problems, evidence):
         elif kind == INCOHERENT_CONCLUSION:
             lines.append("  - the opening conclusion contradicts the evidence "
                          "the answer itself relies on.")
+        elif kind == AMBIGUOUS_CITATION:
+            lines.append(f"  - {problem['reference']} names more than one "
+                         "provision (" + ", ".join(problem["candidates"])
+                         + "); which one is meant decides the answer.")
         elif kind == UNSUPPORTED_CARDINALITY:
             lines.append(f"  - a bound of {problem['asserted']} is asserted; "
                          "no retrieved clause states one. Counting flags, "

@@ -43,6 +43,41 @@ python3 -m venv ~/spear-embed/venv
 cp protocol.py worker.py ~/spear-embed/
 ```
 
+`requirements.txt` is **unpinned on purpose**. SPEAR does not know what card,
+driver or CUDA version you have, and a pin chosen here would make the project
+quietly CUDA-13-specific for everyone.
+
+### Reproducing a tested stack
+
+`constraints-reds-tested.txt` records one deployment's exact versions — the
+ones the equivalence gate below was actually run against, where the new worker
+produced vectors **bit-identical** to the one it replaced (max absolute
+difference 0.0, documents and queries, CPU/fp32 and CUDA/fp16):
+
+| | |
+|---|---|
+| Python | 3.12.3 |
+| torch | 2.12.0+cu130 |
+| sentence-transformers | 5.5.1 |
+| transformers | 5.9.0 |
+| numpy | 2.4.6 |
+
+`torch==2.12.0+cu130` is a PyTorch CUDA-13 build and is **not on PyPI**. It
+comes from `https://download.pytorch.org/whl/cu130`, which has to be named, so
+the install is two steps:
+
+```sh
+venv/bin/pip install \
+    --index-url https://download.pytorch.org/whl/cu130 \
+    --extra-index-url https://pypi.org/simple \
+    "torch==2.12.0+cu130"
+venv/bin/pip install -r requirements.txt -c constraints-reds-tested.txt
+```
+
+Use it when you want that measured result rather than merely a working
+embedder. On a host with a different CUDA, install `requirements.txt`
+unpinned and run the equivalence gate yourself.
+
 Then tell the client where it is. Destination and worker command are separate
 because they are separate facts — a destination with no command is a
 misconfiguration the client reports by name:

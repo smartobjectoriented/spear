@@ -86,6 +86,14 @@ class NothingHereNamesAMachine(unittest.TestCase):
 
         self.assertEqual(named, {})
 
+    #: A four-part pinned version has the same SHAPE as an IPv4 address -- the
+    #: nvidia wheels are pinned that way -- so this scan cannot tell them
+    #: apart, and an example spelled out here would be found by the scan
+    #: itself. Requirement files are therefore read by the NAME scan above and
+    #: by their own tests, not by this one. The exemption is by file kind, not
+    #: by file: a new requirements file inherits it, a new .conf does not.
+    VERSION_BEARING = (".txt",)
+
     def test_no_address_or_bare_hostname_is_configured(self):
         """Only the loopback address, which is a policy and not a machine:
         the server binds it so that reaching it needs a tunnel."""
@@ -94,11 +102,33 @@ class NothingHereNamesAMachine(unittest.TestCase):
         found = {}
 
         for path in files():
+            if path.suffix in self.VERSION_BEARING:
+                continue
+
             hits = {a for a in address.findall(text_of(path))} - allowed
             if hits:
                 found[str(path.relative_to(REPO))] = sorted(hits)
 
         self.assertEqual(found, {})
+
+    def test_the_exempted_files_are_still_scanned_for_real_addresses(self):
+        """The exemption is about SHAPE, not about trust.
+
+        A requirement file that named a host would still be caught -- by the
+        needle scan above, which looks for the values themselves rather than
+        for four dotted numbers.
+        """
+        exempt = [p for p in files() if p.suffix in self.VERSION_BEARING]
+
+        self.assertTrue(exempt, "no version-bearing file found to check")
+
+        for path in exempt:
+            body = text_of(path)
+
+            for label, needles in self.PRIVATE.items():
+                for needle in needles:
+                    with self.subTest(file=path.name, value=label):
+                        self.assertNotIn(needle, body)
 
 
 class AssetsLiveOutsideTheCheckout(unittest.TestCase):

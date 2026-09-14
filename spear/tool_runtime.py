@@ -2332,7 +2332,7 @@ class BubblewrapSandbox:
 
         if self._session_tmpdir is None:
             try:
-                self._session_tmpdir = tempfile.mkdtemp(prefix="edgem-sandbox-")
+                self._session_tmpdir = tempfile.mkdtemp(prefix="spear-sandbox-")
             except OSError:
                 return ["--tmpfs", self.spec.tmpdir]   # degrade, never fail
 

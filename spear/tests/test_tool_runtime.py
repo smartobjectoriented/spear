@@ -3901,10 +3901,10 @@ class SystemdScopeRunnerTests(unittest.TestCase):
             self.assertRegex(name, r"^spear-tool-[0-9a-f]{32}\.scope$")
 
     def test_runtime_generated_names_carry_the_product_name(self):
-        """The scope prefix and the slirp temporary-directory prefix are the
-        two names this runtime leaves where an operator or another tool can
-        see them -- `systemctl list-units`, a cgroup path, /tmp. They were
-        renamed off the old product name together; nothing parses either one
+        """The scope prefix and the two temporary-directory prefixes are the
+        names this runtime leaves where an operator or another tool can see
+        them -- `systemctl list-units`, a cgroup path, /tmp. They were
+        renamed off the old product name together; nothing parses any of them
         back, so the only way a half-rename shows up is here.  The absence of
         the old prefixes is the public boundary scan's job, not this one's --
         asserting it here would only plant the stale literals it looks for."""
@@ -3914,6 +3914,7 @@ class SystemdScopeRunnerTests(unittest.TestCase):
 
         source = Path(tool_runtime.__file__).read_text()
         self.assertIn('prefix="spear-slirp-"', source)
+        self.assertIn('prefix="spear-sandbox-"', source)
 
     def test_unit_name_never_embeds_caller_data(self):
         name = SystemdScopeRunner.unit_name()

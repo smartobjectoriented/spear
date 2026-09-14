@@ -1,0 +1,93 @@
+# SPEAR inference server, supervised.
+#
+# A TEMPLATE. Copy it, do not point systemd at this file in the checkout: a
+# unit that lives in a git working tree changes under the supervisor's feet on
+# every pull.
+#
+#   user unit    cp spear-inference.service ~/.config/systemd/user/
+#                systemctl --user daemon-reload
+#                systemctl --user enable --now spear-inference
+#
+#   system unit  add User=/Group= and replace every %h with the account's home,
+#                then install under /etc/systemd/system/. Needed when the
+#                service must run without anyone logged in and linger is not
+#                wanted -- see PERSISTENCE below.
+#
+# ── what this unit deliberately does NOT contain ─────────────────────
+# No model, no port, no context size, no card, no host. Every one of those is
+# a serving decision, and serve.sh reads them from configuration. Putting one
+# here would create a second place where the same number is decided, which is
+# exactly how a deployment ends up with a server running at one context and a
+# restart script that brings it back at another.
+#
+# ── PERSISTENCE, the part that is easy to get wrong ──────────────────
+# A user unit is supervised only while the user's systemd manager is running,
+# and without lingering that manager stops with the last session and does not
+# start at boot:
+#
+#     loginctl show-user "$USER" -p Linger
+#
+# If that says `Linger=no`, `systemctl --user enable` will NOT survive a
+# reboot or a logout, however enabled it looks. Two honest fixes:
+#
+#     loginctl enable-linger "$USER"      the user manager runs from boot
+#     install as a system unit            supervised by pid 1 instead
+#
+# Lingering is a change to how the machine treats an account. On a shared host
+# that is a decision for whoever administers it, not a detail of deploying a
+# model server.
+#
+# ── readiness ────────────────────────────────────────────────────────
+# `systemctl start` returns when the process has been executed, not when the
+# weights are loaded; a large quantised model takes minutes. "active" means
+# started, not serving. To wait for serving, poll the endpoint:
+#
+#     until curl -sf http://127.0.0.1:<port>/health >/dev/null; do sleep 2; done
+#
+# llama-server speaks no readiness protocol, so Type=notify is not available
+# and a unit that claimed otherwise would be lying.
+
+[Unit]
+Description=SPEAR inference server (llama.cpp)
+Documentation=https://github.com/smartobjectoriented/spear
+After=network-online.target
+Wants=network-online.target
+
+# These two are [Unit] options, not [Service] ones -- systemd moved them and
+# silently ignores them in the wrong section, which is a rate limit that does
+# not exist rather than one that does. `systemd-analyze verify` says so.
+StartLimitIntervalSec=600
+StartLimitBurst=5
+
+[Service]
+Type=exec
+
+# Where the deployment keeps its runtime. serve.sh reads config/server.conf
+# and config/gpu.conf from here; see server/config/*.example.
+Environment=SPEAR_SERVER_ROOT=%h/spear-runtime
+
+# Optional, and optional on purpose: everything can equally be set in
+# server.conf. The leading `-` means an absent file is not an error.
+EnvironmentFile=-%h/spear-runtime/config/service.env
+
+ExecStart=%h/spear/server/inference/serve.sh
+
+# Loading a large GGUF and uploading it to a card takes minutes, and a start
+# timeout shorter than the load turns a working server into a restart loop.
+TimeoutStartSec=900
+
+# on-failure, not always: a clean stop is an operator's decision and must not
+# be undone by the supervisor. The burst limit in [Unit] above keeps a server
+# that cannot allocate its card from hammering the GPU in a loop.
+Restart=on-failure
+RestartSec=15
+
+KillSignal=SIGTERM
+TimeoutStopSec=120
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=spear-inference
+
+[Install]
+WantedBy=default.target

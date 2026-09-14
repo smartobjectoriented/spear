@@ -74,7 +74,7 @@ they are checked at the mechanism level instead:
   failure, i.e. the sandboxed command never started;
 * the marker file the command would have created does not exist;
 * the supervisor's descriptor count did not grow;
-* no residual ``edgem-tool-*`` unit, no orphan ``bwrap`` or ``slirp4netns``.
+* no residual ``spear-tool-*`` unit, no orphan ``bwrap`` or ``slirp4netns``.
 
 Descriptor and namespace hygiene
 --------------------------------
@@ -127,11 +127,11 @@ After a full run, all four must hold:
 
 .. code-block:: console
 
-   $ systemctl --user list-units --all 'edgem-tool-*' --no-legend | wc -l
+   $ systemctl --user list-units --all 'spear-tool-*' --no-legend | wc -l
    0
    $ pgrep -a bwrap ; pgrep -a slirp4netns
    (nothing)
-   $ ls /sys/fs/cgroup/user.slice/user-*.slice/user@*.service/app.slice/edgem-tool-* 2>/dev/null
+   $ ls /sys/fs/cgroup/user.slice/user-*.slice/user@*.service/app.slice/spear-tool-* 2>/dev/null
    (nothing)
 
 and the supervisor's descriptor count is unchanged across repeated runs.
@@ -141,7 +141,7 @@ and the supervisor's descriptor count is unchanged across repeated runs.
    Orphan ``bwrap`` processes observed during development came from ad-hoc
    diagnostic scripts that killed ``bwrap`` without going through the pidfd
    sequence — not from the runtime.  They are recognisable by their workspace
-   path: the runtime always uses a ``/tmp/edgem-slirp-`` prefix.
+   path: the runtime always uses a ``/tmp/spear-slirp-`` prefix.
 
 Live smoke test
 ===============

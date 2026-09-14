@@ -488,7 +488,7 @@ p.label(40, 48, 1000, 22,
 y = 82
 NEST = CONT + SANDBOX        # container styling + the sandbox palette
 NEST_CMD = CONT + DANGER
-w1 = p.box(40, y, 1000, 330, "systemd transient scope   edgem-tool-<uuid>.scope",
+w1 = p.box(40, y, 1000, 330, "systemd transient scope   spear-tool-<uuid>.scope",
            NEST, 12, 1)
 p.label(60, y + 30, 500, 20, "MemoryMax · MemorySwapMax · TasksMax · CPUQuota",
         10, False, "left")
@@ -593,7 +593,7 @@ p.label(60, 85, 960, 22,
         "delegated controllers:  cpu   memory   pids        "
         "(io and cpuset are NOT delegated — they need root)", 10, False, "left")
 
-inside = p.box(60, 140, 520, 260, "edgem-tool-<uuid>.scope   (INSIDE)",
+inside = p.box(60, 140, 520, 260, "spear-tool-<uuid>.scope   (INSIDE)",
                CONT + SANDBOX, 12, 1)
 p.box(90, 185, 460, 34, "bwrap", SANDBOX, 10)
 p.box(90, 225, 460, 34, "bwrap namespace child", SANDBOX, 10)
@@ -711,7 +711,7 @@ for i, (flag, what, need) in enumerate(flags):
 
 p.note(40, 575, 1000, 110,
        "Residual-state checks belong to the suites themselves: after every run "
-       "there must be zero edgem-tool-*.scope unit, zero orphan bwrap or "
+       "there must be zero spear-tool-*.scope unit, zero orphan bwrap or "
        "slirp4netns process, and no descriptor growth in the supervisor. "
        "The characterization test test_characterization_old_pid_based_attachment_still_races "
        "deliberately asserts that the OLD attachment still fails — if a future "

@@ -24,6 +24,7 @@ from standard_semantic import (
 from standard_semantic_store import StandardApprovalStore, StandardSemanticStore
 from standard_value_pair import value_local_pairs
 from standard_store import StandardStoreError
+from standard_structure import StandardStructureError
 from standard_structure_store import StandardStructureStore
 from standard_word_association import (
     UNRESOLVED, associate_words, field_candidates, unpositioned_labels,
@@ -33,6 +34,12 @@ from standard_word_association import (
 # which fact stopped it, so it can decide rather than guess.
 
 STRUCTURE_NOT_FOUND = "STRUCTURE_NOT_FOUND"
+
+# A revision that has never had a geometry pass. Distinct from a stale store:
+# nothing has moved under an approval, there is simply nothing yet. It is a
+# state, not a fault, and the caller is told so rather than handed an
+# exception it cannot read.
+NO_STRUCTURE_STORE = "NO_STRUCTURE_STORE"
 STRUCTURE_NOT_APPROVED = "STRUCTURE_NOT_APPROVED"
 STALE_SEMANTIC_STORE = "STALE_SEMANTIC_STORE"
 STALE_APPROVAL = "STALE_APPROVAL"
@@ -241,6 +248,11 @@ class StandardStructureAccess:
         try:
             geometry, geometry_payload = self.structures.load(standard_id, revision)
             accepted, refused = self.approvals.load(standard_id, revision)
+        except StandardStructureError as exc:
+            if "no structures for this revision" in str(exc):
+                raise StructureAccessError(NO_STRUCTURE_STORE, str(exc)) from exc
+
+            raise StructureAccessError(STALE_SEMANTIC_STORE, str(exc)) from exc
         except (StandardSemanticError, StandardStoreError, FileNotFoundError) as exc:
             raise StructureAccessError(STALE_SEMANTIC_STORE, str(exc)) from exc
 

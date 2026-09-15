@@ -265,7 +265,11 @@ TRAINING_CAPTURE_ENABLED = os.environ.get(
 ).strip().lower() not in {"0", "false", "no", "off"}
 TRAINING_STORE = (TrainingStore(f"{STATE_DIR}/audit/training-data")
                   if TRAINING_CAPTURE_ENABLED else None)
-STANDARD_STORE = StandardStore(f"{STATE_DIR}/standards")
+# SPEAR_STANDARDS_ROOT selects a different standards store without moving
+# anything else: see state_paths.standards_root, which honours the same
+# variable for the readers that do not go through this module.
+STANDARD_STORE = StandardStore(
+    os.environ.get("SPEAR_STANDARDS_ROOT") or f"{STATE_DIR}/standards")
 STANDARD_OPERATOR = StandardOperator(STANDARD_STORE)
 STANDARD_TOOL_SERVICE = StandardToolService(STANDARD_STORE)
 

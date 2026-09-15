@@ -186,6 +186,54 @@ class TableRowKey:
 
 
 @dataclass(frozen=True, order=True)
+class UnlabelledBodyKey:
+    """Normative body text the document did not number.
+
+    A unit typed REQUIREMENT or INFORMATIVE by the extractor carries evidence
+    and no printed label, so it has no ordinal -- and keying it (section,
+    kind, None) collapses every such block in a section onto one identity.
+    The old store hid this because it derived almost none of them; a parser
+    that segments properly derives hundreds, and 63 false "reused citations"
+    appeared the moment one did.
+
+    It is structural evidence, like a scope preamble: not citable, and
+    discriminated by the unit it came from.
+    """
+
+    section: str
+    body_kind: str
+    discriminator: str
+
+    kind: str = field(default="UnlabelledBody", init=False, compare=True)
+
+    def __str__(self):
+        return f"{self.body_kind} §{self.section}@{self.discriminator[:12]}"
+
+
+@dataclass(frozen=True, order=True)
+class TableCellKey:
+    """One cell: its table, its row, and its column.
+
+    A row is the grouping identity; a cell is what a claim is actually about.
+    The old extraction had neither -- it flattened a row into one blob, and
+    on this document it interleaved two columns while doing so, so an
+    approval of "bit 19 = ReqX" ended up recorded against text that also
+    carried the Function column's words. Columns are named from the header
+    where the table has one, and by position where it does not.
+    """
+
+    section: str
+    table: str
+    row: int
+    column: str
+
+    kind: str = field(default="TableCell", init=False, compare=True)
+
+    def __str__(self):
+        return f"TableCell {self.table}:{self.row}[{self.column}]"
+
+
+@dataclass(frozen=True, order=True)
 class ScopePreambleKey:
     """One unnumbered scope-bearing block.
 
@@ -349,6 +397,11 @@ class ProvisionRecord:
     #: several, and is ONE instance rather than two competing ones.
     spans: tuple = ()
 
+    #: For a table row: ordered cell records, each with its own key, text and
+    #: canonical spans. A row never concatenates its columns into one
+    #: normative blob.
+    cells: tuple = ()
+
     standard_id: str = ""
     revision: str = ""
 
@@ -429,10 +482,27 @@ def records_from_unit(unit, *, table=None):
 
     if row and section:
         owner = table or f"unit:{common['source_id']}"
+        row_number = int(row.group("key"))
+        header = unit.get("table_header") or ()
+        cells = []
+
+        for item in (unit.get("cells") or ()):
+            index = item.get("col")
+            name = ""
+
+            if isinstance(index, int):
+                name = (header[index] if index < len(header) and header[index]
+                        else f"col{index}")
+
+            cells.append({"key": TableCellKey(section, owner, row_number,
+                                              name or "col?"),
+                          "text": _clean(item.get("text")),
+                          "span_ids": tuple(item.get("span_ids") or ())})
 
         return [ProvisionRecord(
-            key=TableRowKey(section, owner, int(row.group("key"))),
-            text=_clean(text), modality=_modality_of(text), **common)]
+            key=TableRowKey(section, owner, row_number),
+            text=_clean(text), modality=_modality_of(text),
+            cells=tuple(cells), **common)]
 
     found, spans = [], [(m.start(), m) for m in _LABEL.finditer(text)]
 
@@ -472,8 +542,11 @@ def records_from_unit(unit, *, table=None):
                 else _FROM_CONTENT_TYPE.get(common["content_type"].upper()))
 
         if kind:
+            # Unlabelled body text is structural evidence: it has no printed
+            # ordinal, so it never becomes a citable ProvisionKey.
             key = (ScopePreambleKey(section, common["source_id"])
-                   if kind == SCOPE_PREAMBLE else ProvisionKey(section, kind, None))
+                   if kind == SCOPE_PREAMBLE
+                   else UnlabelledBodyKey(section, kind, common["source_id"]))
             found.append(ProvisionRecord(key=key, text=head,
                                          modality=_modality_of(head), **common))
 
@@ -532,27 +605,40 @@ def reconstruct_page_splits(records):
 
     The store is never written to. This is a derived view.
     """
+    def group_key(record):
+        # Unlabelled body text is discriminated per unit, so two fragments of
+        # ONE split provision never share a key. They are still one
+        # provision, so they are grouped by what they have in common --
+        # section and body kind -- and the strict conditions below decide.
+        if isinstance(record.key, UnlabelledBodyKey):
+            return ("unlabelled", record.key.section, record.key.body_kind)
+
+        return record.key
+
     grouped = {}
 
     for record in records:
-        grouped.setdefault(record.key, []).append(record)
+        grouped.setdefault(group_key(record), []).append(record)
 
     found, joined = [], set()
 
     for key, group in grouped.items():
-        if len(group) != 2 or not isinstance(key, ProvisionKey):
+        unlabelled = isinstance(key, tuple)
+
+        if len(group) != 2 or not (unlabelled or isinstance(key, ProvisionKey)):
             found.extend(group)
             continue
 
         first, second = sorted(group, key=lambda r: (r.page or 0))
         pages = [first.page or 0, second.page or 0]
-        declares_again = second.text.startswith(f"{key.kind} {key.section}-")
+        declares_again = (False if unlabelled
+                          else second.text.startswith(f"{key.kind} {key.section}-"))
 
         if (abs(pages[1] - pages[0]) == 1 and _INCOMPLETE.search(first.text)
                 and not declares_again):
             merged = first.text + " " + second.text
             found.append(ProvisionRecord(
-                key=key, source_id=first.source_id, page=first.page,
+                key=first.key, source_id=first.source_id, page=first.page,
                 text=merged, modality=_modality_of(merged),
                 unit_modality=first.unit_modality,
                 content_type=first.content_type,
@@ -561,7 +647,7 @@ def reconstruct_page_splits(records):
                 spans=tuple(first.spans) + tuple(second.spans),
                 standard_id=first.standard_id, revision=first.revision,
                 declaration_status=first.declaration_status))
-            joined.add(key)
+            joined.add(first.key)
         else:
             found.extend(group)
 

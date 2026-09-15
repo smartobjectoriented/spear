@@ -175,12 +175,14 @@ class APageSplitIsOneProvision(unittest.TestCase):
     def test_the_two_fragments_become_one_instance(self):
         joined, keys = pi.reconstruct_page_splits(
             pi.records_from_unit(self.FIRST) + pi.records_from_unit(self.SECOND))
-        rules = [r for r in joined if isinstance(r.key, pi.ProvisionKey)]
+        rules = [r for r in joined
+                 if isinstance(r.key, (pi.ProvisionKey, pi.UnlabelledBodyKey))]
 
         self.assertEqual(len(rules), 1, [str(r.key) for r in rules])
         self.assertEqual(len(rules[0].spans), 2)
         self.assertEqual([span["page"] for span in rules[0].spans], [90, 91])
         self.assertEqual(keys, [rules[0].key])
+        self.assertIsInstance(rules[0].key, pi.UnlabelledBodyKey)
 
     def test_a_second_declaration_is_not_absorbed_as_a_continuation(self):
         """Both fragments declare the label, so they are two provisions."""
@@ -270,3 +272,63 @@ class ASnippetAndItsFullUnitAreOneInstance(unittest.TestCase):
 
         self.assertEqual(
             len(found.instances_for(pi.ProvisionKey(SECTION, pi.RULE, 5))), 2)
+
+
+class OneDeclarationIsOneInstance(unittest.TestCase):
+    """A provision is tied to its canonical spans, not to how many structural
+    objects happen to cover it."""
+
+    def unit(self, sid, text, spans, page=10, ctype="REQUIREMENT"):
+        return {"source_id": sid, "section": SECTION, "page": page,
+                "content_type": ctype, "modality": "SHALL", "text": text,
+                "span_ids": spans, **BINDING}
+
+    def test_two_objects_over_the_same_spans_are_one_instance(self):
+        text = "Rule 5.2-7: A Gadget shall stop."
+        one = self.unit("std-a", text, ["sp-1", "sp-2"])
+        again = self.unit("std-a", text, ["sp-1", "sp-2"])
+        found = pi.ProvisionLedger()
+        found.observe(one); found.observe(again)
+
+        self.assertEqual(len(found.instances_for(
+            pi.ProvisionKey(SECTION, pi.RULE, 7))), 1)
+
+    def test_the_same_key_on_two_pages_is_two_instances(self):
+        a = self.unit("std-a", "Rule 5.2-8: A Gadget shall stop.", ["sp-1"], page=10)
+        b = self.unit("std-b", "Rule 5.2-8: A Handler shall wait.", ["sp-2"], page=11)
+        found = pi.ProvisionLedger()
+        found.observe(a); found.observe(b)
+
+        self.assertEqual(len(found.instances_for(
+            pi.ProvisionKey(SECTION, pi.RULE, 8))), 2)
+
+    def test_identical_text_in_distinct_spans_stays_two(self):
+        text = "Rule 5.2-9: A Gadget shall stop."
+        a = self.unit("std-a", text, ["sp-1"], page=10)
+        b = self.unit("std-b", text, ["sp-9"], page=12)
+        found = pi.ProvisionLedger()
+        found.observe(a); found.observe(b)
+
+        self.assertEqual(len(found.instances_for(
+            pi.ProvisionKey(SECTION, pi.RULE, 9))), 2)
+
+    def test_a_cross_reference_beside_a_declaration_grounds_nothing(self):
+        decl = self.unit("std-a", "Rule 5.2-6: A Gadget shall stop.", ["sp-1"])
+        ref = self.unit("std-b", "Rule 5.2-6, coupled with the other rules, "
+                                 "applies here.", ["sp-2"], page=11)
+        found = pi.ProvisionLedger()
+        found.observe(decl); found.observe(ref)
+        key = pi.ProvisionKey(SECTION, pi.RULE, 6)
+        declared = [r for r in found.instances_for(key)
+                    if r.declaration_status == pi.DECLARATION]
+
+        self.assertEqual(len(declared), 1)
+
+    def test_a_table_cell_does_not_invent_a_declaration(self):
+        row = {"source_id": "std-t", "section": SECTION, "page": 5,
+               "content_type": "TABLE_ROW", "modality": "NONE",
+               "table": "5.2-1", "text": "3 Rule 5.2-3 see the rule",
+               **BINDING}
+        keys = [r.key for r in pi.records_from_unit(row, table="5.2-1")]
+
+        self.assertTrue(all(isinstance(k, pi.TableRowKey) for k in keys))

@@ -76,8 +76,81 @@ _TABLE_ROW = re.compile(r"^(?P<key>\d{1,3})\s+(?P<name>[A-Za-z][\w./-]{0,24})\b"
 #: Measured on the bound standard: 1332 labels are declarations and 41 are
 #: references, every one of the 41 preceded by a referring word. Deriving
 #: both put one rule on four pages with two different modalities.
+#: The label itself. Whether an occurrence DECLARES the provision or merely
+#: REFERS to it is decided by `classify_label`, never by the colon alone: the
+#: colon is the usual typography and the extractor does lose it. Three
+#: provisions of one bound standard have no colon anywhere, and a rule that
+#: treated the colon as decisive discarded all three in silence.
 _LABEL = re.compile(
-    rf"\b(?P<kind>{'|'.join(LABELLED_KINDS)})\s+(?P<section>{_SECTION})-(?P<ordinal>\d+)\s*:")
+    rf"\b(?P<kind>{'|'.join(LABELLED_KINDS)})\s+(?P<section>{_SECTION})-(?P<ordinal>\d+)")
+
+DECLARATION = "DECLARATION"
+CANDIDATE = "CANDIDATE"          # review required; may not ground a claim
+REFERENCE = "REFERENCE"
+
+#: Generic citation language. These are the words any technical document uses
+#: to point AT a provision rather than to state one -- no phrase here names a
+#: subject, a field or a packet.
+_REFERRING = re.compile(
+    r"(?:\b(?:see|per|pursuant to|according to|described in|given in|"
+    r"expressed in|governed by|specified in|defined in|refer to|as in|"
+    r"violat\w*|follow\w*|apply\w*|abide by|coupled with|together with|"
+    r"in|of|by|with|from|to|and|than)\s*$)", re.I)
+
+#: The left context of a sentence-initial occurrence: end of the previous
+#: sentence, a bullet, or the start of the unit.
+_SENTENCE_END = re.compile(r"(?:^|[.!?:•]\s*|\u2022\s*)$")
+
+#: A label followed by a reporting verb is pointing at the provision, not
+#: stating it: "Rule 6.1.2-7 implies that ...", "Rule 5.1.4.1-1 says that ...".
+#: Generic citation language -- these verbs report what some OTHER text does,
+#: and a provision never opens by reporting itself.
+_REPORTING = re.compile(
+    r"^\s+(?:says?|state[sd]?|implies|implied|requires?|required|establishes?|"
+    r"permits?|permitted|allows?|allowed|prevents?|limits?|restricts?|"
+    r"indicates?|specifies|specified|differs?|considers?|applies|apply|"
+    r"holds?|creates?|makes?|saves?|and|or|is|are|was|were|shall|must|may)\b",
+    re.I)
+
+#: Body text after a label reads like a statement: it starts with a word,
+#: not with a connective that would continue the referring sentence.
+_BODY_START = re.compile(r"^\s+[\"\u201c(]?[A-Z]")
+
+
+def classify_label(text, match):
+    """DECLARATION, CANDIDATE or REFERENCE for one label occurrence.
+
+    Several signals, because no single one is safe. A colon is decisive when
+    present. Otherwise position decides: a label opening a sentence, followed
+    by something that reads like a statement, is a declaration whose colon
+    the extractor dropped -- and a label sitting mid-sentence after citation
+    language is a reference. Anything else is a CANDIDATE, kept for review
+    rather than thrown away.
+    """
+    after = text[match.end():match.end() + 2]
+
+    if after.startswith(":"):
+        return DECLARATION
+
+    left = text[:match.start()]
+    right = text[match.end():]
+    sentence_initial = bool(_SENTENCE_END.search(left))
+    referring = bool(_REFERRING.search(left))
+    body_like = bool(_BODY_START.match(right))
+
+    if referring and not sentence_initial:
+        return REFERENCE
+
+    if _REPORTING.match(right):
+        return REFERENCE            # it reports a provision; it is not one
+
+    if sentence_initial and body_like:
+        return CANDIDATE            # a declaration, most likely, but unproven
+
+    if not sentence_initial:
+        return REFERENCE
+
+    return CANDIDATE
 
 #: A citation as an answer writes it. The kind is optional, which is exactly
 #: the problem: without it the reference may name several provisions.
@@ -210,6 +283,9 @@ class ProvisionRecord:
     text: str = ""
     modality: str = "NONE"          # the PROVISION's own modality
     unit_modality: str = "NONE"     # what the container is stored as
+    #: DECLARATION, or CANDIDATE when the occurrence could not be proven one.
+    #: A CANDIDATE is preserved and surfaced; it may not ground a claim.
+    declaration_status: str = DECLARATION
     content_type: str = ""
     needs_review: bool = False
 
@@ -281,8 +357,13 @@ def records_from_unit(unit, *, table=None):
     found, spans = [], [(m.start(), m) for m in _LABEL.finditer(text)]
 
     claimed = set()
+    statuses = {index: classify_label(text, match)
+                for index, (_, match) in enumerate(spans)}
 
     for index, (start, match) in enumerate(spans):
+        if statuses[index] == REFERENCE:
+            continue                # a mention of a provision is not one
+
         end = spans[index + 1][0] if index + 1 < len(spans) else len(text)
         body = _clean(text[start:end])
         key = ProvisionKey(match.group("section"), match.group("kind"),
@@ -297,7 +378,9 @@ def records_from_unit(unit, *, table=None):
 
         claimed.add(key)
         found.append(ProvisionRecord(key=key, text=body,
-                                     modality=_modality_of(body), **common))
+                                     modality=_modality_of(body),
+                                     declaration_status=statuses[index],
+                                     **common))
 
     # Text before the first label, or a unit with no label at all. It is
     # evidence -- a section lead-in states what its regulations are ABOUT --
@@ -394,8 +477,19 @@ class ProvisionLedger:
     # -- questions it can answer -------------------------------------
 
     def has(self, key):
-        """Was THIS provision retrieved?"""
-        return key in self.records
+        """Was THIS provision retrieved as a proven declaration?"""
+        record = self.records.get(key)
+
+        return record is not None and record.declaration_status == DECLARATION
+
+    def candidates(self):
+        """Occurrences that could not be proven declarations.
+
+        Preserved rather than discarded, and surfaced so an extraction
+        diagnostic can show them. They ground nothing.
+        """
+        return {key: record for key, record in self.records.items()
+                if record.declaration_status != DECLARATION}
 
     def get(self, key):
         return self.records.get(key)
@@ -435,13 +529,19 @@ class ProvisionLedger:
         ordinal = int(ordinal) if ordinal is not None else None
 
         if kind:
+            # `has`, not membership: a candidate is present in the ledger and
+            # may not ground a claim, so it must not resolve a citation either.
             key = ProvisionKey(section, kind, ordinal)
-            return key if key in self.records else None
+            return key if self.has(key) else None
 
         # Only numbered provisions are citable. A scope block and a table row
         # carry evidence and have no name a citation could use.
-        candidates = [key for key in self.records
+        # Only numbered provisions are citable, and only PROVEN declarations
+        # may ground a claim. A candidate is preserved and reported; it is
+        # not silently promoted into evidence.
+        candidates = [key for key, record in self.records.items()
                       if isinstance(key, ProvisionKey)
+                      and record.declaration_status == DECLARATION
                       and key.section == section and key.ordinal == ordinal]
 
         if not candidates:

@@ -32,8 +32,25 @@ UNREVIEWED = "UNREVIEWED"
 
 
 def key_of(entry):
-    """The ProvisionKey an approval record names."""
+    """The evidence key an approval record names.
+
+    Structural evidence first: a table row is identified by its table and its
+    own number, a scope block by its section and a local discriminator.
+    Neither is a ProvisionKey, and reducing them to one collapsed four
+    approved rows of one table onto a single identity.
+    """
     identity = entry.get("identity") or {}
+    kind = str(identity.get("kind") or identity.get("provision_type") or "")
+
+    if kind == provision_identity.TABLE_ROW and identity.get("table"):
+        return provision_identity.TableRowKey(
+            str(identity.get("section") or ""), str(identity["table"]),
+            int(identity["row"]))
+
+    if kind == provision_identity.SCOPE_PREAMBLE and identity.get("discriminator"):
+        return provision_identity.ScopePreambleKey(
+            str(identity.get("section") or ""), str(identity["discriminator"]))
+
     ordinal = identity.get("ordinal")
 
     if isinstance(ordinal, str) and not ordinal.isdigit():

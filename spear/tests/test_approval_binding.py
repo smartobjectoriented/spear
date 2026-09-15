@@ -103,14 +103,24 @@ class ATableRowKeepsItsOwnOrdinal(unittest.TestCase):
         self.assertEqual(len(keys), 4)
         self.assertIn(pi.ProvisionKey("8.3.1", pi.TABLE_ROW, 20), keys)
 
-    def test_a_table_row_unit_becomes_a_provision(self):
+    def test_a_table_row_unit_becomes_a_structural_record(self):
         row = {"source_id": "std-" + "d" * 32, "section": "8.3.1", "page": 1,
                "modality": "NONE", "content_type": "UNKNOWN",
                "text": "20 ReqV Request Validation Set to 1: request it"}
-        records = pi.records_from_unit(row)
+        records = pi.records_from_unit(row, table="8.3.1-1")
 
         self.assertEqual([record.key for record in records],
-                         [pi.ProvisionKey("8.3.1", pi.TABLE_ROW, 20)])
+                         [pi.TableRowKey("8.3.1", "8.3.1-1", 20)])
+
+    def test_a_row_with_no_table_context_is_still_unique(self):
+        """Derivation of one unit cannot know its table; the fallback keys it
+        by its own unit so two rows never merge."""
+        row = {"source_id": "std-" + "f" * 32, "section": "8.3.1",
+               "modality": "NONE", "content_type": "UNKNOWN",
+               "text": "20 ReqV Request Validation"}
+
+        self.assertEqual(pi.records_from_unit(row)[0].key.table,
+                         "unit:std-" + "f" * 32)
 
 
 if __name__ == "__main__":

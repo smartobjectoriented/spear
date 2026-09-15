@@ -70,14 +70,95 @@ _SECTION = r"\d+(?:\.\d+)*"
 
 #: A row whose first token is its key, and whose second is a short name.
 _TABLE_ROW = re.compile(r"^(?P<key>\d{1,3})\s+(?P<name>[A-Za-z][\w./-]{0,24})\b")
+#: A provision DECLARATION: the label, then a colon, then the provision. A
+#: label without the colon is a cross-reference -- "as required by Rule
+#: 5.1.4.1-1" -- and a later mention of a provision is not a second one.
+#: Measured on the bound standard: 1332 labels are declarations and 41 are
+#: references, every one of the 41 preceded by a referring word. Deriving
+#: both put one rule on four pages with two different modalities.
 _LABEL = re.compile(
-    rf"\b(?P<kind>{'|'.join(LABELLED_KINDS)})\s+(?P<section>{_SECTION})-(?P<ordinal>\d+)\b")
+    rf"\b(?P<kind>{'|'.join(LABELLED_KINDS)})\s+(?P<section>{_SECTION})-(?P<ordinal>\d+)\s*:")
 
 #: A citation as an answer writes it. The kind is optional, which is exactly
 #: the problem: without it the reference may name several provisions.
 _REFERENCE = re.compile(
     rf"\b(?:(?P<kind>{'|'.join(LABELLED_KINDS)})\s+)?"
     rf"(?P<section>{_SECTION})(?:-(?P<ordinal>\d+))?\b")
+
+
+# ── structural evidence, which has no provision identity ─────────────
+# A numbered provision is identified by what the document calls it. A table
+# row and a section's lead-in are not numbered, and giving them a
+# ProvisionKey with a null ordinal collapsed every one of them in a section
+# onto a single identity: 33 scope blocks and 37 table rows of one store.
+#
+# They are not provisions, so they do not get ProvisionKeys. They get their
+# own keys, and the discriminator each needs is a property of the structure
+# it sits in -- which table, which block -- never a bare source_id standing
+# in for a normative name.
+
+
+@dataclass(frozen=True, order=True)
+class TableRowKey:
+    """One row of one table. `table` is the table's own identity."""
+
+    section: str
+    table: str
+    row: int
+
+    kind: str = field(default="TableRow", init=False, compare=True)
+
+    def __str__(self):
+        return f"TableRow {self.table}:{self.row}"
+
+
+@dataclass(frozen=True, order=True)
+class ScopePreambleKey:
+    """One unnumbered scope-bearing block.
+
+    The discriminator localises the block within its section. It is the
+    parent unit's id because that is what makes two blocks distinct; it is
+    not a normative name and nothing resolves a citation to it.
+    """
+
+    section: str
+    discriminator: str
+
+    kind: str = field(default="ScopePreamble", init=False, compare=True)
+
+    def __str__(self):
+        return f"ScopePreamble §{self.section}@{self.discriminator[:12]}"
+
+
+#: A caption's own label -- "Table 8.3.1-1: ..." -- which is what the document
+#: calls the table and is stable across re-extraction. Nothing here knows any
+#: particular table.
+_TABLE_LABEL = re.compile(r"^\s*table\s+(?P<label>[0-9]+(?:[.\-][0-9]+)*)",
+                          re.I)
+
+
+def table_identity(caption):
+    """A stable identity for a table, from the best evidence available.
+
+    The caption's printed label first: it is what the document calls the
+    table and it survives re-extraction. Failing that, the caption unit's id
+    with a hash of its text, which is stable while the text is unchanged.
+    Never array position -- that moves when something unrelated is extracted
+    differently.
+    """
+    if not isinstance(caption, dict):
+        return ""
+
+    text = " ".join(str(caption.get("text") or "").split())
+    match = _TABLE_LABEL.match(text)
+
+    if match:
+        return match.group("label")
+
+    source = str(caption.get("source_id") or "")
+    digest = hashlib.sha256(text.encode("utf-8")).hexdigest()[:12]
+
+    return f"{source}:{digest}" if source or text else ""
 
 
 @dataclass(frozen=True, order=True)
@@ -149,7 +230,21 @@ def _clean(text):
     return " ".join((text or "").split())
 
 
-def records_from_unit(unit):
+def _collect_units(node, found):
+    """Every unit-shaped dict in a payload, at any depth."""
+    if isinstance(node, dict):
+        if node.get("text") or node.get("snippet"):
+            found.append(node)
+
+        for value in node.values():
+            if isinstance(value, (dict, list)):
+                _collect_units(value, found)
+    elif isinstance(node, list):
+        for item in node:
+            _collect_units(item, found)
+
+
+def records_from_unit(unit, *, table=None):
     """Every provision a returned unit carries.
 
     A unit is the storage and retrieval container; it is not the provision.
@@ -169,12 +264,18 @@ def records_from_unit(unit):
               "needs_review": bool(unit.get("needs_review")),
               "unit_text": text}
 
-    #: "20 ReqV Request Validation ..." -- a table row, keyed by its number.
+    #: "20 ReqV Request Validation ..." -- a row, keyed by its table and its
+    #: own number. Without the table, two tables in one section whose rows
+    #: are numbered alike collide; `table` is supplied by whatever knows the
+    #: caption, and a row derived with no table context falls back to its own
+    #: unit so it is at least unique.
     row = _TABLE_ROW.match(_clean(text))
 
     if row and section:
+        owner = table or f"unit:{common['source_id']}"
+
         return [ProvisionRecord(
-            key=ProvisionKey(section, TABLE_ROW, int(row.group("key"))),
+            key=TableRowKey(section, owner, int(row.group("key"))),
             text=_clean(text), modality=_modality_of(text), **common)]
 
     found, spans = [], [(m.start(), m) for m in _LABEL.finditer(text)]
@@ -208,9 +309,38 @@ def records_from_unit(unit):
                 else _FROM_CONTENT_TYPE.get(common["content_type"].upper()))
 
         if kind:
-            found.append(ProvisionRecord(
-                key=ProvisionKey(section, kind, None), text=head,
-                modality=_modality_of(head), **common))
+            key = (ScopePreambleKey(section, common["source_id"])
+                   if kind == SCOPE_PREAMBLE else ProvisionKey(section, kind, None))
+            found.append(ProvisionRecord(key=key, text=head,
+                                         modality=_modality_of(head), **common))
+
+    return found
+
+
+def records_for_units(units, *, tables=None):
+    """Every provision in a set of units, with table context applied.
+
+    Derivation of one unit cannot know which table a row belongs to; that is
+    a property of the run it sits in. `tables` is whatever knows -- normally
+    evidence_graph.tables_in -- and without it rows fall back to per-unit
+    identity.
+    """
+    owner = {}
+
+    for table in (tables or ()):
+        identity = table_identity(table.caption)
+
+        for row in table.rows:
+            owner[str(row.get("source_id") or "")] = identity
+
+    found = []
+
+    for unit in units:
+        if not isinstance(unit, dict):
+            continue
+
+        found.extend(records_from_unit(
+            unit, table=owner.get(str(unit.get("source_id") or ""))))
 
     return found
 
@@ -237,27 +367,29 @@ class ProvisionLedger:
     duplicated: set = field(default_factory=set)
 
     def observe(self, payload):
-        """Collect provisions from one tool result. The payload is untouched."""
-        self._walk(payload)
+        """Collect provisions from one tool result. The payload is untouched.
+
+        Table context comes from the payload itself: a fetch of a caption now
+        carries its rows, so the rows in THIS result are identified by the
+        table in THIS result.
+        """
+        import evidence_graph
+
+        units = []
+        _collect_units(payload, units)
+        self._add(records_for_units(units,
+                                    tables=evidence_graph.tables_in(units)))
+
         return self
 
-    def _walk(self, node):
-        if isinstance(node, dict):
-            if node.get("text") or node.get("snippet"):
-                for record in records_from_unit(node):
-                    seen = self.records.get(record.key)
+    def _add(self, records):
+        for record in records:
+            seen = self.records.get(record.key)
 
-                    if seen is not None and seen.source_id != record.source_id:
-                        self.duplicated.add(record.key)
+            if seen is not None and seen.source_id != record.source_id:
+                self.duplicated.add(record.key)
 
-                    self.records.setdefault(record.key, record)
-
-            for value in node.values():
-                if isinstance(value, (dict, list)):
-                    self._walk(value)
-        elif isinstance(node, list):
-            for item in node:
-                self._walk(item)
+            self.records.setdefault(record.key, record)
 
     # -- questions it can answer -------------------------------------
 
@@ -269,9 +401,10 @@ class ProvisionLedger:
         return self.records.get(key)
 
     def kinds_for(self, section, ordinal):
-        """Every kind sharing one section and ordinal."""
+        """Every provision kind sharing one section and ordinal."""
         return sorted({key.kind for key in self.records
-                       if key.section == section and key.ordinal == ordinal})
+                       if isinstance(key, ProvisionKey)
+                       and key.section == section and key.ordinal == ordinal})
 
     def covers_section(self, section):
         """Weaker, informational only.
@@ -305,8 +438,11 @@ class ProvisionLedger:
             key = ProvisionKey(section, kind, ordinal)
             return key if key in self.records else None
 
+        # Only numbered provisions are citable. A scope block and a table row
+        # carry evidence and have no name a citation could use.
         candidates = [key for key in self.records
-                      if key.section == section and key.ordinal == ordinal]
+                      if isinstance(key, ProvisionKey)
+                      and key.section == section and key.ordinal == ordinal]
 
         if not candidates:
             return None

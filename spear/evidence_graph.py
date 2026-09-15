@@ -103,9 +103,12 @@ class Table:
         """The ProvisionKey of every row, in the order they were read."""
         found = []
 
+        identity = provision_identity.table_identity(self.caption)
+
         for row in self.rows:
-            for record in provision_identity.records_from_unit(row):
-                if record.key.kind == provision_identity.TABLE_ROW:
+            for record in provision_identity.records_from_unit(
+                    row, table=identity):
+                if isinstance(record.key, provision_identity.TableRowKey):
                     found.append(record.key)
 
         return found

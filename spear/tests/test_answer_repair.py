@@ -176,3 +176,46 @@ class TheSameGuardsJudgeTheRepair(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class WhatWithheldAnAnswerIsReportable(unittest.TestCase):
+    """A battery that cannot see which check fired can say a turn withheld
+    and not why. The repair is the same: one constrained rewrite either
+    happened or it did not, and "the answer changed" is not evidence of it.
+    """
+
+    def trace(self):
+        import standard_answer_policy
+
+        policy = standard_answer_policy.policy_for(
+            {"standard_id": "ACME-1", "revision": "2030",
+             "corpus_manifest_sha256": "0" * 64,
+             "index_fingerprint": "1" * 64,
+             "retrieval_fingerprint": "2" * 64},
+            "How many replies are required?")
+        policy.finalize("Up to three replies are required.", rounds=1)
+
+        return policy.trace()
+
+    def test_the_claims_guard_reports_whether_it_fired(self):
+        self.assertIn("claims_guard_triggered", self.trace())
+
+    def test_its_findings_are_reported_by_kind(self):
+        found = self.trace()
+
+        self.assertEqual(
+            [item["kind"] for item in found["claim_findings"]],
+            [] if not found["claims_guard_triggered"] else
+            [item["kind"] for item in found["claim_findings"]])
+
+    def test_the_repair_reports_both_attempt_and_outcome(self):
+        """Attempted-and-refused is a different fact from never attempted,
+        and an evaluation that conflates them cannot tell a guard that held
+        from a rewrite that was never offered."""
+        found = self.trace()
+
+        self.assertIn("repair_attempted", found)
+        self.assertIn("repair_accepted", found)
+
+    def test_no_repair_is_attempted_without_a_way_to_ask(self):
+        self.assertFalse(self.trace()["repair_attempted"])

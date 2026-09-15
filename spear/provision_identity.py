@@ -496,6 +496,14 @@ def records_for_units(units, *, tables=None):
         for row in table.rows:
             owner[str(row.get("source_id") or "")] = identity
 
+    # A unit may name its own table. A parser that already knows the table
+    # structure should say so rather than have it reconstructed from
+    # adjacency: the reconstruction exists because the old extractor lost the
+    # relationship, and guessing is not better than being told.
+    for unit in units:
+        if isinstance(unit, dict) and unit.get("table"):
+            owner[str(unit.get("source_id") or "")] = str(unit["table"])
+
     found = []
 
     for unit in units:

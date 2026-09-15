@@ -100,16 +100,27 @@ _STATES_BOUND = re.compile(
     r"shall not exceed|shall be limited to|up to (?:a maximum of )?\d+|"
     r"only one|exactly one|no greater than)\b", re.I)
 
+#: How English attaches a number to a bound. One list, used on both sides:
+#: the phrasings a clause states a bound in are the phrasings an answer
+#: asserts one in, and reading the two differently is what let a fabricated
+#: maximum through. The answer said "up to three"; the guard recognised that
+#: shape in evidence and not in the claim, so it looked for "is three",
+#: found nothing, and had no finding to make.
+_BOUNDING = (r"at most|no more than|no fewer than|at least|maximum of|"
+             r"minimum of|limited to|shall not exceed|no greater than|"
+             r"up to(?: a maximum of)?|as many as")
+_COUNT = r"\d+|one|two|three|four|five|six|seven|eight|nine|ten"
+
 #: A clause that bounds something, and the value it bounds it to.
 _BOUND_VALUE = re.compile(
-    r"\b(?:at most|no more than|no fewer than|at least|maximum of|minimum of|"
-    r"limited to|shall not exceed|no greater than|up to(?: a maximum of)?)\s+"
-    r"(?P<value>\d+|one|two|three|four|five|six|seven|eight|nine|ten)\b"
+    rf"\b(?:{_BOUNDING})\s+(?P<value>{_COUNT})\b"
     r"|\b(?:only|exactly)\s+(?P<value2>one|two|\d+)\b", re.I)
 
+#: The number an ANSWER puts forward. Emphasis markers are how a model
+#: writes, not part of the claim, so they do not hide it.
 _NUMBER = re.compile(
-    r"\b(?:is|are|of)\s+(?:\*\*)?(\d+|one|two|three|four|five|six|seven|eight|"
-    r"nine|ten)(?:\*\*)?\b", re.I)
+    rf"\b(?:is|are|of|only|exactly|{_BOUNDING})\s+(?:\*\*)?({_COUNT})(?:\*\*)?\b",
+    re.I)
 
 #: An identifier shaped like a field, flag or symbol rather than like English.
 #: Conservative on purpose: an ordinary capitalised word at the start of a

@@ -475,3 +475,51 @@ class AnAmbiguousCitationWithholdsTheAnswer(unittest.TestCase):
 
         self.assertEqual(nc.ambiguity_findings("Per 6.2-1 it stops.",
                                                evidence(*one)), [])
+
+
+class ABoundIsReadTheSameWayInAClaimAsInAClause(unittest.TestCase):
+    """The guard knew "up to three" was a bound when a clause said it and not
+    when the answer said it, so it looked for "is three", found nothing, and
+    let a fabricated maximum stand. Asked for the maximum number of
+    Acknowledge packets -- which the document nowhere states -- a turn
+    answered "up to three", reasoning from there being three Ack types.
+    """
+
+    QUESTION = ("What maximum number of Acknowledge packets may a Controllee "
+                "generate in response to one Control packet?")
+
+    def findings(self, answer, given=None):
+        return nc.cardinality_findings(answer, given or evidence(),
+                                       question=self.QUESTION)
+
+    def test_up_to_a_number_is_an_asserted_bound(self):
+        found = self.findings("A Controllee may generate up to **three** "
+                              "Acknowledge packets in response to one Control packet.")
+
+        self.assertEqual([item["kind"] for item in found],
+                         [nc.UNSUPPORTED_CARDINALITY])
+
+    def test_emphasis_does_not_hide_the_number(self):
+        found = self.findings("The limit is **four** packets.")
+
+        self.assertEqual(found[0]["asserted"], "four")
+
+    def test_at_most_is_an_asserted_bound(self):
+        self.assertTrue(self.findings("A Controllee may generate at most 3 packets."))
+
+    def test_only_a_number_is_an_asserted_bound(self):
+        self.assertTrue(self.findings("A Controllee generates only two packets."))
+
+    def test_an_enumeration_is_still_not_a_bound(self):
+        """That three Ack types exist says nothing about how many packets may
+        be generated, and flagging it would withhold correct answers."""
+        self.assertEqual(
+            self.findings("The three types of Acknowledge packet are AckV, "
+                          "AckX and AckS."), [])
+
+    def test_a_bound_the_evidence_states_is_not_flagged(self):
+        self.assertEqual(
+            nc.cardinality_findings("Only one selector may be set.",
+                                    evidence(REQUIRE_ONE),
+                                    question="How many selectors may be set?"),
+            [])

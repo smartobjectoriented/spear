@@ -430,6 +430,12 @@ class ProvisionRecord:
     #: normative blob.
     cells: tuple = ()
 
+    #: Where the table this row belongs to came from. NATIVE means the parser
+    #: recorded the grid and the store kept it; RECONSTRUCTED means it was
+    #: inferred from what sat next to what, which is a guess and is reported
+    #: as one.
+    structure_origin: str = ""
+
     standard_id: str = ""
     revision: str = ""
 
@@ -463,18 +469,80 @@ def _clean(text):
     return " ".join((text or "").split())
 
 
+#: Parts of a unit that are shaped like units and are not. A table cell has
+#: text and a column; walked as a unit it became a record of its own, and a
+#: two-cell row arrived as three pieces of evidence.
+_NOT_UNITS = ("table_structure",)
+
+
 def _collect_units(node, found):
     """Every unit-shaped dict in a payload, at any depth."""
     if isinstance(node, dict):
         if node.get("text") or node.get("snippet"):
             found.append(node)
 
-        for value in node.values():
+        for name, value in node.items():
+            if name in _NOT_UNITS:
+                continue
+
             if isinstance(value, (dict, list)):
                 _collect_units(value, found)
     elif isinstance(node, list):
         for item in node:
             _collect_units(item, found)
+
+
+#: Where a row's table identity came from.
+NATIVE = "NATIVE"
+RECONSTRUCTED = "RECONSTRUCTED"
+
+
+def _column_name(structure, cell):
+    """What to call a cell's column: its printed header, else its position."""
+    if cell.get("column"):
+        return str(cell["column"])
+
+    columns = structure.get("columns") or ()
+    index = cell.get("column_index")
+
+    if isinstance(index, int) and index < len(columns) and columns[index]:
+        return str(columns[index])
+
+    return f"col{index}" if isinstance(index, int) else "col?"
+
+
+def _native_row(unit, section, common):
+    """Identity for a row whose grid the store kept, or None.
+
+    The row's own printed key is what the document numbers it by. A table
+    that numbers nothing gives its rows no citable identity here, exactly as
+    before -- position in a grid is not a name.
+    """
+    structure = unit.get("table_structure")
+
+    if not isinstance(structure, dict) or not structure.get("table_id"):
+        return None
+
+    key = str(structure.get("row_key") or "").strip()
+
+    if not section or not key.isdigit():
+        return None
+
+    owner = str(structure["table_id"])
+    row_number = int(key)
+    cells = tuple(
+        {"key": TableCellKey(section, owner, row_number,
+                             _column_name(structure, cell)),
+         "text": _clean(cell.get("text")),
+         "span_ids": tuple(cell.get("span_ids") or ())}
+        for cell in (structure.get("cells") or ())
+        if isinstance(cell, dict))
+    text = _clean(unit.get("text") or unit.get("snippet") or "")
+
+    return [ProvisionRecord(
+        key=TableRowKey(section, owner, row_number),
+        text=text, modality=_modality_of(text), cells=cells,
+        structure_origin=NATIVE, **common)]
 
 
 def records_from_unit(unit, *, table=None):
@@ -501,12 +569,27 @@ def records_from_unit(unit, *, table=None):
               "spans": ({"source_id": str(unit.get("source_id") or ""),
                          "page": unit.get("page")},)}
 
+    #: The grid the parser recorded, kept by the store. Preferred over every
+    #: other route to a row's identity: a parser that read the table knows
+    #: which table, which row and which column, and reconstructing that from
+    #: adjacency throws away what it was told.
+    structure = unit.get("table_structure")
+    native = _native_row(unit, section, common) if structure else None
+
+    if native is not None:
+        return native
+
     #: "20 ReqV Request Validation ..." -- a row, keyed by its table and its
-    #: own number. Without the table, two tables in one section whose rows
-    #: are numbered alike collide; `table` is supplied by whatever knows the
+    #: own number. The legacy route, for a store whose parser recorded no
+    #: grid: without the table, two tables in one section whose rows are
+    #: numbered alike collide; `table` is supplied by whatever knows the
     #: caption, and a row derived with no table context falls back to its own
     #: unit so it is at least unique.
-    row = _TABLE_ROW.match(_clean(text))
+    # A unit the store DESCRIBED is never guessed at. If its grid gives it no
+    # printed key, it has no citable row identity -- which is what a table
+    # that numbers nothing has always had -- and inventing one from the text
+    # would put the guess back in by the side door.
+    row = None if structure else _TABLE_ROW.match(_clean(text))
 
     if row and section:
         owner = table or f"unit:{common['source_id']}"
@@ -530,7 +613,7 @@ def records_from_unit(unit, *, table=None):
         return [ProvisionRecord(
             key=TableRowKey(section, owner, row_number),
             text=_clean(text), modality=_modality_of(text),
-            cells=tuple(cells), **common)]
+            cells=tuple(cells), structure_origin=RECONSTRUCTED, **common)]
 
     found, spans = [], [(m.start(), m) for m in _LABEL.finditer(text)]
 
@@ -582,14 +665,33 @@ def records_from_unit(unit, *, table=None):
     return found
 
 
+def reconstructed_tables(units):
+    """Tables inferred from what sits next to what -- the legacy fallback.
+
+    Only for the units the store could not describe. Reconstruction is a
+    guess about a relationship the parser may already have recorded, and a
+    guess must never be consulted about something already known: a store
+    whose rows all carry their own grid does no reconstruction at all.
+    """
+    import evidence_graph
+
+    legacy = [unit for unit in units
+              if isinstance(unit, dict) and not unit.get("table_structure")]
+
+    return evidence_graph.tables_in(legacy) if legacy else ()
+
+
 def records_for_units(units, *, tables=None):
     """Every provision in a set of units, with table context applied.
 
-    Derivation of one unit cannot know which table a row belongs to; that is
-    a property of the run it sits in. `tables` is whatever knows -- normally
-    evidence_graph.tables_in -- and without it rows fall back to per-unit
-    identity.
+    A unit that carries its own grid needs nothing from here. For the rest,
+    which table a row belongs to is a property of the run it sits in, not of
+    the unit: `tables` is whatever knows, and when nothing does the legacy
+    reconstruction is run over the units that need it.
     """
+    if tables is None:
+        tables = reconstructed_tables(units)
+
     owner = {}
 
     for table in (tables or ()):
@@ -732,12 +834,9 @@ class ProvisionLedger:
         carries its rows, so the rows in THIS result are identified by the
         table in THIS result.
         """
-        import evidence_graph
-
         units = []
         _collect_units(payload, units)
-        self._add(records_for_units(units,
-                                    tables=evidence_graph.tables_in(units)))
+        self._add(records_for_units(units))
 
         return self
 

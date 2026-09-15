@@ -179,13 +179,24 @@ def records_from_unit(unit):
 
     found, spans = [], [(m.start(), m) for m in _LABEL.finditer(text)]
 
+    claimed = set()
+
     for index, (start, match) in enumerate(spans):
         end = spans[index + 1][0] if index + 1 < len(spans) else len(text)
         body = _clean(text[start:end])
-        found.append(ProvisionRecord(
-            key=ProvisionKey(match.group("section"), match.group("kind"),
-                             int(match.group("ordinal"))),
-            text=body, modality=_modality_of(body), **common))
+        key = ProvisionKey(match.group("section"), match.group("kind"),
+                           int(match.group("ordinal")))
+
+        # A unit may name the same provision twice -- a rule and a later
+        # cross-reference to it. The first occurrence is the provision; the
+        # second is a mention, and emitting both put two records with one
+        # identity into the ledger.
+        if key in claimed:
+            continue
+
+        claimed.add(key)
+        found.append(ProvisionRecord(key=key, text=body,
+                                     modality=_modality_of(body), **common))
 
     # Text before the first label, or a unit with no label at all. It is
     # evidence -- a section lead-in states what its regulations are ABOUT --
@@ -220,6 +231,11 @@ class ProvisionLedger:
 
     records: dict = field(default_factory=dict)
 
+    #: Keys seen in more than one source unit. Identity that is not unique is
+    #: not identity; a caller that needs certainty must treat these as
+    #: ambiguous rather than trusting the first arrival.
+    duplicated: set = field(default_factory=set)
+
     def observe(self, payload):
         """Collect provisions from one tool result. The payload is untouched."""
         self._walk(payload)
@@ -229,6 +245,11 @@ class ProvisionLedger:
         if isinstance(node, dict):
             if node.get("text") or node.get("snippet"):
                 for record in records_from_unit(node):
+                    seen = self.records.get(record.key)
+
+                    if seen is not None and seen.source_id != record.source_id:
+                        self.duplicated.add(record.key)
+
                     self.records.setdefault(record.key, record)
 
             for value in node.values():

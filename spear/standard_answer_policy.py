@@ -35,6 +35,7 @@ import diagram_geometry
 import evidence_bootstrap
 import evidence_progress
 import evidence_recovery
+import answer_repair
 import normative_claims
 import normative_precedence
 import provenance_guard
@@ -149,6 +150,11 @@ class StandardAnswerPolicy:
     provenance_fired: bool = False
     precedence_fired: bool = False
     claims_fired: bool = False
+    repair_attempted: bool = False
+    repair_accepted: bool = False
+    #: Injected by whatever drives the loop. Absent means no repair is
+    #: possible, and the answer is withheld exactly as before.
+    repair_ask: object = None
     claim_findings: list = field(default_factory=list)
     precedence_findings: list = field(default_factory=list)
     replaced_requirements: list = field(default_factory=list)
@@ -363,8 +369,32 @@ class StandardAnswerPolicy:
         # them on that. Before the provenance guard, because what this writes
         # is built from the ledger and must not then be stripped of sources.
 
+        before_repair = guarded
         guarded, claim_problems, claims_fired = normative_claims.guard(
             guarded, self.claim_evidence, question=self.question)
+
+        # One constrained rewrite, when the evidence in hand can settle what
+        # was wrong with the prose. No new retrieval, no loop, and the same
+        # guard again on what comes back -- a repair that fails is withheld
+        # exactly as the original was.
+
+        if (claims_fired and self.repair_ask is not None
+                and answer_repair.is_repairable(claim_problems)):
+            self.repair_attempted = True
+            repaired = answer_repair.attempt(
+                self.question, before_repair, self.claim_evidence,
+                claim_problems, ask=self.repair_ask)
+
+            if repaired:
+                checked, retry_problems, retry_fired = normative_claims.guard(
+                    repaired, self.claim_evidence, question=self.question)
+
+                if not retry_fired:
+                    guarded, claim_problems, claims_fired = checked, [], False
+                    self.repair_accepted = True
+                else:
+                    claim_problems = list(retry_problems)
+
         self.claims_fired = claims_fired
         self.claim_findings = list(claim_problems)
 

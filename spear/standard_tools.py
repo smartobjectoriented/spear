@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import evidence_graph
+
 import hashlib
 import json
 import re
@@ -50,6 +52,32 @@ _CONTEXT_PREVIEW_CHARS = 240
 # must agree, or the renderer fills a window the policy then cuts.
 
 _FETCH_RESULT_POLICY = ToolResultPolicy(4000, True, 1800)
+
+
+def _attach_table_rows(fetched):
+    """Link a fetched table caption to the row units beside it.
+
+    Conservative: a neighbour joins only if it is shaped like a row of a
+    table. Adjacency alone would attach the paragraph after the table, and a
+    table's neighbourhood is mostly prose.
+    """
+    unit = fetched.get("unit")
+
+    if not isinstance(unit, dict) or not evidence_graph.is_caption(unit):
+        return fetched
+
+    neighbours = [item for item in (fetched.get("neighbors") or [])
+                  if isinstance(item, dict)]
+    tables = evidence_graph.tables_in([unit] + neighbours)
+    rows = tables[0].rows if tables else []
+
+    if not rows:
+        return fetched
+
+    found = dict(fetched)
+    found["table_rows"] = rows
+
+    return found
 
 
 def _fetch_policy() -> ToolResultPolicy:
@@ -144,6 +172,8 @@ def render_fetch_for_model(fetched: Mapping[str, object], *, budget: int,
         return len("\n".join([core] + list(candidate))) <= budget
 
     for label, items in (("PARENT", [fetched.get("parent")] if fetched.get("parent") else []),
+                         ("TABLE ROWS belonging to this table",
+                          fetched.get("table_rows") or []),
                          ("NEIGHBOURS in the same section", fetched.get("neighbors") or []),
                          ("CROSS-REFERENCES", fetched.get("resolved_cross_references") or [])):
         group: list[str] = []
@@ -463,6 +493,15 @@ class StandardToolService:
                 SOURCE_NOT_FOUND,
                 "no canonical source unit has that id in this revision",
                 _SOURCE_RECOVERY) from None
+
+        # A table arrives from the extractor as a caption unit and a run of
+        # unlabelled row units with nothing linking them, so a session can
+        # hold every row of a table and still not know it has the table. The
+        # relationship is derived here, read-only, from what the fetch
+        # already returned -- the licensed corpus is not rewritten and a
+        # caller that ignores the field sees what it saw before.
+
+        fetched = _attach_table_rows(fetched)
 
         # The structured form is what is kept, traced and stored; the
         # rendering is what the model is shown. The tool's own output budget

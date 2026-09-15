@@ -64,7 +64,18 @@ KINDS = LABELLED_KINDS + (REQUIREMENT, INFORMATIVE, SCOPE_PREAMBLE,
 _FROM_CONTENT_TYPE = {
     "REQUIREMENT": REQUIREMENT, "RECOMMENDATION": RECOMMENDATION,
     "INFORMATIVE": INFORMATIVE, "DEFINITION": DEFINITION,
+    "SCOPE_PREAMBLE": SCOPE_PREAMBLE,
 }
+
+#: A section's lead-in, recognised by what it SAYS. The kind of block that
+#: says what the regulations below are about is scope-bearing whether or not
+#: the extractor had a name for it: one extraction puts it inside the first
+#: labelled unit, where it is already treated as a preamble, and another
+#: emits it on its own -- where, keyed only on content_type, it produced no
+#: identity at all and the scope of section 8.3.1.5 could not be cited.
+_SCOPE_LEAD = re.compile(
+    r"^\s*(?:the following|this (?:section|subsection|clause)|"
+    r"the regulations|regulations (?:below|in this))\b", re.I)
 
 _SECTION = r"\d+(?:\.\d+)*"
 
@@ -109,8 +120,18 @@ _REPORTING = re.compile(
     r"^\s+(?:says?|state[sd]?|implies|implied|requires?|required|establishes?|"
     r"permits?|permitted|allows?|allowed|prevents?|limits?|restricts?|"
     r"indicates?|specifies|specified|differs?|considers?|applies|apply|"
-    r"holds?|creates?|makes?|saves?|and|or|is|are|was|were|shall|must|may)\b",
+    r"holds?|creates?|makes?|saves?|has|have|had|and|or|is|are|was|were|"
+    r"shall|must|may)\b",
     re.I)
+
+#: A label a sentence runs THROUGH rather than opens with: a comma straight
+#: after it, or a word closing up against it with no space. Both are how a
+#: document mentions a provision mid-clause -- "Permission 6.1.2-1, coupled
+#: with ...", "Permission 9.7.3.4-1permits ..." -- and neither declares one.
+_RUNS_ON = re.compile(r"^(?:\s*,|[a-z])")
+
+#: A letter suffix on the ordinal, then the declaring colon: "Rule 5.2-1a:".
+_SUFFIXED = re.compile(r"^[a-z]{1,2}\s*:")
 
 #: Body text after a label reads like a statement: it starts with a word,
 #: not with a connective that would continue the referring sentence.
@@ -132,6 +153,13 @@ def classify_label(text, match):
     if after.startswith(":"):
         return DECLARATION
 
+    # A sub-lettered ordinal: the label regex stops at the digits, so
+    # "Rule 5.2-1a:" leaves "a:" behind. The colon is still the decisive
+    # signal, and without this the suffix reads as a word running into the
+    # label -- which is the shape of a reference.
+    if _SUFFIXED.match(text[match.end():]):
+        return DECLARATION
+
     left = text[:match.start()]
     right = text[match.end():]
     sentence_initial = bool(_SENTENCE_END.search(left))
@@ -141,8 +169,8 @@ def classify_label(text, match):
     if referring and not sentence_initial:
         return REFERENCE
 
-    if _REPORTING.match(right):
-        return REFERENCE            # it reports a provision; it is not one
+    if _REPORTING.match(right) or _RUNS_ON.match(right):
+        return REFERENCE            # it mentions a provision; it is not one
 
     if sentence_initial and body_like:
         return CANDIDATE            # a declaration, most likely, but unproven
@@ -538,7 +566,8 @@ def records_from_unit(unit, *, table=None):
     head = _clean(text[:spans[0][0]] if spans else text)
 
     if head and section:
-        kind = (SCOPE_PREAMBLE if spans
+        kind = (SCOPE_PREAMBLE
+                if spans or _SCOPE_LEAD.match(head)
                 else _FROM_CONTENT_TYPE.get(common["content_type"].upper()))
 
         if kind:

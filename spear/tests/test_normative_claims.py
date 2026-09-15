@@ -523,3 +523,77 @@ class ABoundIsReadTheSameWayInAClaimAsInAClause(unittest.TestCase):
                                     evidence(REQUIRE_ONE),
                                     question="How many selectors may be set?"),
             [])
+
+
+class AClaimAboutAProvisionIsBoundedByThatProvision(unittest.TestCase):
+    """The strongest thing cited ANYWHERE is not what a sentence about ONE
+    provision may say.
+
+    Measured: asked whether an Observation whose prose says "must" was the
+    binding requirement, a turn answered "Yes ... while labeled as an
+    Observation, the language uses the term must". It also cited a Rule from
+    the same section, and the Rule is what licensed the claim -- the check on
+    conclusion strength compares against everything cited, so a sentence
+    about the Observation was carried by the Rule beside it.
+    """
+
+    OBSERVATION = ("Observation 4.1-2: the Controllee must generate one "
+                   "packet for each requested response.", "SHALL",
+                   "INFORMATIVE", "4.1")
+    RULE = ("Rule 4.1-3: Multiple Reply packets shall be generated when more "
+            "than one selector is set.", "SHALL", "REQUIREMENT", "4.1")
+
+    def given(self):
+        return evidence(self.OBSERVATION, self.RULE)
+
+    def test_an_observation_is_not_the_binding_requirement(self):
+        found = nc.attribution_findings(
+            "Yes, Observation 4.1-2 is indeed describing a binding "
+            "requirement. This is supported by Rule 4.1-3.", self.given())
+
+        self.assertEqual([item["kind"] for item in found],
+                         [nc.MISATTRIBUTED_FORCE])
+
+    def test_the_finding_names_the_provision_and_both_forces(self):
+        found = nc.attribution_findings(
+            "Observation 4.1-2 is a mandatory requirement.", self.given())[0]
+
+        self.assertEqual(found["reference"], "Observation 4.1-2")
+        self.assertEqual((found["claimed"], found["supported"]),
+                         ("requirement", "informative"))
+
+    def test_denying_the_force_is_the_correct_answer_not_a_finding(self):
+        """"is NOT the binding requirement" says the provision does not carry
+        that force, which is what the question was asking."""
+        self.assertEqual(nc.attribution_findings(
+            "No, Observation 4.1-2 is not itself the binding requirement. "
+            "The binding requirement is Rule 4.1-3.", self.given()), [])
+
+    def test_a_rule_credited_with_binding_force_is_not_flagged(self):
+        self.assertEqual(nc.attribution_findings(
+            "Rule 4.1-3 is the binding requirement here.", self.given()), [])
+
+    def test_a_quoted_shall_after_a_citation_is_not_an_attribution(self):
+        """"Rule 4.1-3 states: 'the packet shall ...'" quotes the provision;
+        it does not credit some other provision with a force."""
+        self.assertEqual(nc.attribution_findings(
+            'Observation 4.1-2 says:\n> "the Controllee shall comply"',
+            self.given()), [])
+
+    def test_it_reaches_the_guard(self):
+        withheld, problems, fired = nc.guard(
+            "Yes, Observation 4.1-2 is a binding requirement.", self.given())
+
+        self.assertTrue(fired)
+        self.assertIn("supports informative", withheld)
+
+    def test_emphasis_around_the_citation_does_not_hide_the_claim(self):
+        """A model writes `**Observation 4.1-2**`. Treating the asterisks as
+        a boundary made this check blind to the exact sentence it exists
+        for."""
+        found = nc.attribution_findings(
+            "Yes, the statement in **Observation 4.1-2** is indeed "
+            "describing a binding requirement.", self.given())
+
+        self.assertEqual([item["kind"] for item in found],
+                         [nc.MISATTRIBUTED_FORCE])

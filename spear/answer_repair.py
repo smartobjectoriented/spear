@@ -35,6 +35,9 @@ REPAIRABLE = frozenset({
     normative_claims.STRENGTHENED_MODALITY,
     normative_claims.UNGROUNDED_IDENTIFIER,
     normative_claims.AMBIGUOUS_CITATION,
+    # A provision credited with the wrong force is a wording problem: the
+    # evidence in hand already says which provision imposes what.
+    normative_claims.MISATTRIBUTED_FORCE,
 })
 
 #: And ones it cannot. A bound nothing states is not a wording problem.

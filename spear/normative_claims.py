@@ -47,6 +47,8 @@ STRENGTHENED_MODALITY = "STRENGTHENED_MODALITY"
 INCOHERENT_CONCLUSION = "INCOHERENT_CONCLUSION"
 UNSUPPORTED_CARDINALITY = "UNSUPPORTED_CARDINALITY"
 AMBIGUOUS_CITATION = "AMBIGUOUS_CITATION"
+#: A named provision credited with a force its role cannot carry.
+MISATTRIBUTED_FORCE = "MISATTRIBUTED_FORCE"
 
 #: informative < permission < recommendation < requirement. A conclusion may
 #: sit at or below the level of its evidence, never above it.
@@ -70,6 +72,34 @@ _CLAIM = (
     (PERMISSION, re.compile(
         r"\b(?:may|can|permitted|allowed|optional|is able to)\b", re.I)),
 )
+
+#: "<Provision X> ... is a binding requirement" -- a claim about what a NAMED
+#: provision is, rather than a claim the provision supports. Deliberately
+#: tight: the force word must follow the citation closely and in the same
+#: clause, with no sentence end, newline, quotation mark or emphasis between
+#: them, so "Rule 8.4.1.1-2:" followed by a quoted "shall" is not a match.
+_FORCE_ATTRIBUTION = re.compile(
+    rf"(?P<cite>(?:{'|'.join(provision_identity.LABELLED_KINDS)})"
+    rf"\s+\d+(?:\.\d+)*-\d+)"
+    r"(?P<between>[^.\n\"\u201c\u201d]{0,70}?)"
+    r"\b(?P<force>binding|mandatory|obligation|obligatory|requirement|"
+    r"required|recommendation|recommended|permission|permitted|optional)\b",
+    re.I)
+
+#: What turns the attribution into its opposite. "is NOT the binding
+#: requirement" says the provision does not carry that force, which is the
+#: correct answer to the question this check exists for.
+_NEGATED = re.compile(
+    r"\b(?:not|never|neither|nor|rather than|other than|instead of|"
+    r"no longer|n't)\b", re.I)
+
+#: The force each attribution word names.
+_ATTRIBUTED_FORCE = {
+    "binding": REQUIREMENT, "mandatory": REQUIREMENT, "obligation": REQUIREMENT,
+    "obligatory": REQUIREMENT, "requirement": REQUIREMENT, "required": REQUIREMENT,
+    "recommendation": RECOMMENDATION, "recommended": RECOMMENDATION,
+    "permission": PERMISSION, "permitted": PERMISSION, "optional": PERMISSION,
+}
 
 #: A question that asks whether something is obligatory. A bare "Yes" to one
 #: of these asserts the obligation, which is how a recommendation gets
@@ -553,6 +583,58 @@ def cardinality_findings(answer, evidence, *, question=""):
              "asserted": number.group(1)}]
 
 
+# ── 5. misattributed force ───────────────────────────────────────────
+
+def attribution_findings(answer, evidence):
+    """A named provision credited with a force its role cannot carry.
+
+    Distinct from a conclusion that is too strong for its evidence, and not
+    caught by it: "Observation 8.4.1.1-1 is describing a binding requirement"
+    is a claim ABOUT one provision, and an answer that also cites a Rule
+    further down was licensed by the Rule. The strongest thing cited anywhere
+    is not what a sentence about one provision may say.
+
+    Measured: a turn answered "Yes" to whether an Observation was the binding
+    requirement, reasoning in its own words that "while labeled as an
+    Observation, the language uses the term must". A Rule elsewhere in the
+    same section does impose it, and citing that Rule is what let the claim
+    through.
+    """
+    if not evidence.knows_anything():
+        return []
+
+    found, seen = [], set()
+
+    for match in _FORCE_ATTRIBUTION.finditer(answer or ""):
+        if _NEGATED.search(match.group("between")):
+            continue
+
+        claimed = _ATTRIBUTED_FORCE[match.group("force").lower()]
+
+        try:
+            key = evidence.provisions.resolve(match.group("cite"))
+        except provision_identity.AmbiguousReference:
+            continue        # reported by the ambiguity check, not guessed at
+
+        record = evidence.provisions.get(key) if key is not None else None
+
+        if record is None or claimed <= record.effective_force:
+            continue
+
+        if str(record.key) in seen:
+            continue
+
+        seen.add(str(record.key))
+        found.append({"kind": MISATTRIBUTED_FORCE,
+                      "reference": str(record.key),
+                      "role": record.role,
+                      "claimed": _LEVEL_NAME[claimed],
+                      "supported": _LEVEL_NAME[record.effective_force],
+                      "sentence": match.group(0)})
+
+    return found
+
+
 # ── the gate ─────────────────────────────────────────────────────────
 
 def ambiguity_findings(answer, evidence):
@@ -578,7 +660,8 @@ def findings(answer, evidence, *, question="", permitted=()):
             + identifier_findings(answer, evidence, permitted=permitted)
             + modality_findings(answer, evidence, question=question)
             + coherence_findings(answer, evidence, question=question)
-            + cardinality_findings(answer, evidence, question=question))
+            + cardinality_findings(answer, evidence, question=question)
+            + attribution_findings(answer, evidence))
 
 
 def _note(problems, evidence):
@@ -606,6 +689,12 @@ def _note(problems, evidence):
             lines.append(f"  - a bound of {problem['asserted']} is asserted; "
                          "no retrieved clause states one. Counting flags, "
                          "types or examples does not establish a limit.")
+        elif kind == MISATTRIBUTED_FORCE:
+            lines.append(f"  - {problem['reference']} is credited with "
+                         f"{problem['claimed']} force; it is a "
+                         f"{problem['role'].lower()} and supports "
+                         f"{problem['supported']}. A modal verb inside a "
+                         "provision does not change what the provision is.")
 
     if evidence.units:
         sections = sorted({unit.section for unit in evidence.units if unit.section})

@@ -41,12 +41,15 @@ class ACaptionFindsItsRows(unittest.TestCase):
         self.assertEqual(len(tables), 1)
         self.assertEqual(len(tables[0].rows), 3)
 
-    def test_each_row_becomes_a_keyed_provision(self):
+    def test_each_row_becomes_a_keyed_structural_record(self):
+        """A row is structural evidence keyed by ITS TABLE and its number,
+        not a provision with a null-ordinal ProvisionKey."""
         units = [caption(1)] + [unit(2 + i, row) for i, row in enumerate(ROWS)]
+        keys = eg.tables_in(units)[0].keys()
 
-        self.assertEqual(eg.tables_in(units)[0].keys(),
-                         [pi.ProvisionKey("5.2", pi.TABLE_ROW, key)
-                          for key in (7, 6, 5)])
+        self.assertEqual(keys, [pi.TableRowKey("5.2", "5.2-1", key)
+                                for key in (7, 6, 5)])
+        self.assertTrue(all(isinstance(key, pi.TableRowKey) for key in keys))
 
     def test_a_row_can_be_looked_up_by_its_key(self):
         units = [caption(1)] + [unit(2 + i, row) for i, row in enumerate(ROWS)]
@@ -73,7 +76,7 @@ class ProseIsNotAbsorbed(unittest.TestCase):
         table = eg.tables_in(units)[0]
 
         self.assertEqual(len(table.rows), 3)
-        self.assertNotIn(4, [key.ordinal for key in table.keys()])
+        self.assertNotIn(4, [key.row for key in table.keys()])
 
     def test_a_prose_unit_is_not_row_like(self):
         self.assertFalse(eg.is_row_like(

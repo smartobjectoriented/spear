@@ -111,11 +111,16 @@ class OneUnitYieldsSeveralProvisions(unittest.TestCase):
         self.assertEqual(len(set(digests.values())), len(digests))
 
     def test_the_lead_in_becomes_a_scope_preamble_not_a_rule(self):
+        """It is structural evidence, so it gets a structural key -- not a
+        ProvisionKey with a null ordinal, which collapsed every scope block in
+        a section onto one identity."""
         keys = [record.key for record in pi.records_from_unit(COLLIDING_UNIT)]
-        preamble = [key for key in keys if key.kind == pi.SCOPE_PREAMBLE]
+        preamble = [key for key in keys
+                    if isinstance(key, pi.ScopePreambleKey)]
 
         self.assertEqual(len(preamble), 1)
-        self.assertIsNone(preamble[0].ordinal)
+        self.assertEqual(preamble[0].section, SECTION)
+        self.assertFalse(hasattr(preamble[0], "ordinal"))
 
 
 class RetrievingOneDoesNotCoverAnother(unittest.TestCase):

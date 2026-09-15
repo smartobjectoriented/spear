@@ -123,11 +123,15 @@ class ACandidateMayNotGroundAClaim(unittest.TestCase):
         self.assertTrue(found.has(pi.ProvisionKey("5.2", pi.RULE, 1)))
 
     def test_a_candidate_is_exposed_for_diagnostics(self):
+        """Keyed by INSTANCE: a candidate is one declaration among possibly
+        several sharing a printed label, so the diagnostic names which."""
         found = self.ledger(self.UNIT, self.DECLARED)
         candidates = found.candidates()
 
-        self.assertEqual([str(key) for key in candidates],
-                         ["Definition 3.5.1-7"])
+        self.assertEqual([record.citation_key for record in candidates.values()],
+                         [pi.ProvisionKey("3.5.1", pi.DEFINITION, 7)])
+        self.assertTrue(all(isinstance(identity, pi.ProvisionInstanceId)
+                            for identity in candidates))
 
 
 class TheExtractionBoundaryCase(unittest.TestCase):

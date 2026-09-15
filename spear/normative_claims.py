@@ -247,11 +247,26 @@ class NormativeEvidence:
         return self.provisions.references_in(answer or "")
 
     def cited_units(self, answer):
-        """The provision RECORDS the answer points at, as evidence."""
+        """The provision RECORDS the answer points at, as evidence.
+
+        `get` returns a record only when the printed label names exactly one
+        declaration. Where the document reuses a label the citation is
+        ambiguous and is reported as such, so nothing is grounded by
+        guessing which instance was meant.
+        """
         resolved, _ = self.cited_provisions(answer)
         found = [self.provisions.get(key) for key in resolved]
 
         return [record for record in found if record is not None]
+
+    def cited_instances(self, answer):
+        """The exact ProvisionInstanceIds an answer rests on.
+
+        Carried through rather than re-derived from the rendered citation
+        later: a printed label may name several declarations, and parsing the
+        prose back into an identity is the guess this layer exists to avoid.
+        """
+        return [record.instance_id for record in self.cited_units(answer)]
 
     def level_for(self, citations):
         """Deprecated shape kept for the unit tests that drive it directly."""

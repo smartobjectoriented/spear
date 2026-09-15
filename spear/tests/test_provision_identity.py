@@ -203,3 +203,40 @@ class TheCollisionIsDetectable(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class AUnitMayNameItsOwnTable(unittest.TestCase):
+    """A parser that already knows the table structure should say so.
+
+    The adjacency reconstruction exists because the old extractor lost the
+    caption-to-row relationship. Where a parser supplies it, being told beats
+    guessing -- and two tables in one section whose rows are numbered alike
+    stay distinct without any spatial heuristic.
+    """
+
+    def row(self, source_id, text, table=None):
+        unit = {"source_id": source_id, "section": "8.3.1", "page": 116,
+                "content_type": "TABLE_ROW", "modality": "NONE", "text": text}
+        if table:
+            unit["table"] = table
+        return unit
+
+    def test_a_declared_table_identity_is_used(self):
+        units = [self.row("std-a", "20 ReqV Request Validation", table="8.3.1-1")]
+        found = pi.records_for_units(units)
+
+        self.assertEqual([record.key for record in found],
+                         [pi.TableRowKey("8.3.1", "8.3.1-1", 20)])
+
+    def test_two_tables_with_the_same_row_number_stay_distinct(self):
+        units = [self.row("std-a", "1 Alpha first", table="8.3.1-1"),
+                 self.row("std-b", "1 Beta second", table="8.3.1-2")]
+        keys = [record.key for record in pi.records_for_units(units)]
+
+        self.assertEqual(len(set(keys)), 2)
+        self.assertEqual({key.table for key in keys}, {"8.3.1-1", "8.3.1-2"})
+
+    def test_without_a_declared_table_the_unit_falls_back_to_itself(self):
+        found = pi.records_for_units([self.row("std-c", "7 Gamma third")])
+
+        self.assertEqual(found[0].key.table, "unit:std-c")

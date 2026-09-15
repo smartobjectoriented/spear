@@ -240,3 +240,51 @@ class AUnitMayNameItsOwnTable(unittest.TestCase):
         found = pi.records_for_units([self.row("std-c", "7 Gamma third")])
 
         self.assertEqual(found[0].key.table, "unit:std-c")
+
+
+class ASectionLeadInIsScopeWhoeverExtractedIt(unittest.TestCase):
+    """Scope is recognised from the words, not from the container.
+
+    One extraction leaves the lead-in inside the section's first labelled
+    unit, where it already became a ScopePreambleKey. Another emits it as a
+    unit of its own -- and keyed only on content_type it produced no identity
+    at all, so the scope of a section could not be cited from the store that
+    had segmented it BETTER.
+    """
+
+    def head(self, unit):
+        return [record.key for record in pi.records_from_unit(unit)]
+
+    def test_a_standalone_lead_in_is_a_scope_preamble(self):
+        keys = self.head({"source_id": "std-" + "1" * 32, "section": "8.3.1.5",
+                          "page": 120, "content_type": "TEXT",
+                          "text": "The following regulations are with respect "
+                                  "to the Req-V bits of a Control packet."})
+
+        self.assertEqual([type(key).__name__ for key in keys],
+                         ["ScopePreambleKey"])
+
+    def test_a_parser_that_names_it_is_believed(self):
+        keys = self.head({"source_id": "std-" + "2" * 32, "section": "9.1",
+                          "page": 3, "content_type": "SCOPE_PREAMBLE",
+                          "text": "Fields are described in the order shown."})
+
+        self.assertEqual([type(key).__name__ for key in keys],
+                         ["ScopePreambleKey"])
+
+    def test_ordinary_prose_is_still_not_scope(self):
+        """The test is a lead-in, not any sentence that mentions a section."""
+        keys = self.head({"source_id": "std-" + "3" * 32, "section": "9.1",
+                          "page": 3, "content_type": "TEXT",
+                          "text": "A Controllee returns the packet unchanged."})
+
+        self.assertEqual(keys, [])
+
+    def test_it_is_not_citable(self):
+        """Scope grounds an answer's reach; it is not a numbered provision and
+        nothing may resolve a citation to it."""
+        keys = self.head({"source_id": "std-" + "4" * 32, "section": "8.3.1.5",
+                          "page": 120, "content_type": "TEXT",
+                          "text": "The following regulations apply to Req-V."})
+
+        self.assertNotIsInstance(keys[0], pi.ProvisionKey)

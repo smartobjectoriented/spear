@@ -151,3 +151,83 @@ class TheExtractionBoundaryCase(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ASentenceRunningThroughALabelIsAReference(unittest.TestCase):
+    """A document mentions a provision mid-clause in ways a colon rule and a
+    verb list both miss: a comma straight after the label, or a word closed up
+    against it with no space. Neither declares anything, and treating them as
+    declarations invented a reused printed citation and a candidate."""
+
+    def test_a_comma_after_the_label_is_a_reference(self):
+        self.assertEqual(
+            classify("Permission 5.2-1, coupled with the other rules, applies."),
+            pi.REFERENCE)
+
+    def test_a_word_closed_up_against_the_label_is_a_reference(self):
+        self.assertEqual(classify("Permission 5.2-1permits the repetition of it."),
+                         pi.REFERENCE)
+
+    def test_a_reporting_have_is_a_reference(self):
+        self.assertEqual(classify("Rule 5.2-12 has four possible readings."),
+                         pi.REFERENCE)
+
+    def test_a_colon_declaration_is_untouched(self):
+        self.assertEqual(classify("Permission 5.2-1: A Request may name any tag."),
+                         pi.DECLARATION)
+
+    def test_a_dropped_colon_declaration_is_still_a_candidate(self):
+        self.assertEqual(
+            classify("So named. Definition 5.2-7 Extension Data are data."),
+            pi.CANDIDATE)
+
+
+class ADeclarationBesideItsReferenceIsOneProvision(unittest.TestCase):
+    """One printed label, one declaration and one mention: one instance, and
+    no ambiguity for a citation to resolve."""
+
+    DECL = {"source_id": "std-" + "7" * 32, "section": "5.2", "page": 9,
+            "content_type": "REQUIREMENT", "modality": "MAY",
+            "text": "Permission 5.2-1: A Request may name any tag."}
+    REF = {"source_id": "std-" + "8" * 32, "section": "5.2", "page": 9,
+           "content_type": "TEXT", "modality": "NONE",
+           "text": "Permission 5.2-1, coupled with the other rules, applies here."}
+
+    def ledger(self):
+        found = pi.ProvisionLedger()
+        found.observe(self.DECL); found.observe(self.REF)
+        return found
+
+    def test_only_the_declaration_becomes_a_provision(self):
+        key = pi.ProvisionKey("5.2", pi.PERMISSION, 1)
+
+        self.assertEqual(len(self.ledger().instances_for(key)), 1)
+
+    def test_the_citation_resolves_without_ambiguity(self):
+        found = self.ledger()
+
+        self.assertEqual(found.resolve("Permission 5.2-1"),
+                         pi.ProvisionKey("5.2", pi.PERMISSION, 1))
+
+    def test_the_reference_text_survives_as_evidence(self):
+        """Nothing is discarded: the sentence is still a unit, it simply
+        declares no provision."""
+        records = pi.records_from_unit(self.REF)
+        provisions = [r for r in records if isinstance(r.key, pi.ProvisionKey)
+                      and r.key.ordinal is not None]
+
+        self.assertEqual(provisions, [])
+
+
+class ASubLetteredOrdinalStillDeclares(unittest.TestCase):
+    """The label regex stops at the digits, so a document that numbers a
+    provision "5.2-1a" leaves a letter before the colon. Read as a run-on
+    word that is the shape of a reference, and the provision would vanish."""
+
+    def test_the_colon_after_the_suffix_is_still_decisive(self):
+        self.assertEqual(classify("Rule 5.2-1a: A Request shall name one tag."),
+                         pi.DECLARATION)
+
+    def test_a_word_running_into_the_label_is_still_a_reference(self):
+        self.assertEqual(classify("Permission 5.2-1permits the repetition."),
+                         pi.REFERENCE)

@@ -15,9 +15,15 @@ STANDARD_SCHEMA_VERSION = 1
 # A v2 unit carries layout evidence. v1 units keep their exact v1 serialization so
 # that an already-ingested corpus keeps its fingerprint and stays verifiable.
 
-STANDARD_UNIT_SCHEMA_VERSION = 2
-SUPPORTED_UNIT_SCHEMA_VERSIONS = (1, 2)
-SUPPORTED_CORPUS_SCHEMA_VERSIONS = (1, 2)
+# A v3 unit carries the table it came out of: which table, which row, the
+# ordered columns, and each cell with the canonical spans behind it. Without
+# it a parser that KNEW the grid had to throw it away at the store boundary,
+# and the runtime rebuilt the relationship from adjacency -- guessing at what
+# it had already been told.
+
+STANDARD_UNIT_SCHEMA_VERSION = 3
+SUPPORTED_UNIT_SCHEMA_VERSIONS = (1, 2, 3)
+SUPPORTED_CORPUS_SCHEMA_VERSIONS = (1, 2, 3)
 INDEX_SCHEMA_VERSION = 1
 DEFAULT_STANDARD_RETRIEVAL_CONFIGURATION = {
     "version": "standard-retrieval-policy-v1",
@@ -177,6 +183,115 @@ _UNIT_SCHEMA_2_FIELDS = ("layout_kind", "retrievable", "is_front_matter",
                          "is_toc_entry", "possible_table_continuation",
                          "unit_position")
 
+_UNIT_SCHEMA_3_FIELDS = ("table_structure",)
+
+
+@dataclass(frozen=True)
+class StandardTableCell:
+    """One cell, and the canonical spans it was read from.
+
+    `column` is the header the document printed above it. A table with no
+    header row leaves it empty, and identity then falls back to position --
+    which is what the document itself offers.
+    """
+
+    column_index: int
+    text: str
+    column: str = ""
+    span_ids: tuple[str, ...] = ()
+    bbox: tuple[float, float, float, float] | None = None
+
+    def __post_init__(self) -> None:
+        if self.column_index < 0:
+            raise StandardSchemaError("table cell needs a column position")
+
+        if self.bbox is not None and len(self.bbox) != 4:
+            raise StandardSchemaError("table cell bbox needs four numbers")
+
+    def to_dict(self) -> dict[str, Any]:
+        value = asdict(self)
+        value["span_ids"] = list(self.span_ids)
+        value["bbox"] = list(self.bbox) if self.bbox is not None else None
+
+        return value
+
+    @classmethod
+    def from_dict(cls, raw: Mapping[str, object]) -> "StandardTableCell":
+        value = dict(raw)
+        value["span_ids"] = tuple(value.get("span_ids") or ())
+        bbox = value.get("bbox")
+        value["bbox"] = tuple(float(item) for item in bbox) if bbox else None
+
+        return cls(**value)
+
+
+@dataclass(frozen=True)
+class StandardTableStructure:
+    """The grid a row unit came out of, as the parser read it.
+
+    Held on the ROW, not on the table, because a row is what retrieval hands
+    back and identity has to survive a unit arriving on its own.
+
+    `row_key` is what the document prints in the row's own key column -- "20"
+    for CAM bit 20. It is a string because a document may key its rows with
+    anything; nothing here decides what a key means.
+    """
+
+    table_id: str
+    row_index: int
+    columns: tuple[str, ...] = ()
+    cells: tuple[StandardTableCell, ...] = ()
+    row_key: str = ""
+    caption: str = ""
+    page: int | None = None
+    bbox: tuple[float, float, float, float] | None = None
+    is_header: bool = False
+
+    def __post_init__(self) -> None:
+        if not self.table_id:
+            raise StandardSchemaError("table structure needs a table identity")
+
+        if self.row_index < 0:
+            raise StandardSchemaError("table structure needs a row position")
+
+        seen = [cell.column_index for cell in self.cells]
+
+        if len(set(seen)) != len(seen):
+            raise StandardSchemaError("two cells claim one column")
+
+        if self.bbox is not None and len(self.bbox) != 4:
+            raise StandardSchemaError("table structure bbox needs four numbers")
+
+    def column_of(self, cell: StandardTableCell) -> str:
+        """What to call this cell's column: the printed header, or position."""
+        if cell.column:
+            return cell.column
+
+        if cell.column_index < len(self.columns) and self.columns[cell.column_index]:
+            return self.columns[cell.column_index]
+
+        return f"col{cell.column_index}"
+
+    def to_dict(self) -> dict[str, Any]:
+        return {"table_id": self.table_id, "row_index": self.row_index,
+                "columns": list(self.columns),
+                "cells": [cell.to_dict() for cell in self.cells],
+                "row_key": self.row_key, "caption": self.caption,
+                "page": self.page,
+                "bbox": list(self.bbox) if self.bbox is not None else None,
+                "is_header": self.is_header}
+
+    @classmethod
+    def from_dict(cls, raw: Mapping[str, object]) -> "StandardTableStructure":
+        value = dict(raw)
+        value["columns"] = tuple(value.get("columns") or ())
+        value["cells"] = tuple(StandardTableCell.from_dict(item)
+                               for item in (value.get("cells") or ()))
+        bbox = value.get("bbox")
+        value["bbox"] = tuple(float(item) for item in bbox) if bbox else None
+
+        return cls(**value)
+
 
 @dataclass(frozen=True)
 class StandardDocumentUnit:
@@ -208,6 +323,10 @@ class StandardDocumentUnit:
     possible_table_continuation: bool = False
     unit_position: int = 0
 
+    # -- schema 3: the grid this unit came out of ----------------------------
+
+    table_structure: StandardTableStructure | None = None
+
     def __post_init__(self) -> None:
         if not _SOURCE_ID.fullmatch(self.source_id):
             raise StandardSchemaError("malformed source_id")
@@ -223,6 +342,9 @@ class StandardDocumentUnit:
 
         # A v1 unit predates layout evidence, so carrying any non-default
         # layout field means the version and the content disagree.
+
+        if self.schema_version < 3 and self.table_structure is not None:
+            raise StandardSchemaError("table structure needs source unit schema 3")
 
         if self.schema_version < 2 and (
                 self.layout_kind is not StandardLayoutKind.PROSE
@@ -246,10 +368,18 @@ class StandardDocumentUnit:
         value["modality"] = self.modality.value
         value["layout_kind"] = self.layout_kind.value
 
-        if self.schema_version < 2:
-            # A v1 unit serializes exactly as it was stored, so its corpus
-            # fingerprint survives this schema being extended.
+        value["table_structure"] = (self.table_structure.to_dict()
+                                    if self.table_structure is not None else None)
 
+        # A unit serializes exactly as it was STORED, so an already-ingested
+        # corpus keeps its fingerprint and stays verifiable while the schema
+        # grows underneath it.
+
+        if self.schema_version < 3:
+            for name in _UNIT_SCHEMA_3_FIELDS:
+                value.pop(name, None)
+
+        if self.schema_version < 2:
             for name in _UNIT_SCHEMA_2_FIELDS:
                 value.pop(name, None)
 
@@ -268,6 +398,13 @@ class StandardDocumentUnit:
 
             # A stored v1 unit is read back as v1, layout fields dropped, so it
             # keeps producing the fingerprint it was stored under.
+
+            if int(value["schema_version"]) < 3:
+                for name in _UNIT_SCHEMA_3_FIELDS:
+                    value.pop(name, None)
+            elif value.get("table_structure"):
+                value["table_structure"] = StandardTableStructure.from_dict(
+                    value["table_structure"])
 
             if int(value["schema_version"]) < 2:
                 for name in _UNIT_SCHEMA_2_FIELDS:

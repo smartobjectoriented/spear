@@ -84,6 +84,18 @@ def run_case(question, registry, binding, *, system=None,
 
     # The same policy object the interactive runtime attaches to a bound turn.
     policy = standard_answer_policy.policy_for(binding, question)
+
+    # The repair asks the SAME model with NO tools: a rewrite may use only
+    # what was already retrieved, so it is given no way to retrieve.
+    if policy is not None:
+        def repair_ask(text):
+            reply = _post({"model": MODEL,
+                           "messages": [{"role": "user", "content": text}],
+                           **INFERENCE})
+            return reply["choices"][0]["message"].get("content") or ""
+
+        policy.repair_ask = repair_ask
+
     started = time.time()
     try:
         # The standard is read before the first round, not after the last one.

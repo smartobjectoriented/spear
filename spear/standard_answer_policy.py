@@ -506,6 +506,20 @@ class StandardAnswerPolicy:
                 {item["value"] for item in problems
                  if item["kind"] == provenance_guard.FABRICATED_PATH}),
             "removed_spans": self.removed_provenance,
+
+            # What the answer CLAIMED against what the evidence SAYS, and
+            # whether the one constrained rewrite was tried. A battery that
+            # cannot see these reports that a turn withheld without being
+            # able to say which check withheld it.
+            "claims_guard_triggered": self.claims_fired,
+            "claim_findings": [{"kind": item.get("kind"),
+                                "identifier": item.get("identifier"),
+                                "asserted": item.get("asserted"),
+                                "reference": item.get("reference"),
+                                "sentence": item.get("sentence")}
+                               for item in self.claim_findings],
+            "repair_attempted": self.repair_attempted,
+            "repair_accepted": self.repair_accepted,
             "diagram_cells": [item["label"]
                               for item in self.evidence.cell_fields.values()],
             "evidence_progress_by_round": self.progress.by_round,

@@ -114,6 +114,7 @@ def run_case(question, registry, binding, *, system=None,
             policy.observe_tool_result(opening.tool, record["result"],
                                        origin=opening.origin)
             trace["calls"].append(record)
+            _record_sources(trace, record)
             messages.append({"role": "assistant", "content": None,
                              "tool_calls": [{
                                  "id": "policy-opening", "type": "function",
@@ -147,6 +148,7 @@ def run_case(question, registry, binding, *, system=None,
                     policy.observe_tool_result(injected.tool, record["result"],
                                                origin=injected.origin)
                     trace["calls"].append(record)
+                    _record_sources(trace, record)
                     messages.pop()      # the un-evidenced answer never stands
                     messages.append({"role": "assistant", "content": None,
                                      "tool_calls": [{
@@ -175,16 +177,7 @@ def run_case(question, registry, binding, *, system=None,
                 policy.observe_tool_result(name, record["result"])
                 policy.observe_code_read(name, arguments, record["result"])
                 trace["calls"].append(record)
-                for value in record["metadata"].get("standard_source_ids", ()):
-                    if value not in trace["sources_returned"]:
-                        trace["sources_returned"].append(value)
-                try:
-                    payload = json.loads(record["result"])
-                except ValueError:
-                    payload = None
-                for value in _harvest_sources(payload):
-                    if value not in trace["sources_returned"]:
-                        trace["sources_returned"].append(value)
+                _record_sources(trace, record)
                 messages.append({"role": "tool",
                                  "tool_call_id": call.get("id", ""),
                                  "content": record["result"][:12000]})
@@ -207,6 +200,29 @@ def run_case(question, registry, binding, *, system=None,
     trace["guard_ledger"] = _ledger_view(policy.evidence)
 
     return trace
+
+
+def _record_sources(trace, record):
+    """Every unit a tool call put in front of the model, whoever called it.
+
+    The policy's opening call is retrieval: it reads the standard before the
+    first round, and a turn that answers from it alone has been grounded. Not
+    counting it measured how often the MODEL called a tool, so six cases of
+    one battery scored as having retrieved nothing while quoting the very
+    provision they were meant to find.
+    """
+    for value in record["metadata"].get("standard_source_ids", ()):
+        if value not in trace["sources_returned"]:
+            trace["sources_returned"].append(value)
+
+    try:
+        payload = json.loads(record["result"])
+    except ValueError:
+        return
+
+    for value in _harvest_sources(payload):
+        if value not in trace["sources_returned"]:
+            trace["sources_returned"].append(value)
 
 
 def _execute(registry, context, name, arguments, *, origin="MODEL"):

@@ -37,5 +37,13 @@ def standards_root() -> Path:
 
     Named here rather than joined at each call site: the four readers of this
     directory should not each decide what it is called.
+
+    SPEAR_STANDARDS_ROOT moves the store WITHOUT moving anything else a
+    session accumulates. That is what an extraction evaluation needs: a
+    second corpus of the same document, read by the same code, with the
+    production store untouched and not even opened. Rolling back is not
+    setting the variable.
     """
-    return state_dir() / "standards"
+    configured = os.environ.get("SPEAR_STANDARDS_ROOT")
+
+    return Path(configured) if configured else state_dir() / "standards"

@@ -15,6 +15,7 @@ what the battery measures is what production executes.
 from __future__ import annotations
 
 import json
+import os
 import pathlib
 import sys
 import time
@@ -30,7 +31,11 @@ from tool_registry import ToolRegistry
 from tool_router import ToolExecutionContext
 from tracing import NullTraceRecorder, TraceEmitter
 
-SID, REV = "ANSI-VITA-49.2", "2017-R2024"
+# Which binding the battery drives. Overridable so the SAME cases, prompts
+# and policy can be run against a second extraction of the same document --
+# the store itself is selected by SPEAR_STANDARDS_ROOT.
+SID = os.environ.get("SPEAR_EVAL_STANDARD") or "ANSI-VITA-49.2"
+REV = os.environ.get("SPEAR_EVAL_REVISION") or "2017-R2024"
 ENDPOINT = "http://127.0.0.1:8082/v1/chat/completions"
 MODEL = "qwen3"
 # Deterministic as far as llama-server allows.

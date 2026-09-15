@@ -32,6 +32,8 @@ import hashlib
 import re
 from dataclasses import dataclass, field
 
+import normative_force
+
 #: Inline provision labels, as the document writes them.
 RULE = "Rule"
 RECOMMENDATION = "Recommendation"
@@ -408,7 +410,12 @@ class ProvisionRecord:
     source_id: str = ""
     page: int | None = None
     text: str = ""
-    modality: str = "NONE"          # the PROVISION's own modality
+
+    #: The strongest modal verb occurring in this provision's text. A LEXICAL
+    #: fact, not a normative one: an Observation may contain "must" while
+    #: describing an obligation some Rule imposes. What this provision is
+    #: entitled to establish is `effective_force`, never this.
+    modality: str = "NONE"
     unit_modality: str = "NONE"     # what the container is stored as
     #: DECLARATION, or CANDIDATE when the occurrence could not be proven one.
     #: A CANDIDATE is preserved and surfaced; it may not ground a claim.
@@ -436,8 +443,44 @@ class ProvisionRecord:
     #: as one.
     structure_origin: str = ""
 
+    #: What the DOCUMENT calls this provision: RULE, RECOMMENDATION,
+    #: PERMISSION, OBSERVATION, DEFINITION, or UNLABELLED. Structure, never
+    #: words, and never inferred from a modal verb.
+    provision_role: str = ""
+
     standard_id: str = ""
     revision: str = ""
+
+    @property
+    def role(self):
+        return self.provision_role or normative_force.role_of(
+            getattr(self.key, "kind", ""))
+
+    @property
+    def force(self):
+        """What this provision may be used as evidence for, and why.
+
+        Its own words, capped by what its printed role is entitled to
+        establish under the taxonomy the standard declares.
+        """
+        return normative_force.assess(
+            self.text, role=self.role,
+            taxonomy=normative_force.taxonomy_for(self.standard_id, self.revision))
+
+    @property
+    def lexical_modalities(self):
+        """Every modal verb in the text, whoever it belongs to."""
+        return tuple(dict.fromkeys(item.word.lower() for item in self.force.lexical))
+
+    @property
+    def normative_authority(self):
+        """The ceiling: the strongest force this ROLE could ever establish."""
+        return self.force.authority
+
+    @property
+    def effective_force(self):
+        """The ceiling and the words together. This is what grounds a claim."""
+        return self.force.effective
 
     @property
     def citation_key(self):
@@ -542,7 +585,8 @@ def _native_row(unit, section, common):
     return [ProvisionRecord(
         key=TableRowKey(section, owner, row_number),
         text=text, modality=_modality_of(text), cells=cells,
-        structure_origin=NATIVE, **common)]
+        structure_origin=NATIVE,
+        provision_role=normative_force.role_of(TABLE_ROW), **common)]
 
 
 def records_from_unit(unit, *, table=None):
@@ -613,7 +657,8 @@ def records_from_unit(unit, *, table=None):
         return [ProvisionRecord(
             key=TableRowKey(section, owner, row_number),
             text=_clean(text), modality=_modality_of(text),
-            cells=tuple(cells), structure_origin=RECONSTRUCTED, **common)]
+            cells=tuple(cells), structure_origin=RECONSTRUCTED,
+            provision_role=normative_force.role_of(TABLE_ROW), **common)]
 
     found, spans = [], [(m.start(), m) for m in _LABEL.finditer(text)]
 
@@ -625,7 +670,14 @@ def records_from_unit(unit, *, table=None):
         if statuses[index] == REFERENCE:
             continue                # a mention of a provision is not one
 
-        end = spans[index + 1][0] if index + 1 < len(spans) else len(text)
+        # The provision runs to the next DECLARATION, not to the next label.
+        # A reference inside it -- "Observation 6.1.2-8: Permission 6.1.2-1,
+        # coupled with the other Rules, allows ..." -- is the provision's own
+        # prose, and cutting there left the Observation as its label and a
+        # colon while the sentence it was making went nowhere.
+        following = [spans[later][0] for later in range(index + 1, len(spans))
+                     if statuses[later] != REFERENCE]
+        end = following[0] if following else len(text)
         body = _clean(text[start:end])
         key = ProvisionKey(match.group("section"), match.group("kind"),
                            int(match.group("ordinal")))
@@ -638,10 +690,10 @@ def records_from_unit(unit, *, table=None):
             continue
 
         claimed.add(key)
-        found.append(ProvisionRecord(key=key, text=body,
-                                     modality=_modality_of(body),
-                                     declaration_status=statuses[index],
-                                     **common))
+        found.append(ProvisionRecord(
+            key=key, text=body, modality=_modality_of(body),
+            declaration_status=statuses[index],
+            provision_role=normative_force.role_of(key.kind), **common))
 
     # Text before the first label, or a unit with no label at all. It is
     # evidence -- a section lead-in states what its regulations are ABOUT --
@@ -659,8 +711,12 @@ def records_from_unit(unit, *, table=None):
             key = (ScopePreambleKey(section, common["source_id"])
                    if kind == SCOPE_PREAMBLE
                    else UnlabelledBodyKey(section, kind, common["source_id"]))
-            found.append(ProvisionRecord(key=key, text=head,
-                                         modality=_modality_of(head), **common))
+            # The role is what the DOCUMENT printed, and it printed nothing
+            # here. `kind` came from the extractor reading the words, which
+            # is the conflation this separation exists to remove.
+            found.append(ProvisionRecord(
+                key=key, text=head, modality=_modality_of(head),
+                provision_role=normative_force.UNLABELLED, **common))
 
     return found
 

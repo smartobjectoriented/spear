@@ -38,7 +38,9 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass, field
 
+import normative_force
 import provision_identity
+import standard_profiles  # noqa: F401  (registers declared role taxonomies)
 
 UNGROUNDED_IDENTIFIER = "UNGROUNDED_IDENTIFIER"
 STRENGTHENED_MODALITY = "STRENGTHENED_MODALITY"
@@ -351,19 +353,37 @@ def principal(answer):
 
 
 def claim_level(sentence, question=""):
-    """What the sentence asserts -- with the question's own modality when the
-    sentence merely says yes. "Is it required?" / "Yes." asserts a
-    requirement without containing one modal word."""
+    """What the sentence asserts.
+
+    Two readings, and the STRONGER one is the claim. The sentence's own modal
+    words are one; answering "yes" to a question that asks about an
+    obligation is the other, and it asserts the obligation without containing
+    a modal word at all.
+
+    Taking the sentence's word and stopping there read "Is a Controllee
+    required to X? -- Yes, it should X" as a recommendation claim. The reader
+    is told yes to a question about a requirement; that the same sentence
+    also says "should" does not soften what the "yes" answered.
+    """
+    spoken = None
+
     for level, pattern in _CLAIM:
         if pattern.search(sentence or ""):
-            return level
+            spoken = level
+            break
+
+    affirmed = None
 
     if _AFFIRM.match(sentence or ""):
         for level, pattern in _ASKS:
             if pattern.search(question or ""):
-                return level
+                affirmed = level
+                break
 
-    return None
+    if spoken is None:
+        return affirmed
+
+    return spoken if affirmed is None else max(spoken, affirmed)
 
 
 # ── 1. identifiers ───────────────────────────────────────────────────
@@ -438,10 +458,11 @@ def modality_findings(answer, evidence, *, question=""):
     cited = evidence.cited_units(answer)
 
     if cited:
-        # The provision's own words, not its container's. The unit carrying a
-        # Permission is stored SHALL when a Rule sits beside it.
-        supported = max(_STORED.get(record.modality.upper(), INFORMATIVE)
-                        for record in cited)
+        # What each cited provision is ENTITLED to establish: its own words,
+        # capped by what its printed role may impose. Reading the modal verbs
+        # alone let an Observation that describes an obligation stand as the
+        # obligation, and let a Rule that says "should" carry a "shall".
+        supported = max(record.effective_force for record in cited)
     else:
         supported = evidence.level_for(_citations(answer))
 
@@ -497,8 +518,7 @@ def coherence_findings(answer, evidence, *, question=""):
 
         def restricts(record):
             return (_RESTRICTIVE.search(record.text)
-                    and _STORED.get(record.modality.upper(),
-                                    INFORMATIVE) >= REQUIREMENT)
+                    and record.effective_force >= REQUIREMENT)
 
         if cited and all(restricts(record) for record in cited):
             return [{"kind": INCOHERENT_CONCLUSION, "sentence": sentence,

@@ -77,6 +77,26 @@ def load(path):
     return found
 
 
+AMBIGUOUS_INSTANCE = "AMBIGUOUS_INSTANCE"
+
+
+def instance_for(entry, key, ledger_records):
+    """The single declaration an approval names, or None when it is unclear.
+
+    A printed label may name several declarations, so an approval recorded
+    against the label alone is not enough: the provenance and the text hash
+    must pick exactly one. More than one match is reported, never chosen.
+    """
+    found = [record for record in ledger_records
+             if record.key == key
+             and (not entry.get("carrying_source_id")
+                  or record.source_id == entry["carrying_source_id"])
+             and (not entry.get("unit_text_sha256")
+                  or record.unit_text_sha256 == entry["unit_text_sha256"])]
+
+    return found[0] if len(found) == 1 else None
+
+
 def verify(approvals, records):
     """Each approval against the provisions as extracted now.
 
@@ -85,9 +105,29 @@ def verify(approvals, records):
     report = []
 
     for key, entry in sorted(approvals.items(), key=lambda item: str(item[0])):
-        record = records.get(key)
-        row = {"provision": str(key), "expected_source_id": entry.get("carrying_source_id"),
+        if isinstance(records, dict):
+            pool = list(records.values())
+            record = records.get(key)
+        else:
+            pool = list(records)
+            record = None
+
+        matching = [item for item in pool if item.key == key]
+
+        if record is None and matching:
+            record = instance_for(entry, key, pool)
+
+        row = {"provision": str(key),
+               "instance_id": str(record.instance_id) if record is not None else None,
+               "expected_source_id": entry.get("carrying_source_id"),
                "status": UNREVIEWED, "detail": ""}
+
+        if record is None and len(matching) > 1:
+            row["status"] = AMBIGUOUS_INSTANCE
+            row["detail"] = (f"{len(matching)} declarations carry this printed "
+                             "label and the approval does not pick one")
+            report.append(row)
+            continue
 
         if record is None:
             row["status"] = EXTRACTION_MISMATCH

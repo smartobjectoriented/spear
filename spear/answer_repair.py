@@ -54,12 +54,19 @@ def is_repairable(problems):
 def _provision_lines(evidence):
     lines = []
 
-    for key, record in sorted(evidence.provisions.records.items(),
-                              key=lambda item: str(item[0])):
-        if record.key.kind == "ScopePreamble":
+    for record in sorted(evidence.provisions.instances.values(),
+                         key=lambda item: str(item.key)):
+        if record.key.kind in ("ScopePreamble", "TableRow"):
             continue
 
-        lines.append(f"  [{key}]  modality: {record.modality}\n"
+        if record.declaration_status != "DECLARATION":
+            continue        # a candidate may not ground an answer
+
+        # The printed label, disambiguated only where the document reuses it,
+        # so the model cites what a reader can find.
+        reused = len(evidence.provisions.instances_for(record.key)) > 1
+        cited = record.rendered_citation(disambiguate=reused)
+        lines.append(f"  [{cited}]  modality: {record.modality}\n"
                      f"      {record.text[:400]}")
 
     return lines

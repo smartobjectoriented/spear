@@ -236,7 +236,18 @@ def table_identity(caption):
 
 @dataclass(frozen=True, order=True)
 class ProvisionKey:
-    """(section, kind, ordinal). Two of the three is not an identity."""
+    """The PRINTED CITATION KEY: what the document calls a provision.
+
+    (section, kind, ordinal), and it stays a faithful record of the printed
+    label. It is NOT a unique provision identity, because the document itself
+    reuses labels: Rule 5.1.6-2 is declared twice in section 5.1.6, on pages
+    75 and 76, with the same heading path and entirely different normative
+    content. Twenty-two such labels exist in one bound standard.
+
+    So a citation key resolves to ZERO, ONE or SEVERAL provision instances,
+    and only the one-instance case is unambiguous. `ProvisionInstanceId`
+    below is what identifies a declaration.
+    """
 
     section: str
     kind: str
@@ -273,6 +284,46 @@ def _modality_of(text):
     return "NONE"
 
 
+@dataclass(frozen=True, order=True)
+class ProvisionInstanceId:
+    """One declaration, distinct from any other sharing its printed label.
+
+    Smallest thing that is unique, deterministic and stable while the
+    declaration is unchanged: the document, the printed key, and a digest of
+    the declaring span -- its parent unit and its own text. Neither the page
+    nor the source_id is the citation identity; both are provenance, and the
+    digest is what makes two declarations of one label distinguishable.
+
+    The digest changes when the extracted text changes, which is the point:
+    an approval recorded against this instance is then reviewable rather
+    than silently carried onto different words.
+    """
+
+    standard_id: str
+    revision: str
+    key: ProvisionKey
+    digest: str
+
+    def __str__(self):
+        return f"{self.key}@{self.digest}"
+
+    def render(self, page=None):
+        """The human citation: the document's real printed label, plus only
+        as much locator as is needed to tell two of them apart."""
+        printed = str(self.key)
+
+        return f"{printed} (p. {page})" if page is not None else printed
+
+
+def instance_id(key, *, standard_id, revision, source_id, text):
+    return ProvisionInstanceId(
+        standard_id=str(standard_id or ""), revision=str(revision or ""),
+        key=key,
+        digest=hashlib.sha256(
+            f"{standard_id}|{revision}|{key}|{source_id}|{text}".encode("utf-8")
+        ).hexdigest()[:12])
+
+
 @dataclass(frozen=True)
 class ProvisionRecord:
     """One provision, and the unit it was carried in."""
@@ -292,6 +343,31 @@ class ProvisionRecord:
     #: The container's text, kept so an approval recorded against the unit
     #: can be revalidated without re-deriving the whole store.
     unit_text: str = ""
+
+    #: Every extraction span this one logical provision occupies. Ordinarily
+    #: one; a declaration split across a page boundary and reconstructed has
+    #: several, and is ONE instance rather than two competing ones.
+    spans: tuple = ()
+
+    standard_id: str = ""
+    revision: str = ""
+
+    @property
+    def citation_key(self):
+        """What the document prints. May not be unique."""
+        return self.key
+
+    @property
+    def instance_id(self):
+        """What identifies THIS declaration."""
+        return instance_id(self.key, standard_id=self.standard_id,
+                           revision=self.revision, source_id=self.source_id,
+                           text=self.text)
+
+    def rendered_citation(self, *, disambiguate=False):
+        """The printed label, with a locator only when one is needed."""
+        return (self.instance_id.render(self.page) if disambiguate
+                else str(self.key))
 
     @property
     def text_sha256(self):
@@ -338,7 +414,11 @@ def records_from_unit(unit, *, table=None):
               "unit_modality": str(unit.get("modality") or "NONE"),
               "content_type": str(unit.get("content_type") or ""),
               "needs_review": bool(unit.get("needs_review")),
-              "unit_text": text}
+              "unit_text": text,
+              "standard_id": str(unit.get("standard_id") or ""),
+              "revision": str(unit.get("revision") or ""),
+              "spans": ({"source_id": str(unit.get("source_id") or ""),
+                         "page": unit.get("page")},)}
 
     #: "20 ReqV Request Validation ..." -- a row, keyed by its table and its
     #: own number. Without the table, two tables in one section whose rows
@@ -428,6 +508,58 @@ def records_for_units(units, *, tables=None):
     return found
 
 
+#: A fragment that stops mid-clause: the declaration continues elsewhere.
+_INCOMPLETE = re.compile(r"[a-z0-9,;(\-]\s*$")
+
+
+def reconstruct_page_splits(records):
+    """Join a declaration split across an extraction boundary, read-only.
+
+    One logical provision occupying two extraction units is ONE instance
+    with two provenance spans, not two competing declarations of the same
+    printed label. The conditions are deliberately strict -- same citation
+    key, adjacent pages, the first fragment syntactically incomplete, the
+    second continuing without declaring anything itself -- and anything that
+    fails them stays duplicated and review-required.
+
+    The store is never written to. This is a derived view.
+    """
+    grouped = {}
+
+    for record in records:
+        grouped.setdefault(record.key, []).append(record)
+
+    found, joined = [], set()
+
+    for key, group in grouped.items():
+        if len(group) != 2 or not isinstance(key, ProvisionKey):
+            found.extend(group)
+            continue
+
+        first, second = sorted(group, key=lambda r: (r.page or 0))
+        pages = [first.page or 0, second.page or 0]
+        declares_again = second.text.startswith(f"{key.kind} {key.section}-")
+
+        if (abs(pages[1] - pages[0]) == 1 and _INCOMPLETE.search(first.text)
+                and not declares_again):
+            merged = first.text + " " + second.text
+            found.append(ProvisionRecord(
+                key=key, source_id=first.source_id, page=first.page,
+                text=merged, modality=_modality_of(merged),
+                unit_modality=first.unit_modality,
+                content_type=first.content_type,
+                needs_review=first.needs_review or second.needs_review,
+                unit_text=first.unit_text,
+                spans=tuple(first.spans) + tuple(second.spans),
+                standard_id=first.standard_id, revision=first.revision,
+                declaration_status=first.declaration_status))
+            joined.add(key)
+        else:
+            found.extend(group)
+
+    return found, sorted(joined, key=str)
+
+
 class AmbiguousReference(Exception):
     """A citation that names more than one provision."""
 
@@ -442,12 +574,33 @@ class AmbiguousReference(Exception):
 class ProvisionLedger:
     """Which PROVISIONS a turn retrieved -- not which sections."""
 
-    records: dict = field(default_factory=dict)
+    #: instance_id -> record. The ledger holds INSTANCES, because a printed
+    #: label may name several declarations and keeping one per label throws
+    #: the others away.
+    instances: dict = field(default_factory=dict)
 
-    #: Keys seen in more than one source unit. Identity that is not unique is
-    #: not identity; a caller that needs certainty must treat these as
-    #: ambiguous rather than trusting the first arrival.
+    #: printed citation key -> [instance_id], in arrival order.
+    by_key: dict = field(default_factory=dict)
+
+    #: (citation key, parent source_id) -> record. One declaration cannot be
+    #: made twice in one unit, so this is what collapses a snippet and the
+    #: full unit into a single instance.
+    _by_slot: dict = field(default_factory=dict)
+
+    #: Citation keys naming more than one declaration. Not a defect: the
+    #: document reuses labels. It does mean the printed citation alone
+    #: cannot say which declaration is meant.
     duplicated: set = field(default_factory=set)
+
+    @property
+    def records(self):
+        """{citation key: record} for labels naming exactly ONE declaration.
+
+        Deliberately lossy and deliberately narrow: a reused label has no
+        single record, and a caller that wants one must ask for instances.
+        """
+        return {key: self.instances[ids[0]]
+                for key, ids in self.by_key.items() if len(ids) == 1}
 
     def observe(self, payload):
         """Collect provisions from one tool result. The payload is untouched.
@@ -466,21 +619,84 @@ class ProvisionLedger:
         return self
 
     def _add(self, records):
+        """One declaration per (printed key, parent unit).
+
+        The same declaration reaches a turn more than once and not always
+        whole: `search` returns a truncated snippet and `fetch` the full
+        unit. Keyed on text alone those are two digests and therefore a
+        false ambiguity -- one that made a turn refuse a citation the
+        document does not actually reuse. A label cannot be declared twice
+        in one unit, so the unit settles it, and the longest text wins
+        because a snippet is a prefix of the truth.
+        """
         for record in records:
-            seen = self.records.get(record.key)
+            slot = (record.key, record.source_id)
+            seen = self._by_slot.get(slot)
 
-            if seen is not None and seen.source_id != record.source_id:
+            if seen is not None:
+                if len(record.text) <= len(seen.text):
+                    continue
+
+                # A fuller reading of the same declaration replaces the
+                # snippet, identity and all.
+                self.instances.pop(seen.instance_id, None)
+                arrived = self.by_key.get(record.key, [])
+                if seen.instance_id in arrived:
+                    arrived.remove(seen.instance_id)
+
+            identity = record.instance_id
+
+            if identity in self.instances:
+                continue
+
+            self._by_slot[slot] = record
+            self.instances[identity] = record
+            arrived = self.by_key.setdefault(record.key, [])
+            arrived.append(identity)
+
+            if len(arrived) > 1:
                 self.duplicated.add(record.key)
+            elif record.key in self.duplicated and len(arrived) == 1:
+                self.duplicated.discard(record.key)
 
-            self.records.setdefault(record.key, record)
+    # -- instance-level questions ------------------------------------
+
+    def instances_for(self, key):
+        """Every declaration carrying this printed label."""
+        return [self.instances[item] for item in self.by_key.get(key, ())]
+
+    def contains_instance(self, identity):
+        return identity in self.instances
+
+    def covers_instance(self, identity):
+        """Was THIS declaration retrieved, and is it a proven declaration?"""
+        record = self.instances.get(identity)
+
+        return record is not None and record.declaration_status == DECLARATION
+
+    def covers_citation(self, key):
+        """Is at least one declaration carrying this printed label present?
+
+        Weaker than it looks when the label is reused: it says something
+        with that label was read, never which one. It must not stand in for
+        `covers_instance` where several instances share the key.
+        """
+        return any(record.declaration_status == DECLARATION
+                   for record in self.instances_for(key))
 
     # -- questions it can answer -------------------------------------
 
     def has(self, key):
-        """Was THIS provision retrieved as a proven declaration?"""
-        record = self.records.get(key)
+        """Was this printed label retrieved AND unambiguous?
 
-        return record is not None and record.declaration_status == DECLARATION
+        False when the label names several declarations: something with that
+        label was read, but not which one, and grounding a claim on it would
+        be picking. `covers_citation` reports the weaker fact.
+        """
+        found = self.instances_for(key)
+
+        return (len(found) == 1
+                and found[0].declaration_status == DECLARATION)
 
     def candidates(self):
         """Occurrences that could not be proven declarations.
@@ -488,15 +704,19 @@ class ProvisionLedger:
         Preserved rather than discarded, and surfaced so an extraction
         diagnostic can show them. They ground nothing.
         """
-        return {key: record for key, record in self.records.items()
+        return {record.instance_id: record
+                for record in self.instances.values()
                 if record.declaration_status != DECLARATION}
 
     def get(self, key):
-        return self.records.get(key)
+        """The sole declaration for a label, or None when it is reused."""
+        found = self.instances_for(key)
+
+        return found[0] if len(found) == 1 else None
 
     def kinds_for(self, section, ordinal):
         """Every provision kind sharing one section and ordinal."""
-        return sorted({key.kind for key in self.records
+        return sorted({key.kind for key in self.by_key
                        if isinstance(key, ProvisionKey)
                        and key.section == section and key.ordinal == ordinal})
 
@@ -510,7 +730,7 @@ class ProvisionLedger:
         """
         return any(key.section == section
                    or key.section.startswith(section + ".")
-                   for key in self.records)
+                   for key in self.by_key)
 
     def resolve(self, reference):
         """The provision a citation names, or AmbiguousReference.
@@ -529,20 +749,29 @@ class ProvisionLedger:
         ordinal = int(ordinal) if ordinal is not None else None
 
         if kind:
-            # `has`, not membership: a candidate is present in the ledger and
-            # may not ground a claim, so it must not resolve a citation either.
             key = ProvisionKey(section, kind, ordinal)
-            return key if self.has(key) else None
+            declared = [record for record in self.instances_for(key)
+                        if record.declaration_status == DECLARATION]
+
+            # Naming the kind is not enough when the DOCUMENT reuses the
+            # label: "Rule 5.1.6-2" names two declarations, and returning
+            # nothing would read as "not retrieved" rather than "which one?".
+            if len(declared) > 1:
+                raise AmbiguousReference(
+                    reference, [record.instance_id for record in declared])
+
+            return key if len(declared) == 1 else None
 
         # Only numbered provisions are citable. A scope block and a table row
         # carry evidence and have no name a citation could use.
         # Only numbered provisions are citable, and only PROVEN declarations
         # may ground a claim. A candidate is preserved and reported; it is
         # not silently promoted into evidence.
-        candidates = [key for key, record in self.records.items()
+        candidates = [key for key, ids in self.by_key.items()
                       if isinstance(key, ProvisionKey)
-                      and record.declaration_status == DECLARATION
-                      and key.section == section and key.ordinal == ordinal]
+                      and key.section == section and key.ordinal == ordinal
+                      and any(self.instances[i].declaration_status == DECLARATION
+                              for i in ids)]
 
         if not candidates:
             return None

@@ -5,6 +5,7 @@ from __future__ import annotations
 import evidence_graph
 
 import hashlib
+import os
 import json
 import re
 from typing import Mapping
@@ -78,6 +79,50 @@ def _attach_table_rows(fetched):
     found["table_rows"] = rows
 
     return found
+
+
+#: What retrieval this installation asks for. "hybrid" degrades to lexical
+#: where no vector index exists, which is how a lexical-only path came to be
+#: described as hybrid retrieval for the whole of one investigation -- and it
+#: means the path CHANGES the day somebody configures an embedder. A
+#: deployment whose behaviour has been measured says outright what it wants,
+#: so that measurement keeps describing it.
+_RETRIEVAL_MODES = ("lexical", "vector", "hybrid")
+
+
+class StandardConfigurationError(RuntimeError):
+    """A deployment asked for something this build cannot give it."""
+
+
+def _configured_mode() -> str:
+    """SPEAR_STANDARD_RETRIEVAL_MODE, or the long-standing default.
+
+    Absent means the default, because a deployment that never set the
+    variable must keep the behaviour it has.
+
+    Present and misspelled is an ERROR, and that asymmetry is the whole
+    point. Treating `lexial` as "unset" would hand back hybrid -- and hybrid
+    is not a harmless default here: on a store that HAS a vector index and an
+    embedder, it is real fusion, a different retrieval from the one an
+    operator typed the variable to pin. A typo must not quietly re-enable the
+    thing it was written to switch off.
+    """
+    configured = os.environ.get("SPEAR_STANDARD_RETRIEVAL_MODE")
+
+    if configured is None:
+        return "hybrid"
+
+    mode = configured.strip().lower()
+
+    if not mode:
+        return "hybrid"     # exported-but-empty is how a shell unsets one
+
+    if mode not in _RETRIEVAL_MODES:
+        raise StandardConfigurationError(
+            f"SPEAR_STANDARD_RETRIEVAL_MODE={configured!r} is not a retrieval "
+            f"mode; expected one of {', '.join(_RETRIEVAL_MODES)}")
+
+    return mode
 
 
 def _fetch_policy() -> ToolResultPolicy:
@@ -428,7 +473,7 @@ class StandardToolService:
             response = self.retrieval.search_response(
                 binding.standard_id, binding.revision, query,
                 section=(str(section) if section is not None else None),
-                limit=limit,
+                limit=limit, mode=_configured_mode(),
             )
         except ValueError as exc:
             raise StandardToolRefusal(

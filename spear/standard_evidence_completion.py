@@ -162,7 +162,15 @@ class RelationGraph:
         return found
 
     def neighbours(self, source_id):
-        """(relation, target) for everything this unit is related to."""
+        """(relation, target) for everything this unit is related to.
+
+        Sorted before it is returned. The indexes behind it are sets, and set
+        iteration of strings varies between processes -- so an unsorted walk
+        made the RECORDED PROVENANCE of a companion differ from run to run
+        while the evidence itself stayed identical. Evidence that is stable
+        and a reason that is not is worse than either: it is an audit trail
+        that cannot be reproduced.
+        """
         unit = self.units.get(source_id)
 
         if unit is None:
@@ -181,17 +189,17 @@ class RelationGraph:
                 if target != source_id:
                     found.append((relation, target))
 
-        for section, members in ((unit.get("section") or "", None),):
-            row = self.siblings.get(section) or []
+        row = self.siblings.get(unit.get("section") or "") or []
 
-            if source_id in row:
-                index = row.index(source_id)
+        if source_id in row:
+            index = row.index(source_id)
 
-                for step in (index - 1, index + 1):
-                    if 0 <= step < len(row):
-                        found.append((DECLARATION_SIBLING, row[step]))
+            for step in (index - 1, index + 1):
+                if 0 <= step < len(row):
+                    found.append((DECLARATION_SIBLING, row[step]))
 
-        return found
+        return sorted(set(found), key=lambda item: (PRIORITY.index(item[0]),
+                                                    item[1]))
 
 
 class Completion:
@@ -218,7 +226,7 @@ class Completion:
         terms = tokenize(query)
         best = {}
 
-        for source in primary:
+        for source in sorted(primary):
             for relation, target in self.graph.neighbours(source):
                 if target in primary:
                     continue
@@ -226,7 +234,11 @@ class Completion:
                 rank = PRIORITY.index(relation)
                 seen = best.get(target)
 
-                if seen is None or rank < seen["priority"]:
+                # A companion reachable from several primaries keeps the
+                # strongest relation, and on a tie the lowest source id --
+                # never whichever the walk happened to reach first.
+                if seen is None or (rank, source) < (seen["priority"],
+                                                     seen["reached_from"]):
                     best[target] = {"source_id": target, "relation": relation,
                                     "priority": rank, "reached_from": source,
                                     "score": self.score(terms, target)}

@@ -288,3 +288,66 @@ class ASectionLeadInIsScopeWhoeverExtractedIt(unittest.TestCase):
                           "text": "The following regulations apply to Req-V."})
 
         self.assertNotIsInstance(keys[0], pi.ProvisionKey)
+
+
+class ANumberedTableIsNotAProvisionCitation(unittest.TestCase):
+    """Documents number their tables the way they number their provisions.
+
+    "Table 8.4.1.5-1" and "Rule 8.4.1.5-1" are different objects sharing a
+    printed number. Reading the first as a bare citation of the second
+    reported an ambiguity the writer never created -- between a Rule and an
+    Observation neither of which had been mentioned -- and the turn was
+    withheld over it.
+    """
+
+    RULE = ("Rule 4.2.1-1: When the field is present, the bits shall be set "
+            "as shown.")
+    OBSERVATION = "Observation 4.2.1-1: The field is optional in earlier revisions."
+
+    def ledger(self):
+        found = pi.ProvisionLedger()
+        for index, text in enumerate((self.RULE, self.OBSERVATION)):
+            found.observe({"section": "4.2.1", "page": 7,
+                           "source_id": f"std-{index:032d}",
+                           "content_type": "REQUIREMENT", "modality": "SHALL",
+                           "text": text})
+        return found
+
+    def test_the_document_really_does_reuse_the_number(self):
+        """Otherwise the rest of this proves nothing."""
+        self.assertEqual(
+            len([key for key in self.ledger().by_key
+                 if isinstance(key, pi.ProvisionKey) and key.ordinal == 1]), 2)
+
+    def test_a_table_reference_cites_no_provision(self):
+        resolved, ambiguous = self.ledger().references_in(
+            "The bits shall be set according to Table 4.2.1-1.")
+
+        self.assertEqual((resolved, ambiguous), ([], []))
+
+    def test_a_figure_reference_cites_no_provision(self):
+        _, ambiguous = self.ledger().references_in("Shown in Figure 4.2.1-1.")
+
+        self.assertEqual(ambiguous, [])
+
+    def test_a_bare_number_is_still_ambiguous(self):
+        """The guard is not weakened: a citation that names no kind, and no
+        other object either, still cannot be resolved by picking one."""
+        _, ambiguous = self.ledger().references_in("This follows from 4.2.1-1.")
+
+        self.assertEqual(len(ambiguous), 1)
+
+    def test_naming_the_kind_still_resolves(self):
+        resolved, ambiguous = self.ledger().references_in(
+            "This follows from Rule 4.2.1-1.")
+
+        self.assertEqual([str(key) for key in resolved], ["Rule 4.2.1-1"])
+        self.assertEqual(ambiguous, [])
+
+    def test_the_word_must_be_adjacent(self):
+        """"the table in 4.2.1-1" is not a table reference -- the number is
+        not what the word is naming."""
+        _, ambiguous = self.ledger().references_in(
+            "The table of modes is governed by 4.2.1-1.")
+
+        self.assertEqual(len(ambiguous), 1)

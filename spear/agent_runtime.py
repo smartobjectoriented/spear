@@ -683,13 +683,19 @@ def _asked(conversation) -> str:
     return ""
 
 
-def standard_policy_for(context: AgentContext):
+def standard_policy_for(context: AgentContext, *, repair_ask=None):
     """The deterministic standard-bound policy for this turn, if it is one.
 
     Activation is the session's binding, never the user's phrasing, and never
     anything the model says. A turn with no bound standard gets no policy and
     behaves exactly as it did before -- the runtime stays generic and the
     normative reasoning stays in one place.
+
+    `repair_ask` is the one tool-less question the policy may put back to the
+    model when the guards reject an answer the evidence could still support.
+    It travels from here because this is where the runtime's model access
+    lives; without it the repair silently never ran in an interactive
+    session, only in the evaluation harness.
     """
     if not context.standard_binding:
         return None
@@ -697,7 +703,8 @@ def standard_policy_for(context: AgentContext):
     import standard_answer_policy
 
     return standard_answer_policy.policy_for(context.standard_binding,
-                                             _asked(context.conversation))
+                                             _asked(context.conversation),
+                                             repair_ask=repair_ask)
 
 
 def looks_like_preamble(text: str) -> bool:
@@ -1561,7 +1568,8 @@ class AgentRuntime:
         # One deterministic policy per standard-bound turn. None for every
         # other turn, which then takes exactly the path it took before.
 
-        policy = standard_policy_for(context)
+        policy = standard_policy_for(
+            context, repair_ask=lambda text: self._repair_ask(context, text))
         context.standard_policy = policy
 
         investigate_rounds = preamble_reprompts = repeats = make_reprompts = 0
@@ -3400,6 +3408,27 @@ class AgentRuntime:
         )
 
         return result
+
+    def _repair_ask(self, context: AgentContext, text: str) -> str:
+        """One tool-less question, for the normative repair path.
+
+        Deliberately the narrowest call the runtime can make: no tools, one
+        message, the composed system context the turn already had. A repair
+        that could reach a tool would be a second turn wearing the first
+        one's clothes, which is the constraint the repair contract is built
+        on -- so it is enforced here by what is not passed, not by asking.
+        """
+        from model_backend import ConversationMessage, TextBlock
+
+        try:
+            turn = self.complete_model_turn(
+                context, use_tools=False,
+                conversation=(ConversationMessage("user", (TextBlock(text),)),),
+                grace=True)
+        except Exception:
+            return ""        # a failed repair withholds, exactly as before
+
+        return (turn.text or "") if turn is not None else ""
 
     def complete_model_turn(
         self, context: AgentContext, *, use_tools: bool,

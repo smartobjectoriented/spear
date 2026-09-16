@@ -541,21 +541,37 @@ class StandardAnswerPolicy:
         }
 
 
-def policy_for(binding, question):
+def policy_for(binding, question, *, repair_ask=None):
     """A policy for a turn bound to a standard, or None for every other turn.
 
     Activation is the session's own binding and nothing else -- never the
     user's wording. A turn with no binding is not a standard-bound turn and is
     left exactly as it was.
+
+    `repair_ask` asks the model ONE question with no tools, and it is a
+    parameter rather than an attribute because it was an attribute: the
+    evaluation harness set it, the interactive runtime never did, and the
+    repair path therefore ran in every measurement and in no real session.
+    Two callers of one object diverged silently for as long as the hook was
+    something you could forget.
+
+    Passing None is still allowed and still means "no repair" -- a caller
+    with no model to ask is a real case -- but it now has to be said.
     """
     if not binding:
         return None
 
     identity = dict(binding)
 
-    return StandardAnswerPolicy(
+    return _with_repair(repair_ask, StandardAnswerPolicy(
         question=question or "",
         standard_id=str(identity.get("standard_id") or ""),
         revision=str(identity.get("revision") or ""),
         binding=identity,
-        conformance_turn=conformance_mode.is_conformance_turn(question))
+        conformance_turn=conformance_mode.is_conformance_turn(question)))
+
+
+def _with_repair(repair_ask, policy):
+    policy.repair_ask = repair_ask
+
+    return policy

@@ -585,7 +585,8 @@ class AClaimAboutAProvisionIsBoundedByThatProvision(unittest.TestCase):
             "Yes, Observation 4.1-2 is a binding requirement.", self.given())
 
         self.assertTrue(fired)
-        self.assertIn("supports informative", withheld)
+        self.assertIn("its role is observation and supports informative",
+                      withheld)
 
     def test_emphasis_around_the_citation_does_not_hide_the_claim(self):
         """A model writes `**Observation 4.1-2**`. Treating the asterisks as

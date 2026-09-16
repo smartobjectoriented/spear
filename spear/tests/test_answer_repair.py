@@ -219,3 +219,126 @@ class WhatWithheldAnAnswerIsReportable(unittest.TestCase):
 
     def test_no_repair_is_attempted_without_a_way_to_ask(self):
         self.assertFalse(self.trace()["repair_attempted"])
+
+
+class ARepairThatStopsAnsweringIsNotARepair(unittest.TestCase):
+    """Passing the guards is not the test. A draft that asserts nothing
+    passes every one of them.
+
+    Measured: a turn quoted the governing rule verbatim and concluded
+    correctly from it. One finding -- an unglossed field name in a
+    parenthesis -- sent it to repair, and the rewrite replied that the
+    provisions did not settle the question. Nothing was left to object to,
+    so it was accepted, and a correct answer was replaced by a refusal over
+    a hyphen.
+    """
+
+    ANSWERED = ("The bit shall be set to 0 when acknowledgement is wanted in "
+                "all cases. Rule 4.2-1 states this directly.")
+    DECLINED = ("The provisions above do not settle the question. None of "
+                "them specifies a mandatory action.")
+    WORDING_ONLY = [{"kind": nc.UNGROUNDED_IDENTIFIER, "identifier": "Not-Ack"}]
+
+    def test_an_answering_draft_is_recognised(self):
+        self.assertTrue(ar.answers(self.ANSWERED))
+
+    def test_a_declining_draft_is_recognised(self):
+        self.assertFalse(ar.answers(self.DECLINED))
+
+    def test_a_declination_after_a_leading_caveat_is_still_a_declination(self):
+        """The rewrite that prompted this led with a line of its own
+        instructions before abandoning the answer."""
+        self.assertFalse(ar.answers(
+            "A permission is not a requirement.\n\n" + self.DECLINED))
+
+    def test_an_answer_may_still_mention_what_is_unsettled_later(self):
+        self.assertTrue(ar.answers(
+            self.ANSWERED + " Whether a timeout applies is not established "
+            "by these provisions."))
+
+    def test_answering_to_declining_is_rejected(self):
+        self.assertEqual(
+            ar.outcome(self.ANSWERED, self.DECLINED, self.WORDING_ONLY),
+            ar.REPAIR_WITHHELD)
+
+    def test_answering_to_answering_is_accepted(self):
+        self.assertEqual(
+            ar.outcome(self.ANSWERED, self.ANSWERED, self.WORDING_ONLY),
+            ar.REPAIR_ANSWERED)
+
+    def test_a_draft_that_never_answered_may_still_decline(self):
+        """Genuinely insufficient evidence must keep being allowed to say so."""
+        self.assertEqual(
+            ar.outcome(self.DECLINED, self.DECLINED, self.WORDING_ONLY),
+            ar.REPAIR_FAILED)
+
+    def test_an_empty_repair_is_a_failure_not_a_withhold(self):
+        self.assertEqual(
+            ar.outcome(self.ANSWERED, "", self.WORDING_ONLY),
+            ar.REPAIR_FAILED)
+
+
+class TheRepairPromptAsksForTheSmallestChange(unittest.TestCase):
+
+    def prompt_for(self, problems):
+        return ar.prompt("Does it apply?", "Rule 4.2-1 applies.",
+                                    evidence(RULE), problems)
+
+    def test_a_wording_only_finding_says_the_conclusion_stood(self):
+        text = self.prompt_for([{"kind": nc.UNGROUNDED_IDENTIFIER,
+                                 "identifier": "Not-Ack"}])
+
+        self.assertIn("Your conclusion was not rejected", text)
+
+    def test_a_conclusion_bearing_finding_does_not_say_that(self):
+        """A conclusion the guards rejected must remain changeable."""
+        text = self.prompt_for([{"kind": nc.STRENGTHENED_MODALITY,
+                                 "claimed": "requirement",
+                                 "supported": "recommendation",
+                                 "sentence": "It is required."}])
+
+        self.assertNotIn("Your conclusion was not rejected", text)
+
+    def test_it_forbids_retreating_to_cannot_determine(self):
+        text = self.prompt_for([{"kind": nc.UNGROUNDED_IDENTIFIER,
+                                 "identifier": "Not-Ack"}])
+
+        self.assertIn("do not settle the question", text)
+        self.assertIn("Do NOT replace a supported answer", text)
+
+    def test_it_still_permits_a_genuine_abstention(self):
+        text = self.prompt_for([{"kind": nc.UNGROUNDED_IDENTIFIER,
+                                 "identifier": "Not-Ack"}])
+
+        self.assertIn("genuinely do not answer it", text)
+
+    def test_it_forbids_strengthening_force(self):
+        self.assertIn("Do not strengthen a provision's force",
+                      self.prompt_for([{"kind": nc.UNGROUNDED_IDENTIFIER,
+                                        "identifier": "Not-Ack"}]))
+
+    def test_it_forbids_new_evidence(self):
+        self.assertIn("you cannot retrieve more",
+                      self.prompt_for([{"kind": nc.UNGROUNDED_IDENTIFIER,
+                                        "identifier": "Not-Ack"}]))
+
+
+class FindingsAreSortedByWhatTheyBearOn(unittest.TestCase):
+
+    def test_wording_findings_leave_the_conclusion_alone(self):
+        self.assertEqual(
+            ar.PRESENTATION_ONLY,
+            {nc.UNGROUNDED_IDENTIFIER, nc.AMBIGUOUS_CITATION})
+
+    def test_conclusion_findings_may_change_it(self):
+        self.assertEqual(
+            ar.CONCLUSION_BEARING,
+            {nc.INCOHERENT_CONCLUSION, nc.STRENGTHENED_MODALITY,
+             nc.MISATTRIBUTED_FORCE})
+
+    def test_every_repairable_finding_is_classified(self):
+        """A new repairable finding must be placed deliberately, not default
+        into whichever class happens to be checked first."""
+        self.assertEqual(
+            ar.REPAIRABLE,
+            ar.PRESENTATION_ONLY | ar.CONCLUSION_BEARING)

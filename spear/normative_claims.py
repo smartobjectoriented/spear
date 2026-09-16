@@ -691,7 +691,7 @@ def _note(problems, evidence):
                          "types or examples does not establish a limit.")
         elif kind == MISATTRIBUTED_FORCE:
             lines.append(f"  - {problem['reference']} is credited with "
-                         f"{problem['claimed']} force; it is a "
+                         f"{problem['claimed']} force; its role is "
                          f"{problem['role'].lower()} and supports "
                          f"{problem['supported']}. A modal verb inside a "
                          "provision does not change what the provision is.")

@@ -342,3 +342,129 @@ class FindingsAreSortedByWhatTheyBearOn(unittest.TestCase):
         self.assertEqual(
             ar.REPAIRABLE,
             ar.PRESENTATION_ONLY | ar.CONCLUSION_BEARING)
+
+
+class ARepairMustNotNameTheIdentifierAgain(unittest.TestCase):
+    """An ungrounded name is not fixed by re-hyphenating it.
+
+    Measured: a turn answered a scope question correctly and closed with an
+    elaboration naming a field the evidence never mentions. The repair kept
+    the elaboration, named the field again, and the turn withheld -- a
+    correct conclusion lost to a sentence that was never needed.
+    """
+
+    FLAGGED = [{"kind": nc.UNGROUNDED_IDENTIFIER, "identifier": "SelD"}]
+    SUPPORTED = ("No, Rule 5.2-1 does not constrain the request. It applies "
+                 "to the reply.")
+
+    def test_naming_it_again_is_refused(self):
+        again = self.SUPPORTED + " It may set SelA, SelB and SelD."
+
+        self.assertEqual(ar.outcome(self.SUPPORTED, again, self.FLAGGED),
+                         ar.REPAIR_UNGROUNDED)
+
+    def test_a_respelling_is_the_same_name(self):
+        """"Sel-D" and "SelD" are one identifier; a rewrite that merely
+        re-hyphenates has corrected nothing."""
+        self.assertEqual(
+            ar.outcome(self.SUPPORTED, self.SUPPORTED + " It may set Sel-D.",
+                       self.FLAGGED),
+            ar.REPAIR_UNGROUNDED)
+
+    def test_dropping_the_elaboration_is_accepted(self):
+        self.assertEqual(ar.outcome(self.SUPPORTED, self.SUPPORTED, self.FLAGGED),
+                         ar.REPAIR_ANSWERED)
+
+    def test_a_grounded_generic_category_is_accepted(self):
+        generic = self.SUPPORTED + " It may set any combination of selectors."
+
+        self.assertEqual(ar.outcome(self.SUPPORTED, generic, self.FLAGGED),
+                         ar.REPAIR_ANSWERED)
+
+    def test_another_ungrounded_synonym_is_still_caught_by_the_guards(self):
+        """Not by this check -- it only knows the flagged name -- but the
+        repaired draft is re-guarded, and a new ungrounded identifier is a
+        new finding."""
+        swapped = self.SUPPORTED + " It may set the SelE selector."
+        found = nc.identifier_findings(swapped, evidence(RULE))
+
+        self.assertIn(nc.UNGROUNDED_IDENTIFIER,
+                      [item["kind"] for item in found])
+
+    def test_deleting_the_conclusion_is_still_over_correction(self):
+        self.assertEqual(
+            ar.outcome(self.SUPPORTED,
+                       "The provisions do not settle the question.",
+                       self.FLAGGED),
+            ar.REPAIR_WITHHELD)
+
+    def test_an_essential_identifier_is_not_replaced_by_invention(self):
+        """When the flagged name IS the answer, a rewrite that keeps it is
+        refused and the turn withholds. What must not happen is a grounded-
+        looking substitute being invented in its place."""
+        essential = "The field is named SelD."
+
+        self.assertEqual(ar.outcome(essential, "The field is named SelD.",
+                                    self.FLAGGED),
+                         ar.REPAIR_UNGROUNDED)
+
+
+class TheRepairIsToldWhichNamesExist(unittest.TestCase):
+
+    def prompt_for(self, problems, *units):
+        return ar.prompt("Does it apply?", "Rule 5.2-1 applies to SelD.",
+                         evidence(*(units or (FLAGS,))), problems)
+
+    def test_the_grounded_spellings_are_shown(self):
+        text = self.prompt_for([{"kind": nc.UNGROUNDED_IDENTIFIER,
+                                 "identifier": "SelD"}])
+
+        self.assertIn("TagA", text)
+        self.assertIn("spelled as", text)
+
+    def test_they_are_bounded_not_offered(self):
+        text = self.prompt_for([{"kind": nc.UNGROUNDED_IDENTIFIER,
+                                 "identifier": "SelD"}])
+
+        self.assertIn("add none of these merely to be more explicit", text)
+
+    def test_evidence_with_no_identifiers_says_so(self):
+        text = self.prompt_for([{"kind": nc.UNGROUNDED_IDENTIFIER,
+                                 "identifier": "SelD"}], RECOMMEND)
+
+        self.assertIn("names no field identifiers", text)
+
+    def test_a_different_finding_does_not_list_identifiers(self):
+        text = self.prompt_for([{"kind": nc.INCOHERENT_CONCLUSION,
+                                 "sentence": "Yes."}])
+
+        self.assertNotIn("spelled as", text)
+
+    def test_the_instruction_forbids_variants_and_synonyms(self):
+        text = self.prompt_for([{"kind": nc.UNGROUNDED_IDENTIFIER,
+                                 "identifier": "SelD"}])
+
+        self.assertIn("variant spelling", text)
+        self.assertIn("synonym", text)
+
+    def test_it_says_what_to_do_when_the_name_is_essential(self):
+        text = self.prompt_for([{"kind": nc.UNGROUNDED_IDENTIFIER,
+                                 "identifier": "SelD"}])
+
+        self.assertIn("evidence does not support the point", text)
+
+
+class OneAttemptStillMeansOne(unittest.TestCase):
+
+    def test_a_refused_repair_is_not_retried(self):
+        asked = []
+
+        def ask(text):
+            asked.append(text)
+            return "The provisions do not settle the question."
+
+        ar.attempt("Q?", "Rule 5.2-1 applies.", evidence(RULE),
+                   [{"kind": nc.UNGROUNDED_IDENTIFIER, "identifier": "SelD"}],
+                   ask=ask)
+
+        self.assertEqual(len(asked), 1)

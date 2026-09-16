@@ -277,6 +277,16 @@ class NormativeEvidence:
         return {_normalise(token) for token in _IDENTIFIER.findall(self.text)
                 if token.upper() not in _NOT_IDENTIFIERS}
 
+    def identifier_forms(self):
+        """The identifiers the evidence uses, AS IT SPELLS THEM.
+
+        `identifiers` normalises for comparison, which is right for deciding
+        whether a name is grounded and useless for telling a writer which
+        spelling the document actually uses.
+        """
+        return sorted({token for token in _IDENTIFIER.findall(self.text)
+                       if token.upper() not in _NOT_IDENTIFIERS})
+
     def restrictive_units(self):
         return [unit for unit in self.units if _RESTRICTIVE.search(unit.text)]
 

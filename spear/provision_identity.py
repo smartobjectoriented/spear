@@ -184,6 +184,15 @@ def classify_label(text, match):
 
 #: A citation as an answer writes it. The kind is optional, which is exactly
 #: the problem: without it the reference may name several provisions.
+#: What a document calls something that is NOT a provision but is numbered
+#: the same way. "Table 8.4.1.5-1" and "Rule 8.4.1.5-1" are different objects
+#: that share a printed number, and reading the first as a bare citation of
+#: the second reported an ambiguity the writer never created -- then withheld
+#: an answer over it.
+_NOT_A_PROVISION = re.compile(
+    r"\b(?:table|figure|section|clause|annex|appendix|chapter|equation)\s*$",
+    re.I)
+
 _REFERENCE = re.compile(
     rf"\b(?:(?P<kind>{'|'.join(LABELLED_KINDS)})\s+)?"
     rf"(?P<section>{_SECTION})(?:-(?P<ordinal>\d+))?\b")
@@ -1066,6 +1075,14 @@ class ProvisionLedger:
         for match in _REFERENCE.finditer(text or ""):
             if match.group("ordinal") is None and not match.group("kind"):
                 continue                       # a bare section is not a citation
+
+            # "Table 8.4.1.5-1" names a table. The document numbers its
+            # tables and its provisions alike, and treating the one as a
+            # citation of the other invents an ambiguity between provisions
+            # the writer never mentioned.
+            if not match.group("kind") and _NOT_A_PROVISION.search(
+                    (text or "")[:match.start()]):
+                continue
 
             try:
                 key = self.resolve(match.group(0))

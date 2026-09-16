@@ -26,7 +26,16 @@ does not carry the right answer: nothing here knows it.
 
 from __future__ import annotations
 
+import re
+
 import normative_claims
+
+#: What a repair produced. "It passed the guards" is not the same fact as
+#: "it answered", and conflating them accepted a repair that deleted a
+#: correct conclusion: nothing asserted, nothing to object to.
+REPAIR_ANSWERED = "REPAIR_ANSWERED"
+REPAIR_WITHHELD = "REPAIR_WITHHELD"
+REPAIR_FAILED = "REPAIR_FAILED"
 
 #: Findings a rewrite can honestly fix, because the evidence is already in
 #: hand and the defect is in what was said about it.
@@ -42,6 +51,78 @@ REPAIRABLE = frozenset({
 
 #: And ones it cannot. A bound nothing states is not a wording problem.
 NOT_REPAIRABLE = frozenset({normative_claims.UNSUPPORTED_CARDINALITY})
+
+#: Findings that bear on WHAT was concluded. A repair may legitimately change
+#: the conclusion to settle one of these -- lower a modality, reattribute a
+#: force, reverse an opening that contradicts its own evidence.
+CONCLUSION_BEARING = frozenset({
+    normative_claims.INCOHERENT_CONCLUSION,
+    normative_claims.STRENGTHENED_MODALITY,
+    normative_claims.MISATTRIBUTED_FORCE,
+})
+
+#: Findings about the wording AROUND a conclusion that still stands. An
+#: unglossed name and an under-specified citation say nothing about whether
+#: the answer was right, and a repair that drops the answer to settle one has
+#: thrown away the part that was correct.
+PRESENTATION_ONLY = frozenset({
+    normative_claims.UNGROUNDED_IDENTIFIER,
+    normative_claims.AMBIGUOUS_CITATION,
+})
+
+#: How a turn says it is not answering. Matched against the opening of a
+#: draft, not the whole of it: an answer may well observe that some OTHER
+#: question is unsettled further down.
+_DECLINES = re.compile(
+    r"\b(?:do(?:es)?\s+not\s+(?:settle|establish|specify|determine|answer|"
+    r"support|provide|state)|cannot\s+be\s+(?:determined|established|"
+    r"answered)|can(?:not|'t)\s+(?:be\s+)?(?:determined|established)|"
+    r"is\s+not\s+(?:established|specified|determined|settled)|"
+    r"insufficient\s+(?:evidence|information)|no\s+provision\s+(?:in\s+the\s+"
+    r"(?:provided|retrieved)\s+evidence\s+)?(?:specifies|establishes|states))\b",
+    re.I)
+
+#: How much of a draft counts as its opening. Two sentences: a rewrite may
+#: lead with a caveat before it declines -- one did, echoing a line of its
+#: own instructions before abandoning the answer -- but reaching further
+#: would read an answer's closing note about some OTHER unsettled question
+#: as a refusal of the one asked.
+_OPENING_SENTENCES = 2
+
+
+def answers(text):
+    """Does this draft assert something, or decline to?
+
+    Deliberately small. The pipeline has no answer/withhold status of its own
+    and inventing a large one here would be a second classifier to keep
+    correct; this decides one question, and its tests stand alone.
+    """
+    body = (text or "").strip()
+
+    if not body:
+        return False
+
+    opening = " ".join(
+        re.split(r"(?<=[.!?])\s+", body)[:_OPENING_SENTENCES])
+
+    return not _DECLINES.search(opening)
+
+
+def outcome(original, repaired, problems):
+    """What the repair did, as a fact about the two drafts.
+
+    A repair that turns an answering draft into a non-answer has not fixed
+    the findings; it has removed everything they could attach to. When every
+    finding was repairable, that is a worse outcome than the original, and
+    accepting it hid a correct conclusion behind a refusal.
+    """
+    if not repaired:
+        return REPAIR_FAILED
+
+    if answers(repaired):
+        return REPAIR_ANSWERED
+
+    return REPAIR_WITHHELD if answers(original) else REPAIR_FAILED
 
 
 def is_repairable(problems):
@@ -94,6 +175,12 @@ def _finding_lines(problems):
         elif kind == normative_claims.AMBIGUOUS_CITATION:
             lines.append(f"  - `{problem['reference']}` names several provisions "
                          f"({', '.join(problem['candidates'])}). Name the kind.")
+        elif kind == normative_claims.MISATTRIBUTED_FORCE:
+            lines.append(f"  - You credited {problem['reference']} with "
+                         f"{problem['claimed']} force; its role is "
+                         f"{problem['role'].lower()} and it supports "
+                         f"{problem['supported']}. If another provision above "
+                         "imposes the obligation, attribute it to that one.")
 
     return lines
 
@@ -115,12 +202,34 @@ def prompt(question, rejected, evidence, problems):
         "and you cannot retrieve more:",
         *_provision_lines(evidence),
         "",
-        "Write the answer again, using only the provisions above.",
+        "",
+        "Correct ONLY the problems listed above. Everything else in your",
+        "answer that the provisions support must survive unchanged.",
+        *_preservation_lines(problems),
         "Open with the conclusion those provisions support, at their own",
-        "modality: a permission is not a requirement and a recommendation is",
-        "not a rule. Cite each provision by kind and number.",
-        "If the provisions above do not settle the question, say exactly that.",
+        "modality -- a permission is not a requirement and a recommendation",
+        "is not a rule -- and cite each provision by kind and number.",
+        "Do not strengthen a provision's force. Do not introduce evidence",
+        "that is not above; you cannot retrieve more.",
+        "",
+        "Do NOT replace a supported answer with 'cannot be determined', 'the",
+        "provisions do not settle the question', 'insufficient evidence' or",
+        "anything equivalent in order to avoid the problems listed. Where the",
+        "provisions above directly establish what was asked, state it.",
+        "Say the question is unsettled only if, after the corrections above,",
+        "the provisions genuinely do not answer it.",
     ])
+
+
+def _preservation_lines(problems):
+    """Told outright when the conclusion itself was not what was wrong."""
+    kinds = {problem["kind"] for problem in problems}
+
+    if kinds and kinds <= PRESENTATION_ONLY:
+        return ["Your conclusion was not rejected -- only the wording noted",
+                "above was. Keep the conclusion and fix that wording.", ""]
+
+    return [""]
 
 
 def attempt(question, rejected, evidence, problems, *, ask):

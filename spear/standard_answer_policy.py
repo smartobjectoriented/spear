@@ -152,6 +152,9 @@ class StandardAnswerPolicy:
     claims_fired: bool = False
     repair_attempted: bool = False
     repair_accepted: bool = False
+    #: REPAIR_ANSWERED / REPAIR_WITHHELD / REPAIR_FAILED, or "" when no
+    #: repair was attempted. A refused repair says which way it failed.
+    repair_outcome: str = ""
     #: Injected by whatever drives the loop. Absent means no repair is
     #: possible, and the answer is withheld exactly as before.
     repair_ask: object = None
@@ -385,7 +388,15 @@ class StandardAnswerPolicy:
                 self.question, before_repair, self.claim_evidence,
                 claim_problems, ask=self.repair_ask)
 
-            if repaired:
+            # A repair that stops answering has not settled the findings; it
+            # has removed what they attached to. Passing the guards is not
+            # the test -- a draft that asserts nothing passes every one of
+            # them, and accepting that hid a correct conclusion behind a
+            # refusal for the sake of an unglossed field name.
+            self.repair_outcome = answer_repair.outcome(
+                before_repair, repaired, claim_problems)
+
+            if repaired and self.repair_outcome == answer_repair.REPAIR_ANSWERED:
                 checked, retry_problems, retry_fired = normative_claims.guard(
                     repaired, self.claim_evidence, question=self.question)
 
@@ -520,6 +531,7 @@ class StandardAnswerPolicy:
                                for item in self.claim_findings],
             "repair_attempted": self.repair_attempted,
             "repair_accepted": self.repair_accepted,
+            "repair_outcome": self.repair_outcome,
             "diagram_cells": [item["label"]
                               for item in self.evidence.cell_fields.values()],
             "evidence_progress_by_round": self.progress.by_round,

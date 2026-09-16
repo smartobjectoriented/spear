@@ -12,6 +12,7 @@ from pathlib import Path
 
 from standard_crossrefs import rebuild_cross_reference_index
 from standard_ingest import ingest_pdf
+import standard_retrieval
 from standard_retrieval import StandardRetrieval, rebuild_lexical_index
 from standard_retrieval_eval import (
     StandardRetrievalEvaluationItem, evaluate_retrieval,
@@ -505,3 +506,37 @@ class StandardHybridRetrievalTests(unittest.TestCase):
         self.assertEqual(json.loads(report.to_json())["embedding_model"],
                          self.embedder.model_id)
         self.assertIn("hybrid:", report.to_text())
+
+
+class RetrievalSaysWhatItActuallyHad(unittest.TestCase):
+    """"lexical_fallback" reports that a fallback happened, not what was lost.
+
+    Asking for hybrid retrieval on a store that has never been embedded, and
+    asking for vector retrieval on the same store, produced one string. An
+    evaluation then described a lexical-only run as hybrid retrieval -- and a
+    retrieval regression on a better-segmented corpus was read as a parsing
+    problem for as long as that held.
+    """
+
+    def test_a_store_with_no_vector_index_is_named_as_degraded(self):
+        self.assertEqual(
+            standard_retrieval._capability("hybrid", "lexical_fallback"),
+            standard_retrieval.HYBRID_DEGRADED_NO_VECTOR)
+
+    def test_asking_for_vector_without_one_is_degradation_too(self):
+        self.assertEqual(
+            standard_retrieval._capability("vector", "lexical_fallback"),
+            standard_retrieval.HYBRID_DEGRADED_NO_VECTOR)
+
+    def test_asking_for_lexical_is_not_degradation(self):
+        self.assertEqual(standard_retrieval._capability("lexical", "lexical"),
+                         standard_retrieval.LEXICAL_ONLY)
+
+    def test_both_rankings_are_named_as_such(self):
+        self.assertEqual(standard_retrieval._capability("hybrid", "hybrid"),
+                         standard_retrieval.HYBRID_LEXICAL_VECTOR)
+
+    def test_the_three_names_are_distinct(self):
+        self.assertEqual(len({standard_retrieval.HYBRID_LEXICAL_VECTOR,
+                              standard_retrieval.LEXICAL_ONLY,
+                              standard_retrieval.HYBRID_DEGRADED_NO_VECTOR}), 3)

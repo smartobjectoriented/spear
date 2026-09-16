@@ -30,12 +30,40 @@ class LocalStandardEmbedder(Protocol):
     def embed_query(self, text: str) -> list[float]: ...
 
 
+def structural_context(unit) -> tuple[str, ...]:
+    """What the DOCUMENT prints around this unit, where the store recorded it.
+
+    For a table row: the table's caption and its column headers. A row reads
+    "20 ReqV Request Validation Acknowledge packet Set to 1: ..." and nothing
+    in those words says it is a bit of the Control packet CAM field -- the
+    caption above it says that, and the column header "Bit#" says what the 20
+    is. Measured on one bound standard, four bit-level questions found their
+    row nowhere in the vector top twenty without it.
+
+    Structural only, and never a neighbouring provision: a caption and a
+    column header carry no normative force of their own, so nothing here can
+    lend one provision the modality of the one beside it. The evidence
+    returned to a caller is unchanged; this is what the row is FOUND by.
+
+    A unit whose store never recorded a grid contributes nothing, so a corpus
+    ingested under an earlier schema indexes exactly as it did before.
+    """
+    structure = getattr(unit, "table_structure", None)
+
+    if structure is None:
+        return ()
+
+    return tuple(part for part in (structure.caption, *structure.columns) if part)
+
+
 def retrieval_text(unit) -> str:
     """Visible semantic metadata only; identity and storage metadata are excluded."""
 
     return "\n".join(part for part in (
         f"Section {unit.section}" if unit.section else "",
-        " > ".join(unit.heading_path), unit.text,
+        " > ".join(unit.heading_path),
+        " ".join(structural_context(unit)),
+        unit.text,
     ) if part)
 
 

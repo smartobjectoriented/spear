@@ -445,6 +445,9 @@ class StandardToolService:
                         "retrieval_fingerprint": retrieval_fingerprint},
             "result_count": len(results),
             "retrieval_mode_used": response.retrieval_mode_used,
+            "retrieval_capability": response.retrieval_capability,
+            "evidence_completion": response.evidence_completion,
+            "completion_budget": response.completion_budget,
             "results": [item.to_dict() for item in results],
         }
         result = ToolHandlerResult(
@@ -456,6 +459,9 @@ class StandardToolService:
                 "result_count": len(results),
                 "standard_source_ids": [item.source_id for item in results],
                 "retrieval_mode_used": response.retrieval_mode_used,
+            "retrieval_capability": response.retrieval_capability,
+            "evidence_completion": response.evidence_completion,
+            "completion_budget": response.completion_budget,
                 "retrieval_fingerprint": retrieval_fingerprint,
                 "lexical_candidate_count": response.lexical_candidate_count,
                 "vector_candidate_count": response.vector_candidate_count,

@@ -20,7 +20,6 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
 import diagram_geometry
-from state_paths import standards_root
 from diagram_geometry import Cell, cells_for_unit, independent
 from evidence_guard import (
     CELL_LOCAL_RANGE_USED_AS_GLOBAL, EvidenceLedger, guard, safe_rendering,
@@ -28,8 +27,21 @@ from evidence_guard import (
 )
 
 SID, REV = "ANSI-VITA-49.2", "2017-R2024"
-UNIT = "std-3bdaec3f4716725e5551e915ee43637d"
-CORPUS = standards_root() / SID / REV / "corpus"
+#: The shape the recovery exists for: a packet diagram flattened into one
+#: line, each cell still carrying its own range. Written out here rather than
+#: read from a store, because a source_id names a unit inside ONE extraction
+#: and nothing else. Pinning one made these tests skip in silence the moment
+#: the store was re-extracted -- and the store they were pinned to had since
+#: been replaced by one that does not flatten the row at all, so the
+#: protection stopped being exercised exactly when it stopped being needed
+#: for that corpus. It is still needed for every corpus that does flatten.
+FLATTENED = {
+    "source_id": "std-" + "b" * 32, "standard_id": SID, "revision": REV,
+    "section": "9.4.1.5", "page": 153, "content_type": "UNKNOWN",
+    "text": "1                Horizontal Beamwidth (15..0), Degrees"
+            "                                      Vertical Beamwidth "
+            "(15..0), Degrees",
+}
 
 
 def horizontal(msb=15, lsb=0):
@@ -56,12 +68,7 @@ class Recovery(unittest.TestCase):
     """The cells, read back out of the store's own layout artifact."""
 
     def setUp(self):
-        path = CORPUS / f"{UNIT}.json"
-
-        if not path.is_file():
-            self.skipTest("the frozen VITA store is not present here")
-
-        self.unit = json.loads(path.read_text("utf-8"))
+        self.unit = dict(FLATTENED)
 
     def test_the_flattened_row_resolves_to_two_cells(self):
         cells = cells_for_unit(self.unit, standard_id=SID, revision=REV)
@@ -85,7 +92,7 @@ class Recovery(unittest.TestCase):
         cell = cells_for_unit(self.unit, standard_id=SID, revision=REV)[0]
 
         self.assertEqual(cell.provenance["page"], 153)
-        self.assertEqual(cell.provenance["source_id"], UNIT)
+        self.assertEqual(cell.provenance["source_id"], FLATTENED["source_id"])
         self.assertEqual(len(cell.provenance["bbox"]), 4)
         self.assertIn("Horizontal Beamwidth", cell.provenance["text"])
 

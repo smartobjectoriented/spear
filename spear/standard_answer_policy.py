@@ -29,6 +29,7 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass, field
 
+import code_evidence
 import conformance_guard
 import conformance_mode
 import diagram_geometry
@@ -116,6 +117,12 @@ class StandardAnswerPolicy:
         default_factory=normative_claims.NormativeEvidence)
     code: conformance_mode.CodeReadLedger = field(
         default_factory=conformance_mode.CodeReadLedger)
+
+    # The other half of a code-comparison answer's vocabulary: the names the
+    # turn's own tool results put in front of the model. Existence only --
+    # what the standard REQUIRES is `claim_evidence` and nothing else.
+    code_evidence: code_evidence.CodeEvidenceLedger = field(
+        default_factory=code_evidence.CodeEvidenceLedger)
 
     #: the question asks whether code conforms; decided once, from its words
     conformance_turn: bool = False
@@ -220,6 +227,10 @@ class StandardAnswerPolicy:
         non-normative ones: which source files were put in front of the
         model. The evidence ledgers never see these."""
         self.code.observe(name, arguments, text)
+
+        # From the RESULT alone, and separately: this ledger answers whether
+        # the model saw a name, which the file list cannot and should not.
+        self.code_evidence.observe(name, text)
 
     def close_round(self, round_index):
         """End of one round of retrieval: did it establish anything new?"""
@@ -372,9 +383,17 @@ class StandardAnswerPolicy:
         # them on that. Before the provenance guard, because what this writes
         # is built from the ledger and must not then be stripped of sources.
 
+        # Both kinds of name the answer may legitimately use: the ones the
+        # clauses define and the ones the repository calls its own. Fixed
+        # here, before the first check, so the repair below is judged against
+        # the same set -- a rewrite runs no tools and may not enlarge it.
+
+        permitted = self.code_evidence.identifiers()
+
         before_repair = guarded
         guarded, claim_problems, claims_fired = normative_claims.guard(
-            guarded, self.claim_evidence, question=self.question)
+            guarded, self.claim_evidence, question=self.question,
+            permitted=permitted, binding=self.binding)
 
         # One constrained rewrite, when the evidence in hand can settle what
         # was wrong with the prose. No new retrieval, no loop, and the same
@@ -398,7 +417,8 @@ class StandardAnswerPolicy:
 
             if repaired and self.repair_outcome == answer_repair.REPAIR_ANSWERED:
                 checked, retry_problems, retry_fired = normative_claims.guard(
-                    repaired, self.claim_evidence, question=self.question)
+                    repaired, self.claim_evidence, question=self.question,
+                    permitted=permitted, binding=self.binding)
 
                 if not retry_fired:
                     guarded, claim_problems, claims_fired = checked, [], False
@@ -501,6 +521,7 @@ class StandardAnswerPolicy:
             "conformance_turn": self.conformance_turn,
             "code_read": sorted(self.code.files),
             "code_tool_calls": dict(self.code.tools),
+            "code_identifiers": self.code_evidence.provenance(),
             "normative_precedence_triggered": self.precedence_fired,
             "ungrounded_requirements": [{"kind": item["kind"],
                                          "clauses": item["clauses"],

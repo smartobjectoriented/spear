@@ -36,6 +36,10 @@ import normative_claims
 REPAIR_ANSWERED = "REPAIR_ANSWERED"
 REPAIR_WITHHELD = "REPAIR_WITHHELD"
 REPAIR_FAILED = "REPAIR_FAILED"
+#: The rewrite named the very identifier it was told was ungrounded. Caught
+#: here so the trace says WHY the repair was refused; the guards would reject
+#: the result either way.
+REPAIR_UNGROUNDED = "REPAIR_UNGROUNDED"
 
 #: Findings a rewrite can honestly fix, because the evidence is already in
 #: hand and the defect is in what was said about it.
@@ -108,6 +112,31 @@ def answers(text):
     return not _DECLINES.search(opening)
 
 
+def _normalise(token):
+    return re.sub(r"[-_\s]", "", str(token)).lower()
+
+
+def repeats_flagged_identifier(repaired, problems):
+    """Did the rewrite name a flagged identifier again, however spelled?
+
+    Comparison is on the normalised form, because "Req-S" and "ReqS" are one
+    name and a rewrite that merely re-hyphenates has not corrected anything.
+    """
+    flagged = {_normalise(problem["identifier"])
+               for problem in problems
+               if problem["kind"] == normative_claims.UNGROUNDED_IDENTIFIER
+               and problem.get("identifier")}
+
+    if not flagged:
+        return None
+
+    for token in normative_claims._IDENTIFIER.findall(repaired or ""):
+        if _normalise(token) in flagged:
+            return token
+
+    return None
+
+
 def outcome(original, repaired, problems):
     """What the repair did, as a fact about the two drafts.
 
@@ -118,6 +147,9 @@ def outcome(original, repaired, problems):
     """
     if not repaired:
         return REPAIR_FAILED
+
+    if repeats_flagged_identifier(repaired, problems):
+        return REPAIR_UNGROUNDED
 
     if answers(repaired):
         return REPAIR_ANSWERED
@@ -163,8 +195,15 @@ def _finding_lines(problems):
         kind = problem["kind"]
 
         if kind == normative_claims.UNGROUNDED_IDENTIFIER:
-            lines.append(f"  - You named `{problem['identifier']}`. No retrieved "
-                         "provision contains it. Remove it.")
+            lines.append(
+                f"  - `{problem['identifier']}` is named in your answer and "
+                "appears in no provision below. Do not use it again, and do "
+                "not substitute a variant spelling, an expansion or a "
+                "synonym for it. If it was not needed to answer the "
+                "question, leave it out and keep the rest of the answer as "
+                "it was. If the answer cannot be made without it, say that "
+                "the evidence does not support the point rather than naming "
+                "it anyway.")
         elif kind == normative_claims.STRENGTHENED_MODALITY:
             lines.append(f"  - Your conclusion states a {problem['claimed']}; the "
                          f"provision you cite establishes a {problem['supported']}. "
@@ -201,6 +240,7 @@ def prompt(question, rejected, evidence, problems):
         "THE ONLY EVIDENCE YOU MAY USE -- no other source exists for this turn,",
         "and you cannot retrieve more:",
         *_provision_lines(evidence),
+        *_grounded_lines(evidence, problems),
         "",
         "",
         "Correct ONLY the problems listed above. Everything else in your",
@@ -219,6 +259,28 @@ def prompt(question, rejected, evidence, problems):
         "Say the question is unsettled only if, after the corrections above,",
         "the provisions genuinely do not answer it.",
     ])
+
+
+def _grounded_lines(evidence, problems):
+    """The identifiers the evidence contains, when grounding was the problem.
+
+    Shown as a bound, not a menu: the failure this addresses is an answer
+    reaching for a name it half-remembered, and the fix is to say which names
+    exist -- not to invite more of them.
+    """
+    if not any(problem["kind"] == normative_claims.UNGROUNDED_IDENTIFIER
+               for problem in problems):
+        return []
+
+    forms = evidence.identifier_forms()
+
+    if not forms:
+        return ["", "The evidence above names no field identifiers. Do not "
+                    "introduce any."]
+
+    return ["", "The ONLY identifiers the evidence above contains, spelled as "
+                "it spells them:", "  " + ", ".join(forms[:40]),
+            "Use no others, and add none of these merely to be more explicit."]
 
 
 def _preservation_lines(problems):

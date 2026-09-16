@@ -5965,7 +5965,20 @@ def standard_binding_for(question):
     """
     global STANDARD_ENGAGED_BEFORE, STANDARD_READ_CONTEXT
 
-    binding = STANDARD_OPERATOR.active_binding()
+    try:
+        binding = STANDARD_OPERATOR.active_binding()
+    except StandardCommandError as exc:
+        # A binding the store can no longer honour is an ordinary state after
+        # a re-extraction, not a reason to lose the session. Refusing to
+        # rebind silently is right -- the corpus underneath moved and that
+        # must be visible -- but the refusal belongs in a message with a way
+        # out, and it was killing spear-chat with a traceback instead.
+        print(f"  {C_DIM}⎿  {STANDARD_OPERATOR.stale_binding_status(exc)}{C_RST}")
+        print(f"  {C_DIM}   answering unbound: no normative grounding this "
+              f"turn{C_RST}")
+
+        return None
+
     context, STANDARD_READ_CONTEXT = STANDARD_READ_CONTEXT, ""
 
     if not standard_scope.engages(binding, question,

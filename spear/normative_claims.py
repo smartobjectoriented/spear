@@ -39,6 +39,7 @@ import re
 from dataclasses import dataclass, field
 
 import normative_force
+import normative_precedence
 import provision_identity
 import standard_profiles  # noqa: F401  (registers declared role taxonomies)
 
@@ -183,9 +184,21 @@ _NOT_IDENTIFIERS = frozenset({
 })
 
 
-def _normalise(token):
+def normalise(token):
     """One spelling for comparison: `Req-V`, `ReqV` and `req_v` are one name."""
     return re.sub(r"[-_\s]", "", str(token)).lower()
+
+
+def identifiers_in(text):
+    """The technical identifiers a piece of text uses, AS IT SPELLS THEM.
+
+    The one place the shape of an identifier is decided. Anything that needs
+    to know what names a text contains -- the evidence ledger below, and the
+    record of what the turn read out of a repository -- asks here, so that a
+    second notion of "identifier" cannot drift away from this one.
+    """
+    return [token for token in dict.fromkeys(_IDENTIFIER.findall(text or ""))
+            if token.upper() not in _NOT_IDENTIFIERS]
 
 
 @dataclass
@@ -274,8 +287,7 @@ class NormativeEvidence:
         literal spellings flagged three real fields as fabricated and withheld
         a correct answer.
         """
-        return {_normalise(token) for token in _IDENTIFIER.findall(self.text)
-                if token.upper() not in _NOT_IDENTIFIERS}
+        return {normalise(token) for token in identifiers_in(self.text)}
 
     def identifier_forms(self):
         """The identifiers the evidence uses, AS IT SPELLS THEM.
@@ -428,21 +440,58 @@ def claim_level(sentence, question=""):
 
 # ── 1. identifiers ───────────────────────────────────────────────────
 
-def identifier_findings(answer, evidence, *, permitted=()):
-    """Technical identifiers the answer introduces and the evidence lacks."""
+def identifier_findings(answer, evidence, *, permitted=(), binding=None):
+    """Technical identifiers the answer introduces and nothing behind it has.
+
+    Two things can be behind a name, and they are not interchangeable. The
+    retrieved clauses are what the DOCUMENT defines; `permitted` is what the
+    turn read out of a repository, and an answer comparing an implementation
+    against a standard uses both -- a function it read is not a field it
+    invented, and reporting it as one withheld a whole analysis over nineteen
+    names that were plainly in front of the model.
+
+    So code grounds a name for the purpose it can: saying that the name
+    EXISTS, in a sentence describing the implementation. It grounds nothing in
+    a sentence that says what the standard requires. A name credited to the
+    document must be in the document, and a comment in a source file is not
+    the document -- which is the same precedence every other guard here keeps,
+    applied to the answer's vocabulary.
+    """
     if not evidence.knows_anything():
         return []
 
-    known = evidence.identifiers() | {_normalise(item) for item in permitted}
+    documented = evidence.identifiers()
+    from_code = {normalise(item) for item in permitted} - documented
+    attributed = (_attributed_identifiers(answer, from_code, binding)
+                  if from_code else set())
     found = []
 
-    for token in dict.fromkeys(_IDENTIFIER.findall(answer or "")):
-        if token.upper() in _NOT_IDENTIFIERS or _normalise(token) in known:
+    for token in identifiers_in(answer):
+        key = normalise(token)
+
+        if key in documented:
             continue
 
-        found.append({"kind": UNGROUNDED_IDENTIFIER, "identifier": token})
+        if key in from_code and key not in attributed:
+            continue
+
+        found.append({"kind": UNGROUNDED_IDENTIFIER, "identifier": token,
+                      "read_from_code": key in from_code})
 
     return found
+
+
+def _attributed_identifiers(answer, from_code, binding):
+    """Code-read names the answer credits to the standard itself."""
+    found = set()
+
+    for sentence in normative_precedence.sentences(answer):
+        if not normative_precedence.states_a_requirement(sentence, binding):
+            continue
+
+        found |= {normalise(token) for token in identifiers_in(sentence)}
+
+    return found & from_code
 
 
 # ── 2. modality ──────────────────────────────────────────────────────
@@ -665,9 +714,10 @@ def ambiguity_findings(answer, evidence):
             for problem in ambiguous]
 
 
-def findings(answer, evidence, *, question="", permitted=()):
+def findings(answer, evidence, *, question="", permitted=(), binding=None):
     return (ambiguity_findings(answer, evidence)
-            + identifier_findings(answer, evidence, permitted=permitted)
+            + identifier_findings(answer, evidence, permitted=permitted,
+                                  binding=binding)
             + modality_findings(answer, evidence, question=question)
             + coherence_findings(answer, evidence, question=question)
             + cardinality_findings(answer, evidence, question=question)
@@ -683,8 +733,12 @@ def _note(problems, evidence):
         kind = problem["kind"]
 
         if kind == UNGROUNDED_IDENTIFIER:
-            lines.append(f"  - {problem['identifier']}: named in the answer, "
-                         "present in no retrieved unit.")
+            lines.append(
+                f"  - {problem['identifier']}: named in the answer, "
+                + ("read from source code but credited to the standard, "
+                   "which no retrieved unit supports."
+                   if problem.get("read_from_code")
+                   else "present in no retrieved unit."))
         elif kind == STRENGTHENED_MODALITY:
             lines.append(f"  - the conclusion states a {problem['claimed']}; "
                          f"the evidence establishes a {problem['supported']}.")
@@ -715,10 +769,10 @@ def _note(problems, evidence):
     return "\n".join(lines)
 
 
-def guard(answer, evidence, *, question="", permitted=()):
+def guard(answer, evidence, *, question="", permitted=(), binding=None):
     """The answer, or a note saying why it is withheld."""
     problems = findings(answer, evidence, question=question,
-                        permitted=permitted)
+                        permitted=permitted, binding=binding)
 
     if not problems:
         return answer, [], False

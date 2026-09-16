@@ -188,6 +188,25 @@ def _clause_voiced(sentence):
                 and re.search(_STATES, sentence, re.I))
 
 
+def states_a_requirement(sentence, binding=None):
+    """Does this sentence say what the STANDARD requires?
+
+    The one test for it, so that a second reader of the same question -- the
+    identifier check, which must know whether a name is being credited to the
+    document or merely described -- cannot come to a different answer than
+    this module does.
+    """
+    if _INTERROGATIVE.search(sentence) or _NEGATED.search(sentence):
+        return False
+
+    return bool(_subject(binding).search(sentence) or _clause_voiced(sentence))
+
+
+def sentences(text):
+    """The answer, split the way the guards read it."""
+    return _sentences(text)
+
+
 def findings(answer, ledger, binding=None):
     """Every statement of what the standard requires that nothing backs.
 
@@ -199,15 +218,11 @@ def findings(answer, ledger, binding=None):
     "came from the document" -- what the window widens is how near the
     citation has to sit, never what counts as one.
     """
-    subject = _subject(binding)
     sentences = _sentences(answer)
     found = []
 
     for index, sentence in enumerate(sentences):
-        if _INTERROGATIVE.search(sentence) or _NEGATED.search(sentence):
-            continue
-
-        if not (subject.search(sentence) or _clause_voiced(sentence)):
+        if not states_a_requirement(sentence, binding):
             continue
 
         # The sentence and what it follows. A conclusion drawn from the

@@ -25,6 +25,7 @@ from standard_ingest import ingest_pdf
 from standard_retrieval import rebuild_lexical_index
 from standard_store import StandardStore
 from standard_tools import (
+    STALE_EVIDENCE_HANDLE,
     INVALID_QUERY, INVALID_SOURCE_ID, SOURCE_NOT_FOUND, StandardToolService,
 )
 from tests.standard_fixture import synthetic_pdf_bytes
@@ -97,9 +98,19 @@ class Fetch(_Bound):
         _, payload = self.refusal("standard.fetch", {"source_id": "Gain Field"})
         self.assertEqual(payload["error"], INVALID_SOURCE_ID)
 
-    def test_an_absent_but_well_formed_source_is_a_different_answer(self):
+    def test_a_source_this_turn_never_retrieved_is_refused_before_lookup(self):
+        """Whether it exists is not the question being answered.
+
+        A fetch is reading back something this turn retrieved. An id that came
+        from somewhere else -- an older conversation, a memory, a guess -- is
+        refused on that ground alone, and the corpus is not consulted to say
+        whether it happens to name a real unit. Replying "no such unit" to one
+        id and "stale" to another would answer, for anyone who asked twice,
+        which ids exist.
+        """
         _, payload = self.refusal("standard.fetch", {"source_id": ABSENT_SOURCE})
-        self.assertEqual(payload["error"], SOURCE_NOT_FOUND)
+        self.assertEqual(payload["error"], STALE_EVIDENCE_HANDLE)
+        self.assertIn("standard.search", json.dumps(payload["recovery"]))
 
     def test_the_recovery_names_the_tool_that_hands_out_source_ids(self):
         for asked in (STRUCTURE_IDS[0], ABSENT_SOURCE):
@@ -126,11 +137,18 @@ class Cite(_Bound):
         self.assertEqual(payload["error"], INVALID_SOURCE_ID)
         self.assertIn("standard.search", json.dumps(payload["recovery"]))
 
-    def test_an_absent_source_stays_distinct_from_a_wrong_kind(self):
-        _, absent = self.refusal("standard.cite", {"source_id": ABSENT_SOURCE})
+    def test_an_unissued_source_stays_distinct_from_a_wrong_kind(self):
+        """Two different mistakes keep two different answers.
+
+        A well formed handle this turn never retrieved is refused as stale,
+        without the corpus being asked whether it exists. An identifier from
+        another namespace does not get that far: it is not the shape of a
+        handle at all, and is refused on its form.
+        """
+        _, unissued = self.refusal("standard.cite", {"source_id": ABSENT_SOURCE})
         _, wrong = self.refusal("standard.cite", {"source_id": STRUCTURE_IDS[1]})
-        self.assertEqual(absent["error"], SOURCE_NOT_FOUND)
-        self.assertNotEqual(absent["error"], wrong["error"])
+        self.assertEqual(unissued["error"], STALE_EVIDENCE_HANDLE)
+        self.assertNotEqual(unissued["error"], wrong["error"])
 
     def test_no_citation_is_invented_for_a_refused_identifier(self):
         result, payload = self.refusal("standard.cite",
@@ -185,7 +203,12 @@ class EveryRefusal(_Bound):
         for tool in ("standard.fetch", "standard.cite"):
             with self.subTest(tool=tool):
                 _, payload = self.refusal(tool, {"source_id": near})
-                self.assertEqual(payload["error"], SOURCE_NOT_FOUND)
+
+                # Both dereference a handle, so both refuse one this turn
+                # never retrieved, without looking it up. What neither does,
+                # which is what this is really about, is hand back the
+                # neighbouring id that does exist.
+                self.assertEqual(payload["error"], STALE_EVIDENCE_HANDLE)
                 self.assertNotIn(source, json.dumps(payload))
 
     def test_every_refusal_is_read_only(self):

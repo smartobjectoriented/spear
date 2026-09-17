@@ -24,6 +24,7 @@ import subprocess
 from contextlib import contextmanager
 from pathlib import Path
 import embedding
+import evidence_handles
 import skill_library
 import standard_scope
 import web_fetch
@@ -7752,7 +7753,11 @@ def main():
         user_record = user_input
 
         if tool_log:
-            joined = "\n\n".join(tool_log)[:2000]
+            # Words yes, handles no. The transcript is kept so a follow-up can
+            # refer back to what happened; the source ids in it are stripped,
+            # because a later turn that reads one can fetch that evidence
+            # again and answer a new question from an old question's clauses.
+            joined = evidence_handles.redact("\n\n".join(tool_log)[:2000])
             user_record += ("\n\n[Tools executed during this turn — results:\n"
                             f"{joined}\n]")
 

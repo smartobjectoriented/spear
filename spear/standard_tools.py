@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import evidence_graph
+import evidence_handles
 
 import hashlib
 import os
@@ -29,6 +30,9 @@ STANDARD_TOOL_NAMES = frozenset({"standard.search", "standard.fetch",
 # evidence about the standard, the first is only evidence about the caller.
 
 INVALID_SOURCE_ID = "INVALID_SOURCE_ID"
+#: A well formed handle that this turn never issued -- copied from an older
+#: conversation, a memory, or nowhere at all.
+STALE_EVIDENCE_HANDLE = "STALE_EVIDENCE_HANDLE"
 SOURCE_NOT_FOUND = "SOURCE_NOT_FOUND"
 INVALID_QUERY = "INVALID_QUERY"
 
@@ -246,6 +250,18 @@ def render_fetch_for_model(fetched: Mapping[str, object], *, budget: int,
 # How a caller comes by a source id at all. There is no listing of the corpus,
 # so pointing at one would be inventing a path that does not exist.
 
+# A handle from somewhere else -- an older turn's transcript, a memory, a
+# paste. The way forward is not a different id but a retrieval: the question
+# being asked now decides what evidence answers it.
+
+_STALE_HANDLE_RECOVERY = {
+    "how": "call standard.search for what this question needs; every result "
+           "carries a source_id that can then be fetched",
+    "why": "a source_id is good for the turn that retrieved it; one carried "
+           "over from an earlier turn says nothing about this question",
+    "source_id_form": "std-<32 hex>",
+}
+
 _SOURCE_RECOVERY = {
     "how": "call standard.search; every result carries the source_id to fetch "
            "or cite",
@@ -279,6 +295,23 @@ def _refused(exc: StandardToolRefusal) -> "ToolHandlerResult":
         json.dumps(exc.to_dict(), ensure_ascii=False, sort_keys=True),
         metadata={"standard_event": "standard_tool_refused",
                   "standard_refusal": exc.reason})
+
+
+def _require_owned(context: ToolExecutionContext, source_id: str) -> None:
+    """Refuse a handle this turn did not retrieve.
+
+    Checked before the store is consulted, and by every operation that
+    dereferences a handle rather than by one of them: answering "no such unit"
+    for an id that is absent and "stale" for one that is present would tell
+    anyone willing to ask twice which ids exist.
+    """
+    cache = getattr(context, "cache", None)
+
+    if cache is not None and not evidence_handles.owns(cache, source_id):
+        raise StandardToolRefusal(
+            STALE_EVIDENCE_HANDLE,
+            "that source id was not issued during this turn",
+            _STALE_HANDLE_RECOVERY)
 
 
 def _source_id(arguments: Mapping[str, object]) -> str:
@@ -521,6 +554,8 @@ class StandardToolService:
     def fetch(self, context: ToolExecutionContext, arguments: Mapping[str, object]):
         binding = self._active_binding(context, arguments)
         source_id = _source_id(arguments)
+
+        _require_owned(context, source_id)
         offset = arguments.get("text_offset", 0)
 
         try:
@@ -585,6 +620,13 @@ class StandardToolService:
         binding = self._active_binding(context, arguments)
         source_id = _source_id(arguments)
 
+        # A citation dereferences a handle too. It returns no words, but it
+        # returns the section and the page -- which is exactly what it takes
+        # to cite a clause this turn never read, and a citation is what the
+        # provenance checks downstream trust.
+
+        _require_owned(context, source_id)
+
         try:
             citation = self.retrieval.cite(
                 binding.standard_id, binding.revision, source_id)
@@ -646,13 +688,26 @@ class StandardToolService:
 
     @staticmethod
     def _answering(handler):
-        """Refusals come back as data; everything else keeps its own behaviour."""
+        """Refusals come back as data; everything else keeps its own behaviour.
+
+        This is also where a turn takes ownership of what it retrieved. Every
+        standard result passes through here, so every handle the model is
+        shown is recorded here, and nothing else has to remember to do it.
+        """
 
         def call(context: ToolExecutionContext, arguments: Mapping[str, object]):
             try:
-                return handler(context, arguments)
+                result = handler(context, arguments)
             except StandardToolRefusal as exc:
                 return _refused(exc)
+
+            cache = getattr(context, "cache", None)
+            text = getattr(result, "text", None)
+
+            if cache is not None and isinstance(text, str):
+                evidence_handles.issue(cache, text)
+
+            return result
 
         call.__name__ = getattr(handler, "__name__", "call")
 

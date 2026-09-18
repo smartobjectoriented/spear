@@ -11,6 +11,7 @@ from datetime import datetime, timezone
 from standard_schema import (
     StandardCitation, StandardIndexManifest, StandardSchemaError, sha256_json,
 )
+import standard_query_expansion
 from standard_store import StandardStore, StandardStoreError
 from standard_vector_index import (
     LocalStandardEmbedder, cosine_similarity, structural_context,
@@ -202,12 +203,22 @@ class StandardRetrieval:
         self.store, self.embedder = store, embedder
         self.policy = policy or StandardRetrievalPolicy()
         self.last_response: StandardSearchResponse | None = None
+        #: Which query terms brought in which corpus-native family terms,
+        #: for the record a diagnosis needs and the answer never sees.
+        self.last_expansion: dict = {}
 
     def _lexical(self, standard_id, revision, query, section):
         _, index = self.store.load_index(standard_id, revision)
         units = {u.source_id: u for u in self.store.load_units(standard_id, revision)}
-        terms = tokenize(query)
         count, avg = int(index["document_count"]), float(index["average_document_length"] or 1)
+
+        # A question asks with the stem; the document defines the family. The
+        # terms added here are the bound standard's own, never a synonym from
+        # somewhere else, and nothing is removed -- a query with no family in
+        # this corpus scores exactly as it did before.
+        terms, self.last_expansion = standard_query_expansion.expand(
+            tokenize(query), index["document_frequency"],
+            index["document_frequency"], count, query=query)
         k1, b = float(index["bm25"]["k1"]), float(index["bm25"]["b"])
         match = _SECTION_QUERY.match(query)
         exact_section = match.group(1) if match else None

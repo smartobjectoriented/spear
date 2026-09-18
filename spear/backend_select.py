@@ -26,7 +26,7 @@ STATE_FILE = os.path.join(os.environ.get("SPEAR_STATE_DIR", APP_DIR),
                           "active-backend.conf")
 DEFAULT_ANTHROPIC_MODEL = "claude-sonnet-5"
 
-C_DIM, C_ACCENT, C_RST = "\033[2m", "\033[38;5;208m", "\033[0m"
+C_DIM, C_ACCENT, C_RST = "\033[2m", "\033[38;5;77m", "\033[0m"
 
 BACKENDS = ("local", "remote", "reds", "anthropic")
 

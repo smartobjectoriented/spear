@@ -1083,7 +1083,7 @@ C_ERR = "\033[31m"
 C_RST = "\033[0m"
 C_DIM = "\033[2m"
 C_BOLD = "\033[1m"
-C_ACCENT = "\033[38;5;208m"   # Claude Code orange
+C_ACCENT = "\033[38;5;77m"    # the platform green
 C_CODE = "\033[38;5;114m"     # soft green for inline code
 
 
@@ -6379,7 +6379,7 @@ def load_corpus_rules():
 # ── main ─────────────────────────────────────────────────────────────
 
 def banner_art():
-    """ASCII-art header in the orange gradient the platform has always used.
+    """ASCII-art header in the platform gradient.
     Shown first, before the project picker."""
     art = [
         "  ███████╗██████╗ ███████╗ █████╗ ██████╗ ",
@@ -6389,14 +6389,14 @@ def banner_art():
         "  ███████║██║     ███████╗██║  ██║██║  ██║",
         "  ╚══════╝╚═╝     ╚══════╝╚═╝  ╚═╝╚═╝  ╚═╝",
     ]
-    grad = ["240;130;26", "240;130;26", "237;104;20",
-            "235;91;17", "233;78;15", "232;78;15"]
+    grad = ["112;196;78", "112;196;78", "94;182;66",
+            "78;168;56", "62;154;48", "56;150;46"]
     print()
 
     for line, rgb in zip(art, grad):
         print(f"\033[38;2;{rgb}m{line}{C_RST}")
 
-    print(f"\033[38;2;240;130;26m  HEIG-VD/REDS — \033[1;38;2;232;78;15m"
+    print(f"\033[38;2;112;196;78m  HEIG-VD/REDS — \033[1;38;2;56;150;46m"
           f"Specification-driven Platform for Embedded "
           f"Agentic Reasoning{C_RST}\n")
 

@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import json
 import re
+
+import answer_scope
 from dataclasses import dataclass
 
 from agent_roles import AgentRole, AgentRoleSpec
@@ -129,7 +131,7 @@ class ToolExposurePolicy:
         self, registry: ToolRegistry, role: AgentRole | AgentRoleSpec, *,
         objective: str = "", mutation_expected: bool | None = None,
         web_enabled: bool = False, memory_write_enabled: bool = False,
-        standard_bound: bool = False,
+        standard_bound: bool = False, prior_scope: str | None = None,
     ) -> ToolView:
         """The tools a role may see for this objective.
 
@@ -150,6 +152,14 @@ class ToolExposurePolicy:
         # and it wins over every verb _MUTATION can find.
 
         read_only = self.read_only_intent(objective)
+
+        # What THIS turn asked about. History may say what its words refer to;
+        # it does not add a second piece of work to a question that asked for
+        # one thing.
+        withhold_local = answer_scope.withholds_local_tools(
+            answer_scope.of(objective, prior=prior_scope,
+                            standard_bound=standard_bound),
+            standard_bound=standard_bound)
 
         # Whether the task looks like it will change something, read from the
         # objective unless the caller already knows.
@@ -206,6 +216,20 @@ class ToolExposurePolicy:
         keep = {tool.name for tool in selected}
         keep.update(tool.name for tool in candidates if tool.name in floor)
         selected = [tool for tool in candidates if tool.name in keep]
+
+        # A turn that asked about the bound document, and named nothing local,
+        # is not offered the tools that reach a working tree -- the floor
+        # included, because the floor guarantees a way to WORK and on this turn
+        # the way to work is the document. Not because reading code is wrong,
+        # but because it was not what was asked: a conversation that has spent
+        # the morning in a codebase otherwise answers a question about the
+        # document with the codebase, and every identifier in that answer is
+        # real, grounded, and unrequested. They return the moment a turn asks
+        # about an implementation -- see answer_scope.
+
+        if withhold_local:
+            selected = [tool for tool in selected
+                        if tool.category not in answer_scope.LOCAL_CATEGORIES]
 
         definitions = tuple(ToolDefinition(
             tool.name, tool.description, dict(tool.input_schema)

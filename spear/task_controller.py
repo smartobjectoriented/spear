@@ -342,11 +342,19 @@ class TaskController:
         )
 
         if request.role_aware_tools:
+            import answer_scope
+
+            bound = context.standard_binding is not None
             view = self.tool_exposure_policy.select(
                 self.registry, AgentRole.MAIN, objective=request.objective,
                 web_enabled=request.web_enabled,
                 memory_write_enabled=request.memory_write_enabled,
-                standard_bound=context.standard_binding is not None,
+                standard_bound=bound,
+                # What the turn before this one was about, so a message that
+                # refers back ("does that comply?") is understood as being
+                # about the thing it points at.
+                prior_scope=answer_scope.prior_scope(
+                    context.conversation, standard_bound=bound),
             )
         else:
             # Controlled ablation: expose the same registry definitions in

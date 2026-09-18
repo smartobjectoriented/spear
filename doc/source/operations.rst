@@ -1,3 +1,5 @@
+.. _operations:
+
 ==========
 Operations
 ==========
@@ -47,7 +49,7 @@ mechanism that refused.  The vocabulary is deliberately narrow.
    * - ``slirp4netns network backend unavailable: helper is absent``
      - ``slirp4netns`` not found.
    * - ``… pinned namespace attachment requires --netns-type and --userns-path``
-     - The helper is too old.  There is no fallback; see :doc:`network`.
+     - The helper is too old.  There is no fallback; see :doc:`/harness/network`.
    * - ``… containment failure``
      - The backend is poisoned: a previous run could not confirm the sandbox
        child died.  Restart the chat session.
@@ -70,7 +72,7 @@ No user bus
 The harness fails closed, by design.  If SPEAR must run without an
 interactive session, the deployment decision is
 ``loginctl enable-linger <user>`` — taken by an administrator.  The runtime
-never does it (:doc:`resource_control`).
+never does it (:doc:`/harness/resource_control`).
 
 Inspecting a live scope
 =======================
@@ -165,17 +167,17 @@ Known environment quirks
      - Explanation
    * - ``Read-only file system`` writing under ``/etc``
      - Expected.  ``/etc`` is a sealed tmpfs holding only ``alternatives``;
-       only ``/workspace`` is writable (:doc:`sandbox`).
+       only ``/workspace`` is writable (:doc:`/harness/sandbox`).
    * - A tool needs a file from the host ``/etc``
      - It will not find it.  Only ``/etc/alternatives`` is bound, plus the
        generated resolver files on the network profile.
    * - ``drawio`` CLI export fails on every file
      - snap 30.4.1 raises ``ReferenceError: next is not defined`` from its own
        ``electron.js``.  The documentation renders its SVGs directly instead
-       (:doc:`directory_layout`).
+       (:doc:`/directory_layout`).
    * - Network tests flaky under heavy load
      - the slirp readiness wait is a wall-clock timeout; the attachment itself
-       is timing-independent (:doc:`network`).
+       is timing-independent (:doc:`/harness/network`).
    * - Suspend breaks a running CUDA job
      - unrelated to the harness, but a recurring loss on this workstation:
        do not suspend during a fine-tuning run.

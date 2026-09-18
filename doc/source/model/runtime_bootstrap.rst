@@ -1,3 +1,5 @@
+.. _runtime_bootstrap:
+
 Rebuilding the runtime
 ======================
 

@@ -1,3 +1,5 @@
+.. _tool_harness:
+
 ======================
 Tool execution harness
 ======================
@@ -27,7 +29,7 @@ The two schemas that gate saved measure 155 tokens of a 65536-token window; a
 tool the model cannot see is one it narrates instead of using.
 
 
-.. figure:: img/spear_harness.svg
+.. figure:: /img/spear_harness.svg
    :width: 100%
    :alt: Tool execution harness architecture
 
@@ -96,7 +98,7 @@ Execution layer — *how it is confined*
    closed-network path; ``_run_with_slirp()`` executes the network path.
 
 ``ResourceLimits`` / ``CgroupLimits``
-   Two orthogonal resource contracts.  See :doc:`resource_control` for why
+   Two orthogonal resource contracts.  See :doc:`/harness/resource_control` for why
    there are two and why neither replaces the other.
 
 ``SystemdScopeRunner``
@@ -124,7 +126,7 @@ Life of a tool call
    the bwrap binary, ``prlimit`` if resource limits are active, the cgroup
    mechanism if cgroup limits are active, and for network work the slirp
    helper plus its pinned-namespace support.
-#. The command runs, wrapped as described in :doc:`sandbox`.
+#. The command runs, wrapped as described in :doc:`/harness/sandbox`.
 #. The substrate returns a ``ToolResult``; the router normalizes it as a
    ``ToolResultEnvelope``.
 #. Large safe output is kept in ``ResultStore`` while only a bounded preview is
@@ -196,7 +198,7 @@ signalled.  On a machine that spawns processes as fast as a build does, that is
 not a theoretical concern.  ``_stop_namespace_child()`` retries once through
 the *same* pidfd and has deliberately no ``os.kill`` fallback.
 
-The pidfd and the namespace handles introduced in :doc:`network` have distinct
+The pidfd and the namespace handles introduced in :doc:`/harness/network` have distinct
 roles that are worth keeping straight:
 
 .. list-table::

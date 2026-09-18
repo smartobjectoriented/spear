@@ -1,3 +1,5 @@
+.. _container:
+
 =========
 Container
 =========
@@ -47,7 +49,7 @@ to be handed around; ``--network host`` makes ``127.0.0.1`` the same thing on
 both sides anyway.
 
 **The current directory is translated.**  The harness runs its tools in the
-cwd, whatever the corpus (:doc:`retrieval`), so the host cwd is mapped to the
+cwd, whatever the corpus (:doc:`/retrieval`), so the host cwd is mapped to the
 matching path under ``/corpora`` and passed as the container's working
 directory.  Without it every session would start at the mount root and
 ``cd ~/soo/so3/so3`` would mean nothing.
@@ -213,7 +215,7 @@ in the image), where the workstation registry uses absolute paths under
 ``/home/operator``.  That is what makes one
 image work for someone whose checkouts live elsewhere;
 ``resolve_corpus_path()`` leaves absolute paths untouched, so the workstation
-keeps behaving exactly as before (:doc:`retrieval`).
+keeps behaving exactly as before (:doc:`/retrieval`).
 
 A tree the host does not have is not an error.  The entrypoint prints what
 resolved and what did not, at startup, rather than letting a missing corpus
@@ -239,7 +241,7 @@ The two flags that are not optional
    --security-opt seccomp=unconfined --security-opt apparmor=unconfined
 
 The harness runs **every** command inside bubblewrap and refuses to run any
-without it (:doc:`sandbox`).  Docker's default seccomp profile blocks
+without it (:doc:`/harness/sandbox`).  Docker's default seccomp profile blocks
 ``clone(CLONE_NEWUSER)``, so ``bwrap`` cannot start, and the failure surfaces
 as ``sandbox unavailable`` — which reads like a broken harness rather than a
 missing run flag.  ``spear-docker.sh`` passes both, and ``entrypoint.sh``

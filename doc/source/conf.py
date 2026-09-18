@@ -58,7 +58,9 @@ language = u'en'
 numfig = True
 
 exclude_patterns = []
-pygments_style = 'sphinx'
+# 'default' is more contrasted than the 'sphinx' style, which
+# matters for the long shell transcripts in these pages.
+pygments_style = 'default'
 
 # -- Options for HTML output -----------------------------------------------
 

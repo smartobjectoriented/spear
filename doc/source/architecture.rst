@@ -1,3 +1,5 @@
+.. _architecture:
+
 ====================
 Harness architecture
 ====================
@@ -123,7 +125,7 @@ rather than calls: canonical episode capture, SFT and preference curation,
 governance, readiness, the frozen bundle, and the operator control plane that
 launches a job.  It sits outside the turn — nothing in it is model-visible, no
 tool reaches it, and freezing a bundle executes no training.  It has its own
-chapter, :doc:`training`.
+chapter, :doc:`/model/training`.
 
 The coupling that does exist runs one way and is deliberate: ``AgentRuntime``
 and ``TaskController`` emit trajectories, ``rag_chat`` owns the ``/finetune``

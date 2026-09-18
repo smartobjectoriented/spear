@@ -1,9 +1,18 @@
+.. _introduction:
+
 ============
 Introduction
 ============
 
 What SPEAR is
 ================
+
+.. figure:: img/spear_overview.svg
+   :width: 100%
+   :alt: SPEAR overall architecture
+
+   Overall architecture: entry points, the Python core, model serving and the
+   confined tool execution path.
 
 SPEAR is a self-hosted coding assistant that runs entirely on the
 workstation.  No prompt, no source file and no command output leaves the
@@ -15,18 +24,18 @@ It has three parts:
 **A served model.**
    ``llama-server`` from ``llama.cpp-next`` serves a quantised GGUF model over
    an OpenAI-compatible HTTP API on ``127.0.0.1:8080``.  See
-   :doc:`model_serving`.
+   :doc:`/model/model_serving`.
 
 **A retrieval corpus.**
    A Chroma vector store indexed from the source trees the assistant is
    expected to reason about — SO3, the EDGE-M1 products, LVGL, U-Boot and the
-   LLM infrastructure itself.  See :doc:`retrieval`.
+   LLM infrastructure itself.  See :doc:`/retrieval`.
 
 **An execution harness.**
    The part that lets the model actually *do* things: read files, run builds,
    run tests.  Everything the model proposes is classified, authorized,
    confined and audited before it runs.  This is where most of the engineering
-   — and most of this documentation — lives.  See :doc:`tool_harness`.
+   — and most of this documentation — lives.  See :doc:`/harness/tool_harness`.
 
 Why the harness is the interesting part
 =======================================
@@ -77,7 +86,7 @@ independent on purpose: each one assumes the others may fail.
      - memory, task count and CPU of the command *and every descendant*
 
 The order in which these wrap each other is fixed and is not an
-implementation detail; see :doc:`sandbox`.
+implementation detail; see :doc:`/harness/sandbox`.
 
 Trust boundaries
 ================
@@ -102,11 +111,11 @@ What this documentation covers
 ==============================
 
 The chapters follow the life of a tool call: what may run
-(:doc:`security_model`), where it runs (:doc:`sandbox`), how it reaches the
-network if allowed (:doc:`network`), what resources it may consume
-(:doc:`resource_control`), how all of that is verified (:doc:`testing`), and
-what to look at when it misbehaves (:doc:`operations`).
+(:doc:`/harness/security_model`), where it runs (:doc:`/harness/sandbox`), how it reaches the
+network if allowed (:doc:`/harness/network`), what resources it may consume
+(:doc:`/harness/resource_control`), how all of that is verified (:doc:`/testing`), and
+what to look at when it misbehaves (:doc:`/operations`).
 
 Several sections quote real measurements.  Those numbers come from this
-machine and are labelled as such; :doc:`resource_control` discusses which of
+machine and are labelled as such; :doc:`/harness/resource_control` discusses which of
 them are portable and which are not.

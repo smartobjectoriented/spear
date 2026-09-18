@@ -1,3 +1,5 @@
+.. _testing:
+
 =======
 Testing
 =======
@@ -107,7 +109,7 @@ The always-on suites are deterministic.  One property required care:
    :class: warning
 
    Any synchronous work between reading bwrap's info-fd and spawning the
-   network helper breaks the network path (:doc:`network`).  A test that wants
+   network helper breaks the network path (:doc:`/harness/network`).  A test that wants
    to observe the live scope must sample from a **side thread**, and that
    thread must be cheap — an early version scanned all of ``/proc`` every
    10 ms and made the suite flaky through GIL contention alone.
@@ -147,5 +149,5 @@ Live smoke test
 ===============
 
 The end-to-end check that serving and the backend contract are both healthy is
-in :doc:`model_serving`; the expected answer is ``end_turn`` /
+in :doc:`/model/model_serving`; the expected answer is ``end_turn`` /
 ``EDGEM-BACKEND-OK`` / empty tool tuple.

@@ -1,3 +1,5 @@
+.. _network:
+
 ===============
 Network backend
 ===============
@@ -7,7 +9,7 @@ at all.  When the ``network`` capability is granted, connectivity is provided
 by attaching ``slirp4netns`` to that private namespace — a user-mode network
 stack, no root, no bridge, no host interface exposed.
 
-.. figure:: img/spear_network.svg
+.. figure:: /img/spear_network.svg
    :width: 100%
    :alt: Timing-independent slirp4netns attachment
 
@@ -252,4 +254,4 @@ release write never happens and the command stays blocked forever on its
 pidfd, terminates the scope, stops the helper and closes every descriptor.
 
 If the child's termination cannot be confirmed, the backend is poisoned for the
-lifetime of the sandbox object (see :doc:`tool_harness`).
+lifetime of the sandbox object (see :doc:`/harness/tool_harness`).

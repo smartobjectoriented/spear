@@ -1,3 +1,5 @@
+.. _usage:
+
 ===================
 Using the assistant
 ===================
@@ -20,7 +22,7 @@ and a collection derived from its path.
 The active corpus is auto-detected from the current directory; otherwise a
 picker lists them.  Launching in an unregistered multi-component workspace
 offers to split it into one corpus per large sub-tree, so that a huge upstream
-tree never dilutes the index.  :doc:`retrieval` is the full account.
+tree never dilutes the index.  :doc:`/retrieval` is the full account.
 
 Command line
 ============
@@ -93,7 +95,7 @@ Session commands:
 
 ``/good`` / ``/bad``
    Save the last exchange as a fine-tuning sample, or log a bad one.  Bad ones
-   are never trained on.  See :doc:`training`.
+   are never trained on.  See :doc:`/model/training`.
 
 Multi-line paste is supported; ``ctrl+c`` interrupts generation; ``Enter``
 confirms tool prompts; arrows, ``Home``/``End`` and ``ctrl+r`` come from
@@ -182,6 +184,6 @@ Each of these was added after the failure it prevents:
 * grounded edit errors: a failed exact-match edit returns the file's real tail
   and points the model at ``append_file``.
 
-The authorization rules behind the first bullet are :doc:`security_model`; the
-confinement behind all of them is :doc:`sandbox`, :doc:`network` and
-:doc:`resource_control`.
+The authorization rules behind the first bullet are :doc:`/harness/security_model`; the
+confinement behind all of them is :doc:`/harness/sandbox`, :doc:`/harness/network` and
+:doc:`/harness/resource_control`.

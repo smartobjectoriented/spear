@@ -1,8 +1,10 @@
+.. _sandbox:
+
 =======
 Sandbox
 =======
 
-.. figure:: img/spear_sandbox.svg
+.. figure:: /img/spear_sandbox.svg
    :width: 100%
    :alt: Wrapper order and confinement
 
@@ -49,7 +51,7 @@ Namespaces
 ``--unshare-net`` is unconditional — including for the network profile.  The
 sandbox always starts with no network at all; connectivity, when granted, is
 added afterwards by attaching a helper to the private namespace
-(:doc:`network`).  There is no code path in which the command shares the host
+(:doc:`/harness/network`).  There is no code path in which the command shares the host
 network namespace.
 
 ``--die-with-parent``
@@ -195,7 +197,7 @@ Network
 -------
 
 ``_run_with_slirp()`` coordinates bwrap's private network namespace with the
-helper's ready/exit protocol.  It is described in full in :doc:`network`.
+helper's ready/exit protocol.  It is described in full in :doc:`/harness/network`.
 
 Preflight
 =========

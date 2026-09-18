@@ -1,3 +1,5 @@
+.. _final_harness_audit:
+
 =====================
 Final harness audit
 =====================
@@ -5,7 +7,7 @@ Final harness audit
 This page records the final evidence-driven production profile. It is a
 description of the current implementation, not a promise of model quality.
 
-.. figure:: img/spear_architecture_dark.svg
+.. figure:: /img/spear_architecture_dark.svg
    :width: 100%
    :alt: The agent harness in one picture: layers, roles and boundaries
 
@@ -53,7 +55,7 @@ OPERATOR-ONLY, OUTSIDE THE TURN
 * the training subsystem — capture, curation, governance, readiness, frozen
   bundles, and the launcher.  Nothing in it is model-visible and freezing runs
   no training; its own readiness vocabulary tops out at ``READY_FOR_EXPERIMENT``
-  (:doc:`training`).
+  (:doc:`/model/training`).
 
 Explorer and Reviewer remain isolated, read-only roles and can be enabled by
 an explicit ``TaskRequest`` or benchmark configuration. They are not
@@ -103,7 +105,7 @@ and legacy callers still reach them.
 nothing reads it.  It is recorded here rather than quietly deleted because a
 field with that name invites the reading that the registry filters tools by
 execution mode, and it does not: what a mode actually gates is authorization,
-in ``CapabilityPolicy`` and ``CommandPolicy`` (:doc:`security_model`).  Either
+in ``CapabilityPolicy`` and ``CommandPolicy`` (:doc:`/harness/security_model`).  Either
 the field grows a reader or it goes; leaving it as decoration is the one option
 that misleads. Explorer/Reviewer contract reliability,
 long-context benchmark scoring and repair quality need more model evidence.

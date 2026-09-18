@@ -1,8 +1,10 @@
+.. _security_model:
+
 ==============
 Security model
 ==============
 
-.. figure:: img/spear_security.svg
+.. figure:: /img/spear_security.svg
    :width: 100%
    :alt: Modes, capabilities and the authorization pipeline
 

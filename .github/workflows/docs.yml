@@ -38,8 +38,13 @@ jobs:
       - name: Install the documentation toolchain
         run: python -m pip install --upgrade pip -r doc/requirements.txt
 
+      # -W turns warnings into errors. Without it, an extension that
+      # cannot reach its native tool only logs a warning and drops the
+      # node: the job stays green while the diagrams are missing from
+      # the published pages. --keep-going reports every warning of the
+      # run instead of stopping at the first one.
       - name: Build the HTML documentation
-        run: make -C doc html
+        run: sphinx-build -W --keep-going -b html doc/source doc/build/html
 
       - name: Upload the built site
         uses: actions/upload-pages-artifact@v3

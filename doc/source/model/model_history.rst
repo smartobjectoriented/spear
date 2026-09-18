@@ -1,3 +1,5 @@
+.. _model_history:
+
 ==============================
 Model history and what it cost
 ==============================
@@ -23,15 +25,15 @@ and they run at different speeds::
                                                                         assistant
 
 **Retrieval** brings *content* on the fly — indexed code and documentation,
-refreshed by a reindex, no retraining (:doc:`retrieval`).
+refreshed by a reindex, no retraining (:doc:`/retrieval`).
 
 **A QLoRA adapter** brings *behaviour* — domain style, vocabulary, reflexes —
 frozen into a small adapter served with ``--lora`` on top of the frozen base.
 Only about 0.1 % of the weights are trained, which is why a run costs a few
-dollars (:doc:`training`).
+dollars (:doc:`/model/training`).
 
 **Memory and skills** are immediate, local context that the model writes
-itself, with confirmation, and recalls across sessions (:doc:`retrieval`).
+itself, with confirmation, and recalls across sessions (:doc:`/retrieval`).
 
 The contextual-learning loop — skills plus memory — is comparable to what Nous
 Research's Hermes Agent does.  What is unusual here is that the same system
@@ -49,7 +51,7 @@ Coder-32B rewrote whole files.  The inference host serves it at roughly
 157 tokens/s in Q8_0.
 
 Q8 was chosen over Q4 for accuracy: measured, it costs about 7 % of throughput
-to double the precision of the weights.  :doc:`model_serving` describes the
+to double the precision of the weights.  :doc:`/model/model_serving` describes the
 serving profile and how to override the model or load an adapter for one run.
 
 No fine-tune is served today
@@ -99,4 +101,4 @@ competes with it.
 
 So no adapter is served.  The pipeline is kept for the thing that would justify
 one: **behaviour, not facts**.  What a governed dataset looks like, and what it
-takes to run a job on the card that also serves the model, is :doc:`training`.
+takes to run a job on the card that also serves the model, is :doc:`/model/training`.

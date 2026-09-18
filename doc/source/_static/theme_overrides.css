@@ -45,3 +45,17 @@
 .rst-content .admonition-title {
     font-weight: 600;
 }
+
+/* The landing page sets its own alignment through `.. rst-class::`, the way
+   the other projects in this family do. Without these two rules the class is
+   accepted, emitted into the HTML, and does nothing — which is worse than
+   not having it, because the page looks deliberate and is not. */
+.center h1,
+.center h2 {
+    text-align: center;
+}
+
+.left h1,
+.left h2 {
+    text-align: left;
+}

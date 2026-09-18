@@ -1,3 +1,5 @@
+.. _retrieval:
+
 =========
 Retrieval
 =========
@@ -102,7 +104,7 @@ That root defaults to the **repository root**, so the six corpora that live
 inside the repository (``llama.cpp-next``, ``qwen3-finetune``, ``src``,
 ``spear`` and the two under ``corpora/``) are found wherever the
 repository is cloned, and a container overrides the root with its mount point
-(:doc:`container`).
+(:doc:`/container`).
 
 Federated and shared corpora
 ============================
@@ -132,7 +134,7 @@ The prefix rewrites each chunk's ``# File:`` header so the path is usable from
 where the tools actually run — relative while the corpus sits under the launch
 directory, **absolute** otherwise, because ``../../../opt/llm/...`` is both
 unusable and refused by the command policy.  Absolute paths outside the
-workspace are readable (:doc:`security_model`), so what the model is shown is
+workspace are readable (:doc:`/harness/security_model`), so what the model is shown is
 what it can open.
 
 .. _retrieval-measured-effect:
@@ -180,7 +182,7 @@ safety story:
 ``PROJECT_ROOT``
    Where the **tools** run: the real current directory, always.  It is the
    workspace root the execution harness validates every filesystem path
-   against (:doc:`security_model`).
+   against (:doc:`/harness/security_model`).
 
 Only the cwd moves ``PROJECT_ROOT``.  Nothing in a question does — not a
 ``--corpus`` flag, and certainly not a corpus name appearing in a sentence.

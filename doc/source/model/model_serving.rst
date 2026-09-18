@@ -1,3 +1,5 @@
+.. _model_serving:
+
 =============
 Model serving
 =============
@@ -125,7 +127,7 @@ This placement is load-bearing for the security model.  The model server sits
 in ``system.slice``; sandboxed tool commands sit in transient scopes under
 ``user.slice/…/app.slice``.  The two trees are disjoint, so no memory limit,
 OOM kill or task-limit hit inside a tool call can reach the model server.
-:doc:`resource_control` verifies this explicitly.
+:doc:`/harness/resource_control` verifies this explicitly.
 
 Backends
 ========

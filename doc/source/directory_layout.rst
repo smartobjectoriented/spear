@@ -1,3 +1,5 @@
+.. _directory_layout:
+
 ================
 Directory layout
 ================
@@ -38,7 +40,7 @@ Top level
      - Everything about the container image: ``Dockerfile``, the build and run
        wrappers, the entrypoint and the relative-path corpus registry.  It sits
        at the root rather than under ``spear/`` because it draws on both
-       (:doc:`container`).
+       (:doc:`/container`).
    * - ``llama.cpp-next/``
      - 1.3 G
      - The ``llama.cpp`` checkout and build providing ``llama-server``.
@@ -46,7 +48,7 @@ Top level
      - 5.6 G
      - The fine-tuning working area: LoRA trainers, pod and reds-ml scripts,
        corpus builders and the load preflight.  The *governed* training path
-       lives in the application instead (:doc:`training`).
+       lives in the application instead (:doc:`/model/training`).
    * - ``src/``
      - 351 M
      - **Git submodule** (``llm/spear-src``).  An exact rsync of the ML
@@ -112,7 +114,7 @@ The application
    * - ``training*.py`` / ``sft_dataset.py`` / ``preference_dataset.py``
      - The fine-tuning subsystem: capture, curation, governance, readiness,
        frozen bundles and the operator control plane.  Fifteen modules, none
-       of them model-visible (:doc:`training`).
+       of them model-visible (:doc:`/model/training`).
    * - ``inference_service.py`` / ``remote_readiness.py``
      - Operator-only control of the serving process, and what a training host
        is missing.  Used by the single-GPU handoff.
@@ -120,7 +122,7 @@ The application
      - The startup backend picker.  Writes ``active-backend.conf``.
    * - ``tests/``
      - Forty-four test modules, 851 tests.  ``test_tool_runtime.py`` is the
-       largest; see :doc:`testing`.
+       largest; see :doc:`/testing`.
 
 Configuration
 =============
@@ -159,11 +161,11 @@ Configuration
      - The tool usage guide handed to the model.
    * - ``rules.d/``
      - Prompt fragments injected per task kind.  ``rules.d/corpora/<name>.md``
-       holds a corpus's orientation map (:doc:`retrieval`).
+       holds a corpus's orientation map (:doc:`/retrieval`).
    * - ``skills/``
      - Task recipes (build debugging, rootfs packages, code quality…), each
        optionally opening with a ``SKILL.md`` frontmatter block read by
-       ``skill_library.py`` (:doc:`retrieval`).
+       ``skill_library.py`` (:doc:`/retrieval`).
 
 .. _resource-directories:
 
@@ -266,7 +268,7 @@ These are on ``PATH`` (via ``~/.local/bin``):
 ``spear-docker``
    The same assistant in a container.  It takes ``spear-chat``'s arguments and
    adds the mounts, the tunnel and the working-directory translation
-   (:doc:`container`).
+   (:doc:`/container`).
 
 ``spear-corpus``
    Manages the ``projects.json`` registry: ``add`` a tree, or ``scan`` a

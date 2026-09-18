@@ -2,7 +2,41 @@ SPEAR documentation
 ======================
 
 Sphinx documentation for the local LLM assistant infrastructure under
-/opt/llm. Layout and build targets mirror soo/so3/doc.
+/opt/llm. Layout, configuration and landing page follow the same model as
+soo/infrabase/doc, which is the shared layout across this family of projects:
+doc/Makefile, sources in doc/source/*.rst, configuration in
+doc/source/conf.py, output in doc/build/ (generated — never edit it, never
+index it).
+
+Structure
+---------
+
+Top-level pages are flat; a topic with several pages gets a directory and an
+eponymous index (harness/harness.rst, model/model.rst), the way infrabase
+groups rootfs/, build_system/ and base_extension/.
+
+index.rst carries the REDS/HEIG-VD logotype and nothing else of its own: the
+toctree is hidden and numbered, and the landing sections are `.. rst-class::`
+blocks of cross-references. Every page therefore needs a label (`.. _name:`
+above its title) so those references are `:ref:` and break the build if their
+target disappears.
+
+Cross-references are absolute (:doc:`/harness/sandbox`), and so are image
+paths from a subdirectory (/img/...). A relative reference changes meaning
+with the directory of the page that writes it, which is exactly what moving
+a page does.
+
+Warnings are errors
+-------------------
+
+CI builds with `sphinx-build -W --keep-going`. Without -W, an extension that
+cannot reach its native tool only logs a warning and drops the node: the job
+stays green while the diagrams are missing from the published pages.
+
+To check warnings reliably, clean first — an incremental build skips the
+consistency check:
+
+    make clean && make html
 
 Build
 -----

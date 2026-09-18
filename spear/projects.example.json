@@ -8,6 +8,43 @@
       "micropython"
     ]
   },
+  "infrabase": {
+    "path": "/path/to/soo/infrabase",
+    "kind": "generic",
+    "_comment": "a build-system tree that VENDORS its components, and the lesson is GRANULARITY. Excluding './linux' wholesale looks right -- 3 GB of fetched kernel under it -- but infrabase TRACKS 43 files in there: the br2-external skeleton with its .its files, and the userspace sources under linux/usr. Measured on the real tree, the wholesale exclude yields 197 indexable files and 13 .its for a 42 GB build system; excluding the fetched and built subtrees one level down instead yields 3037 and 19. Same cap, fifteen times the corpus. Two things are already handled and need no entry here: '.back' snapshots are skipped by suffix wherever they appear, and include_build drops build/{tmp,sstate-cache,downloads,cache,deploy} by itself -- './build/bitbake' below is bitbake's own source, which that list does not cover. './linux/rootfs.0' does need saying: the indexer deliberately does not treat '.0' as a snapshot suffix, because it collides with version directories. Finally the leading ./ matters: linux, qemu, u-boot, so3 and avz occur again as recipe directories under build/meta-*, which carry the recipes and ITS files this corpus exists for -- a bare name would take those with the vendored source.",
+    "include_build": true,
+    "exclude": [
+      "./linux/linux",
+      "./linux/rootfs",
+      "./linux/rootfs.0",
+      "./linux/images",
+      "./build/bitbake",
+      "./qemu",
+      "./u-boot",
+      "./so3",
+      "./avz",
+      "./doc/build"
+    ],
+    "corpora": [
+      "buildsystem-a",
+      "buildsystem-b"
+    ]
+  },
+  "ib_so3": {
+    "path": "/path/to/soo/infrabase/so3",
+    "kind": "generic",
+    "_comment": "the ib_ prefix is a CONVENTION, not a feature: a vendored checkout indexed in its own right, named so it cannot be confused with the upstream corpus of the same project. infrabase/so3 and the so3 corpus above are different versions -- the product BSP pins its own -- and answering from the wrong one is the failure this prevents. Sized to fit: 32k files, under the 60k cap that indexing now treats as an error rather than a warning. infrabase/linux (109k) and infrabase/qemu (81k) do NOT fit, and both already have upstream corpora, so they stay excluded rather than prefixed."
+  },
+  "ib_u-boot": {
+    "path": "/path/to/soo/infrabase/u-boot",
+    "kind": "generic",
+    "_comment": "same convention, 20k files"
+  },
+  "ib_avz": {
+    "path": "/path/to/soo/infrabase/avz",
+    "kind": "generic",
+    "_comment": "same convention, 1k files"
+  },
   "lvgl": {
     "path": "/path/to/lvgl",
     "kind": "generic",

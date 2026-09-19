@@ -49,6 +49,9 @@ import re
 from dataclasses import dataclass, field
 from enum import StrEnum
 
+import requirement_set
+from requirement_set import Disposition, RequirementSet
+
 
 class Phase(StrEnum):
     INVESTIGATE = "investigate"
@@ -263,22 +266,53 @@ class GapItem:
     correction: str = ""
     validation: str = ""
 
+    #: What is to become of this requirement. Not one of FIELDS: the seven
+    #: are what must be SAID, and this is what is being said about them. It
+    #: defaults to the ordinary case, so a turn that says nothing about it
+    #: has planned a change, which is what calling this tool usually means.
+    disposition: str = str(Disposition.CHANGE_PLANNED)
+
     FIELDS = ("requirement", "requirement_evidence", "current_behaviour",
               "implementation_evidence", "gap", "correction", "validation")
 
     @classmethod
     def from_mapping(cls, raw):
         raw = raw if isinstance(raw, dict) else {}
+        stated = str(raw.get("disposition") or "").strip().lower()
 
-        return cls(**{name: str(raw.get(name) or "").strip()
+        return cls(disposition=(stated if stated in
+                                {str(value) for value in requirement_set.STATED}
+                                else str(Disposition.CHANGE_PLANNED)),
+                   **{name: str(raw.get(name) or "").strip()
                       for name in cls.FIELDS})
 
     def missing(self):
         """The fields this item left empty, in declaration order."""
         return tuple(name for name in self.FIELDS if not getattr(self, name))
 
+    def settled_disposition(self):
+        """The label, corrected by the item's own content.
+
+        An item that says it could not be determined, and then names the
+        function to change and the test that will prove it, has determined it.
+        Measured: two runs of one workflow answered `undetermined` to every
+        requirement they carried while describing concrete corrections for
+        each -- the label is cheap and the seven fields are not, so the fields
+        decide. It is the same principle as everywhere else here: what the
+        turn DID beats what the turn called it.
+        """
+        if self.disposition != str(Disposition.UNDETERMINED):
+            return self.disposition
+
+        names = _PATH.findall(self.correction) or re.findall(
+            r"\b\w+\(\)", self.correction)
+
+        return (str(Disposition.CHANGE_PLANNED) if names and self.gap
+                else self.disposition)
+
     def to_dict(self):
-        return {name: getattr(self, name) for name in self.FIELDS}
+        return {**{name: getattr(self, name) for name in self.FIELDS},
+                "disposition": self.disposition}
 
 
 @dataclass(frozen=True)
@@ -339,6 +373,11 @@ class WorkPhaseLedger:
     phase: Phase = Phase.INVESTIGATE
     evidence: EvidenceState = field(default_factory=EvidenceState)
 
+    #: What the previous grounded turn established and this one inherited.
+    #: Empty on a turn that established its own scope, and then the coverage
+    #: gate below has nothing to ask for.
+    requirements: RequirementSet = field(default_factory=RequirementSet)
+
     items: list = field(default_factory=list)
     rejected: list = field(default_factory=list)
     replans: list = field(default_factory=list)
@@ -365,7 +404,7 @@ class WorkPhaseLedger:
     # -- engagement -------------------------------------------------------
 
     def engage(self, *, authority_bound, write_requested, root="",
-               prior_authority=()):
+               prior_authority=(), requirements=None):
         """Does this lifecycle govern the turn at all?
 
         Both halves, and only both. A normative question with no change asked
@@ -383,6 +422,28 @@ class WorkPhaseLedger:
         # implementation still has to be read in THIS turn before anything
         # writes, which is the half that was missing in the failure.
         self.evidence.observe_authority(prior_authority, 0)
+
+        # The contract, when the turn pointed back at one. Its provisions
+        # count as authority evidence for planning, for the same reason the
+        # carried clauses do: they were read, in this session, out of the
+        # bound document.
+        if requirements is not None and self.engaged:
+            self.requirements = requirements
+            carried_keys = set()
+
+            for item in requirements:
+                carried_keys |= requirement_set.citations_in(item.key)
+
+                if item.section:
+                    carried_keys.add(item.section)
+
+            # ...and the section each printed citation sits in. "Rule
+            # 8.4.1.1-3" identifies a provision; the evidence state keys on
+            # sections, and without the ordinal stripped off, a plan item
+            # citing the very rule it inherited was refused as unread.
+            carried_keys |= {key.rsplit("-", 1)[0]
+                             for key in list(carried_keys) if "-" in key}
+            self.evidence.observe_authority(carried_keys, 0)
 
         return self.engaged
 
@@ -483,6 +544,17 @@ class WorkPhaseLedger:
         self.items.extend(v.item for v in accepted)
         self.rejected.extend(rejected)
 
+        # Bind each accepted item to the carried requirement it answers, and
+        # record what the turn said would become of it. An item that answers
+        # nothing carried is fine -- a turn may discover a requirement of its
+        # own -- but it closes nothing either.
+
+        for verdict in accepted:
+            self.requirements.dispose(
+                verdict.item.requirement_evidence,
+                verdict.item.settled_disposition(),
+                note=verdict.item.correction[:200])
+
         if self.items and self.phase in (Phase.INVESTIGATE, Phase.PLAN):
             self.phase = Phase.EDIT
         elif self.items and self.phase == Phase.REVIEW:
@@ -552,10 +624,55 @@ class WorkPhaseLedger:
 
     # -- the write gate ---------------------------------------------------
 
+    def uncovered_requirements(self):
+        """Carried requirements this turn has said nothing about yet.
+
+        Not the same question as `open_items`. This one is about SILENCE, and
+        it is what the write gate asks: a requirement the turn has declared
+        undeterminable has been answered and does not hold the gate shut, even
+        though it does keep the turn from being finished.
+        """
+        return self.requirements.unstated()
+
     def may_write(self):
         """Whether a mutating action may run right now, and why not."""
         if not self.engaged:
             return WriteDecision(True)
+
+        # The coverage gate, and it is checked BEFORE the phase: a plan that
+        # covers one of five carried requirements is a plan for one fifth of
+        # the task, and letting it write is how the other four stop being
+        # mentioned. Four runs of the same two turns implemented between one
+        # and eight of the behaviours the first turn had established; the
+        # ones that dropped requirements dropped them here, silently.
+        #
+        # Every disposition is accepted, including "I could not tell". What
+        # is refused is saying nothing at all.
+
+        open_items = self.uncovered_requirements()
+
+        if open_items and self.phase != Phase.REVIEW:
+            # A requirement that names several cases is not closed by a
+            # disposition that answers one of them, so the cases are put in
+            # front of the turn with the requirement. Which cases they are is
+            # read out of the provision's own words -- see requirement_set.
+            listed = "; ".join(
+                f"{item.key} — {item.statement[:110]}"
+                + (f" [covers each of: {', '.join(item.members)}]"
+                   if item.members else "")
+                for item in open_items[:6])
+            more = (f" and {len(open_items) - 6} more"
+                    if len(open_items) > 6 else "")
+
+            return WriteDecision(
+                False, PLAN_INCOMPLETE,
+                f"{WRITE_BLOCKED} The previous turn established "
+                f"{len(self.requirements)} requirement(s) and "
+                f"{len(open_items)} of them still have no disposition. Call "
+                f"`{PLAN_TOOL}` once for each, citing it in "
+                f"`requirement_evidence`, with `disposition` set to "
+                f"change_planned, satisfied_already, explicitly_out_of_scope "
+                f"or undetermined. Outstanding: {listed}{more}")
 
         if self.phase in (Phase.EDIT, Phase.TEST):
             return WriteDecision(True)
@@ -609,17 +726,45 @@ class WorkPhaseLedger:
 
         return self
 
-    def note_write(self):
+    def note_write(self, paths=()):
         """A mutation that reached the tree, and the phase it landed in.
 
         The phase is recorded as it WAS, never as it should have been. If a
         write ever lands during INVESTIGATE, the diagnostic must say so rather
         than tidy it away -- that reading is the whole point of the field.
+
+        A requirement moves from planned to implemented HERE, from the paths
+        the write actually touched, and not when the model says it is done:
+        whether a file changed is a fact about the tree.
         """
         self.writes += 1
 
         if not self.first_write_phase:
             self.first_write_phase = str(self.phase)
+
+        touched = {_basename(str(path)) for path in paths if path}
+
+        if not touched:
+            return self
+
+        for item in self.items:
+            named = {_basename(found) for found
+                     in _PATH.findall(item.implementation_evidence + " "
+                                      + item.correction)}
+
+            if not (named & touched):
+                continue
+
+            carried = self.requirements.match(item.requirement_evidence)
+
+            # Promoted from UNDETERMINED too: the file was written, which
+            # settles what a label could only claim.
+            if carried is not None and carried.disposition in (
+                    str(Disposition.CHANGE_PLANNED),
+                    str(Disposition.UNDETERMINED)):
+                self.requirements.dispose(
+                    carried.key, Disposition.CHANGE_IMPLEMENTED,
+                    note=carried.note)
 
         return self
 
@@ -768,4 +913,8 @@ class WorkPhaseLedger:
             "unresolved_items": [item.requirement
                                  for item in self.unresolved_items()],
             "syntheses_forced": self.syntheses_forced,
+            "requirements": self.requirements.to_dict(),
+            "requirement_matrix": self.requirements.matrix(),
+            "requirements_open": [item.key
+                                  for item in self.requirements.open_items()],
         }

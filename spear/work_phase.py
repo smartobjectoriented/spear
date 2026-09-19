@@ -76,19 +76,28 @@ PLAN_TOOL = "plan_change"
 NO_AUTHORITY = "authority_evidence_missing"
 NO_IMPLEMENTATION = "implementation_evidence_missing"
 NO_PLAN = "plan_missing"
+#: Every carried requirement needs a disposition before anything is written.
+#: Distinct from NO_PLAN: a turn here HAS a plan, and it does not yet cover
+#: the whole of what the previous turn established.
+PLAN_INCOMPLETE = "plan_does_not_cover_the_requirements"
 REVIEW_IS_READ_ONLY = "review_is_read_only"
 
 #: How many equivalent observations in a row mean the session is no longer
 #: learning anything. Small on purpose. The failure this bounds ran to dozens
 #: of calls before anything noticed; a threshold set where the damage becomes
 #: visible is a threshold set far too late.
-REPETITION_LIMIT = 3
+#:
+#: Two, not three. At three it fired in every one of four measured runs and
+#: fired three times in each, which is a threshold being reached rather than
+#: a threshold being respected: the turn was allowed to restart exploring
+#: after each intervention. One early synthesis beats three late ones.
+REPETITION_LIMIT = 2
 
 #: And how many times the turn is told so. A demand repeated eight times in
 #: one turn is not a demand, it is wallpaper -- and every copy of it is paid
 #: for out of the context window. After this many, the harness stops asking
 #: and narrows the round instead.
-MAX_SYNTHESES = 3
+MAX_SYNTHESES = 2
 
 #: And how many times the same validation command may fail unchanged before
 #: re-running it stops being a test and becomes a wish.
@@ -530,8 +539,12 @@ class WorkPhaseLedger:
             self.items = [item for item in self.items
                           if item.requirement != invalidated]
 
-        if not self.items or invalidated:
-            self.phase = Phase.PLAN
+        # Always back to PLAN, whether or not the caller could name the item
+        # at fault. A general invalidation is the case where it CANNOT -- the
+        # project's build failing the same way twice says the understanding is
+        # wrong without saying which part of it -- and leaving such a turn in
+        # EDIT let it write its third patch against the same wrong plan.
+        self.phase = Phase.PLAN
 
         self.consecutive_without_evidence = 0
 

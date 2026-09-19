@@ -119,7 +119,11 @@ touched: a file that compiles alone says nothing about the program.
   result in this conversation confirms it.
 - If a diagnostic command returns nothing, say so and try a more thorough
   check — do not speculate.
-- Do not re-run a command that was already executed this turn.
+- Do not re-run a command that was already executed this turn, and do not
+  re-read lines you have already been shown. Reading one file through
+  overlapping windows is the most expensive habit there is: `sed -n '1,200p'`
+  followed by `sed -n '50,150p'` shows you nothing new and is answered from
+  evidence rather than run. Widen the range, open a different file, or move on.
 - MEMORY: relevant active memories may appear in the durable-memory context
   layer. They are durable knowledge, not proof of current task actions. When
   the user explicitly asks to retain a short fact and `remember` is exposed,

@@ -40,10 +40,14 @@ class ToolView:
 
 
 class ToolExposurePolicy:
+    # The inflections matter as much as the stems. `\bchange\b` does not match
+    # "do the necessary changes", and that sentence is a writing request by
+    # any reading of it: the verb list knew every verb somebody had typed into
+    # it and none of their plurals.
     _MUTATION = re.compile(
         r"\b(add|append|change|correct|create|delete|edit|fix|implement|improve|"
         r"migrate|modify|patch|refactor|remove|rename|repair|replace|rework|"
-        r"update|write)\b", re.IGNORECASE,
+        r"update|write)(?:s|es|d|ed|ing)?\b", re.IGNORECASE,
     )
     # There is no _WEB regex any more. Guessing web intent from the wording
     # cost the capability outright whenever the phrasing missed: "please get
@@ -189,6 +193,16 @@ class ToolExposurePolicy:
             elif tool.mutability == ToolMutability.MUTATING and (
                     read_only or (tool.category != ToolCategory.MEMORY
                                   and not mutation)):
+                continue
+
+            # The plan is what opens the write gate, and the gate only exists
+            # where both halves of the work do: an authoritative source to
+            # satisfy, and a request to change the code. Offered on a pure
+            # question it would be a ceremony with nothing behind it, and
+            # offered on a pure code task it would ask for citations the task
+            # has no document to give.
+
+            if tool.name == "plan_change" and not (standard_bound and mutation):
                 continue
 
             if tool.category == ToolCategory.WEB and not web_enabled:

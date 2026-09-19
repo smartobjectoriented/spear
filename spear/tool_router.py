@@ -211,6 +211,17 @@ class ToolExecutionContext:
     #: honours cannot be routed around with `sed -i`, `cp` or `>`.
     read_only: bool = False
 
+    #: Whether a mutating action may run yet, asked fresh at every call.
+    #:
+    #: Supplied by the caller because only it holds the turn's lifecycle. It
+    #: returns an object with `allowed`, `reason` and `message`; anything
+    #: falsy here means no gate, which is every turn the lifecycle does not
+    #: govern. A callable rather than a flag on purpose: the answer changes
+    #: DURING the turn, as evidence arrives and a plan is accepted, and a
+    #: value sampled when the context was built would be the answer to a
+    #: question asked before the turn started.
+    write_gate: Callable[[], Any] | None = None
+
     #: The session's permission mode, as its own name: "safe", "ask", "auto".
     #: A plain string rather than the enum so the routing layer keeps no
     #: dependency on the command runtime that owns it; ExecutionMode is a
@@ -285,6 +296,31 @@ class ToolRouter:
                 f"turn can write: answer from what you have read.",
                 spec.category.value, (),
             )
+
+        # And the other reason a write may not run yet: the turn has not
+        # established what it is changing or why. The read-only gate above
+        # answers "was this turn allowed to write at all?"; this one answers
+        # "has it earned the right yet?", and the difference matters in the
+        # refusal -- one is permanent and the other names the missing work.
+        #
+        # Refused rather than withheld. A tool that disappears from the view
+        # reads to the model as a capability it does not have, and a turn that
+        # believes it cannot write describes the change instead of making it.
+        # A refusal that says what is missing is an instruction, and it
+        # arrives through the channel the model is already reading.
+
+        if context.write_gate is not None and spec.mutability == ToolMutability.MUTATING:
+            decision = context.write_gate()
+
+            if decision is not None and not getattr(decision, "allowed", True):
+                return self._early_failure(
+                    context, tool_call_id, action_id, name, started,
+                    ToolResultStatus.DENIED,
+                    getattr(decision, "reason", "") or "investigation_incomplete",
+                    "ERROR: " + (getattr(decision, "message", "")
+                                 or "investigation incomplete"),
+                    spec.category.value, (),
+                )
 
         # The mode the session runs in, against the modes this tool declares
         # it works in. One invariant, checked once, for every tool: the

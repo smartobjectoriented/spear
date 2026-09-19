@@ -43,7 +43,7 @@ class ToolExposureTests(unittest.TestCase):
         full_cost = AgentRuntime._tool_schema_tokens(
             self.registry.definitions_for_model(), True,
         )
-        self.assertEqual(len(self.registry.definitions_for_model()), 9)
+        self.assertEqual(len(self.registry.definitions_for_model()), 10)
         self.assertLess(view.schema_token_estimate, full_cost)
 
     def test_read_only_role_views_match_trusted_specs(self):

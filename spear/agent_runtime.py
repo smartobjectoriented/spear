@@ -53,6 +53,7 @@ from verification import (
     VerificationEvidence, VerificationPolicy,
 )
 from budgets import BudgetExceeded, BudgetKind, BudgetManager
+import work_phase
 from working_state import (
     ActionKind, StateEvent, StateEventType, StateSource, TerminalStatus,
     VerificationOutcome, WorkingState,
@@ -202,6 +203,14 @@ class AgentContext:
     # resumed, and None on every non-standard turn.
 
     standard_policy: object | None = None
+
+    #: INVESTIGATE / PLAN / EDIT / TEST / REVIEW, and the gap model behind
+    #: them. Attached by the caller and engaged by the runtime for the one
+    #: shape it governs -- an authoritative source to satisfy AND a request to
+    #: change the code. On every other turn it stays disengaged and decides
+    #: nothing, so a pure question and a pure code task take the path they
+    #: always took. Turn-scoped, like the policy above.
+    work_phase: object | None = None
 
     def __post_init__(self) -> None:
         if self.max_model_rounds < 1:
@@ -446,6 +455,24 @@ _SYSTEM_CONTEXT_LAYERS = {
     ContextLayer.RETRIEVED_CONTEXT,
 }
 _WRITE_TOOLS = ("edit_file", "write_file", "append_file")
+
+#: The tool that opens the write gate. It belongs with the writing tools
+#: wherever the harness narrows a round to them: a round offered nothing but
+#: `edit_file` while the gate is still shut is a round that can only be
+#: refused, and a demand the harness has made impossible reads as the model
+#: refusing to act.
+_PLAN_TOOL = work_phase.PLAN_TOOL
+
+
+def _write_round_tools(context) -> tuple[str, ...]:
+    """The tools a round narrowed to writing may see."""
+    phase = getattr(context, "work_phase", None)
+
+    if phase is None or not getattr(phase, "engaged", False):
+        return _WRITE_TOOLS
+
+    return (_WRITE_TOOLS if phase.may_write().allowed
+            else _WRITE_TOOLS + (_PLAN_TOOL,))
 
 
 # A read that answers the same thing again has told the turn nothing. Said
@@ -804,7 +831,24 @@ def unverified_change(tool_log: Sequence[str]) -> bool:
     return last_change >= 0 and not ran_after
 
 
-def unverified_write_note(tool_log: Sequence[str], project_runs=()) -> str:
+#: Compiling the files that were touched, and nothing else. A legitimate step
+#: on the way -- it finds a typo in one round instead of three -- and not a
+#: result: it links nothing, runs nothing, and says nothing about the program
+#: the change was made to. Recognised by the shape every such command has,
+#: which is a compiler asked NOT to produce a program.
+_SYNTAX_ONLY = re.compile(
+    r"^\s*(?:\S*/)?(?:g?cc|clang|c\+\+|g\+\+|clang\+\+)\b[^|;&]*"
+    r"(?:\s-fsyntax-only\b|\s-c\b)", re.I)
+
+
+def syntax_only_verification(runs) -> bool:
+    """Every verification this turn ran was a compile of loose files."""
+    return bool(runs) and all(_SYNTAX_ONLY.search(command)
+                              for command, _ in runs)
+
+
+def unverified_write_note(tool_log: Sequence[str], project_runs=(),
+                          project_commands=None) -> str:
     """What to append when a turn changed files and never showed they work.
 
     The sibling of unsupported_change_claim, for the opposite fault. That one
@@ -857,6 +901,22 @@ def unverified_write_note(tool_log: Sequence[str], project_runs=()) -> str:
     # when nothing after it passed.
 
     if runs[-1][1]:
+        # It passed -- but a compile of the files that were touched is not a
+        # verification of the program they belong to, and a tree that declares
+        # how it builds and tests itself has said what one would be. Reported
+        # rather than demanded: the suite may be unrunnable here for reasons
+        # the turn cannot fix, and a note is honest where a nudge would just
+        # spend the last round.
+
+        declared = tuple(getattr(project_commands, "verifies", lambda: ())())
+
+        if declared and syntax_only_verification(runs):
+            return (f"\n\n⚠ {files} changed, and the only thing run afterwards "
+                    f"compiled the files in isolation. That is not the "
+                    f"project's own verification: `{declared[-1][:120]}` was "
+                    f"never run, so the change above is unproven at the level "
+                    f"the project tests itself.")
+
         return ""
 
     failed = runs[-1][0]
@@ -942,8 +1002,15 @@ def announced_but_unmade_change(text: str, tool_log: Sequence[str],
 # A turn whose request is a write, in the user's own words. Not a guess about
 # intent: these are imperatives naming an edit.
 _WRITE_REQUEST_RE = re.compile(
+    # "do the necessary changes" is a writing request in anyone's reading, and
+    # the determiner group knew "the" but not "the necessary": one adjective
+    # between the two was enough for the whole deterministic floor to miss a
+    # turn that asked for the code to be changed, leaving the decision to the
+    # model classifier alone. Two adjectives, because "all the required minor
+    # fixes" is the same sentence.
     r"\b(?:do|make|apply|carry\s+out|perform)\s+(?:the\s+|these\s+|those\s+|"
-    r"all\s+(?:the\s+)?)?(?:modifications?|changes?|edits?|task|work|fix(?:es)?)"
+    r"all\s+(?:the\s+)?)?(?:\w+\s+){0,2}?(?:modifications?|changes?|edits?|"
+    r"task|work|fix(?:es)?)"
     r"|\b(?:implement|write|edit|patch|refactor|rename|add|create|update|fix|"
     r"modify|remove|delete|adapt|adjust|amend|revise|rework|correct)\b"
     r"|\b(?:fais|faire|applique|implémente|implementer|implémenter|corrige|"
@@ -1438,6 +1505,17 @@ def project_build_runs(context, tool_log):
 
     runs = tuple(runs)
 
+    # The lifecycle's TEST phase is about the PROJECT's own verification, and
+    # this is where it happens -- once per generation of changes, for every
+    # caller. Recorded here rather than at the five call sites above, which
+    # would each have had to remember.
+
+    phase = getattr(context, "work_phase", None)
+
+    if phase is not None and getattr(phase, "engaged", False):
+        for command, status, _ in runs:
+            phase.note_validation(command, status)
+
     try:
         context._project_verification = (generation, runs)
     except (AttributeError, TypeError):
@@ -1572,6 +1650,34 @@ class AgentRuntime:
             context, repair_ask=lambda text: self._repair_ask(context, text))
         context.standard_policy = policy
 
+        # And one lifecycle, for the turns that have two sources of truth to
+        # reconcile. Engaged from two facts already established: the turn is
+        # bound to an authoritative document, and the user asked for the code
+        # to change. Neither is guessed here.
+
+        phase = context.work_phase
+
+        if phase is not None:
+            phase.engage(
+                authority_bound=policy is not None,
+                write_requested=wants_write(context, _asked(context.conversation)),
+                # What the SESSION established, not only what this turn has
+                # re-read. The two-prompt shape is the whole point of
+                # `prior_clauses`: the question was answered from the document
+                # in the first turn, and the change is asked for in the
+                # second. A gate that ignored them told a run its own answer
+                # was unsupported -- it planned against the rule it had just
+                # quoted, was refused, and spent nine minutes re-searching for
+                # a clause it already had. The strict current-turn rule stays
+                # where it belongs, on the answer: the citation and identifier
+                # guards are untouched.
+                prior_authority=context.prior_clauses,
+                # What counts as "the implementation". A session may have
+                # several corpora attached and read a great deal of code that
+                # has nothing to do with the task; a gate that opened on that
+                # would have been satisfied by the wrong tree.
+                root=getattr(context, "project_root", ""))
+
         investigate_rounds = preamble_reprompts = repeats = make_reprompts = 0
         scope_final = False
         order_reprompts = 0
@@ -1685,12 +1791,35 @@ class AgentRuntime:
                         build_reprompts += 1
                         round_limit = round_index + 3
                         budget_final = False
+
+                        # The same command failing the same way for the third
+                        # time is not a build to retry, it is a plan to
+                        # reconsider: each retry so far has asked for another
+                        # fix against the same understanding, and the
+                        # understanding is what the evidence now contradicts.
+
+                        demand = project_build.demand(
+                            broken, output, last_build_output)
+
+                        if (phase is not None and phase.engaged
+                                and phase.validation_exhausted(broken)):
+                            phase.invalidate(
+                                reason="the project's own verification keeps "
+                                       "failing the same way",
+                                evidence=output.splitlines()[0][:200]
+                                if output else broken)
+                            demand += (
+                                "\n\nThis command has now failed unchanged "
+                                "more than once. Stop patching against the "
+                                "current plan: read the failure, then record "
+                                "what it actually shows with plan_change, "
+                                "naming the item it replaces.")
+
                         context.conversation.append(ConversationMessage(
-                            "user", (TextBlock(project_build.demand(
-                                broken, output, last_build_output)),),
+                            "user", (TextBlock(demand),),
                             authored_by="harness"))
                         last_build_output = output
-                        only_tools = _WRITE_TOOLS
+                        only_tools = _write_round_tools(context)
                         context.observer.notice(
                             "project_build_failed",
                             {"command": broken, "retry": build_reprompts},
@@ -1939,7 +2068,7 @@ class AgentRuntime:
                                     broken, output, last_build_output)),),
                                 authored_by="harness"))
                             last_build_output = output
-                            only_tools = _WRITE_TOOLS
+                            only_tools = _write_round_tools(context)
                             context.observer.notice(
                                 "project_build_failed",
                                 {"command": broken, "retry": build_reprompts},
@@ -2143,7 +2272,7 @@ class AgentRuntime:
                         # diff. The demand is a request; the tool list is
                         # not. For this one round the only tools are the
                         # ones that change a file.
-                        only_tools = _WRITE_TOOLS
+                        only_tools = _write_round_tools(context)
                         last_write_redirect = round_index
                         context.observer.notice(
                             "write_request_unanswered",
@@ -2312,6 +2441,52 @@ class AgentRuntime:
                     if policy is not None:
                         policy.observe_code_read(call.name, call.arguments,
                                                  envelope.model_content)
+
+                    # The lifecycle reads the same two ledgers the policy
+                    # keeps, and derives nothing of its own: what the turn
+                    # retrieved from the document, and which files a reading
+                    # tool put in front of it. A call that added neither is
+                    # counted as such, which is how repetition is noticed
+                    # without anyone deciding what a "useful" call looks like.
+
+                    # An accepted plan is progress of the same kind as a
+                    # write, and its clock has to be reset the same way. A run
+                    # was nudged to conclude four minutes in, recorded five
+                    # evidence-backed plan items immediately afterwards, and
+                    # then spent the rest of the turn with a closing tool
+                    # window it had just earned the right to use.
+
+                    if (call.name == _PLAN_TOOL and envelope.success
+                            and phase is not None and phase.has_plan):
+                        nudged = False
+                        rounds_since_nudge = 0
+                        investigate_rounds = 0
+
+                    if phase is not None and phase.engaged:
+                        phase.observe_call(
+                            authority_keys=(
+                                set(policy.clauses.sections)
+                                | set(context.standard_source_ids_used)
+                                if policy is not None else ()),
+                            authority_units=(len(policy.claim_evidence.units)
+                                             if policy is not None else 0),
+                            # Three ledgers, because one file can be put in
+                            # front of the model three ways: named in a call's
+                            # arguments (`sed -n 1,80p a.c`), reported by the
+                            # command boundary as read, or printed line by
+                            # line by a recursive grep that named no file at
+                            # all. Taking only the first would have left a
+                            # turn that read the tree entirely through
+                            # `grep -rn` with nothing recorded, and the gate
+                            # would never have opened for it.
+                            implementation_paths=(
+                                (set(policy.code.files)
+                                 | policy.code_evidence.files())
+                                if policy is not None else set())
+                            | set(envelope.read_paths))
+
+                        if envelope.mutation:
+                            phase.note_write()
 
                     if (context.budget_manager is not None and call.name == "bash"
                             and envelope.status != ToolResultStatus.CACHED):
@@ -2536,7 +2711,7 @@ class AgentRuntime:
                                     broken, output, last_build_output)),),
                                 authored_by="harness"))
                             last_build_output = output
-                            only_tools = _WRITE_TOOLS
+                            only_tools = _write_round_tools(context)
                             context.observer.notice(
                                 "project_build_failed",
                                 {"command": broken, "retry": build_reprompts,
@@ -2573,7 +2748,7 @@ class AgentRuntime:
                         context.conversation.append(ConversationMessage(
                             "user", (TextBlock(write_demand(
                                 _asked(context.conversation))),), authored_by="harness"))
-                        only_tools = _WRITE_TOOLS
+                        only_tools = _write_round_tools(context)
                         last_write_redirect = round_index
                         context.observer.notice(
                             "write_request_unanswered",
@@ -2701,6 +2876,92 @@ class AgentRuntime:
                 elif names:
                     investigate_rounds += 1
 
+                # Exploration that has stopped paying. The nudge below waits
+                # for a fraction of the whole round budget to go by, which is
+                # the right ceiling for a turn that is working and much too
+                # patient for one that is circling: five calls in a row that
+                # add no clause and open no file are not a turn on its way to
+                # finding something. This fires on the evidence state itself,
+                # so it is as short as it can be without cutting off a turn
+                # that is still learning -- three barren calls, and the turn
+                # is asked to say what it has and either plan from it or say
+                # what it still needs.
+
+                if phase is not None and phase.engaged and phase.repeating:
+                    reached = phase.force_synthesis()
+                    context.conversation.append(ConversationMessage(
+                        "user", (TextBlock(
+                            "The last few calls added no requirement and "
+                            "opened no file that was not already read. Stop "
+                            "searching. State what you have established so "
+                            "far on both sides -- what the source requires "
+                            "and what the code does -- and then either record "
+                            "the plan with plan_change, or name the one thing "
+                            "you still need and go straight to it."
+                            # Where the work is. A turn that has searched
+                            # itself to a standstill has usually been
+                            # searching somewhere else: a run spent twenty
+                            # calls grepping a registered corpus that shares
+                            # a subject with the task and never opened a file
+                            # of the tree it was launched in.
+                            + (f" The code this session is about is under "
+                               f"{context.project_root}; a path outside it is "
+                               f"not the implementation you were asked about."
+                               if getattr(context, "project_root", "") else "")
+                            + turn_evidence(tool_log)),),
+                        authored_by="harness"))
+                    context.trace.emit(
+                        EventType.RETRY, context.task_id,
+                        status=EventStatus.DETECTED,
+                        metadata={"reason": "exploration_without_evidence",
+                                  "phase": str(reached),
+                                  "retry": phase.syntheses_forced},
+                    )
+                    context.observer.notice(
+                        "exploration_without_evidence",
+                        {"phase": str(reached),
+                         "forced": phase.syntheses_forced},
+                    )
+
+                # Both halves in hand, nothing planned, and the reading goes
+                # on. Not a gate -- the write gate is the gate -- but the
+                # moment INVESTIGATE is over should be visible from inside the
+                # turn, and without something that says so "read a bit more"
+                # is always the easier move.
+
+                if phase is not None and phase.owes_a_plan():
+                    context.conversation.append(ConversationMessage(
+                        "user", (TextBlock(
+                            "You have now read both the requirements and the "
+                            "implementation. Before any file changes, record "
+                            "the plan with plan_change: one entry per "
+                            "requirement you intend to satisfy, each naming "
+                            "the provision and where you read it, what the "
+                            "code does now and in which file, the gap, the "
+                            "change you intend, and the test that will prove "
+                            "it. The tools that modify files stay refused "
+                            "until one entry is accepted."),),
+                        authored_by="harness"))
+                    context.trace.emit(
+                        EventType.RETRY, context.task_id,
+                        status=EventStatus.DETECTED,
+                        metadata={"reason": "plan_owed",
+                                  "retry": phase.plan_demands},
+                    )
+                    context.observer.notice("plan_owed",
+                                            {"demand": phase.plan_demands})
+
+                    # The last time of asking. After it the round is narrowed
+                    # to the one call that can move the turn on: a demand the
+                    # model can ignore while still calling `bash` is a demand
+                    # it does ignore -- measured on a run that was asked
+                    # twice, read for another twenty minutes and never
+                    # planned at all. Same lever, same reason, as the write
+                    # redirect: the demand is a request, the tool list is not.
+
+                    if phase.plan_demand_ignored:
+                        only_tools = (_PLAN_TOOL,)
+
                 # Reading forever without changing anything is the failure mode
                 # this catches: a round that only investigates counts towards a
                 # single nudge to conclude, which is issued at most once.
@@ -2819,7 +3080,7 @@ class AgentRuntime:
                     with context.observer.model_activity("Repairing the build…") as tick:
                         repair = self.complete_model_turn(
                             context, use_tools=True, on_token=tick,
-                            only_tools=_WRITE_TOOLS, grace=True)
+                            only_tools=_write_round_tools(context), grace=True)
 
                     for call in repair.tool_calls:
                         envelope = context.tool_executor(
@@ -3985,7 +4246,8 @@ class AgentRuntime:
         # same single execution either way.
 
         runs = project_build_runs(context, tool_log)
-        write_note = unverified_write_note(tool_log, runs)
+        write_note = unverified_write_note(
+            tool_log, runs, getattr(context, "project_commands", None))
 
         if write_note:
             response = (response or "") + write_note
@@ -4019,6 +4281,39 @@ class AgentRuntime:
 
         if policy is not None:
             context.clauses_read = tuple(sorted(policy.clauses.sections))
+
+        # The lifecycle's last two moves, and the one thing it owes the
+        # reader: a plan item that nothing validated. It is reported rather
+        # than enforced -- "the existing suite already covers it" is a
+        # legitimate answer and a deterministic layer cannot tell it from a
+        # requirement quietly dropped -- but a turn that planned five changes
+        # and ran one test should not be the only party that knows.
+
+        phase = getattr(context, "work_phase", None)
+
+        if phase is not None and phase.engaged:
+            phase.begin_review()
+            unresolved = phase.unresolved_items()
+
+            if unresolved:
+                response = (response or "") + (
+                    "\n\nPLANNED, NOT VALIDATED — no validation action this "
+                    "turn claims to cover:\n"
+                    + "\n".join(f"- {item.requirement}" for item in unresolved))
+
+            context.trace.emit(
+                EventType.TOOL_CALL_FINISHED, context.task_id,
+                session_id=context.session_id, status=EventStatus.OK,
+                metadata={"component": "work_phase", **{
+                    key: value for key, value in phase.to_dict().items()
+                    if key in ("phase", "first_write_phase", "writes",
+                               "write_refusals", "syntheses_forced")},
+                    "plan_items": len(phase.items),
+                    "rejected_items": len(phase.rejected),
+                    "replans": len(phase.replans),
+                    "unresolved_items": len(unresolved)},
+            )
+            phase.finish()
 
         # And the tally of the work order's own sections, when the turn was
         # working from one. Deterministic, from the diff.

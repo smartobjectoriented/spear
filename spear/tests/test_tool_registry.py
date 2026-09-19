@@ -84,7 +84,8 @@ class ToolRegistryTests(unittest.TestCase):
     def test_current_native_set_and_order_are_preserved(self):
         self.assertEqual([item.name for item in native_tool_specs()], [
             "bash", "edit_file", "write_file", "append_file", "delete_file",
-            "remember", "search_corpus", "search_internet", "fetch_url",
+            "remember", "plan_change", "search_corpus", "search_internet",
+            "fetch_url",
         ])
 
     def test_non_command_requires_handler_but_command_is_router_owned(self):

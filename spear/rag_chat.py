@@ -1385,6 +1385,9 @@ class CliRuntimeObserver:
             print(f"  {C_DIM}↪ {len(missing)} of "
                   f"{metadata.get('carried', 0)} established clauses not "
                   f"addressed — asking for them{C_RST}")
+        elif kind == "contract_closed":
+            print(f"  {C_DIM}↪ every carried requirement closed and covered — "
+                  f"asking it to land{C_RST}")
         elif kind == "plan_owed":
             print(f"  {C_DIM}↪ both sides read and nothing planned — asking "
                   f"for the plan{C_RST}")

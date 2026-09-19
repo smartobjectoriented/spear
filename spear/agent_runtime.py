@@ -54,6 +54,7 @@ from verification import (
 )
 from budgets import BudgetExceeded, BudgetKind, BudgetManager
 import work_phase
+from requirement_set import Disposition
 from working_state import (
     ActionKind, StateEvent, StateEventType, StateSource, TerminalStatus,
     VerificationOutcome, WorkingState,
@@ -863,14 +864,58 @@ _DISPOSITION_LABEL = {
 }
 
 
-def requirement_matrix_note(phase) -> str:
-    """One line per carried requirement, with what became of it.
+#: What a turn says when it believes it has finished. Matched only to compare
+#: it against the ledger -- the prose is never the record, and a run that
+#: ended "the implementation is complete and satisfies all the requirements"
+#: over a ledger holding one out-of-scope rule and six unvalidated items is
+#: why this is checked at all.
+_CLAIMS_DONE = re.compile(
+    r"\b(?:implementation|it|this|everything|all\s+(?:of\s+)?(?:the\s+)?"
+    r"(?:requirements?|clauses?|rules?))\s+(?:is|are|now)\s+"
+    r"(?:complete|compliant|satisfied|done)\b"
+    r"|\bfully\s+(?:compliant|implemented|satisfied)\b"
+    r"|\ball\s+(?:the\s+)?requirements?\s+(?:are\s+)?(?:met|satisfied)\b"
+    r"|\bsatisfies\s+all\b|\bimplementation\s+is\s+complete\b",
+    re.I)
+
+
+def requirement_status(phase):
+    """The turn's status, in the ledger's words and nobody else's.
+
+    Three readings and no fourth, because there are only three things the
+    ledger can be saying: everything reviewed is closed and validated, it is
+    closed with stated exclusions, or there is work left. "Everything is
+    compliant" is not among them and cannot be reached from here.
+    """
+    requirements = getattr(phase, "requirements", None)
+
+    if not requirements or not len(requirements):
+        return ""
+
+    open_items = requirements.open_items()
+    excluded = [item for item in requirements
+                if item.disposition == str(Disposition.EXPLICITLY_OUT_OF_SCOPE)]
+    unvalidated = phase.unvalidated_requirements()
+
+    if open_items or unvalidated:
+        return "implementation work incomplete"
+
+    if excluded:
+        return "supported profile validated, with exclusions"
+
+    return "reviewed requirements satisfied"
+
+
+def requirement_matrix_note(phase, answer="") -> str:
+    """The canonical record: one line per requirement, and one status.
 
     Deterministic, built from the ledger rather than from the answer, and
-    printed whether the news is good or bad. Two of the five dispositions are
-    unfinished work and are named in capitals, because a turn that ends with
-    a requirement still planned or still undetermined has not finished and
-    the reader should not have to infer that from a diff.
+    printed whether the news is good or bad. It is also the ONLY matrix: a
+    real run wrote its own three-row summary table declaring every clause
+    satisfied, directly above a harness matrix that called one of them out of
+    scope and listed six items as unvalidated. Two tables that disagree are
+    worse than one that says something unwelcome, so when the prose claims
+    completion the ledger contradicts it here, by name.
     """
     requirements = getattr(phase, "requirements", None)
 
@@ -878,21 +923,70 @@ def requirement_matrix_note(phase) -> str:
         return ""
 
     lines = ["", "", f"REQUIREMENT MATRIX — {len(requirements)} requirement(s) "
-             f"carried from the previous turn:"]
+             f"carried from the previous turn. This is the record; any summary "
+             f"above that disagrees with it is wrong."]
+
+    unvalidated = {item.key for item in phase.unvalidated_requirements()}
 
     for item in requirements:
         label = _DISPOSITION_LABEL.get(item.disposition, item.disposition)
+
+        if item.key in unvalidated:
+            label += ", NOT VALIDATED"
+
         where = item.source_id or item.section or "—"
-        lines.append(f"- {item.key} [{where}] — {label}"
+        said = requirements.stated_revisions(item)
+        revised = f" (revised {said}x)" if said > 1 else ""
+        lines.append(f"- {item.key} [{where}] — {label}{revised}"
+                     + (f" | condition: {item.trigger[:90]}"
+                        if item.trigger else "")
                      + (f": {item.note[:120]}" if item.note else ""))
 
     unfinished = requirements.open_items()
+    status = requirement_status(phase)
 
     if unfinished:
         lines.append("")
         lines.append(f"{len(unfinished)} of them are not closed: "
                      + ", ".join(found.key for found in unfinished)
                      + ". This turn is not finished.")
+
+    if unvalidated:
+        lines.append("")
+        lines.append(f"{len(unvalidated)} changed requirement(s) have no test "
+                     f"that reaches the changed path: "
+                     + ", ".join(sorted(unvalidated))
+                     + ". A suite that passed without exercising them proves "
+                       "nothing about them.")
+
+    carried_only = requirements.excluded()
+
+    if carried_only:
+        lines.append("")
+        lines.append(f"Also retrieved and NOT in scope for this turn "
+                     f"({len(carried_only)}), recorded so the choice is "
+                     f"visible: "
+                     + ", ".join(f"{found.key} ({found.origin})"
+                                 for found in carried_only[:8]))
+
+    excluded = [item for item in requirements
+                if item.disposition == str(Disposition.EXPLICITLY_OUT_OF_SCOPE)]
+
+    if excluded:
+        lines.append("")
+        lines.append("Explicitly excluded from the supported profile: "
+                     + ", ".join(found.key for found in excluded)
+                     + ". The result is not compliance with the whole "
+                       "document and must not be reported as such.")
+
+    lines.append("")
+    lines.append(f"STATUS (from the ledger): {status}.")
+
+    if (unfinished or unvalidated) and _CLAIMS_DONE.search(answer or ""):
+        lines.append("")
+        lines.append("The answer above claims this work is complete. The "
+                     "ledger says it is not, and the ledger is what was "
+                     "measured: take the matrix, not the claim.")
 
     return "\n".join(lines)
 
@@ -1737,7 +1831,7 @@ class AgentRuntime:
         clause_reprompts = 0
         did_modify = nudged = verify_reprompts = budget_event_emitted = False
         only_tools: tuple[str, ...] | None = None
-        wrap_up_warned = False
+        wrap_up_warned = landed = False
         seen_results: dict[str, int] = {}
         last_write_redirect = -WRITE_REDIRECT_SPACING
         last_clause_redirect = -WRITE_REDIRECT_SPACING
@@ -2973,6 +3067,26 @@ class AgentRuntime:
                         {"phase": str(reached),
                          "forced": phase.syntheses_forced},
                     )
+
+                # The contract is closed and every change it names is
+                # validated. There is nothing left to establish, and a turn
+                # that keeps looking is spending the operator's time proving
+                # what it has already proved -- a real run re-dispositioned
+                # rules it had closed, for minutes, after its own tests went
+                # green.
+
+                if (phase is not None and phase.engaged
+                        and phase.contract_closed() and not landed
+                        and not force_final):
+                    landed = True
+                    context.conversation.append(ConversationMessage(
+                        "user", (TextBlock(
+                            "Every requirement carried into this turn now has "
+                            "a disposition, nothing is left open, and the "
+                            "changes are covered by validation that ran. "
+                            "There is nothing further to establish. Report "
+                            "what was done and stop."),), authored_by="harness"))
+                    context.observer.notice("contract_closed", {})
 
                 # Both halves in hand, nothing planned, and the reading goes
                 # on. Not a gate -- the write gate is the gate -- but the

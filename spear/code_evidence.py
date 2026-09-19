@@ -117,6 +117,12 @@ class CodeEvidenceLedger:
 
     seen: dict = field(default_factory=dict)
 
+    #: Files a result showed as `path:line:body`, whether or not the line
+    #: happened to carry an identifier. Kept apart from `seen` on purpose:
+    #: that one answers "may this name be used", and a line of pure
+    #: punctuation grounds no name while still being content of its file.
+    located: set = field(default_factory=set)
+
     def observe(self, name, text=""):
         """One tool result, exactly as the model was shown it.
 
@@ -129,6 +135,9 @@ class CodeEvidenceLedger:
             return self
 
         for path, body in _content_lines(text):
+            if path:
+                self.located.add(path)
+
             for form in normative_claims.identifiers_in(body):
                 key = normative_claims.normalise(form)
                 entry = self.seen.get(key)
@@ -146,6 +155,23 @@ class CodeEvidenceLedger:
     def identifiers(self):
         """The spellings, for the identifier check to permit."""
         return {entry.form for entry in self.seen.values()}
+
+    def files(self):
+        """The files whose CONTENT a tool result named, line by line.
+
+        The other code ledger takes its paths from a call's ARGUMENTS, which
+        is the right answer to "what did this turn ask to see" and the wrong
+        one to "what was it shown": `grep -rn thing src/` names no file in its
+        arguments and prints the contents of a dozen. Every `path:line:body`
+        the result carried is content of that file, in front of the model,
+        which is exactly what this ledger has been parsing all along.
+        """
+        found = set(self.located)
+
+        for entry in self.seen.values():
+            found |= entry.files
+
+        return found
 
     def knows(self, token):
         return normative_claims.normalise(token) in self.seen

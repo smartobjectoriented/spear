@@ -317,6 +317,64 @@ def native_tool_specs() -> tuple[ToolSpec, ...]:
             ("persistent_memory_write",), ("ask", "auto"), handler_key="remember",
         ),
 
+        # The tool that opens the write gate on a turn that must satisfy an
+        # authoritative source. It writes nothing, which is why it is
+        # read-only: it is the record of what the turn found and what it
+        # intends, and the gate it opens is the one in front of the tools
+        # that do write.
+        #
+        # ONE requirement per call, and seven flat strings. It began as an
+        # array of objects, which is the shape the data has and the wrong
+        # shape to ask a model for: measured on one run, forty-three
+        # consecutive calls were rejected before the arguments were ever
+        # parsed, and the turn gave up on planning and went back to trying to
+        # write. Nested tool-call payloads are exactly what this tool guide
+        # already warns against for edits, and a plan is no different.
+        #
+        # Every field is required because the gate is not a formality. An
+        # item without its evidence is an assertion, one without the current
+        # behaviour is a feature request, and one without a validation is a
+        # change nothing will ever check. The refusal names whichever is
+        # missing, so a turn learns what the gate wants from the gate itself
+        # rather than from a system prompt nobody re-reads.
+        ToolSpec(
+            "plan_change",
+            "Record ONE evidence-backed change that a standard, specification "
+            "or API contract requires. REQUIRED before edit_file/write_file "
+            "on such a task: until one is accepted, the tools that modify "
+            "files are refused. Call it again for each further requirement — "
+            "one call per requirement, never a list. Two fields are checked "
+            "against what this turn actually read: `requirement_evidence` "
+            "must cite a provision you retrieved, and "
+            "`implementation_evidence` must name a file you opened. Set "
+            "`supersedes` to the `requirement` of an earlier entry when what "
+            "you find later makes it wrong.",
+            {"type": "object", "properties": {
+                "requirement": string(
+                    "what the authoritative source demands"),
+                "requirement_evidence": string(
+                    "the provision, as you read it: e.g. \"Rule 5.2.1-3\" "
+                    "or a retrieval handle"),
+                "current_behaviour": string("what the code does today"),
+                "implementation_evidence": string(
+                    "the file you read it in, e.g. src/a/b.c"),
+                "gap": string("how the two differ"),
+                "correction": string(
+                    "the change you intend, naming the function or symbol it "
+                    "lands in"),
+                "validation": string(
+                    "the test or command that will prove it"),
+                "supersedes": string(
+                    "the `requirement` of an entry this call replaces"),
+                "reason": string("why that entry no longer holds"),
+                "new_evidence": string("what you found that invalidated it"),
+            }, "required": ["requirement", "requirement_evidence",
+                            "current_behaviour", "implementation_evidence",
+                            "gap", "correction", "validation"]},
+            ToolCategory.OTHER, ToolMutability.READ_ONLY,
+            handler_key="plan_change",
+        ),
+
         ToolSpec(
             "search_corpus", "Search THIS project's indexed corpora (its "
             "sources, the libc headers, the POSIX man pages) for code or an "

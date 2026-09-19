@@ -56,6 +56,40 @@ case you expected to match printed nothing, the change is wrong — say so or
 fix it, do not record it as correct. Report a case as working only when you
 have seen its output, and say plainly which cases you did not test.
 
+## Changing code to satisfy a document
+
+Some changes are not decided by the code alone: a standard, a specification or
+an API contract says what the result has to be, and the repository says what it
+is today. The change is the DIFFERENCE between the two, and it cannot be
+written before both sides have been read.
+
+On such a turn the tools that modify files are held back until you have:
+
+1. retrieved the requirements from the authoritative source — the actual
+   provisions, not your memory of them;
+2. read the implementation that is supposed to satisfy them — the real files,
+   in the directory the session is running in, not a tree that happens to
+   share a subject;
+3. recorded it with `plan_change`: ONE call per requirement, seven flat
+   string arguments — what the source demands and where you read it, what the
+   code does now and in which file, the gap, the change you intend, and the
+   test that will prove it. Never pass a list; call it again for the next
+   requirement.
+
+Two of those fields are checked against what this turn actually retrieved and
+opened, so a citation you did not read and a filename you did not open are
+refused with the reason. Once one entry is accepted, `edit_file` and
+`write_file` work normally.
+
+If something you find later makes an entry wrong — the lifecycle is not what
+you assumed, the value is already carried by an existing structure, the
+validation you planned duplicates one that exists — call `plan_change` again
+with `supersedes` naming the entry it replaces, and say what you found. Do not
+carry on against a plan you know to be wrong.
+
+Finish on the project's own build and tests, not on a compile of the files you
+touched: a file that compiles alone says nothing about the program.
+
 ## Tool usage rules
 
 - For informational questions, answer with text; only modify files when the
@@ -68,7 +102,10 @@ have seen its output, and say plainly which cases you did not test.
   from the toolchain's libc headers (the musl sysroot) — you do not need to
   locate their header to use them correctly. Rule of thumb: after ~3
   exploratory commands you should already be editing; more grepping rarely
-  changes the fix.
+  changes the fix. This rule of thumb is for a change whose requirement the
+  user has already stated. It does NOT apply when the requirement has to be
+  read out of a document first — see the section below, where the three
+  commands would not even have reached the document.
 - PREFER SMALL, TARGETED EDITS. Make one edit_file call per change, with a
   SHORT unique old_text (a few lines) and its new_text — NOT a whole-file
   rewrite or a giant multi-hunk diff in one call. Large multi-line tool-call

@@ -28,6 +28,7 @@ import evidence_handles
 import skill_library
 import standard_scope
 import web_fetch
+import work_phase
 from datetime import datetime, timezone
 from openai import (OpenAI, APIStatusError, APIConnectionError, APIError)
 from model_backend import (AnthropicBackend, ConversationMessage,
@@ -1372,6 +1373,13 @@ class CliRuntimeObserver:
             print(f"  {C_DIM}↪ {len(missing)} of "
                   f"{metadata.get('carried', 0)} established clauses not "
                   f"addressed — asking for them{C_RST}")
+        elif kind == "plan_owed":
+            print(f"  {C_DIM}↪ both sides read and nothing planned — asking "
+                  f"for the plan{C_RST}")
+        elif kind == "exploration_without_evidence":
+            print(f"  {C_DIM}↪ the last few calls established nothing new — "
+                  f"asking for a synthesis ({metadata.get('phase', '')})"
+                  f"{C_RST}")
         elif kind == "write_request_unanswered":
             print(f"  {C_DIM}↪ nothing was changed — asking for the edit"
                   f"{C_RST}")
@@ -1637,7 +1645,11 @@ def audit_rejected_mutation(action, summary, *, paths=()):
 #: Router refusals that are mutation denials and belong in the mutation trail.
 #: Named here rather than inferred from the status: a DENIED envelope may be a
 #: role refusal or a repeat suppression, which are not mutations at all.
-_ROUTER_MUTATION_DENIALS = frozenset({"read_only_task", "execution_mode_denied"})
+_ROUTER_MUTATION_DENIALS = frozenset({
+    "read_only_task", "execution_mode_denied",
+    work_phase.NO_AUTHORITY, work_phase.NO_IMPLEMENTATION,
+    work_phase.NO_PLAN, work_phase.REVIEW_IS_READ_ONLY,
+})
 
 #: What the operator is told when the router refuses a call, keyed by the
 #: category it stamped on the envelope.
@@ -1657,6 +1669,12 @@ _ROUTER_MUTATION_DENIALS = frozenset({"read_only_task", "execution_mode_denied"}
 #: one as an invitation spends its remaining rounds proving it.
 _ROUTER_REFUSAL_NOTICES = {
     "read_only_task": "the task is read-only",
+    # Not permanent, unlike the one above, and the line says so: the turn has
+    # not finished working out what it is changing.
+    work_phase.NO_AUTHORITY: "the authoritative source has not been read yet",
+    work_phase.NO_IMPLEMENTATION: "the implementation has not been read yet",
+    work_phase.NO_PLAN: "no evidence-backed plan has been recorded yet",
+    work_phase.REVIEW_IS_READ_ONLY: "the normative review is read-only",
     "execution_mode_denied": "unavailable in {mode} mode",
     "permission_denied": "not available to this role",
     "failed_action_repeated": "this call already failed this turn",
@@ -4770,8 +4788,14 @@ def _registered_command(context, command):
         # the view is not enough on its own, because bash can write with
         # `sed -i`, `cp`, or a redirection. SAFE takes workspace:write away
         # for the whole turn, and the sandbox mounts the tree read-only.
+        # ...and a turn whose write gate has not opened yet runs the same
+        # way. Dropping edit_file from the model's reach is not enough on its
+        # own: a turn refused an edit reached for `sed -i` within two rounds,
+        # which is the same write through a different door. SAFE closes the
+        # door rather than the doorway.
         execution_mode=(ExecutionMode.SAFE
                         if context.read_only
+                        or _write_gate_closed(context)
                         or context.role in {"explorer", "reviewer", "planning"}
                         else None),
     )
@@ -4788,6 +4812,25 @@ def _registered_command(context, command):
     # spelling of the same intent, and a run spent thirty-five steps finding
     # them -- `sed -i`, a redirection, python. Say what the refusal is for,
     # and what to do instead.
+
+    # Same shape, different reason. A command refused because the gate is
+    # still shut is refused temporarily, and saying only "denied" invites the
+    # next spelling of the same write instead of the investigation that would
+    # open it.
+
+    if (not context.read_only and command_result.status == "denied"
+            and _write_gate_closed(context)
+            and COMMAND_POLICY.classify(cmd).classification
+            != CommandClassification.READ_ONLY):
+        gate = context.write_gate()
+        result = result.rstrip() + "\n" + getattr(gate, "message", "")
+        context.trace.emit(
+            EventType.TOOL_CALL_FAILED, context.task_id,
+            status=EventStatus.DETECTED, tool_name="bash",
+            action_id=context.action_id,
+            metadata={"reason": getattr(gate, "reason", "investigation_incomplete"),
+                      "arguments_recorded": False},
+        )
 
     if (context.read_only and command_result.status == "denied"
             and COMMAND_POLICY.classify(cmd).classification
@@ -5297,6 +5340,72 @@ def _registered_search_history(context, args):
     return _classified_handler_result(result)
 
 
+#: Where the turn's lifecycle sits inside the per-call cache. A sentinel, for
+#: the same reason the repeat ledger uses one: the cache's string keys are
+#: cleared when a write makes the turn's reads stale, and the phase a turn has
+#: reached is not made stale by writing.
+WORK_PHASE = object()
+
+
+def _write_gate_closed(context):
+    """Is the turn's lifecycle still holding the writes back?
+
+    False whenever there is no gate at all, which is every turn that is not
+    changing code to satisfy an authoritative source.
+    """
+    gate = getattr(context, "write_gate", None)
+
+    if gate is None:
+        return False
+
+    decision = gate()
+
+    return decision is not None and not getattr(decision, "allowed", True)
+
+
+def _registered_plan_change(context, args):
+    """Record one planned change, and say plainly what was wrong with it.
+
+    The ledger judges the entry against what the turn actually retrieved and
+    read; that verdict goes straight back as the tool result. An item rejected
+    in silence is an item the model will submit again in the same words.
+    """
+    ledger = context.cache.get(WORK_PHASE)
+    item = {name: args.get(name) for name in work_phase.GapItem.FIELDS}
+
+    print()
+    tool_use("Plan", str(item.get("requirement") or "")[:60], color=C_TOOL)
+
+    if ledger is None or not getattr(ledger, "engaged", False):
+        # No lifecycle on this turn: nothing gates the writes, so recording a
+        # plan changes nothing. Say so rather than pretending it was filed.
+        tool_result("(no investigation gate on this turn)")
+        print()
+
+        return _classified_handler_result(
+            "This turn has no investigation gate — the plan was not recorded "
+            "and nothing was waiting for it. Proceed with the change.")
+
+    outcome = ledger.record_plan(
+        [item],
+        supersedes=str(args.get("supersedes") or "").strip(),
+        reason=str(args.get("reason") or "").strip(),
+        new_evidence=str(args.get("new_evidence") or "").strip())
+
+    if outcome.any_accepted:
+        lines = [f"Recorded. {len(ledger.items)} planned change(s) now stand.",
+                 "The write gate is open. Make this change, then run the "
+                 "project's own build and tests."]
+    else:
+        lines = ["Not recorded.", outcome.report(), work_phase.WRITE_BLOCKED]
+
+    text = "\n".join(line for line in lines if line)
+    tool_result(text.splitlines()[0])
+    print()
+
+    return _classified_handler_result(text)
+
+
 def _registered_search_corpus(context, args):
     query = (args.get("query") or "").strip()
     print()
@@ -5501,6 +5610,7 @@ def build_tool_registry():
         "append_file": _registered_append_file,
         "delete_file": _registered_delete_file,
         "remember": _registered_remember,
+        "plan_change": _registered_plan_change,
         "search_corpus": _registered_search_corpus,
         "search_internet": _registered_search_internet,
         "fetch_url": _registered_fetch_url,
@@ -5607,6 +5717,16 @@ def route_tool_envelope(
     name, args, cache, *, task_id=None, trace=None, tool_call_id=None,
     cancellation=None, agent_context=None,
 ):
+    # The turn's lifecycle, when it governs this turn. The handler that
+    # records a plan reaches it through the cache, and the router reaches the
+    # decision it makes through `write_gate` -- one object, two doors, and no
+    # way for the two to disagree about the same turn.
+
+    phase_ledger = getattr(agent_context, "work_phase", None)
+
+    if phase_ledger is not None:
+        cache[WORK_PHASE] = phase_ledger
+
     execution_context = ToolExecutionContext(
         task_id=task_id or new_task_id(),
         trace=trace or TRACE,
@@ -5627,8 +5747,15 @@ def route_tool_envelope(
         evidence_available=(
             (lambda marker: _evidence_in_context(agent_context, marker))
             if agent_context is not None else None),
+        # Asked at the moment of the call, never sampled: the answer changes
+        # within the turn, as the standard is read, the sources are opened and
+        # a plan is accepted.
+        write_gate=(phase_ledger.may_write
+                    if phase_ledger is not None and phase_ledger.engaged
+                    else None),
         metadata={"standard_binding": getattr(agent_context, "standard_binding", None)},
     )
+
     execution_context.command_executor = lambda command: _registered_command(
         execution_context, command,
     )
@@ -7398,6 +7525,11 @@ def main():
             project_verifier=verify_project_command,
             prior_clauses=STANDARD_PRIOR_CLAUSES,
             prior_answer=STANDARD_PRIOR_ANSWER,
+            # A fresh lifecycle per turn. It engages itself inside the
+            # runtime, which is where both of the facts it needs are known;
+            # attached unconditionally here because a disengaged one decides
+            # nothing and costs nothing.
+            work_phase=work_phase.WorkPhaseLedger(),
         )
         session_handle.append(
             SessionEventType.SESSION_STARTED, working_state.task_id,

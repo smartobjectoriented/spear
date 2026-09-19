@@ -438,7 +438,8 @@ class RagChatCompatibilityTests(unittest.TestCase):
         tools = self.rag_chat.TOOLS
         self.assertEqual([tool["function"]["name"] for tool in tools], [
             "bash", "edit_file", "write_file", "append_file", "delete_file",
-            "remember", "search_corpus", "search_internet", "fetch_url",
+            "remember", "plan_change", "search_corpus", "search_internet",
+            "fetch_url",
         ])
         self.assertTrue(all(tool["type"] == "function" for tool in tools))
         self.assertEqual(tools[0]["function"]["parameters"]["required"], ["command"])

@@ -351,7 +351,13 @@ def native_tool_specs() -> tuple[ToolSpec, ...]:
             "them needs its own call before any file may be modified — use "
             "`disposition` to say which ones need no change and which you "
             "could not determine. Set `supersedes` to the `requirement` of an "
-            "earlier entry when what you find later makes it wrong.",
+            "earlier entry when what you find later makes it wrong. Calling "
+            "it twice for the SAME provision revises that entry rather than "
+            "adding another: cite the provision, not your sentence about it. "
+            "Where the provision conditions its obligation — on a stage, an "
+            "event or a case — `correction` must name the point in the code "
+            "that reaches it, and where the change calls something existing "
+            "from a new place, `implementation_evidence` must name both ends.",
             {"type": "object", "properties": {
                 "requirement": string(
                     "what the authoritative source demands"),
@@ -366,7 +372,11 @@ def native_tool_specs() -> tuple[ToolSpec, ...]:
                     "the change you intend, naming the function or symbol it "
                     "lands in"),
                 "validation": string(
-                    "the test or command that will prove it"),
+                    "the test that will prove it, and it has to reach the "
+                    "changed path: a suite that already passes without "
+                    "entering your new branch proves nothing about it. Name "
+                    "the test you will add or change, or say plainly that no "
+                    "automated test can reach this and why."),
                 "disposition": string(
                     "what is to become of this requirement: change_planned "
                     "(the default), satisfied_already, "

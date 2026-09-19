@@ -4357,7 +4357,8 @@ class AgentRuntime:
             # the failure this replaces is a requirement that stopped being
             # mentioned -- and silence reads exactly like success.
 
-            response = (response or "") + requirement_matrix_note(phase)
+            response = (response or "") + requirement_matrix_note(
+                phase, response or "")
 
             context.trace.emit(
                 EventType.TOOL_CALL_FINISHED, context.task_id,

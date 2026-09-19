@@ -122,6 +122,23 @@ def citations_in(text):
     return {found.lower() for found in _CITED.findall(text or "")}
 
 
+#: How a provision conditions its obligation. Ordinary connectives, because
+#: that is how documents write conditions; the clause they open is kept whole
+#: and is never parsed into a model of time. A requirement with none of these
+#: is unconditional, which is a fact worth knowing too.
+_TRIGGER = re.compile(
+    r"\b(?:when|whenever|after|before|prior\s+to|upon|once|while|during|"
+    r"if|unless|in\s+response\s+to|as\s+a\s+result\s+of|following)\b"
+    r"[^.;]{0,200}", re.I)
+
+
+def _trigger_of(text):
+    """The clause this provision conditions its obligation on, if any."""
+    found = _TRIGGER.search(text or "")
+
+    return " ".join(found.group(0).split())[:200] if found else ""
+
+
 def _family_of(text):
     """The members of a coordinated list this provision states, if any.
 
@@ -156,6 +173,26 @@ class Requirement:
     force: str = "requirement"
     statement: str = ""
     members: tuple = ()
+
+    #: What the provision conditions its obligation on, in its own words. A
+    #: requirement is rarely just subject and predicate: it says WHEN, AFTER
+    #: WHAT, and IN WHICH CASE, and a plan that emits the right object at the
+    #: wrong point in the lifecycle has not satisfied it. Kept as the
+    #: provision's own clause rather than as a parsed model of time, because
+    #: the document is the only authority on what its words mean.
+    trigger: str = ""
+
+    #: Why this provision is in the set at all: because the answer cited it,
+    #: because it is structurally coupled to one that was, or -- for the ones
+    #: that did NOT make the cut -- the reason they were left out. Nothing is
+    #: dropped silently; something is either carried or carried as excluded.
+    origin: str = "cited"
+
+    #: An origin that begins with this is carried FOR THE RECORD, not for
+    #: closure: the turn is not asked to disposition it and the gate does not
+    #: wait for it. It is in the set so that a reader can see it was
+    #: considered and why it is not in scope.
+    NOT_REQUIRED = "retrieved,"
     disposition: str = str(Disposition.UNDETERMINED)
     note: str = ""
 
@@ -165,16 +202,33 @@ class Requirement:
     #: an answer the gate accepts, the second is the failure it exists for.
     stated: bool = False
 
+    #: Every disposition this requirement has been given, in order. The
+    #: LATEST one is the requirement's state; the rest are how it got there.
+    #: Measured on one real run: a turn dispositioned one rule eight times --
+    #: planned, satisfied, undetermined, satisfied, satisfied, undetermined,
+    #: undetermined, out of scope -- and each call appended another logical
+    #: requirement to the plan while overwriting this one in place. The count
+    #: it was shown climbed to seventeen for four requirements, and neither
+    #: the model nor a reader could tell what the turn actually thought.
+    history: tuple = ()
+
+    @property
+    def required(self):
+        """Whether this requirement is part of what the turn must close."""
+        return not self.origin.startswith(self.NOT_REQUIRED)
+
     @property
     def open(self):
-        return self.disposition in UNFINISHED
+        return self.required and self.disposition in UNFINISHED
 
     def to_dict(self):
         return {"key": self.key, "section": self.section,
                 "source_id": self.source_id, "force": self.force,
                 "statement": self.statement, "members": list(self.members),
+                "trigger": self.trigger, "origin": self.origin,
                 "disposition": self.disposition, "note": self.note,
-                "stated": self.stated}
+                "stated": self.stated,
+                "history": [dict(entry) for entry in self.history]}
 
     @classmethod
     def from_dict(cls, raw):
@@ -187,10 +241,13 @@ class Requirement:
             force=str(raw.get("force") or "requirement"),
             statement=str(raw.get("statement") or ""),
             members=tuple(raw.get("members") or ()),
+            trigger=str(raw.get("trigger") or ""),
+            origin=str(raw.get("origin") or "cited"),
             disposition=str(raw.get("disposition")
                             or Disposition.UNDETERMINED),
             note=str(raw.get("note") or ""),
-            stated=bool(raw.get("stated")))
+            stated=bool(raw.get("stated")),
+            history=tuple(dict(entry) for entry in (raw.get("history") or ())))
 
 
 @dataclass
@@ -202,14 +259,18 @@ class RequirementSet:
     origin: str = ""
 
     def __len__(self):
-        return len(self.items)
+        """How many requirements are in SCOPE. The excluded ones are carried
+        for the record and counted separately, because a contract of four is
+        not a contract of sixteen with twelve footnotes."""
+        return len(self.required())
 
     def __iter__(self):
         return iter(self.items)
 
     @property
     def keys(self):
-        return tuple(item.key for item in self.items)
+        """The requirements in scope, by printed key."""
+        return tuple(item.key for item in self.required())
 
     def get(self, key):
         wanted = (key or "").strip().lower()
@@ -223,9 +284,18 @@ class RequirementSet:
     def open_items(self):
         return tuple(item for item in self.items if item.open)
 
+    def required(self):
+        """The requirements in scope for closure."""
+        return tuple(item for item in self.items if item.required)
+
+    def excluded(self):
+        """The ones carried for the record, with why."""
+        return tuple(item for item in self.items if not item.required)
+
     def unstated(self):
-        """The requirements this turn has said nothing at all about."""
-        return tuple(item for item in self.items if not item.stated)
+        """The in-scope requirements this turn has said nothing at all about."""
+        return tuple(item for item in self.items
+                     if item.required and not item.stated)
 
     # -- matching ---------------------------------------------------------
 
@@ -299,18 +369,27 @@ class RequirementSet:
 
         return None
 
-    def dispose(self, key, disposition, note=""):
-        """Record what became of one requirement. Returns the item, or None."""
+    def dispose(self, key, disposition, note="", *, by="model"):
+        """Record what became of one requirement. Returns the item, or None.
+
+        `by` separates what the TURN said from what the harness observed. A
+        requirement promoted to implemented because its file was written is
+        not the turn changing its mind, and counting it as a revision would
+        make every ordinary requirement look like one somebody argued about.
+        """
         found = self.get(key) or self.match(key)
 
         if found is None:
             return None
 
-        self.items[self.items.index(found)] = replace(
+        index = self.items.index(found)
+        self.items[index] = replace(
             found, disposition=str(disposition), note=note or found.note,
-            stated=True)
+            stated=True,
+            history=found.history + ({"disposition": str(disposition),
+                                      "note": note[:200], "by": by},))
 
-        return self.items[self.items.index(self.get(found.key))]
+        return self.items[index]
 
     # -- serialisation ----------------------------------------------------
 
@@ -327,6 +406,23 @@ class RequirementSet:
                     for item in raw.get("items") or ()],
                    str(raw.get("origin") or ""))
 
+    def revisions(self):
+        """Requirements the TURN changed its mind about, and how often."""
+        found = {}
+
+        for item in self.items:
+            said = [entry["disposition"] for entry in item.history
+                    if entry.get("by", "model") == "model"]
+
+            if len(said) > 1:
+                found[item.key] = said
+
+        return found
+
+    def stated_revisions(self, item):
+        return len([entry for entry in item.history
+                    if entry.get("by", "model") == "model"])
+
     def matrix(self):
         """The requirement table a review owes its reader."""
         rows = []
@@ -334,6 +430,7 @@ class RequirementSet:
         for item in self.items:
             rows.append({
                 "requirement": item.key,
+                "revisions": len(item.history),
                 "force": item.force,
                 "evidence": item.source_id or item.section,
                 "statement": item.statement,
@@ -378,6 +475,7 @@ def publish(policy, answer="", *, origin="", limit=CARRY_LIMIT):
             source_id=str(getattr(record, "source_id", "") or ""),
             force="requirement",
             statement=text[:400],
+            trigger=_trigger_of(text),
             members=_family_of(text)))
 
     if not binding:
@@ -386,12 +484,26 @@ def publish(policy, answer="", *, origin="", limit=CARRY_LIMIT):
     named = citations_in(answer)
 
     if named:
-        chosen = [item for item in binding
-                  if item.key.lower() in named
-                  or (item.key.lower().split()[-1] if item.key else "") in named]
+        def cited(item):
+            bare = item.key.lower().split()[-1] if item.key else ""
+
+            return item.key.lower() in named or bare in named
+
+        chosen = [item for item in binding if cited(item)]
 
         if chosen:
-            return RequirementSet(_ordered(chosen), origin)
+            # ...and the rest, CARRIED AS EXCLUDED rather than dropped. The
+            # narrowing is right -- "this" points at the answer -- but a
+            # binding provision the turn retrieved and the answer did not
+            # repeat is a decision, and a decision that leaves no trace is
+            # indistinguishable from an oversight. A real run established far
+            # more than the four requirements that travelled, and nothing
+            # anywhere said what happened to the others.
+            rest = [replace(item, origin="retrieved, not named in the answer")
+                    for item in binding if not cited(item)]
+
+            return RequirementSet(
+                _ordered(chosen) + _ordered(rest)[:limit], origin)
 
     return RequirementSet(_ordered(binding)[:limit], origin)
 

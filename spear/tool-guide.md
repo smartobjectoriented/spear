@@ -98,6 +98,26 @@ and where one names several cases it lists those too — answer all of them.
 Once every carried requirement has a disposition and one change is planned,
 `edit_file` and `write_file` work normally.
 
+Four things the record holds you to:
+
+* **One call per provision, not per sentence.** Calling `plan_change` again
+  for a requirement REVISES it. Cite the provision — its printed rule, its
+  section, or its retrieval handle — not your own wording of it.
+* **Where a requirement says WHEN, say where.** A provision that conditions
+  its obligation on a stage or an event is not satisfied by code that does the
+  right thing eventually; `correction` has to name the function or file that
+  reaches that point.
+* **A test has to reach what you changed.** An existing suite that passes
+  without entering your new branch proves nothing about it. Name the test you
+  will add or change, or say plainly that no automated test can reach it.
+* **A call moved is a call in a new context.** Calling something existing from
+  somewhere it is not called from today means reading both ends and saying
+  what the existing callers assume about thread, lock or lifetime.
+
+The closing requirement matrix is the record. Do not write your own summary
+table that disagrees with it, and do not report work as complete while it
+shows anything open or unvalidated.
+
 If something you find later makes an entry wrong — the lifecycle is not what
 you assumed, the value is already carried by an existing structure, the
 validation you planned duplicates one that exists — call `plan_change` again

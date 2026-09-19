@@ -46,7 +46,7 @@ round number.
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from enum import StrEnum
 
 import requirement_set
@@ -124,6 +124,31 @@ _SECTION = re.compile(r"\b(\d+(?:\.\d+)+)(?:-\d+)?\b")
 
 #: An opaque retrieval handle, whatever the store calls them.
 _HANDLE = re.compile(r"\b[a-z]{2,4}-[0-9a-f]{8,}\b")
+
+#: A correction that names somewhere in the code: a file, or a function call.
+#: Weak on purpose -- this is not a proof that the lifecycle point is right,
+#: only a refusal to accept a plan that names no point at all.
+_NAMES_A_PATH = re.compile(r"[\w.\-/]*\w\.[A-Za-z0-9_+]{1,8}\b|\b\w+\(\)")
+
+#: A correction that MOVES work: calling something that already exists from
+#: somewhere it is not called from today. The generic risk is never the call
+#: itself, it is everything the old site guaranteed and the new one may not --
+#: which thread owns it, what lock is held, how long the state it touches
+#: lives, who produced that state. A function that is safe where it is called
+#: now is not thereby safe from anywhere.
+_MOVES_A_CALL = re.compile(
+    r"\b(?:call|calling|invoke|invoking|move|moving|relocate|hoist|reuse|"
+    r"trigger)\b[^.;]{0,80}\b(?:from|into|in|at|inside|within|to)\b",
+    re.I)
+
+#: A plan item saying plainly that no automated test can reach this. Narrow
+#: on purpose: it is an admission, and an admission has to be made, not
+#: inferred from a vague validation field.
+_NO_TEST_POSSIBLE = re.compile(
+    r"\bno\s+(?:automated\s+|executable\s+)?test\b"
+    r"|\bcannot\s+be\s+(?:automatically\s+)?tested\b"
+    r"|\bnot\s+testable\b|\buntestable\b"
+    r"|\brequires?\s+(?:real\s+)?hardware\b", re.I)
 
 #: A path, or the tail of one. Matched loosely because a plan item may write
 #: `src/a/b.c`, `./src/a/b.c` or just `b.c` for a file the turn plainly read.
@@ -272,6 +297,15 @@ class GapItem:
     #: has planned a change, which is what calling this tool usually means.
     disposition: str = str(Disposition.CHANGE_PLANNED)
 
+    #: The canonical provision this item answers, resolved by the ledger from
+    #: whatever citation the model wrote. It is the item's IDENTITY: two calls
+    #: that resolve to the same provision are one item, however differently
+    #: they are worded. Empty when the item answers nothing carried, and then
+    #: the citation itself has to serve -- a turn may discover a requirement
+    #: of its own, and it should not thereby acquire a duplicate every time
+    #: it revises it.
+    bound_to: str = ""
+
     FIELDS = ("requirement", "requirement_evidence", "current_behaviour",
               "implementation_evidence", "gap", "correction", "validation")
 
@@ -310,9 +344,21 @@ class GapItem:
         return (str(Disposition.CHANGE_PLANNED) if names and self.gap
                 else self.disposition)
 
+    @property
+    def identity(self):
+        """What makes two plan items the same item.
+
+        The provision, when one was resolved; otherwise the citation the item
+        gave, normalised. NEVER the free-text requirement statement: a model
+        rewords its own sentence between calls, and keying on that is how one
+        rule became eight logical requirements in a single turn.
+        """
+        return self.bound_to or " ".join(
+            self.requirement_evidence.lower().split())[:120]
+
     def to_dict(self):
         return {**{name: getattr(self, name) for name in self.FIELDS},
-                "disposition": self.disposition}
+                "disposition": self.disposition, "bound_to": self.bound_to}
 
 
 @dataclass(frozen=True)
@@ -381,6 +427,8 @@ class WorkPhaseLedger:
     items: list = field(default_factory=list)
     rejected: list = field(default_factory=list)
     replans: list = field(default_factory=list)
+    #: Plan items replaced by a later call for the same provision.
+    revised: list = field(default_factory=list)
 
     #: Where the first write landed, as a phase. The whole diagnostic rests on
     #: this one field: "the first edit happened during INVESTIGATE" is the
@@ -391,6 +439,10 @@ class WorkPhaseLedger:
 
     validations: list = field(default_factory=list)
     failed_validations: dict = field(default_factory=dict)
+    #: Every path this turn actually wrote. A test named in a plan item
+    #: counts as evidence only if it is among these: a suite the turn ran but
+    #: did not touch cannot have gained a check for behaviour invented today.
+    written: set = field(default_factory=set)
 
     consecutive_without_evidence: int = 0
     syntheses_forced: int = 0
@@ -436,6 +488,14 @@ class WorkPhaseLedger:
 
                 if item.section:
                     carried_keys.add(item.section)
+
+                # The handle the requirement was retrieved under. A plan item
+                # that cites a carried requirement by its own source id was
+                # refused as unread -- the one citation form that is exactly
+                # and only this provision, and the only one the evidence state
+                # did not hold.
+                if item.source_id:
+                    carried_keys.add(item.source_id)
 
             # ...and the section each printed citation sits in. "Rule
             # 8.4.1.1-3" identifies a provision; the evidence state keys on
@@ -528,7 +588,7 @@ class WorkPhaseLedger:
         was wrong with it, and a diagnostic can see that a turn tried to plan
         from something it had not read.
         """
-        verdicts = [self._judge(GapItem.from_mapping(raw))
+        verdicts = [self._judge(self._bound(GapItem.from_mapping(raw)))
                     for raw in (raw_items or [])]
         accepted = tuple(v for v in verdicts if v.accepted)
         rejected = tuple(v for v in verdicts if not v.accepted)
@@ -541,7 +601,27 @@ class WorkPhaseLedger:
             self.items = [item for item in self.items
                           if item.requirement != supersedes]
 
-        self.items.extend(v.item for v in accepted)
+        # One item per provision. A second call for the same requirement is a
+        # REVISION of it, not a second requirement: the run that made this
+        # necessary dispositioned one rule eight times and was told each time
+        # that another planned change now stood, until seventeen of them stood
+        # for four requirements and the closing report listed six things that
+        # were mostly not requirements at all.
+
+        for verdict in accepted:
+            known = {item.identity: index
+                     for index, item in enumerate(self.items)}
+            at = known.get(verdict.item.identity)
+
+            if at is None:
+                self.items.append(verdict.item)
+            else:
+                self.revised.append(
+                    {"requirement": verdict.item.identity,
+                     "from": self.items[at].disposition,
+                     "to": verdict.item.disposition})
+                self.items[at] = verdict.item
+
         self.rejected.extend(rejected)
 
         # Bind each accepted item to the carried requirement it answers, and
@@ -564,6 +644,17 @@ class WorkPhaseLedger:
 
         return PlanAcceptance(accepted, rejected)
 
+    def _bound(self, item):
+        """Resolve the item's citation to a carried provision, once.
+
+        Done before the item is judged, so identity is settled by the ledger
+        rather than by whatever the model typed -- and so a citation that
+        resolves to a provision is recorded under the provision's own name.
+        """
+        found = self.requirements.match(item.requirement_evidence)
+
+        return item if found is None else replace(item, bound_to=found.key)
+
     def _judge(self, item):
         empty = item.missing()
 
@@ -571,7 +662,14 @@ class WorkPhaseLedger:
             return ItemVerdict(item, False,
                                "missing: " + ", ".join(empty))
 
-        if not self.evidence.backs_requirement(item.requirement_evidence):
+        # An item the ledger resolved to a carried provision is backed by
+        # construction: that provision was retrieved, in this session, out of
+        # the bound document, which is the whole question this check asks.
+        # Without this, a citation the ledger had just matched could still be
+        # refused as unread, and the requirement it answered stayed silent.
+        if item.bound_to:
+            pass
+        elif not self.evidence.backs_requirement(item.requirement_evidence):
             # Naming what IS held, not only what is missing. A refusal that
             # says "not retrieved" and stops leaves the model to guess whether
             # the fault is the spelling, the section or the retrieval, and a
@@ -582,6 +680,41 @@ class WorkPhaseLedger:
                 f"the cited provision {item.requirement_evidence!r} is not "
                 f"among the evidence this session holds. Retrieve it, or cite "
                 f"one of: {self.evidence.summary()}")
+
+        # A requirement that says WHEN is not satisfied by code that emits the
+        # right thing eventually. The provision's own condition is quoted back
+        # and the item has to say where in the code that point is reached --
+        # a run produced acknowledgements at the wrong lifecycle stage and
+        # every field of its plan was filled in correctly.
+        carried = self.requirements.match(item.requirement_evidence)
+
+        if (carried is not None and carried.trigger
+                and not _NAMES_A_PATH.search(item.correction)):
+            return ItemVerdict(
+                item, False,
+                f"this provision conditions its obligation — \"{carried.trigger}\" "
+                f"— so the correction has to name the point in the code where "
+                f"that condition is reached: the function or file the change "
+                f"lands in, not only what it will do")
+
+        # Two sites, two readings. An item that moves an existing call has to
+        # show it read BOTH ends -- the thing being called and the place it is
+        # to be called from -- because the constraints that matter are never
+        # written at the call site being added.
+        if _MOVES_A_CALL.search(item.correction):
+            sites = {_basename(found) for found
+                     in _PATH.findall(item.implementation_evidence)}
+
+            if len(sites) < 2:
+                return ItemVerdict(
+                    item, False,
+                    "this change calls something from a place it is not "
+                    "called from today. Name BOTH files in "
+                    "`implementation_evidence` -- where the thing being "
+                    "called is defined and where the new call goes -- and say "
+                    "in `current_behaviour` what the existing callers assume "
+                    "about thread, lock or lifetime. A function that is safe "
+                    "where it is called now is not safe from anywhere.")
 
         if not self.evidence.backs_implementation(item.implementation_evidence):
             return ItemVerdict(
@@ -764,7 +897,7 @@ class WorkPhaseLedger:
                     str(Disposition.UNDETERMINED)):
                 self.requirements.dispose(
                     carried.key, Disposition.CHANGE_IMPLEMENTED,
-                    note=carried.note)
+                    note=carried.note, by="harness")
 
         return self
 

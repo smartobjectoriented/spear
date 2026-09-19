@@ -78,8 +78,25 @@ On such a turn the tools that modify files are held back until you have:
 
 Two of those fields are checked against what this turn actually retrieved and
 opened, so a citation you did not read and a filename you did not open are
-refused with the reason. Once one entry is accepted, `edit_file` and
-`write_file` work normally.
+refused with the reason.
+
+WHEN THE PREVIOUS TURN ESTABLISHED A SET OF REQUIREMENTS and this one says
+"comply with this", that set is the task. Every requirement in it needs its own
+`plan_change` call before ANY file may be modified — not only the ones you
+intend to change. Use `disposition` to say which:
+
+    change_planned            you are going to change the code (the default)
+    satisfied_already         the code already does it — say where
+    explicitly_out_of_scope   this build deliberately does not support it
+    undetermined              you could not tell from what you read
+
+"I could not determine this" is an answer and the gate accepts it. Silence is
+not: a requirement you simply stop mentioning is the one failure this exists to
+prevent. The refusal lists exactly which requirements are still outstanding,
+and where one names several cases it lists those too — answer all of them.
+
+Once every carried requirement has a disposition and one change is planned,
+`edit_file` and `write_file` work normally.
 
 If something you find later makes an entry wrong — the lifecycle is not what
 you assumed, the value is already carried by an existing structure, the

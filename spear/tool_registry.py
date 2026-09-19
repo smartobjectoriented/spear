@@ -346,9 +346,12 @@ def native_tool_specs() -> tuple[ToolSpec, ...]:
             "one call per requirement, never a list. Two fields are checked "
             "against what this turn actually read: `requirement_evidence` "
             "must cite a provision you retrieved, and "
-            "`implementation_evidence` must name a file you opened. Set "
-            "`supersedes` to the `requirement` of an earlier entry when what "
-            "you find later makes it wrong.",
+            "`implementation_evidence` must name a file you opened. When the "
+            "previous turn established a set of requirements, EVERY one of "
+            "them needs its own call before any file may be modified — use "
+            "`disposition` to say which ones need no change and which you "
+            "could not determine. Set `supersedes` to the `requirement` of an "
+            "earlier entry when what you find later makes it wrong.",
             {"type": "object", "properties": {
                 "requirement": string(
                     "what the authoritative source demands"),
@@ -364,6 +367,18 @@ def native_tool_specs() -> tuple[ToolSpec, ...]:
                     "lands in"),
                 "validation": string(
                     "the test or command that will prove it"),
+                "disposition": string(
+                    "what is to become of this requirement: change_planned "
+                    "(the default), satisfied_already, "
+                    "explicitly_out_of_scope, or undetermined. Every "
+                    "requirement carried in from the previous turn needs one "
+                    "before any file may be modified. `undetermined` is for a "
+                    "requirement you genuinely could not resolve — you could "
+                    "not tell what the rule demands, or what the code does. "
+                    "It is NOT for a change you intend but have not made yet: "
+                    "that is change_planned, and an entry that names the "
+                    "function to change is recorded as one whatever it is "
+                    "labelled."),
                 "supersedes": string(
                     "the `requirement` of an entry this call replaces"),
                 "reason": string("why that entry no longer holds"),

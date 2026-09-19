@@ -27,6 +27,7 @@ import embedding
 import evidence_handles
 import skill_library
 import progress_monitor
+import requirement_set
 import tool_router
 import standard_scope
 import web_fetch
@@ -305,6 +306,15 @@ STANDARD_PRIOR_CLAUSES = ()
 # the requirements the change must meet are the ones already established.
 
 STANDARD_PRIOR_ANSWER = ""
+
+# ...and what it ESTABLISHED, as provisions rather than as prose. The prose
+# carry was the whole contract until it was measured: on the two runs whose
+# first answer the identifier guard withheld, the follow-up inherited an
+# assessment record, started from nothing, and rebuilt an arbitrary subset of
+# the document. This is built from the evidence ledger instead, so it survives
+# a withheld answer -- see requirement_set.publish.
+
+STANDARD_PRIOR_REQUIREMENTS = requirement_set.RequirementSet()
 TRACE_PROVIDER = None
 TRACE_MODEL = None
 
@@ -5435,6 +5445,7 @@ def _registered_plan_change(context, args):
     """
     ledger = context.cache.get(WORK_PHASE)
     item = {name: args.get(name) for name in work_phase.GapItem.FIELDS}
+    item["disposition"] = args.get("disposition")
 
     print()
     tool_use("Plan", str(item.get("requirement") or "")[:60], color=C_TOOL)
@@ -5455,10 +5466,17 @@ def _registered_plan_change(context, args):
         reason=str(args.get("reason") or "").strip(),
         new_evidence=str(args.get("new_evidence") or "").strip())
 
-    if outcome.any_accepted:
+    outstanding = ledger.uncovered_requirements()
+
+    if outcome.any_accepted and not outstanding:
         lines = [f"Recorded. {len(ledger.items)} planned change(s) now stand.",
                  "The write gate is open. Make this change, then run the "
                  "project's own build and tests."]
+    elif outcome.any_accepted:
+        lines = [f"Recorded. {len(ledger.items)} planned change(s) now stand.",
+                 f"{len(outstanding)} carried requirement(s) still have no "
+                 f"disposition, so the write gate stays shut: "
+                 + ", ".join(found.key for found in outstanding[:8])]
     else:
         lines = ["Not recorded.", outcome.report(), work_phase.WRITE_BLOCKED]
 
@@ -6131,9 +6149,12 @@ def announce_carried_spec(question):
     if not (STANDARD_PRIOR_ANSWER and is_write_request_text(question)):
         return
 
+    carried = (f", {len(STANDARD_PRIOR_REQUIREMENTS)} requirement(s) to close"
+               if len(STANDARD_PRIOR_REQUIREMENTS)
+               and requirement_set.refers_back(question) else "")
     print(f"  {C_DIM}⎿  carrying forward this session's answer as the "
           f"specification ({len(STANDARD_PRIOR_ANSWER)} chars, "
-          f"{len(STANDARD_PRIOR_CLAUSES)} clauses){C_RST}")
+          f"{len(STANDARD_PRIOR_CLAUSES)} clauses{carried}){C_RST}")
 
 
 def is_write_request_text(question):
@@ -6722,6 +6743,7 @@ def compaction_policy_from_environment():
 def main():
     global TRACE_PROVIDER, TRACE_MODEL, STANDARD_ENGAGED_BEFORE, STANDARD_READ_CONTEXT
     global STANDARD_PRIOR_CLAUSES, STANDARD_PRIOR_ANSWER
+    global STANDARD_PRIOR_REQUIREMENTS
 
     # Before anything with a side effect: --help must not resolve a corpus,
     # offer a workspace split, or touch the model server.
@@ -7037,6 +7059,7 @@ def main():
             STANDARD_ENGAGED_BEFORE = False
             STANDARD_PRIOR_CLAUSES = ()
             STANDARD_PRIOR_ANSWER = ""
+            STANDARD_PRIOR_REQUIREMENTS = requirement_set.RequirementSet()
             print("History cleared.\n")
 
             continue
@@ -7593,6 +7616,12 @@ def main():
             # attached unconditionally here because a disengaged one decides
             # nothing and costs nothing.
             work_phase=work_phase.WorkPhaseLedger(),
+            # The contract only travels to a turn that pointed back at it. A
+            # new, self-contained task names its own subject and inherits
+            # nobody else's obligations.
+            carried_requirements=(
+                STANDARD_PRIOR_REQUIREMENTS
+                if requirement_set.refers_back(user_input) else None),
         )
         session_handle.append(
             SessionEventType.SESSION_STARTED, working_state.task_id,
@@ -7895,6 +7924,9 @@ def main():
         if read:
             STANDARD_PRIOR_CLAUSES = read
             STANDARD_PRIOR_ANSWER = (task_result.final_response or "")[:4000]
+            STANDARD_PRIOR_REQUIREMENTS = requirement_set.publish(
+                getattr(agent_context, "standard_policy", None),
+                task_result.final_response or "", origin=user_input[:120])
 
         runtime_result = task_result.agent_result
         response_text = task_result.final_response

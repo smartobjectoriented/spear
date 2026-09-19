@@ -204,6 +204,12 @@ class AgentContext:
 
     standard_policy: object | None = None
 
+    #: What the previous grounded turn established, when this turn pointed
+    #: back at it. The lifecycle holds it to those requirements: each one
+    #: needs a disposition before anything is written. None on every turn
+    #: that set its own scope.
+    carried_requirements: object | None = None
+
     #: INVESTIGATE / PLAN / EDIT / TEST / REVIEW, and the gap model behind
     #: them. Attached by the caller and engaged by the runtime for the one
     #: shape it governs -- an authoritative source to satisfy AND a request to
@@ -845,6 +851,50 @@ def syntax_only_verification(runs) -> bool:
     """Every verification this turn ran was a compile of loose files."""
     return bool(runs) and all(_SYNTAX_ONLY.search(command)
                               for command, _ in runs)
+
+
+#: How a disposition reads in the closing table.
+_DISPOSITION_LABEL = {
+    "satisfied_already": "already satisfied",
+    "change_planned": "CHANGE PLANNED, NOT MADE",
+    "change_implemented": "changed",
+    "explicitly_out_of_scope": "out of scope",
+    "undetermined": "UNDETERMINED",
+}
+
+
+def requirement_matrix_note(phase) -> str:
+    """One line per carried requirement, with what became of it.
+
+    Deterministic, built from the ledger rather than from the answer, and
+    printed whether the news is good or bad. Two of the five dispositions are
+    unfinished work and are named in capitals, because a turn that ends with
+    a requirement still planned or still undetermined has not finished and
+    the reader should not have to infer that from a diff.
+    """
+    requirements = getattr(phase, "requirements", None)
+
+    if not requirements or not len(requirements):
+        return ""
+
+    lines = ["", "", f"REQUIREMENT MATRIX — {len(requirements)} requirement(s) "
+             f"carried from the previous turn:"]
+
+    for item in requirements:
+        label = _DISPOSITION_LABEL.get(item.disposition, item.disposition)
+        where = item.source_id or item.section or "—"
+        lines.append(f"- {item.key} [{where}] — {label}"
+                     + (f": {item.note[:120]}" if item.note else ""))
+
+    unfinished = requirements.open_items()
+
+    if unfinished:
+        lines.append("")
+        lines.append(f"{len(unfinished)} of them are not closed: "
+                     + ", ".join(found.key for found in unfinished)
+                     + ". This turn is not finished.")
+
+    return "\n".join(lines)
 
 
 def unverified_write_note(tool_log: Sequence[str], project_runs=(),
@@ -1676,7 +1726,8 @@ class AgentRuntime:
                 # several corpora attached and read a great deal of code that
                 # has nothing to do with the task; a gate that opened on that
                 # would have been satisfied by the wrong tree.
-                root=getattr(context, "project_root", ""))
+                root=getattr(context, "project_root", ""),
+                requirements=context.carried_requirements)
 
         investigate_rounds = preamble_reprompts = repeats = make_reprompts = 0
         scope_final = False
@@ -2486,7 +2537,7 @@ class AgentRuntime:
                             | set(envelope.read_paths))
 
                         if envelope.mutation:
-                            phase.note_write()
+                            phase.note_write(envelope.affected_paths)
 
                     if (context.budget_manager is not None and call.name == "bash"
                             and envelope.status != ToolResultStatus.CACHED):
@@ -4301,6 +4352,13 @@ class AgentRuntime:
                     "turn claims to cover:\n"
                     + "\n".join(f"- {item.requirement}" for item in unresolved))
 
+            # And the contract, closed or not. A turn that inherited a set of
+            # requirements owes its reader a line per requirement, because
+            # the failure this replaces is a requirement that stopped being
+            # mentioned -- and silence reads exactly like success.
+
+            response = (response or "") + requirement_matrix_note(phase)
+
             context.trace.emit(
                 EventType.TOOL_CALL_FINISHED, context.task_id,
                 session_id=context.session_id, status=EventStatus.OK,
@@ -4311,7 +4369,9 @@ class AgentRuntime:
                     "plan_items": len(phase.items),
                     "rejected_items": len(phase.rejected),
                     "replans": len(phase.replans),
-                    "unresolved_items": len(unresolved)},
+                    "unresolved_items": len(unresolved),
+                    "requirements_carried": len(phase.requirements),
+                    "requirements_open": len(phase.requirements.open_items())},
             )
             phase.finish()
 

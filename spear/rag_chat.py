@@ -26,6 +26,8 @@ from pathlib import Path
 import embedding
 import evidence_handles
 import skill_library
+import progress_monitor
+import tool_router
 import standard_scope
 import web_fetch
 import work_phase
@@ -4581,6 +4583,55 @@ SANDBOX_DOWN = object()
 # model its denied `sed -i` had worked.
 
 DENIED_COMMANDS = object()
+
+#: Blocks of source this turn has already been shown, and the mutation
+#: generation they were read at. Reading a file in overlapping windows is the
+#: single largest cost a governed turn pays: measured across four runs of one
+#: two-turn workflow, 54% to 62% of every windowed read landed entirely on
+#: lines the turn had already seen. The router's cache cannot catch those --
+#: `sed -n '590,720p'` and `sed -n '600,700p'` are different arguments and the
+#: same evidence.
+REGIONS_READ = object()
+
+
+def _already_in_evidence(context, command):
+    """The note to return instead of re-reading lines already shown.
+
+    Empty when the command is not a windowed read, when any of its blocks are
+    new, or when something has been written since they were read -- a file
+    that changed is a file worth reading again, and that is the whole reason
+    the generation is part of the key.
+    """
+    blocks = progress_monitor.read_evidence(command)
+
+    if not blocks:
+        return ""
+
+    seen = context.cache.setdefault(REGIONS_READ, {})
+    generation = _mutation_generation(context)
+    fresh = [block for block in blocks
+             if seen.get(block) != generation]
+
+    for block in blocks:
+        seen[block] = generation
+
+    if fresh:
+        return ""
+
+    where = sorted({block.split("#", 1)[0] for block in blocks})
+
+    return ("(ALREADY IN EVIDENCE this turn — these lines of "
+            + ", ".join(where)
+            + " are already above in this conversation, and nothing has been "
+              "written since. Read them there. Widen the range, open a "
+              "different file, or move on.)\n")
+
+
+def _mutation_generation(context):
+    """The router's own write counter, which is what makes a read stale."""
+    ledger = context.cache.get(tool_router._REPEAT_KEY)
+
+    return ledger.get("generation", 0) if isinstance(ledger, dict) else 0
 SANDBOX_DOWN_MSG = (
     "REFUSED: the sandbox is unavailable, so nothing you write can be read "
     "back, compiled or run. Editing from retrieved context alone produces "
@@ -4779,6 +4830,18 @@ def _registered_command(context, command):
             "(ALREADY EXECUTED this turn — its output is already above in this "
             "conversation. Read it there. DO NOT run this command again.)\n"
         )
+
+    # Lines this turn has already been shown, in whatever window it asked for
+    # them. Checked before the command runs, because the cost being saved is
+    # the round, not the disk.
+
+    settled = _already_in_evidence(context, cmd)
+
+    if settled:
+        tool_result(settled.splitlines()[0])
+        print()
+
+        return _classified_handler_result(settled)
 
     reads_before = set(context.cache.get(READ_PATHS, set()))
     command_result = run_cmd_result(

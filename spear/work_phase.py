@@ -876,6 +876,7 @@ class WorkPhaseLedger:
             self.first_write_phase = str(self.phase)
 
         touched = {_basename(str(path)) for path in paths if path}
+        self.written |= {str(path) for path in paths if path}
 
         if not touched:
             return self
@@ -964,6 +965,60 @@ class WorkPhaseLedger:
 
         return tuple(item for item in self.items if not answered(item))
 
+    def unvalidated_requirements(self):
+        """Requirements whose behaviour changed and nothing exercised it.
+
+        A green suite is not evidence about a branch it never reaches. The
+        run that made this necessary changed acknowledge emission, added no
+        test, ran 198 existing checks, and reported that all of them passed --
+        which was true, and said nothing whatever about the new behaviour.
+
+        Two ways out, and both are honest: a validation that ran and PASSED
+        naming something the turn also wrote (a test it added or changed), or
+        an explicit statement in the plan item that no automated test can
+        reach it. What is refused is the third way, where an untouched suite
+        is offered as proof.
+        """
+        if not self.engaged or not len(self.requirements):
+            return ()
+
+        proven, excused = set(), set()
+
+        for item in self.items:
+            if item.identity in self._validated_identities():
+                proven.add(item.bound_to or item.identity)
+
+            if _NO_TEST_POSSIBLE.search(item.validation):
+                excused.add(item.bound_to or item.identity)
+
+        changed = {found.key for found in self.requirements
+                   if found.disposition == str(Disposition.CHANGE_IMPLEMENTED)}
+
+        return tuple(found for found in self.requirements
+                     if found.key in changed - proven - excused)
+
+    def _validated_identities(self):
+        """Plan items a validation that passed actually reached.
+
+        The link is the test the item named AND the turn touched: a test file
+        the turn wrote or changed is a test that can reach the new path, and
+        a pre-existing one it merely ran is not evidence that it does.
+        """
+        if not self.validated:
+            return set()
+
+        touched = {_basename(path) for path in self.written}
+        proven = set()
+
+        for item in self.items:
+            named = {_basename(found)
+                     for found in _PATH.findall(item.validation)}
+
+            if named & touched:
+                proven.add(item.identity)
+
+        return proven
+
     @property
     def validated(self):
         """A project-level validation ran and passed since the last write."""
@@ -1004,6 +1059,22 @@ class WorkPhaseLedger:
         """
         return self.engaged and self.plan_demands >= MAX_PLAN_DEMANDS \
             and self.phase == Phase.PLAN
+
+    def contract_closed(self):
+        """Every in-scope requirement disposed, none open, none unvalidated.
+
+        The signal to land. A real run reached this state and then went on
+        revisiting the ledger, re-dispositioning rules it had already closed
+        and re-reading files it had already read, for another several minutes.
+        There is nothing left to find once the contract is closed; what is
+        left is to say so.
+        """
+        if not self.engaged or not len(self.requirements):
+            return False
+
+        return (not self.requirements.open_items()
+                and not self.requirements.unstated()
+                and not self.unvalidated_requirements())
 
     def force_synthesis(self):
         """Stop exploring. Either the plan stands or it needs replacing."""

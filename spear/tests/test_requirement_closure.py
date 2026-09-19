@@ -104,6 +104,27 @@ class TurnOnePublishesWhatItGrounded(unittest.TestCase):
 
         self.assertEqual(found.keys, ("Rule 4.2.1-1", "Rule 4.3-1"))
 
+    def test_what_the_answer_left_out_is_carried_as_excluded_not_dropped(self):
+        """A decision that leaves no trace is an oversight to any reader."""
+        found = requirement_set.publish(
+            self.policy(), "As Rule 4.2.1-1 and Rule 4.3-1 require, ...")
+        excluded = found.excluded()
+
+        self.assertEqual([item.key for item in excluded], ["Rule 4.2.2-1"])
+        self.assertIn("not named in the answer", excluded[0].origin)
+
+    def test_an_excluded_requirement_does_not_hold_the_gate(self):
+        ledger = WorkPhaseLedger()
+        ledger.engage(authority_bound=True, write_requested=True,
+                      requirements=requirement_set.publish(
+                          self.policy(),
+                          "As Rule 4.2.1-1 and Rule 4.3-1 require, ..."))
+        ledger.observe_call(authority_keys={"4.2.1"}, authority_units=1)
+        ledger.observe_call(implementation_paths={SOURCE})
+
+        self.assertEqual({item.key for item in ledger.uncovered_requirements()},
+                         {"Rule 4.2.1-1", "Rule 4.3-1"})
+
     def test_nothing_grounded_publishes_nothing(self):
         self.assertEqual(len(requirement_set.publish(self.Policy([]), "")), 0)
 

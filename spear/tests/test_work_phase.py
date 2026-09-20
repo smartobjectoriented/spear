@@ -47,7 +47,7 @@ def good_item(**overrides):
         "implementation_evidence": SOURCE,
         "gap": "subsequent requests are dropped without an answer",
         "correction": "answer each accepted request in handshake_accept()",
-        "validation": "tests/test_handshake.c exercises two requests in a row",
+        "validation": "tests/test_handshake.c: when a second request arrives on the same link, expect a second answer carrying the same identifier",
     }
     item.update(overrides)
 
@@ -555,7 +555,8 @@ class CompilingIsNotTesting(unittest.TestCase):
     def test_a_requirement_no_validation_covers_is_reported(self):
         ledger = investigated()
         ledger.record_plan([good_item(
-            validation="a reviewer reads the diff")])
+            validation="when a reviewer walks the diff, expect the new branch "
+                       "to be visible")])
         ledger.note_write()
         ledger.note_validation("ctest --test-dir build", "passed")
 

@@ -60,7 +60,7 @@ def ledger(*, investigated=False, planned=False):
             "implementation_evidence": SOURCE,
             "gap": "later requests get no answer",
             "correction": "answer each request in handshake_accept()",
-            "validation": "the project's own test suite",
+            "validation": "tests/test_handshake.c: when a second request arrives on the same link, expect a second answer carrying the same identifier",
         }])
 
     return found
@@ -185,7 +185,8 @@ class TheGateOpensOnAnAcceptedPlan(unittest.TestCase):
         found.record_plan([{
             "requirement": "r", "requirement_evidence": f"§{CLAUSE}",
             "current_behaviour": "b", "implementation_evidence": SOURCE,
-            "gap": "g", "correction": "c", "validation": "v"}])
+            "gap": "g", "correction": "c in src/link/handshake.c",
+            "validation": "tests/t.c: when a second request arrives on the same link, expect a second answer carrying the same identifier"}])
 
         self.assertTrue(found.may_write().allowed)
 
@@ -285,7 +286,8 @@ class ThePlanHandlerReportsWhatItRefused(unittest.TestCase):
         envelope, _ = call("plan_change", {
             "requirement": "r", "requirement_evidence": f"§{CLAUSE}",
             "current_behaviour": "b", "implementation_evidence": SOURCE,
-            "gap": "g", "correction": "c", "validation": "v"},
+            "gap": "g", "correction": "c in src/link/handshake.c",
+            "validation": "tests/t.c: when a second request arrives on the same link, expect a second answer carrying the same identifier"},
             phase=found, cache=cache)
 
         self.assertIn("1 planned change(s) now stand", envelope.text)
@@ -298,7 +300,8 @@ class ThePlanHandlerReportsWhatItRefused(unittest.TestCase):
         envelope, _ = call("plan_change", {
             "requirement": "r", "requirement_evidence": "§9.9.9",
             "current_behaviour": "b", "implementation_evidence": SOURCE,
-            "gap": "g", "correction": "c", "validation": "v"},
+            "gap": "g", "correction": "c in src/link/handshake.c",
+            "validation": "tests/t.c: when a second request arrives on the same link, expect a second answer carrying the same identifier"},
             phase=found, cache=cache)
 
         self.assertIn("is not among the evidence this session holds",
@@ -335,7 +338,8 @@ class ThePlanHandlerReportsWhatItRefused(unittest.TestCase):
         envelope, _ = call("plan_change", {
             "requirement": "r", "requirement_evidence": "r",
             "current_behaviour": "b", "implementation_evidence": SOURCE,
-            "gap": "g", "correction": "c", "validation": "v"}, phase=None)
+            "gap": "g", "correction": "c in src/link/handshake.c",
+            "validation": "tests/t.c: when a second request arrives on the same link, expect a second answer carrying the same identifier"}, phase=None)
 
         self.assertIn("no investigation gate", envelope.text)
         self.assertTrue(envelope.success)

@@ -191,7 +191,8 @@ class ASettledPlanItemStopsTheReading(unittest.TestCase):
         found.record_plan([{
             "requirement": "r", "requirement_evidence": "§4.2.1",
             "current_behaviour": "b", "implementation_evidence": SOURCE,
-            "gap": "g", "correction": "c", "validation": "v"}])
+            "gap": "g", "correction": "c in src/link/handshake.c",
+            "validation": "tests/t.c: when a second request arrives on the same link, expect a second answer carrying the same identifier"}])
 
         return found
 
@@ -236,7 +237,8 @@ class ARepeatedBuildFailureBecomesAReplan(unittest.TestCase):
         found.record_plan([{
             "requirement": "r", "requirement_evidence": "§4.2.1",
             "current_behaviour": "b", "implementation_evidence": SOURCE,
-            "gap": "g", "correction": "c", "validation": "v"}])
+            "gap": "g", "correction": "c in src/link/handshake.c",
+            "validation": "tests/t.c: when a second request arrives on the same link, expect a second answer carrying the same identifier"}])
 
         return found
 

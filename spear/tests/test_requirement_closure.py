@@ -55,7 +55,7 @@ def item_for(requirement, **kw):
         "implementation_evidence": SOURCE,
         "gap": "the behaviour is absent",
         "correction": f"add it to handshake_accept() in {SOURCE}",
-        "validation": "tests/test_handshake.c",
+        "validation": "tests/test_handshake.c: when a second request arrives on the same link, expect a second answer carrying the same identifier",
     }
     field.update(kw)
 
@@ -270,7 +270,8 @@ class EveryDispositionIsAnAnswerExceptSilence(unittest.TestCase):
         self.assertEqual(ledger.requirements.get(R1.key).disposition,
                          str(Disposition.UNDETERMINED))
 
-    def test_a_write_settles_it_whatever_it_was_labelled(self):
+    def test_a_write_settles_the_label_but_not_the_proof(self):
+        """A write says the code changed. It does not say it works."""
         ledger = governed()
         ledger.record_plan([item_for(
             R1, disposition="undetermined",
@@ -278,8 +279,9 @@ class EveryDispositionIsAnAnswerExceptSilence(unittest.TestCase):
             correction="needs more reading")])
         ledger.note_write([SOURCE])
 
-        self.assertEqual(ledger.requirements.get(R1.key).disposition,
-                         str(Disposition.CHANGE_IMPLEMENTED))
+        self.assertEqual(
+            ledger.requirements.get(R1.key).disposition,
+            str(Disposition.CODE_CHANGED_AWAITING_VALIDATION))
 
     def test_an_unknown_disposition_falls_back_to_the_ordinary_case(self):
         ledger = governed()
@@ -296,13 +298,27 @@ class EveryDispositionIsAnAnswerExceptSilence(unittest.TestCase):
 
         self.assertEqual(len(ledger.requirements.open_items()), 3)
 
-    def test_a_write_to_the_named_file_finishes_it(self):
+    def test_a_write_to_the_named_file_moves_it_on_but_not_to_done(self):
         ledger = governed()
 
         for requirement in (R1, R2, R3):
             ledger.record_plan([item_for(requirement)])
 
         ledger.note_write([SOURCE])
+
+        self.assertEqual(
+            {found.disposition for found in ledger.requirements},
+            {str(Disposition.CODE_CHANGED_AWAITING_VALIDATION)})
+        self.assertEqual(len(ledger.requirements.open_items()), 3)
+
+    def test_the_write_and_its_validation_together_finish_it(self):
+        ledger = governed()
+
+        for requirement in (R1, R2, R3):
+            ledger.record_plan([item_for(requirement)])
+
+        ledger.note_write([SOURCE, "tests/test_handshake.c"])
+        ledger.note_validation("ctest --test-dir build", "passed")
 
         self.assertEqual(ledger.requirements.open_items(), ())
 

@@ -54,6 +54,11 @@ from normative_force import REQUIREMENT_FORCE
 class Disposition(StrEnum):
     SATISFIED_ALREADY = "satisfied_already"
     CHANGE_PLANNED = "change_planned"
+    #: The source changed and nothing has proved it yet. Not a synonym for
+    #: implemented: a run edited nine files, ran 198 existing checks, and was
+    #: recorded as having implemented everything it touched, when not one of
+    #: those checks enters a branch written that afternoon.
+    CODE_CHANGED_AWAITING_VALIDATION = "code_changed_awaiting_validation"
     CHANGE_IMPLEMENTED = "change_implemented"
     EXPLICITLY_OUT_OF_SCOPE = "explicitly_out_of_scope"
     UNDETERMINED = "undetermined"
@@ -62,7 +67,9 @@ class Disposition(StrEnum):
 #: The dispositions that leave work unfinished. DONE is not honest while a
 #: requirement is still in one of them: the first is a promise and the second
 #: is an open question.
-UNFINISHED = frozenset({Disposition.CHANGE_PLANNED, Disposition.UNDETERMINED})
+UNFINISHED = frozenset({Disposition.CHANGE_PLANNED,
+                        Disposition.CODE_CHANGED_AWAITING_VALIDATION,
+                        Disposition.UNDETERMINED})
 
 #: What a turn may say through the plan tool. `CHANGE_IMPLEMENTED` is absent
 #: on purpose: whether a change was made is a fact about the tree, observed by

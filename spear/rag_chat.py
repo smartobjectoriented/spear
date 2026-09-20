@@ -1385,6 +1385,12 @@ class CliRuntimeObserver:
             print(f"  {C_DIM}↪ {len(missing)} of "
                   f"{metadata.get('carried', 0)} established clauses not "
                   f"addressed — asking for them{C_RST}")
+        elif kind == "validation_owed":
+            print(f"  {C_DIM}↪ source changed and its test not written yet — "
+                  f"asking for the validation{C_RST}")
+        elif kind == "build_broken_work_item":
+            print(f"  {C_DIM}↪ build down, nothing proved — sending it back "
+                  f"to the work item that broke it{C_RST}")
         elif kind == "contract_closed":
             print(f"  {C_DIM}↪ every carried requirement closed and covered — "
                   f"asking it to land{C_RST}")

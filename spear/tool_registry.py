@@ -372,11 +372,17 @@ def native_tool_specs() -> tuple[ToolSpec, ...]:
                     "the change you intend, naming the function or symbol it "
                     "lands in"),
                 "validation": string(
-                    "the test that will prove it, and it has to reach the "
-                    "changed path: a suite that already passes without "
-                    "entering your new branch proves nothing about it. Name "
-                    "the test you will add or change, or say plainly that no "
-                    "automated test can reach this and why."),
+                    "HOW THIS WILL BE PROVED, designed before the code is "
+                    "written. Two things, both needed: the scenario — what "
+                    "input, condition or path makes the behaviour happen — "
+                    "and the result that shows it worked. Where the "
+                    "requirement is conditional, cover the branch that would "
+                    "otherwise pass by accident. \"Run the tests\", \"run "
+                    "ctest\" and \"extend the suite\" are refused: a suite "
+                    "that already passes without entering your new branch "
+                    "proves nothing about it. Name the file if you know where "
+                    "the tests live. If no automated test can reach it, say "
+                    "so, say why, and say what you will do instead."),
                 "disposition": string(
                     "what is to become of this requirement: change_planned "
                     "(the default), satisfied_already, "

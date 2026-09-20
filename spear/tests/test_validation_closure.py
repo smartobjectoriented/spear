@@ -26,6 +26,8 @@ from work_phase import WorkPhaseLedger
 
 SOURCE = "src/link/handshake.c"
 HANDLE = "std-0a1b2c3d4e5f"
+DESIGN = ("when a second request arrives on the same link, expect a "
+          "second answer carrying the same identifier")
 
 
 def ledger():
@@ -48,7 +50,7 @@ def item(**kw):
         "implementation_evidence": SOURCE,
         "gap": "later requests get no answer",
         "correction": f"answer each request in handshake_accept() in {SOURCE}",
-        "validation": "tests/test_handshake.c exercises two requests",
+        "validation": "tests/test_handshake.c: when a second request arrives on the same link, expect a second answer carrying the same identifier",
     }
     base.update(kw)
 
@@ -67,21 +69,42 @@ class AChangedBehaviourNeedsATestThatReachesIt(unittest.TestCase):
 
         return found
 
-    def test_leaning_on_the_existing_suite_is_not_coverage(self):
-        found = self.implemented("the existing project test suite")
+    def test_leaning_on_the_existing_suite_is_not_even_a_plan(self):
+        """It never reaches the ledger: the write gate refuses the item."""
+        found = ledger()
+        outcome = found.record_plan(
+            [item(validation="the existing project test suite")])
+
+        self.assertFalse(outcome.any_accepted)
+        self.assertIn("no validation design", outcome.report())
+
+    def test_a_focused_test_planned_and_never_written_is_not_coverage(self):
+        found = self.implemented(f"tests/test_handshake.c: {DESIGN}")
 
         self.assertEqual([r.key for r in found.unvalidated_requirements()],
                          ["Rule 4.2.1-1"])
 
-    def test_a_test_the_turn_wrote_is(self):
-        found = self.implemented("tests/test_handshake.c covers both branches",
+    def test_a_test_the_turn_actually_wrote_is(self):
+        found = self.implemented(f"tests/test_handshake.c: {DESIGN}",
                                  wrote=(SOURCE, "tests/test_handshake.c"))
 
         self.assertEqual(found.unvalidated_requirements(), ())
+        self.assertEqual(found.requirements.get("Rule 4.2.1-1").disposition,
+                         str(Disposition.CHANGE_IMPLEMENTED))
+
+    def test_a_write_alone_leaves_it_awaiting_validation(self):
+        found = ledger()
+        found.record_plan([item()])
+        found.note_write([SOURCE])
+
+        self.assertEqual(
+            found.requirements.get("Rule 4.2.1-1").disposition,
+            str(Disposition.CODE_CHANGED_AWAITING_VALIDATION))
 
     def test_saying_plainly_that_no_test_can_reach_it_is_accepted(self):
         found = self.implemented(
-            "no automated test can reach this without real hardware")
+            "no automated test can reach this because it needs the real "
+            "device; when the board is next on the bench it is checked by hand")
 
         self.assertEqual(found.unvalidated_requirements(), ())
 
@@ -91,10 +114,11 @@ class AChangedBehaviourNeedsATestThatReachesIt(unittest.TestCase):
                                 correction="no change needed",
                                 validation="the existing suite covers it")])
 
+
         self.assertEqual(found.unvalidated_requirements(), ())
 
     def test_the_closing_record_names_them(self):
-        found = self.implemented("the existing project test suite")
+        found = self.implemented(f"tests/test_handshake.c: {DESIGN}")
         note = agent_runtime.requirement_matrix_note(found)
 
         self.assertIn("NOT VALIDATED", note)
@@ -136,7 +160,7 @@ class TheLedgerHasTheLastWord(unittest.TestCase):
 
     def closed(self):
         found = ledger()
-        found.record_plan([item(validation="tests/test_handshake.c")])
+        found.record_plan([item(validation=f"tests/test_handshake.c: {DESIGN}")])
         found.note_write([SOURCE, "tests/test_handshake.c"])
         found.note_validation("ctest", "passed")
 

@@ -969,6 +969,16 @@ def requirement_matrix_note(phase, answer="") -> str:
                      + ", ".join(f"{found.key} ({found.origin})"
                                  for found in carried_only[:8]))
 
+    gaps = phase.branch_gaps()
+
+    if gaps:
+        lines.append("")
+        lines.append("Tested on one side of the condition only: "
+                     + "; ".join(f"{key} — {why}"
+                                 for key, why in sorted(gaps.items())[:6])
+                     + ". An implementation can pass these and still ignore "
+                       "the condition.")
+
     excluded = [item for item in requirements
                 if item.disposition == str(Disposition.EXPLICITLY_OUT_OF_SCOPE)]
 
@@ -1629,8 +1639,16 @@ def project_build_runs(context, tool_log):
         return cached[1]
 
     runs = []
+    phase = getattr(context, "work_phase", None)
 
     for command in commands.verifies():
+        # Already taken, at this exact state, with a pass. Re-running it
+        # cannot say anything new and a real run spent minutes doing so.
+        if (phase is not None and getattr(phase, "engaged", False)
+                and phase.already_validated(command)):
+            runs.append((command, "passed", ""))
+            continue
+
         if verifier is not None:
             status, output = verifier(command)
         else:
@@ -1653,8 +1671,6 @@ def project_build_runs(context, tool_log):
     # this is where it happens -- once per generation of changes, for every
     # caller. Recorded here rather than at the five call sites above, which
     # would each have had to remember.
-
-    phase = getattr(context, "work_phase", None)
 
     if phase is not None and getattr(phase, "engaged", False):
         for command, status, _ in runs:
@@ -1832,6 +1848,7 @@ class AgentRuntime:
         did_modify = nudged = verify_reprompts = budget_event_emitted = False
         only_tools: tuple[str, ...] | None = None
         wrap_up_warned = landed = False
+        validation_demands = 0
         seen_results: dict[str, int] = {}
         last_write_redirect = -WRITE_REDIRECT_SPACING
         last_clause_redirect = -WRITE_REDIRECT_SPACING
@@ -3067,6 +3084,56 @@ class AgentRuntime:
                         {"phase": str(reached),
                          "forced": phase.syntheses_forced},
                     )
+
+                # Source changed, proof still owed. The turn is steered to
+                # the validation it planned rather than left to remember: in
+                # four measured runs the first source edit came at call 37,
+                # 73, 101 and 33, and the first test edit at 125, 102, never
+                # and 51. Test authoring was always an afterthought, and twice
+                # it never arrived at all -- once leaving the tree not
+                # building, because the signature change never reached the
+                # callers in the test file nobody opened.
+
+                if (phase is not None and phase.engaged
+                        and not force_final):
+                    owed = phase.awaiting_validation()
+                    broken, _ = project_build_gap(context, tool_log)
+
+                    if broken and owed and validation_demands < 2:
+                        validation_demands += 1
+                        context.conversation.append(ConversationMessage(
+                            "user", (TextBlock(
+                                f"The project does not build after this "
+                                f"change, so nothing it was meant to prove is "
+                                f"proved: `{broken[:90]}` fails. Go back to "
+                                f"the work item that broke it and repair it "
+                                f"before anything else -- "
+                                + ", ".join(found.key for found in owed[:4])
+                                + ". Do not open new ground while the build "
+                                  "is down."),), authored_by="harness"))
+                        only_tools = _write_round_tools(context)
+                        context.observer.notice(
+                            "build_broken_work_item",
+                            {"command": broken[:60],
+                             "requirements": len(owed)})
+                    elif owed and not broken and validation_demands < 2:
+                        validation_demands += 1
+                        planned = [found.key for found in owed]
+                        context.conversation.append(ConversationMessage(
+                            "user", (TextBlock(
+                                "The source is changed and the validation you "
+                                "planned for it does not exist yet: "
+                                + ", ".join(planned[:4])
+                                + ". Write that test now, in the project's own "
+                                  "test files, following the fixtures, helpers "
+                                  "and registration the neighbouring tests "
+                                  "use. Then run the project's build and "
+                                  "tests. Do not start new investigation "
+                                  "until the change you already made is "
+                                  "proved."),), authored_by="harness"))
+                        only_tools = _write_round_tools(context)
+                        context.observer.notice(
+                            "validation_owed", {"requirements": len(planned)})
 
                 # The contract is closed and every change it names is
                 # validated. There is nothing left to establish, and a turn

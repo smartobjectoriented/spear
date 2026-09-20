@@ -125,6 +125,33 @@ _SECTION = re.compile(r"\b(\d+(?:\.\d+)+)(?:-\d+)?\b")
 #: An opaque retrieval handle, whatever the store calls them.
 _HANDLE = re.compile(r"\b[a-z]{2,4}-[0-9a-f]{8,}\b")
 
+def _looks_like_a_test(path):
+    """Whether a path the turn wrote is part of the project's tests.
+
+    By the shapes projects actually use, and nothing cleverer: a directory
+    called test or tests anywhere in the path, or a basename that says so.
+    """
+    text = str(path or "").replace("\\", "/").lower()
+
+    return bool(re.search(
+        r"(^|/)tests?/"                       # under a test directory
+        r"|(^|/)test[_\-][\w.\-]+$"           # test_foo.c
+        r"|(^|/)[\w.\-]+[_\-]tests?\.\w+$",   # foo_test.py
+        text))
+
+
+#: Language that covers the other side of a condition: the case where the
+#: behaviour must NOT happen, or must happen differently. An implementation
+#: can satisfy the positive example and violate the condition, and only this
+#: branch tells the two apart.
+_NEGATIVE_BRANCH = re.compile(
+    r"\b(?:and\s+when\s+not|when\s+(?:it\s+is\s+)?not|if\s+not|otherwise|"
+    r"unless|but\s+not|neither|no\s+\w+\s+is|nothing\s+is|does\s+not|"
+    r"is\s+not|only\s+(?:when|if)|exactly\s+one|absent|omitted|cleared|"
+    r"rejected|refused|fails?|failure|negative|opposite|conversely|"
+    r"whereas|while\s+the\s+other)\b", re.I)
+
+
 #: A correction that names somewhere in the code: a file, or a function call.
 #: Weak on purpose -- this is not a proof that the lifecycle point is right,
 #: only a refusal to accept a plan that names no point at all.
@@ -139,6 +166,97 @@ _NAMES_A_PATH = re.compile(r"[\w.\-/]*\w\.[A-Za-z0-9_+]{1,8}\b|\b\w+\(\)")
 _MOVES_A_CALL = re.compile(
     r"\b(?:call|calling|invoke|invoking|move|moving|relocate|hoist|reuse|"
     r"trigger)\b[^.;]{0,80}\b(?:from|into|in|at|inside|within|to)\b",
+    re.I)
+
+# ── what makes a validation statement a DESIGN ───────────────────────────
+#
+# The field was mandatory and non-empty, and that was all it was. Measured
+# across four runs: "The fix will be validated by running the existing unit
+# tests", "the test suite should be extended", "run ctest" -- every one of them
+# non-empty, every one of them committing to nothing, every one accepted. The
+# turn then decided what code to write before it had decided how the behaviour
+# would be proved, and wrote the source edit eighty-eight calls before the
+# first test edit, or never wrote one at all.
+#
+# A design answers two questions the prose above does not: what makes the
+# behaviour happen, and what result shows it worked. Both, because either
+# alone is still a wish.
+
+#: A scenario: the input, condition or path that triggers the behaviour.
+_SCENARIO = re.compile(
+    r"\b(?:when|if|after|before|given|upon|once|with|for\s+a|in\s+the\s+case|"
+    r"send(?:s|ing)?|request(?:s|ing)?|set(?:s|ting)?|call(?:s|ing)?|"
+    r"provid(?:e|es|ing)|constructs?|build(?:s|ing)?)\b", re.I)
+
+#: An outcome: what the test observes, which is what makes it a test.
+_OUTCOME = re.compile(
+    r"\b(?:expect(?:s|ed|ing)?|assert(?:s|ion|ed|ing)?|check(?:s|ed|ing)?\s+that|"
+    r"verif(?:y|ies|ied|ying)\s+that|should\s+(?:be|contain|carry|return|"
+    r"produce|emit|send|set|equal|have|fail|reject)|must\s+(?:be|contain|"
+    r"return|produce|equal)|result(?:s|ing)?\s+in|returns?\s+|produces?\s+|"
+    r"emits?\s+|yields?\s+|is\s+(?:set|cleared|present|absent|rejected)|"
+    r"exactly\s+one|no\s+\w+\s+is\s+sent)\b", re.I)
+
+#: "Run the tests and see" -- the whole statement, with nothing else in it.
+#: Recognised so the refusal can quote back what was wrong rather than say
+#: "insufficient" and leave the turn to guess.
+_RUN_THE_SUITE = re.compile(
+    r"^\W*(?:the\s+|existing\s+|project'?s?\s+|current\s+)*"
+    r"(?:fix\s+will\s+be\s+validated\s+by\s+)?"
+    r"(?:run(?:ning)?|execut(?:e|ing)|use|using|extend(?:ing)?|add(?:ing)?)?\s*"
+    r"(?:the\s+)?(?:existing\s+|project'?s?\s+|current\s+|full\s+)*"
+    r"(?:unit\s+)?(?:test\s+suite|tests?|ctest|make\s+test|suite|"
+    r"test\s+cases?)\b[^.]{0,60}$", re.I)
+
+
+def validation_design(statement, *, read_files=()):
+    """What kind of validation this item has planned, if any.
+
+    Returns one of the three dispositions PHASE 4 asks for, or "" when the
+    statement is not a design at all. Derived from the text and the evidence
+    rather than asked for as another schema field: one more required argument
+    is one more thing a backend can fail to encode, and the turn has already
+    written everything needed to tell these apart.
+    """
+    text = (statement or "").strip()
+
+    if not text:
+        return ""
+
+    if _NO_TEST_POSSIBLE.search(text):
+        # An admission needs a reason and something done instead; "it cannot
+        # be tested" on its own is a shrug, not a plan.
+        return (NOT_PRACTICAL
+                if _SCENARIO.search(text) or " because " in text.lower()
+                else "")
+
+    scenario = bool(_SCENARIO.search(text))
+    outcome = bool(_OUTCOME.search(text))
+
+    if not (scenario and outcome):
+        return ""
+
+    # A test that already exists counts only where the turn has actually read
+    # it. Naming a file is not evidence that the file reaches the new branch;
+    # having opened it is at least evidence the claim was looked at.
+    named = {_basename(found) for found in _PATH.findall(text)}
+    opened = {_basename(str(path)) for path in read_files}
+
+    if named & opened and not _PLANS_NEW_TEST.search(text):
+        return EXISTING_PROVEN
+
+    return FOCUSED_PLANNED
+
+
+#: The three answers PHASE 4 allows, as their own names.
+FOCUSED_PLANNED = "focused_test_planned"
+EXISTING_PROVEN = "existing_test_proven_to_cover"
+NOT_PRACTICAL = "automated_test_not_practical"
+
+#: Language that says a NEW test is being written, which settles the choice
+#: between planning one and leaning on one that exists.
+_PLANS_NEW_TEST = re.compile(
+    r"\b(?:add|adding|write|writing|new|extend|extending|create|creating)\b",
     re.I)
 
 #: A plan item saying plainly that no automated test can reach this. Narrow
@@ -306,6 +424,17 @@ class GapItem:
     #: it revises it.
     bound_to: str = ""
 
+    #: The conditional branch this item's validation does not cover, when
+    #: the requirement has a condition and the design tests only the case
+    #: where it applies. Recorded rather than refused indefinitely -- see
+    #: `_judge`.
+    branch_gap: str = ""
+
+    #: Which of the three answers this item's validation statement gives.
+    #: Derived at acceptance from the statement and the evidence, so it is
+    #: settled once rather than re-read at every consultation.
+    testability: str = ""
+
     FIELDS = ("requirement", "requirement_evidence", "current_behaviour",
               "implementation_evidence", "gap", "correction", "validation")
 
@@ -429,6 +558,21 @@ class WorkPhaseLedger:
     replans: list = field(default_factory=list)
     #: Plan items replaced by a later call for the same provision.
     revised: list = field(default_factory=list)
+    #: Revisions the turn made with nothing new to go on.
+    idle_revisions: int = 0
+    #: The evidence state each requirement was last planned against, so a
+    #: revision can be asked what changed since.
+    _planned_at: dict = field(default_factory=dict)
+    #: Items already asked once for the other side of their condition, and
+    #: for the second end of a moved call, and for the lifecycle point. These
+    #: three are judgements about wording, not facts about evidence, and a
+    #: judgement that can be asked forever is a wall: one run was told five
+    #: times running to name both ends of a call, produced a sound plan each
+    #: time, and spent its whole turn in the plan tool without writing a line.
+    #: Asked once, then recorded as a gap the closing matrix reports.
+    _branch_asked: set = field(default_factory=set)
+    _context_asked: set = field(default_factory=set)
+    _point_asked: set = field(default_factory=set)
 
     #: Where the first write landed, as a phase. The whole diagnostic rests on
     #: this one field: "the first edit happened during INVESTIGATE" is the
@@ -588,7 +732,13 @@ class WorkPhaseLedger:
         was wrong with it, and a diagnostic can see that a turn tried to plan
         from something it had not read.
         """
-        verdicts = [self._judge(self._bound(GapItem.from_mapping(raw)))
+        # A supersede that NAMES what it found is a revision with its
+        # evidence stated, which is exactly what one is asked to do. It is
+        # not held to the counters: the turn is telling the ledger what
+        # changed rather than being asked to prove it moved.
+        declared = bool(supersedes or new_evidence)
+        verdicts = [self._judge(self._bound(GapItem.from_mapping(raw)),
+                                declared=declared)
                     for raw in (raw_items or [])]
         accepted = tuple(v for v in verdicts if v.accepted)
         rejected = tuple(v for v in verdicts if not v.accepted)
@@ -597,7 +747,10 @@ class WorkPhaseLedger:
             self.replans.append(Replan(reason or "replanned",
                                        supersedes, new_evidence))
 
-        if supersedes:
+        if supersedes and accepted:
+            # Only once a replacement is actually accepted: dropping the
+            # standing entry for one that is then refused leaves the
+            # requirement with nothing at all.
             self.items = [item for item in self.items
                           if item.requirement != supersedes]
 
@@ -615,12 +768,21 @@ class WorkPhaseLedger:
 
             if at is None:
                 self.items.append(verdict.item)
+                self._planned_at[verdict.item.identity] = self._evidence_mark()
             else:
+                mark = self._evidence_mark()
+                fresh = mark != self._planned_at.get(verdict.item.identity)
                 self.revised.append(
                     {"requirement": verdict.item.identity,
                      "from": self.items[at].disposition,
-                     "to": verdict.item.disposition})
+                     "to": verdict.item.disposition,
+                     "new_evidence": fresh})
+
+                if not fresh:
+                    self.idle_revisions += 1
+
                 self.items[at] = verdict.item
+                self._planned_at[verdict.item.identity] = mark
 
         self.rejected.extend(rejected)
 
@@ -644,6 +806,15 @@ class WorkPhaseLedger:
 
         return PlanAcceptance(accepted, rejected)
 
+    def _evidence_mark(self):
+        """A stamp of what the turn knows, so a revision can be asked what
+        changed. Counts, not contents: anything that moves one of them is new
+        evidence, and nothing else is."""
+        return (len(self.evidence.authority_keys),
+                self.evidence.authority_units,
+                len(self.evidence.implementation_files),
+                len(self.validations))
+
     def _bound(self, item):
         """Resolve the item's citation to a carried provision, once.
 
@@ -653,9 +824,42 @@ class WorkPhaseLedger:
         """
         found = self.requirements.match(item.requirement_evidence)
 
+        item = replace(item, testability=validation_design(
+            item.validation, read_files=self.evidence.implementation_files))
+
         return item if found is None else replace(item, bound_to=found.key)
 
-    def _judge(self, item):
+    def _judge(self, item, *, declared=False):
+        # A second opinion is not a revision. Measured on one run: of
+        # twenty-seven accepted plan calls, six were byte-identical
+        # restatements and two more revised a requirement with no tool call of
+        # any kind in between -- nothing could have been learned, and the
+        # disposition moved anyway. What a revision owes is the evidence that
+        # caused it.
+        standing = next((known for known in self.items
+                         if known.identity == item.identity), None)
+
+        if standing is not None and not declared:
+            mark = self._evidence_mark()
+
+            if mark == self._planned_at.get(item.identity):
+                if (standing.disposition, standing.correction,
+                        standing.validation) == (item.disposition,
+                                                 item.correction,
+                                                 item.validation):
+                    return ItemVerdict(
+                        item, False,
+                        "this is the entry that already stands, word for "
+                        "word. It is recorded; nothing further is needed for "
+                        "it.")
+
+                return ItemVerdict(
+                    item, False,
+                    "nothing has been read, retrieved or run since this "
+                    "requirement was last planned, so there is no new "
+                    "evidence to revise it on. Go and establish the fact that "
+                    "would change it, or leave the entry as it stands.")
+
         empty = item.missing()
 
         if empty:
@@ -689,7 +893,10 @@ class WorkPhaseLedger:
         carried = self.requirements.match(item.requirement_evidence)
 
         if (carried is not None and carried.trigger
-                and not _NAMES_A_PATH.search(item.correction)):
+                and not _NAMES_A_PATH.search(item.correction)
+                and item.identity not in self._point_asked):
+            self._point_asked.add(item.identity)
+
             return ItemVerdict(
                 item, False,
                 f"this provision conditions its obligation — \"{carried.trigger}\" "
@@ -705,7 +912,9 @@ class WorkPhaseLedger:
             sites = {_basename(found) for found
                      in _PATH.findall(item.implementation_evidence)}
 
-            if len(sites) < 2:
+            if len(sites) < 2 and item.identity not in self._context_asked:
+                self._context_asked.add(item.identity)
+
                 return ItemVerdict(
                     item, False,
                     "this change calls something from a place it is not "
@@ -715,6 +924,67 @@ class WorkPhaseLedger:
                     "in `current_behaviour` what the existing callers assume "
                     "about thread, lock or lifetime. A function that is safe "
                     "where it is called now is not safe from anywhere.")
+
+            if len(sites) < 2:
+                item = replace(
+                    item,
+                    branch_gap=(item.branch_gap + "; " if item.branch_gap else "")
+                    + "moves a call without evidence from the site it is "
+                      "called from today")
+
+        # A change to behaviour needs a design for proving it, BEFORE the
+        # code is written. Not a filename and not a promise to run something:
+        # what makes the behaviour happen, and what result shows it worked.
+        if item.disposition == str(Disposition.CHANGE_PLANNED):
+            design = validation_design(
+                item.validation,
+                read_files=self.evidence.implementation_files)
+
+            # The other side of a condition, asked for ONCE. A test of the
+            # case where a provision applies can pass while the condition
+            # itself is ignored, so it is worth asking; but a run that was
+            # asked three times running produced a sound design each time,
+            # never found the words this looks for, and spent its whole turn
+            # in the plan tool without writing a line. A check that cannot be
+            # satisfied is a wall, not a gate. So: refused once, with the
+            # reason, and after that recorded as a known gap in the coverage
+            # and reported in the closing matrix.
+            if (design == FOCUSED_PLANNED and carried is not None
+                    and carried.trigger
+                    and not _NEGATIVE_BRANCH.search(item.validation)):
+                if item.identity not in self._branch_asked:
+                    self._branch_asked.add(item.identity)
+
+                    return ItemVerdict(
+                        item, False,
+                        f"this provision only applies "
+                        f"\"{carried.trigger[:80]}\", so a test of the case "
+                        f"where it does apply can pass while the condition "
+                        f"itself is ignored. Say what the test expects in the "
+                        f"other case too -- when the condition does not hold, "
+                        f"or when only one of the cases is asked for. If that "
+                        f"is genuinely not distinguishable here, say so and "
+                        f"this will be recorded as a gap in the coverage.")
+
+                item = replace(
+                    item,
+                    branch_gap=f"tests only the case where the condition "
+                               f"holds ({carried.trigger[:60]})")
+
+            if not design:
+                return ItemVerdict(
+                    item, False,
+                    "this behaviour has no validation design yet. "
+                    + (f"\"{item.validation[:70]}\" names no scenario and no "
+                       "expected result"
+                       if _RUN_THE_SUITE.search(item.validation)
+                       else "Say what makes the behaviour happen and what "
+                            "result proves it worked")
+                    + ". A suite that already passes without entering your "
+                      "new branch proves nothing about it. Give the "
+                      "condition, the expected result, and where the check "
+                      "belongs -- or say plainly that no automated test can "
+                      "reach it, and why, and what you will do instead.")
 
         if not self.evidence.backs_implementation(item.implementation_evidence):
             return ItemVerdict(
@@ -897,23 +1167,42 @@ class WorkPhaseLedger:
                     str(Disposition.CHANGE_PLANNED),
                     str(Disposition.UNDETERMINED)):
                 self.requirements.dispose(
-                    carried.key, Disposition.CHANGE_IMPLEMENTED,
+                    carried.key,
+                    Disposition.CODE_CHANGED_AWAITING_VALIDATION,
                     note=carried.note, by="harness")
 
         return self
 
     # -- validation -------------------------------------------------------
 
+    def already_validated(self, command):
+        """Whether this exact command already passed on this exact state.
+
+        The tree has not changed and neither has the answer. A turn that asks
+        again is asking to be told the same thing, and the run this comes from
+        declared completion, ran the suite, and then reopened the ledger.
+        """
+        return any(run["command"] == command and run["status"] == "passed"
+                   and run.get("generation") == self.writes
+                   for run in self.validations)
+
     def note_validation(self, command, status, *, covers=()):
         """One validation action: what ran, what it said, what it covers."""
         self.validations.append({"command": command, "status": status,
-                                 "covers": [str(item) for item in covers]})
+                                 "covers": [str(item) for item in covers],
+                                 # Which state it was taken at: the write
+                                 # count, because a write is the only thing
+                                 # that can change the answer.
+                                 "generation": self.writes})
 
         if status != "passed":
             self.failed_validations[command] = (
                 self.failed_validations.get(command, 0) + 1)
         else:
             self.failed_validations.pop(command, None)
+
+        if status == "passed":
+            self.settle_validated()
 
         if self.phase == Phase.EDIT:
             self.phase = Phase.TEST
@@ -966,58 +1255,68 @@ class WorkPhaseLedger:
         return tuple(item for item in self.items if not answered(item))
 
     def unvalidated_requirements(self):
-        """Requirements whose behaviour changed and nothing exercised it.
+        """Requirements whose behaviour changed and nothing proves it.
 
-        A green suite is not evidence about a branch it never reaches. The
-        run that made this necessary changed acknowledge emission, added no
-        test, ran 198 existing checks, and reported that all of them passed --
-        which was true, and said nothing whatever about the new behaviour.
+        Coverage is decided by CAUSE, not by filename. The previous rule asked
+        whether the validation text named a file the turn also wrote, and on a
+        real run every accepted validation named no file at all -- the path
+        pattern matched "e.g" and "i.e" out of the prose -- so a run that did
+        write tests got no credit and a run that named a file and described
+        nothing would have. What settles it is the design the item committed
+        to and whether the work that design calls for actually happened:
 
-        Two ways out, and both are honest: a validation that ran and PASSED
-        naming something the turn also wrote (a test it added or changed), or
-        an explicit statement in the plan item that no automated test can
-        reach it. What is refused is the third way, where an untouched suite
-        is offered as proof.
+        * a focused test was planned -- the turn must have written a test and
+          a validation must have passed;
+        * an existing test was claimed to cover it -- a validation must have
+          passed, and the claim had to be made against a file the turn read;
+        * no automated test is practical -- said plainly, with a reason.
         """
         if not self.engaged or not len(self.requirements):
             return ()
 
-        proven, excused = set(), set()
+        proven = set()
+        wrote_a_test = any(_looks_like_a_test(path) for path in self.written)
 
         for item in self.items:
-            if item.identity in self._validated_identities():
-                proven.add(item.bound_to or item.identity)
+            key = item.bound_to or item.identity
 
-            if _NO_TEST_POSSIBLE.search(item.validation):
-                excused.add(item.bound_to or item.identity)
+            if item.testability == NOT_PRACTICAL:
+                proven.add(key)
+            elif item.testability == EXISTING_PROVEN and self.validated:
+                proven.add(key)
+            elif (item.testability == FOCUSED_PLANNED and self.validated
+                  and wrote_a_test):
+                proven.add(key)
 
-        changed = {found.key for found in self.requirements
-                   if found.disposition == str(Disposition.CHANGE_IMPLEMENTED)}
+        awaiting = {found.key for found in self.requirements
+                    if found.disposition in (
+                        str(Disposition.CHANGE_IMPLEMENTED),
+                        str(Disposition.CODE_CHANGED_AWAITING_VALIDATION))}
 
         return tuple(found for found in self.requirements
-                     if found.key in changed - proven - excused)
+                     if found.key in awaiting - proven)
 
-    def _validated_identities(self):
-        """Plan items a validation that passed actually reached.
+    def settle_validated(self):
+        """Promote what the validation just proved, and nothing else.
 
-        The link is the test the item named AND the turn touched: a test file
-        the turn wrote or changed is a test that can reach the new path, and
-        a pre-existing one it merely ran is not evidence that it does.
+        Called when the project's own verification has run. A requirement
+        whose code changed becomes implemented only here, and only when the
+        work its own validation design called for has been done.
         """
-        if not self.validated:
-            return set()
+        if not self.engaged or not len(self.requirements):
+            return self
 
-        touched = {_basename(path) for path in self.written}
-        proven = set()
+        unproven = {found.key for found in self.unvalidated_requirements()}
 
-        for item in self.items:
-            named = {_basename(found)
-                     for found in _PATH.findall(item.validation)}
+        for found in self.requirements:
+            if (found.disposition
+                    == str(Disposition.CODE_CHANGED_AWAITING_VALIDATION)
+                    and found.key not in unproven):
+                self.requirements.dispose(
+                    found.key, Disposition.CHANGE_IMPLEMENTED,
+                    note=found.note, by="harness")
 
-            if named & touched:
-                proven.add(item.identity)
-
-        return proven
+        return self
 
     @property
     def validated(self):
@@ -1060,6 +1359,30 @@ class WorkPhaseLedger:
         return self.engaged and self.plan_demands >= MAX_PLAN_DEMANDS \
             and self.phase == Phase.PLAN
 
+    def branch_gaps(self):
+        """Coverage the turn was asked for and did not give, by requirement."""
+        return {item.bound_to or item.identity: item.branch_gap
+                for item in self.items if item.branch_gap}
+
+    def awaiting_validation(self):
+        """Requirements whose code changed and whose proof is still owed."""
+        return tuple(found for found in self.requirements
+                     if found.disposition
+                     == str(Disposition.CODE_CHANGED_AWAITING_VALIDATION))
+
+    def build_broken_for(self, command=""):
+        """The requirements a failing project build leaves unproven.
+
+        A build that does not survive the change is not a test result and is
+        not an environment problem to route around: nothing the turn wrote
+        can be credited while it stands, and the work item that broke it is
+        the work item to go back to.
+        """
+        if not self.failed_validations:
+            return ()
+
+        return self.awaiting_validation()
+
     def contract_closed(self):
         """Every in-scope requirement disposed, none open, none unvalidated.
 
@@ -1074,7 +1397,8 @@ class WorkPhaseLedger:
 
         return (not self.requirements.open_items()
                 and not self.requirements.unstated()
-                and not self.unvalidated_requirements())
+                and not self.unvalidated_requirements()
+                and not self.failed_validations)
 
     def force_synthesis(self):
         """Stop exploring. Either the plan stands or it needs replacing."""

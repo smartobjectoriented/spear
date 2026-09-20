@@ -33,6 +33,7 @@ from work_phase import WorkPhaseLedger
 SOURCE = "src/link/handshake.c"
 OTHER = "src/link/device.c"
 HANDLE = "std-0a1b2c3d4e5f"
+NEG = "; and when validation fails, expect no answer at all"
 
 
 def R(key, **kw):
@@ -60,7 +61,7 @@ def item(**kw):
         "implementation_evidence": SOURCE,
         "gap": "later requests get no answer",
         "correction": f"answer each request in handshake_accept() in {SOURCE}",
-        "validation": "tests/test_handshake.c exercises two requests",
+        "validation": "tests/test_handshake.c: when a second request arrives on the same link, expect a second answer carrying the same identifier",
     }
     base.update(kw)
 
@@ -84,13 +85,19 @@ class OneProvisionIsOneRecord(unittest.TestCase):
         self.assertEqual(len(found.items), 1)
         self.assertEqual(len(found.requirements), 1)
 
-    def test_the_latest_disposition_is_the_one_that_stands(self):
+    def learned(self, found, index):
+        """Something the turn did not know a moment ago."""
+        found.observe_call(implementation_paths={f"src/link/other{index}.c"})
+
+    def test_the_latest_evidence_backed_disposition_stands(self):
         found = ledger()
 
-        for disposition in ("change_planned", "satisfied_already",
-                            "explicitly_out_of_scope"):
+        for index, disposition in enumerate(("change_planned",
+                                             "satisfied_already",
+                                             "explicitly_out_of_scope")):
             found.record_plan([item(disposition=disposition,
                                     correction="no change needed here")])
+            self.learned(found, index)
 
         self.assertEqual(found.requirements.get("Rule 4.2.1-1").disposition,
                          str(Disposition.EXPLICITLY_OUT_OF_SCOPE))
@@ -98,23 +105,46 @@ class OneProvisionIsOneRecord(unittest.TestCase):
     def test_the_whole_history_is_kept(self):
         found = ledger()
 
-        for disposition in ("change_planned", "satisfied_already",
-                            "explicitly_out_of_scope"):
+        for index, disposition in enumerate(("change_planned",
+                                             "satisfied_already",
+                                             "explicitly_out_of_scope")):
             found.record_plan([item(disposition=disposition,
                                     correction="no change needed here")])
+            self.learned(found, index)
 
         self.assertEqual(
             found.requirements.revisions()["Rule 4.2.1-1"],
             ["change_planned", "satisfied_already", "explicitly_out_of_scope"])
 
-    def test_revisions_are_reported(self):
+    def test_revisions_are_reported_with_whether_anything_was_learned(self):
         found = ledger()
         found.record_plan([item()])
+        self.learned(found, 0)
         found.record_plan([item(disposition="satisfied_already",
                                 correction="no change needed")])
 
         self.assertEqual(len(found.revised), 1)
         self.assertEqual(found.revised[0]["requirement"], "Rule 4.2.1-1")
+        self.assertTrue(found.revised[0]["new_evidence"])
+
+    def test_a_revision_with_nothing_new_behind_it_is_refused(self):
+        """Six of one run's twenty-seven plan calls were byte-identical."""
+        found = ledger()
+        found.record_plan([item()])
+        outcome = found.record_plan([item(disposition="satisfied_already",
+                                          correction="actually it is fine")])
+
+        self.assertFalse(outcome.any_accepted)
+        self.assertIn("no new evidence", outcome.report())
+        self.assertEqual(found.idle_revisions, 0)
+
+    def test_an_identical_restatement_is_told_it_already_stands(self):
+        found = ledger()
+        found.record_plan([item()])
+        outcome = found.record_plan([item()])
+
+        self.assertFalse(outcome.any_accepted)
+        self.assertIn("word for word", outcome.report())
 
     def test_free_text_is_never_the_identity(self):
         """A model rewords its own sentence between calls."""
@@ -193,9 +223,22 @@ class LifecycleSemanticsSurvive(unittest.TestCase):
         found = ledger(R("Rule 4.2.1-1", trigger="after validation completes"))
         outcome = found.record_plan([item(
             correction=f"answer from handshake_accept() in {SOURCE}, after "
-                       f"the validation branch returns")])
+                       f"the validation branch returns",
+            validation="tests/test_handshake.c: when validation succeeds, "
+                       "expect one answer" + NEG)])
 
         self.assertTrue(outcome.any_accepted, outcome.report())
+
+    def test_a_conditional_requirement_asks_for_the_other_branch(self):
+        """The positive case can pass while the condition is ignored."""
+        found = ledger(R("Rule 4.2.1-1", trigger="after validation completes"))
+        outcome = found.record_plan([item(
+            correction=f"answer from handshake_accept() in {SOURCE}",
+            validation="tests/test_handshake.c: when validation succeeds, "
+                       "expect one answer")])
+
+        self.assertFalse(outcome.any_accepted)
+        self.assertIn("the other case too", outcome.report())
 
     def test_an_unconditional_requirement_asks_for_no_binding(self):
         found = ledger(R("Rule 4.2.1-1", trigger=""))
@@ -212,7 +255,9 @@ class LifecycleSemanticsSurvive(unittest.TestCase):
                          source_id="std-bbbbbbbbbbbb"))
         found.record_plan([item(
             requirement_evidence="Rule 4.2.1-1",
-            correction=f"answer from validate() in {SOURCE}")])
+            correction=f"answer from validate() in {SOURCE}",
+            validation="tests/test_handshake.c: when validation succeeds, "
+                       "expect one answer" + NEG)])
 
         self.assertEqual([found.key for found in found.uncovered_requirements()],
                          ["Rule 4.2.1-2"])
@@ -265,7 +310,7 @@ class MovingACallAsksAboutItsContext(unittest.TestCase):
     """PHASES 12 and 13 — what the old call site guaranteed, the new one may
     not: thread, lock, lifetime, ownership."""
 
-    def test_a_moved_call_with_one_file_read_is_refused(self):
+    def test_a_moved_call_with_one_file_read_is_refused_once(self):
         found = ledger(read=(SOURCE, OTHER))
         outcome = found.record_plan([item(
             implementation_evidence=SOURCE,
@@ -273,6 +318,17 @@ class MovingACallAsksAboutItsContext(unittest.TestCase):
 
         self.assertFalse(outcome.any_accepted)
         self.assertIn("not safe from anywhere", outcome.report())
+
+    def test_asked_twice_it_is_recorded_as_a_gap_not_walled_off(self):
+        found = ledger(read=(SOURCE, OTHER))
+        plan = item(implementation_evidence=SOURCE,
+                    correction=f"call device_read() from the listener in {SOURCE}")
+        found.record_plan([plan])
+        outcome = found.record_plan([plan])
+
+        self.assertTrue(outcome.any_accepted, outcome.report())
+        self.assertIn("moves a call without evidence",
+                      found.branch_gaps()["Rule 4.2.1-1"])
 
     def test_having_read_both_ends_it_is_accepted(self):
         found = ledger(read=(SOURCE, OTHER))

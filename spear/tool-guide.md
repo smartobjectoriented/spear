@@ -107,9 +107,21 @@ Four things the record holds you to:
   its obligation on a stage or an event is not satisfied by code that does the
   right thing eventually; `correction` has to name the function or file that
   reaches that point.
-* **A test has to reach what you changed.** An existing suite that passes
-  without entering your new branch proves nothing about it. Name the test you
-  will add or change, or say plainly that no automated test can reach it.
+* **Design the proof before you write the code.** `validation` must say what
+  makes the behaviour happen and what result shows it worked — a scenario and
+  an outcome. "Run the tests", "run ctest" and "extend the suite" are refused,
+  because a suite that already passes without entering your new branch proves
+  nothing about it. Where the requirement is conditional, cover the branch
+  that would otherwise pass by accident. If no automated test can reach it,
+  say so, say why, and say what you will do instead.
+* **The change and its test are one piece of work.** A source edit leaves the
+  requirement awaiting validation, not done. Write the test in the project's
+  own test files, following the fixtures, helpers, naming and registration the
+  neighbouring tests use — do not build a parallel harness. Then run the
+  project's build and tests.
+* **A broken build proves nothing.** If the project stops building after your
+  change, go back to the work item that broke it before anything else. Do not
+  open new ground while the build is down.
 * **A call moved is a call in a new context.** Calling something existing from
   somewhere it is not called from today means reading both ends and saying
   what the existing callers assume about thread, lock or lifetime.

@@ -621,11 +621,13 @@ class TheFinalReviewIsReadOnly(unittest.TestCase):
         self.assertEqual(decision.reason, work_phase.REVIEW_IS_READ_ONLY)
 
     def test_a_review_finding_reopens_the_gate_through_a_plan(self):
+        self.ledger.observe_call(implementation_paths={"src/link/other.c"})
         self.ledger.record_plan([good_item(
             requirement="the responder reports an unknown opcode")])
 
         self.assertEqual(self.ledger.phase, Phase.EDIT)
-        self.assertTrue(self.ledger.may_write().allowed)
+        self.assertTrue(self.ledger.may_write(SOURCE).allowed,
+                        self.ledger.may_write(SOURCE).message)
 
 
 class TheRecordIsInspectable(unittest.TestCase):

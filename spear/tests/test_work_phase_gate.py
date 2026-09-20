@@ -128,6 +128,16 @@ class TheRouterConsultsTheGate(unittest.TestCase):
 
         self.assertNotIn(envelope.error_category, _GATE_REASONS)
 
+    def test_a_write_outside_every_planned_change_is_refused(self):
+        """The permission belongs to the change, not to the turn."""
+        envelope, _ = call("write_file",
+                           {"path": "somewhere/else.c", "content": "x"},
+                           phase=ledger(planned=True))
+
+        self.assertFalse(envelope.success)
+        self.assertEqual(envelope.error_category,
+                         work_phase.OUTSIDE_WORK_ITEM)
+
     def test_no_gate_at_all_leaves_a_write_alone(self):
         target = Path("test_work_phase_gate_ungoverned.txt")
 
@@ -192,11 +202,13 @@ class TheGateOpensOnAnAcceptedPlan(unittest.TestCase):
 
     def test_a_write_then_reaches_the_handler(self):
         target = Path("test_work_phase_gate_written.txt")
+        found = ledger(planned=True)
+        found.work_items[0].paths.add(target.name)
 
         try:
             envelope, _ = call("write_file",
                                {"path": str(target), "content": "x"},
-                               phase=ledger(planned=True))
+                               phase=found)
 
             self.assertTrue(envelope.success, envelope.text)
             self.assertTrue(target.exists())

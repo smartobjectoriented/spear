@@ -220,7 +220,7 @@ class ToolExecutionContext:
     #: DURING the turn, as evidence arrives and a plan is accepted, and a
     #: value sampled when the context was built would be the answer to a
     #: question asked before the turn started.
-    write_gate: Callable[[], Any] | None = None
+    write_gate: Callable[..., Any] | None = None
 
     #: The session's permission mode, as its own name: "safe", "ask", "auto".
     #: A plain string rather than the enum so the routing layer keeps no
@@ -310,7 +310,18 @@ class ToolRouter:
         # arrives through the channel the model is already reading.
 
         if context.write_gate is not None and spec.mutability == ToolMutability.MUTATING:
-            decision = context.write_gate()
+            # The file the call is about, so the gate can ask which planned
+            # change authorises it. A mutating tool that names no path gets
+            # the general question instead.
+            target = ""
+
+            if isinstance(arguments, Mapping):
+                for key in ("path", "file_path", "file"):
+                    if isinstance(arguments.get(key), str):
+                        target = arguments[key]
+                        break
+
+            decision = context.write_gate(target)
 
             if decision is not None and not getattr(decision, "allowed", True):
                 return self._early_failure(

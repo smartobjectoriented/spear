@@ -79,6 +79,8 @@ PLAN_TOOL = "plan_change"
 NO_AUTHORITY = "authority_evidence_missing"
 NO_IMPLEMENTATION = "implementation_evidence_missing"
 NO_PLAN = "plan_missing"
+#: An edit to a file no planned change names.
+OUTSIDE_WORK_ITEM = "outside_the_planned_change"
 #: Every carried requirement needs a disposition before anything is written.
 #: Distinct from NO_PLAN: a turn here HAS a plan, and it does not yet cover
 #: the whole of what the previous turn established.
@@ -490,6 +492,70 @@ class GapItem:
                 "disposition": self.disposition, "bound_to": self.bound_to}
 
 
+#: How a requirement that nobody has planned yet appears in the ledger. It is
+#: not a disposition and it does not block anything; it is the record saying
+#: the requirement is known, in scope, and not yet analysed.
+NOT_YET_ANALYSED = "open / not yet analysed"
+
+
+@dataclass
+class WorkItem:
+    """One intended change to one behaviour, and everything it must answer.
+
+    Grouped by CODE PATH, never by document section. Two plan items belong
+    together when they touch the same files and symbols, because that is what
+    makes them one edit, one build and one test -- a section number says
+    nothing about whether two changes can be made and proved together.
+
+    This exists because the gate before it was global. Every carried
+    requirement had to be dispositioned before any source write, and measured
+    on four runs that meant three of four requirements blocking an edit they
+    had nothing to do with. One run spent its entire turn dispositioning the
+    contract, looping on a single requirement, and never wrote a line.
+
+    Plan locally, edit and validate locally, close globally.
+    """
+
+    key: str
+    #: Requirement keys this item answers.
+    requirements: set = field(default_factory=set)
+    #: Files it changes, by basename: what the edit gate checks against.
+    paths: set = field(default_factory=set)
+    #: Symbols named in its corrections, for coupling and impact.
+    symbols: set = field(default_factory=set)
+    #: Requirements pulled in because they constrain the same behaviour.
+    coupled: set = field(default_factory=set)
+    #: Work items that must be finished first.
+    depends_on: set = field(default_factory=set)
+    closed: bool = False
+    reopened: int = 0
+
+    def covers(self, path):
+        return _basename(str(path or "")) in self.paths
+
+    def to_dict(self):
+        return {"key": self.key, "requirements": sorted(self.requirements),
+                "paths": sorted(self.paths), "symbols": sorted(self.symbols),
+                "coupled": sorted(self.coupled),
+                "depends_on": sorted(self.depends_on),
+                "closed": self.closed, "reopened": self.reopened}
+
+
+def _symbols_in(text):
+    """The functions and types a plan item names, as it names them."""
+    return {found.rstrip("()") for found in
+            re.findall(r"\b[A-Za-z_]\w{2,}\s*\(\)", text or "")} | {
+        found for found in re.findall(r"\b[A-Z][A-Za-z0-9]*_[A-Z0-9_]{2,}\b",
+                                      text or "")}
+
+
+def _paths_in(text):
+    """The files a plan item names, by basename."""
+    return {_basename(found) for found in _PATH.findall(text or "")
+            if "." in _basename(found) and not re.fullmatch(
+                r"(?:e\.g|i\.e|etc)\.?", _basename(found), re.I)}
+
+
 @dataclass(frozen=True)
 class ItemVerdict:
     item: GapItem
@@ -560,9 +626,16 @@ class WorkPhaseLedger:
     revised: list = field(default_factory=list)
     #: Revisions the turn made with nothing new to go on.
     idle_revisions: int = 0
+    #: Set when evidence invalidated the plan and nothing has replaced it.
+    #: The work items survive -- what is known about the code has not changed
+    #: -- but nothing may be written against a plan known to be wrong.
+    replan_pending: bool = False
     #: The evidence state each requirement was last planned against, so a
     #: revision can be asked what changed since.
     _planned_at: dict = field(default_factory=dict)
+    #: One entry per intended change, keyed by the code path it touches.
+    work_items: list = field(default_factory=list)
+
     #: Items already asked once for the other side of their condition, and
     #: for the second end of a moved call, and for the lifecycle point. These
     #: three are judgements about wording, not facts about evidence, and a
@@ -769,6 +842,7 @@ class WorkPhaseLedger:
             if at is None:
                 self.items.append(verdict.item)
                 self._planned_at[verdict.item.identity] = self._evidence_mark()
+                self.couple(self._place(verdict.item))
             else:
                 mark = self._evidence_mark()
                 fresh = mark != self._planned_at.get(verdict.item.identity)
@@ -783,8 +857,12 @@ class WorkPhaseLedger:
 
                 self.items[at] = verdict.item
                 self._planned_at[verdict.item.identity] = mark
+                self.couple(self._place(verdict.item))
 
         self.rejected.extend(rejected)
+
+        if accepted:
+            self.replan_pending = False
 
         # Bind each accepted item to the carried requirement it answers, and
         # record what the turn said would become of it. An item that answers
@@ -797,14 +875,132 @@ class WorkPhaseLedger:
                 verdict.item.settled_disposition(),
                 note=verdict.item.correction[:200])
 
-        if self.items and self.phase in (Phase.INVESTIGATE, Phase.PLAN):
-            self.phase = Phase.EDIT
-        elif self.items and self.phase == Phase.REVIEW:
+        if self.items and self.phase in (Phase.INVESTIGATE, Phase.PLAN,
+                                         Phase.REVIEW):
             self.phase = Phase.EDIT
 
         self.consecutive_without_evidence = 0
 
         return PlanAcceptance(accepted, rejected)
+
+    # ── work items ────────────────────────────────────────────────────
+
+    def _place(self, item):
+        """Put a plan item in the work item it belongs to, or open one.
+
+        Belonging is decided by the code: an item that touches a file or a
+        symbol another item already touches is the same piece of work, and
+        will be the same edit, the same build and the same test.
+        """
+        paths = _paths_in(item.implementation_evidence) | _paths_in(item.correction)
+        symbols = _symbols_in(item.correction) | _symbols_in(item.current_behaviour)
+        # A test file is where the proof goes, not what the change is about;
+        # grouping on it would put every unrelated change in one item.
+        paths = {path for path in paths if not _looks_like_a_test(path)}
+        bound = item.bound_to or item.identity
+
+        for work in self.work_items:
+            if (paths & work.paths) or (symbols & work.symbols):
+                work.requirements.add(bound)
+                work.paths |= paths
+                work.symbols |= symbols
+
+                return work
+
+        work = WorkItem(key=f"work-{len(self.work_items) + 1}",
+                        requirements={bound}, paths=set(paths),
+                        symbols=set(symbols))
+        self.work_items.append(work)
+
+        return work
+
+    def work_item_for(self, path):
+        """The work item that authorises an edit to this file, if any."""
+        for work in self.work_items:
+            if work.covers(path):
+                return work
+
+        return None
+
+    def couple(self, work):
+        """Pull in every carried requirement constraining the same behaviour.
+
+        Bounded and evidence-driven: a requirement joins when its own words
+        name something this change touches -- a symbol it edits or a file its
+        plan already names. Nothing wider, because the point is not to rebuild
+        the contract around one edit; it is to stop an edit being scoped so
+        narrowly that a requirement governing the same output is quietly left
+        out of it.
+        """
+        for found in self.requirements.required():
+            if found.key in work.requirements:
+                continue
+
+            text = f"{found.statement} {found.trigger}"
+            named = _symbols_in(text) | {word for word in re.findall(
+                r"\b[A-Za-z_]\w{3,}\b", text)}
+
+            if work.symbols & named:
+                work.requirements.add(found.key)
+                work.coupled.add(found.key)
+
+        return work
+
+    def local_gaps(self, work):
+        """What this work item still owes before it may be written.
+
+        Only its own requirements, never the whole contract.
+        """
+        missing = []
+
+        for key in sorted(work.requirements):
+            found = self.requirements.get(key)
+
+            if found is None:
+                continue
+
+            if not found.stated:
+                missing.append((key, "no disposition"))
+                continue
+
+            if found.disposition != str(Disposition.CHANGE_PLANNED):
+                continue
+
+            planned = next((item for item in self.items
+                            if (item.bound_to or item.identity) == key), None)
+
+            if planned is None or not planned.testability:
+                missing.append((key, "no validation design"))
+
+        return tuple(missing)
+
+    def blocked_work_items(self):
+        """Open work items waiting on another that is not finished yet.
+
+        Dependencies are declared, never inferred: only the turn knows that
+        one change has to land before another makes sense. What this does is
+        keep the declaration honest once it exists.
+        """
+        closed = {work.key for work in self.work_items if work.closed}
+        blocked = {}
+
+        for work in self.open_work_items():
+            waiting = work.depends_on - closed
+
+            if waiting:
+                for key in waiting:
+                    blocked[key] = blocked.get(key, set()) | {work.key}
+
+        return blocked
+
+    def open_work_items(self):
+        return tuple(work for work in self.work_items if not work.closed)
+
+    def close_work_item(self, work):
+        """Freeze it. Only new evidence about its behaviour reopens it."""
+        work.closed = True
+
+        return work
 
     def _evidence_mark(self):
         """A stamp of what the turn knows, so a revision can be asked what
@@ -838,6 +1034,27 @@ class WorkPhaseLedger:
         # caused it.
         standing = next((known for known in self.items
                          if known.identity == item.identity), None)
+
+        # Work that is finished stays finished. A closed item has had its
+        # change made, built and proved, and re-planning it on the strength
+        # of having just done so is how a turn spends its remaining rounds
+        # revisiting its own conclusions. Only evidence the caller NAMES --
+        # a supersede with what it found -- reopens one.
+        if standing is not None and not declared:
+            done = next((work for work in self.work_items
+                         if work.closed
+                         and (item.bound_to or item.identity)
+                         in work.requirements), None)
+
+            if done is not None:
+                return ItemVerdict(
+                    item, False,
+                    f"{done.key} is finished: the change was made, it built "
+                    f"and its validation passed. If something you have found "
+                    f"since makes that wrong, say what it is -- pass "
+                    f"`supersedes` and `new_evidence` -- and it will be "
+                    f"reopened. Otherwise there are other requirements still "
+                    f"open.")
 
         if standing is not None and not declared:
             mark = self._evidence_mark()
@@ -1009,6 +1226,11 @@ class WorkPhaseLedger:
         against a plan that is known to be wrong is an edit nobody chose.
         """
         self.replans.append(Replan(reason, invalidated, evidence))
+        self.replan_pending = True
+
+        for work in self.work_items:
+            work.closed = False
+            work.reopened += 1
 
         if invalidated:
             self.items = [item for item in self.items
@@ -1037,48 +1259,119 @@ class WorkPhaseLedger:
         """
         return self.requirements.unstated()
 
-    def may_write(self):
-        """Whether a mutating action may run right now, and why not."""
+    def may_write(self, path=""):
+        """Whether this mutating action may run, and why not.
+
+        The permission belongs to a WORK ITEM, not to the turn. It used to
+        belong to the turn: every carried requirement had to be dispositioned
+        before any source write, which meant three of four requirements
+        blocking an edit they had nothing to do with, and one run spending its
+        whole turn dispositioning a contract it never got to act on.
+
+        So the question asked here is local. Which work item authorises this
+        edit, and has that item answered for its own requirements? What the
+        rest of the contract owes is still owed -- it is asked at the end, by
+        `contract_closed`, and nothing here lets a requirement disappear.
+        """
         if not self.engaged:
             return WriteDecision(True)
 
-        # The coverage gate, and it is checked BEFORE the phase: a plan that
-        # covers one of five carried requirements is a plan for one fifth of
-        # the task, and letting it write is how the other four stop being
-        # mentioned. Four runs of the same two turns implemented between one
-        # and eight of the behaviours the first turn had established; the
-        # ones that dropped requirements dropped them here, silently.
-        #
-        # Every disposition is accepted, including "I could not tell". What
-        # is refused is saying nothing at all.
+        if self.phase == Phase.REVIEW:
+            return WriteDecision(
+                False, REVIEW_IS_READ_ONLY,
+                "The normative review is read-only. If it found something the "
+                "implementation must answer, record the replan and the new "
+                "evidence first; the write gate reopens with the plan.")
 
-        open_items = self.uncovered_requirements()
+        missing = self.investigation_gaps()
 
-        if open_items and self.phase != Phase.REVIEW:
-            # A requirement that names several cases is not closed by a
-            # disposition that answers one of them, so the cases are put in
-            # front of the turn with the requirement. Which cases they are is
-            # read out of the provision's own words -- see requirement_set.
-            listed = "; ".join(
-                f"{item.key} — {item.statement[:110]}"
-                + (f" [covers each of: {', '.join(item.members)}]"
-                   if item.members else "")
-                for item in open_items[:6])
-            more = (f" and {len(open_items) - 6} more"
-                    if len(open_items) > 6 else "")
+        if missing:
+            return WriteDecision(
+                False, missing[0],
+                WRITE_BLOCKED + " " + self._investigation_detail(missing))
+
+        if self.replan_pending:
+            return WriteDecision(
+                False, NO_PLAN,
+                f"{WRITE_BLOCKED} New evidence has made the current plan "
+                f"wrong and nothing has replaced it. Record what you now "
+                f"intend with `{PLAN_TOOL}` before changing anything further."
+                + (" " + self._rejection_hint() if self.rejected else ""))
+
+        if not self.work_items:
+            return WriteDecision(
+                False, NO_PLAN,
+                f"{WRITE_BLOCKED} Nothing has been planned yet. Call "
+                f"`{PLAN_TOOL}` for the requirement you intend to satisfy "
+                f"first -- not for all of them: plan the one change you are "
+                f"about to make, with the provision, what the code does now, "
+                f"the gap, the change, and how it will be proved. The rest of "
+                f"the contract stays open and is asked for at the end."
+                + (" " + self._rejection_hint() if self.rejected else ""))
+
+        # Which work item authorises THIS edit. A write outside every planned
+        # change is a change nobody planned, whatever else has been agreed.
+        work = self.work_item_for(path) if path else None
+
+        if path and work is None:
+            known = sorted({name for item in self.work_items
+                            for name in item.paths})
 
             return WriteDecision(
-                False, PLAN_INCOMPLETE,
-                f"{WRITE_BLOCKED} The previous turn established "
-                f"{len(self.requirements)} requirement(s) and "
-                f"{len(open_items)} of them still have no disposition. Call "
-                f"`{PLAN_TOOL}` once for each, citing it in "
-                f"`requirement_evidence`, with `disposition` set to "
-                f"change_planned, satisfied_already, explicitly_out_of_scope "
-                f"or undetermined. Outstanding: {listed}{more}")
+                False, OUTSIDE_WORK_ITEM,
+                f"no planned change covers {_basename(str(path))}. The work "
+                f"planned so far touches: {', '.join(known) or 'nothing'}. If "
+                f"this file is part of the change you planned, say so in a "
+                f"`{PLAN_TOOL}` call naming it; if it is a different change, "
+                f"plan that one.")
 
-        if self.phase in (Phase.EDIT, Phase.TEST):
-            return WriteDecision(True)
+        candidates = [work] if work is not None else list(self.open_work_items())
+
+        for item in candidates:
+            self.couple(item)
+            gaps = self.local_gaps(item)
+
+            if not gaps:
+                return WriteDecision(True)
+
+        if not candidates:
+            # Every work item is closed and this write belongs to none of
+            # them. There is nothing left that authorises it.
+            return WriteDecision(
+                False, OUTSIDE_WORK_ITEM,
+                f"every planned change is finished and none of them covers "
+                f"this. If there is more to do, plan it with `{PLAN_TOOL}`.")
+
+        gaps = self.local_gaps(candidates[0])
+        listed = "; ".join(
+            f"{key} ({why})"
+            + (f" [covers each of: {', '.join(found.members)}]"
+               if (found := self.requirements.get(key)) is not None
+               and found.members else "")
+            for key, why in gaps[:6])
+
+        return WriteDecision(
+            False, PLAN_INCOMPLETE,
+            f"{WRITE_BLOCKED} This change is governed by "
+            f"{len(candidates[0].requirements)} requirement(s) and "
+            f"{len(gaps)} of them are not answered yet: {listed}. Only these "
+            f"-- the rest of the contract does not block this edit."
+            + (" " + self._rejection_hint() if self.rejected else ""))
+
+    def _investigation_detail(self, missing):
+        if NO_AUTHORITY in missing and NO_IMPLEMENTATION in missing:
+            return ("Neither the authoritative requirements nor the current "
+                    "implementation has been read this turn.")
+
+        if NO_AUTHORITY in missing:
+            return ("The implementation has been read, but no requirement "
+                    "has been retrieved from the authoritative source, so "
+                    "there is nothing to be compliant with.")
+
+        return ("Requirements have been retrieved, but no source file has "
+                "been read, so what the code does today is unknown and the "
+                "gap cannot be stated.")
+
 
         if self.phase == Phase.REVIEW:
             return WriteDecision(
@@ -1203,6 +1496,21 @@ class WorkPhaseLedger:
 
         if status == "passed":
             self.settle_validated()
+
+            # A work item whose requirements are all settled and whose change
+            # is proved is finished. Freezing it here rather than waiting for
+            # the end is what lets the turn move on instead of revisiting it.
+            unproven = {found.key for found in self.unvalidated_requirements()}
+
+            for work in self.open_work_items():
+                if work.requirements & unproven:
+                    continue
+
+                if all(found.stated and not found.open
+                       for found in (self.requirements.get(key)
+                                     for key in work.requirements)
+                       if found is not None):
+                    self.close_work_item(work)
 
         if self.phase == Phase.EDIT:
             self.phase = Phase.TEST
@@ -1383,6 +1691,17 @@ class WorkPhaseLedger:
 
         return self.awaiting_validation()
 
+    def next_open_requirements(self):
+        """Binding requirements no work item has taken on yet.
+
+        What to point the turn at once a change is finished, so it moves on to
+        the next piece of work instead of back over the last one.
+        """
+        taken = {key for work in self.work_items for key in work.requirements}
+
+        return tuple(found for found in self.requirements.required()
+                     if found.key not in taken and found.open)
+
     def contract_closed(self):
         """Every in-scope requirement disposed, none open, none unvalidated.
 
@@ -1441,6 +1760,7 @@ class WorkPhaseLedger:
             "unresolved_items": [item.requirement
                                  for item in self.unresolved_items()],
             "syntheses_forced": self.syntheses_forced,
+            "work_items": [work.to_dict() for work in self.work_items],
             "requirements": self.requirements.to_dict(),
             "requirement_matrix": self.requirements.matrix(),
             "requirements_open": [item.key

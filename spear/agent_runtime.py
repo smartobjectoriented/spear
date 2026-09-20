@@ -1848,7 +1848,7 @@ class AgentRuntime:
         did_modify = nudged = verify_reprompts = budget_event_emitted = False
         only_tools: tuple[str, ...] | None = None
         wrap_up_warned = landed = False
-        validation_demands = 0
+        validation_demands = next_item_demands = 0
         seen_results: dict[str, int] = {}
         last_write_redirect = -WRITE_REDIRECT_SPACING
         last_clause_redirect = -WRITE_REDIRECT_SPACING
@@ -3134,6 +3134,34 @@ class AgentRuntime:
                         only_tools = _write_round_tools(context)
                         context.observer.notice(
                             "validation_owed", {"requirements": len(planned)})
+
+                # One change is finished and others are still open. The
+                # turn is pointed at the next piece of work rather than left
+                # to rediscover that there is any: the gate is local now, so
+                # nothing else was ever going to remind it.
+
+                if (phase is not None and phase.engaged and not force_final
+                        and not phase.contract_closed()
+                        and phase.work_items
+                        and not phase.open_work_items()
+                        and next_item_demands < 2):
+                    pending = phase.next_open_requirements()
+
+                    if pending:
+                        next_item_demands += 1
+                        context.conversation.append(ConversationMessage(
+                            "user", (TextBlock(
+                                "That change is made, built and proved. It is "
+                                "finished -- do not revisit it. "
+                                + f"{len(pending)} requirement(s) carried into "
+                                  "this turn are still open and nothing has "
+                                  "been planned for them: "
+                                + ", ".join(found.key for found in pending[:4])
+                                + ". Take the next one: read what the code "
+                                  "does about it, then plan that change on "
+                                  "its own."),), authored_by="harness"))
+                        context.observer.notice(
+                            "next_work_item", {"open": len(pending)})
 
                 # The contract is closed and every change it names is
                 # validated. There is nothing left to establish, and a turn

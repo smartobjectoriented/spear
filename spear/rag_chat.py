@@ -1385,6 +1385,9 @@ class CliRuntimeObserver:
             print(f"  {C_DIM}↪ {len(missing)} of "
                   f"{metadata.get('carried', 0)} established clauses not "
                   f"addressed — asking for them{C_RST}")
+        elif kind == "next_work_item":
+            print(f"  {C_DIM}↪ that change is finished — pointing at the next "
+                  f"open requirement{C_RST}")
         elif kind == "validation_owed":
             print(f"  {C_DIM}↪ source changed and its test not written yet — "
                   f"asking for the validation{C_RST}")
@@ -4904,7 +4907,7 @@ def _registered_command(context, command):
             and _write_gate_closed(context)
             and COMMAND_POLICY.classify(cmd).classification
             != CommandClassification.READ_ONLY):
-        gate = context.write_gate()
+        gate = context.write_gate("")
         result = result.rstrip() + "\n" + getattr(gate, "message", "")
         context.trace.emit(
             EventType.TOOL_CALL_FAILED, context.task_id,
@@ -5440,7 +5443,9 @@ def _write_gate_closed(context):
     if gate is None:
         return False
 
-    decision = gate()
+    # A shell command names no single file the gate could check, so it asks
+    # the general question: is there any planned change ready to be made?
+    decision = gate("")
 
     return decision is not None and not getattr(decision, "allowed", True)
 

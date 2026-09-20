@@ -173,15 +173,22 @@ class NoRequirementMayDisappear(unittest.TestCase):
         self.assertEqual({found.key for found in ledger.uncovered_requirements()},
                          {R2.key, R3.key})
 
-    def test_the_gate_stays_shut_while_one_is_undisposed(self):
+    def test_an_unrelated_undisposed_requirement_no_longer_blocks(self):
+        """Plan locally, close globally: R3 stays open and stays visible."""
         ledger = governed()
         ledger.record_plan([item_for(R1)])
-        ledger.record_plan([item_for(R2)])
-        decision = ledger.may_write()
 
-        self.assertFalse(decision.allowed)
-        self.assertEqual(decision.reason, work_phase.PLAN_INCOMPLETE)
-        self.assertIn(R3.key, decision.message)
+        self.assertTrue(ledger.may_write(SOURCE).allowed)
+        self.assertIn(R3.key,
+                      [found.key for found in ledger.uncovered_requirements()])
+
+    def test_but_it_still_keeps_the_turn_from_finishing(self):
+        ledger = governed()
+        ledger.record_plan([item_for(R1)])
+        ledger.note_write([SOURCE, "tests/test_handshake.c"])
+        ledger.note_validation("ctest", "passed")
+
+        self.assertFalse(ledger.contract_closed())
 
     def test_the_gate_opens_when_every_one_has_a_disposition(self):
         ledger = governed()
@@ -191,12 +198,12 @@ class NoRequirementMayDisappear(unittest.TestCase):
 
         self.assertTrue(ledger.may_write().allowed)
 
-    def test_the_refusal_names_what_is_outstanding(self):
+    def test_with_nothing_planned_the_refusal_says_to_plan_one(self):
         ledger = governed()
         message = ledger.may_write().message
 
-        for requirement in (R1, R2, R3):
-            self.assertIn(requirement.key, message)
+        self.assertIn("Nothing has been planned yet", message)
+        self.assertIn("not for all of them", message)
 
     def test_a_plan_item_for_nothing_carried_closes_nothing(self):
         ledger = governed()
@@ -371,16 +378,23 @@ class AFamilyIsTrackedBeforeThePlanCloses(unittest.TestCase):
 
         self.assertEqual(found.items[0].members, ("Alpha", "Bravo", "Charlie"))
 
-    def test_the_refusal_puts_the_members_in_front_of_the_turn(self):
+    def test_the_members_are_put_in_front_of_the_turn_when_it_is_blocked(self):
         ledger = WorkPhaseLedger()
         ledger.engage(authority_bound=True, write_requested=True,
                       requirements=RequirementSet([
                           R("Rule 4.2.1-1", "4.2.1",
                             "one for each of Alpha, Bravo or Charlie",
-                            members=("Alpha", "Bravo", "Charlie"))]))
-        ledger.observe_call(authority_keys={"4.2.1"}, authority_units=1)
+                            members=("Alpha", "Bravo", "Charlie")),
+                          R("Rule 4.2.2-1", "4.2.2",
+                            "the same handshake_accept path also carries the id")]))
+        ledger.observe_call(authority_keys={"4.2.1", "4.2.2"}, authority_units=2)
         ledger.observe_call(implementation_paths={SOURCE})
-        message = ledger.may_write().message
+        ledger.record_plan([item_for(
+            R("Rule 4.2.2-1", "4.2.2", "x"),
+            correction=f"change handshake_accept() in {SOURCE}")])
+        ledger.requirements.dispose("Rule 4.2.1-1", "change_planned")
+        ledger.work_items[0].requirements.add("Rule 4.2.1-1")
+        message = ledger.may_write(SOURCE).message
 
         self.assertIn("covers each of: Alpha, Bravo, Charlie", message)
 

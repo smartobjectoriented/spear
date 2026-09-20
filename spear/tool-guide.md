@@ -81,9 +81,18 @@ opened, so a citation you did not read and a filename you did not open are
 refused with the reason.
 
 WHEN THE PREVIOUS TURN ESTABLISHED A SET OF REQUIREMENTS and this one says
-"comply with this", that set is the task. Every requirement in it needs its own
-`plan_change` call before ANY file may be modified — not only the ones you
-intend to change. Use `disposition` to say which:
+"comply with this", that set is the task. You do NOT have to plan all of it
+before you may work. Plan ONE change — the requirements it actually affects —
+make it, prove it, and then take the next. The rest stay open in the record
+and are asked for before the turn can call itself finished.
+
+What a planned change unlocks is the files IT names. An edit to a file no plan
+mentions is refused: plan that change too, or say it is part of this one. And
+a requirement that constrains the same behaviour you are changing is pulled
+into that change automatically — you cannot scope your way around it.
+
+Each requirement needs its own `plan_change` call, with `disposition` saying
+which:
 
     change_planned            you are going to change the code (the default)
     satisfied_already         the code already does it — say where

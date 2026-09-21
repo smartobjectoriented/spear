@@ -103,6 +103,28 @@ COPY --from=repo docker/projects.docker.json $APP/projects.json
 # behaviour: someone who HAS the repo works from their own copy.
 COPY --from=notes . /corpora/spear/claude/
 COPY --from=repo corpora/ /corpora/spear/corpora/
+
+# The trees a build chose to bake, at the paths the generated registry already
+# resolves them to. Empty unless --bake named some, and shadowed by a bind
+# mount on /corpora, so a workstation keeps working from its own checkouts.
+# This exists for the container that is handed over with nothing mounted,
+# where an empty /corpora is not a stale corpus but no corpus at all.
+COPY --from=baked --chmod=0777 . /corpora/
+
+# THE NORMATIVE STORE, and the state directory it lives in.
+#
+# Without this the container has a harness that can bind a standard and no
+# standard to bind: /standard list is empty, every normative question falls
+# back to the source tree, and the one capability this platform is built
+# around is silently absent. Which documents travel is decided per document,
+# from what each one declares about itself -- see docker/stage-standards.py.
+#
+# 0777 because the session WRITES here: history, memories, the audit trail and
+# any standard ingested later all land under SPEAR_STATE_DIR, and the
+# container runs as whichever uid the operator passes.
+COPY --from=standards --chmod=0777 . /opt/spear/state/standards/
+RUN chmod 0777 /opt/spear/state
+ENV SPEAR_STATE_DIR=/opt/spear/state
 # NOT in /usr/local/bin: the host's copy of that directory is mounted over
 # it (189 toolchain symlinks that ib.md tells the operator to put there),
 # which would hide the entrypoint and stop the container dead.

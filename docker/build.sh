@@ -21,7 +21,48 @@
 set -e
 REPO="$(cd "$(dirname "$0")/.." && pwd)"
 APP="${SPEAR_APP:-$REPO/spear}"
-TAG="${1:-spear:1.0}"
+
+# THE PROFILE decides what the image is allowed to carry, and it defaults to
+# the one that is safe to hand to anyone. `engagement` is the deliberate word
+# for "this image carries licensed and customer material"; there is no way to
+# get there by omission.
+PROFILE=public
+BAKE=""
+TAG=""
+
+while [ $# -gt 0 ]; do
+    case "$1" in
+        --profile) PROFILE="$2"; shift 2 ;;
+        --profile=*) PROFILE="${1#*=}"; shift ;;
+        --bake) BAKE="$2"; shift 2 ;;
+        --bake=*) BAKE="${1#*=}"; shift ;;
+        -h|--help)
+            cat <<'USAGE'
+docker/build.sh [TAG] [--profile public|engagement] [--bake name,name,...]
+
+  --profile public       (default) only normative documents that declare
+                         themselves PUBLIC; nothing licensed, nothing of a
+                         customer's. Safe to hand over.
+  --profile engagement   everything this machine has, licensed documents and
+                         the original PDFs included. NOT redistributable; the
+                         image is labelled so, and push is refused unless you
+                         say --allow-push.
+  --bake a,b,c           copy these registered corpora INTO the image, for a
+                         container that has to work with nothing mounted.
+                         Default: none, and they are expected at /corpora.
+USAGE
+            exit 0 ;;
+        -*) echo "unknown option: $1" >&2; exit 1 ;;
+        *) TAG="$1"; shift ;;
+    esac
+done
+
+case "$PROFILE" in
+    public|engagement) ;;
+    *) echo "--profile must be public or engagement, not '$PROFILE'" >&2; exit 1 ;;
+esac
+
+TAG="${TAG:-spear:1.0-$PROFILE}"
 [ -f "$APP/rag_chat.py" ] || { echo "no harness under $APP — set SPEAR_APP" >&2; exit 1; }
 
 EMPTY="$(mktemp -d)"
@@ -63,8 +104,52 @@ REGISTRY="$REPO/docker/projects.docker.json"
     exit 1
 }
 
+# The normative store and the baked trees are staged rather than pointed at:
+# what may travel is a per-document decision (see stage-standards.py), and
+# what gets baked is a named subset of a 300 GB registry. Neither is a
+# directory that happens to be in the right shape already.
+STAGE="$(mktemp -d)"
+trap 'rm -rf "$EMPTY" "$STAGE"' EXIT
+
+"$REPO/docker/stage-standards.py" --profile "$PROFILE" "$STAGE/standards"
+CONTEXTS+=(--build-context "standards=$STAGE/standards")
+
+RESTRICT=()
+[ -n "$BAKE" ] && RESTRICT=(--restrict-registry)
+"$REPO/docker/stage-corpora.py" --bake "$BAKE" "${RESTRICT[@]}" "$STAGE/baked" || true
+CONTEXTS+=(--build-context "baked=$STAGE/baked")
+
+# What the image says about itself. A tarball changes hands and a tag gets
+# retyped; a label travels with the bytes, and `docker inspect` answers the
+# only question that matters about a copy of this image: may it be passed on?
+LABELS=(
+    --label "ch.heig-vd.reds.spear.profile=$PROFILE"
+    --label "ch.heig-vd.reds.spear.built=$(date -Iseconds)"
+)
+
+if [ "$PROFILE" = engagement ]; then
+    LABELS+=(--label "ch.heig-vd.reds.spear.redistributable=false")
+else
+    LABELS+=(--label "ch.heig-vd.reds.spear.redistributable=true")
+fi
+
 echo "== building $TAG =="
+echo "   profile         : $PROFILE"
 echo "   harness context : $APP"
 echo "   repo context    : $REPO  (corpora/ + docker/ only)"
-exec docker build --build-context "repo=$REPO" "${CONTEXTS[@]}" \
+docker build --build-context "repo=$REPO" "${CONTEXTS[@]}" "${LABELS[@]}" \
     -f "$REPO/docker/Dockerfile" -t "$TAG" "$APP"
+
+echo
+echo "built $TAG ($PROFILE)"
+
+if [ "$PROFILE" = engagement ]; then
+    cat <<MSG
+
+  This image carries licensed normative material and customer trees. It is
+  labelled redistributable=false and docker/push.sh will refuse to publish it
+  without --allow-push. Hand it over as a file:
+
+      docker save $TAG | zstd -T0 -19 -o spear-engagement.tar.zst
+MSG
+fi

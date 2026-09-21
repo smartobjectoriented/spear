@@ -24,6 +24,163 @@ SPEAR keeps the two roles apart:
 evidence.** A claim about what is *required* may rest only on the first. The
 second may illustrate, compare and contradict — it may never establish.
 
+Which documents are supported
+*****************************
+
+There is no list of supported standards, and that is deliberate. Extraction is
+generic: any specification-style PDF can be ingested, and what SPEAR derives
+from it — provisions, their kinds, their ordinals, their sections and pages —
+is read from the document's own structure.
+
+What *is* document-specific is smaller, and it is the only thing that ever
+needs declaring: **what this document's provision roles mean.**
+
+Most specifications follow the conventional reading, which is the default:
+
+.. list-table::
+   :header-rows: 1
+   :widths: 34 66
+
+   * - Role
+     - May establish at most
+   * - Rule, Requirement
+     - a requirement
+   * - Recommendation
+     - a recommendation
+   * - Permission
+     - a permission
+   * - Observation, Definition, Informative
+     - nothing — they explain, they do not oblige
+   * - unlabelled normative prose, and tables
+     - a requirement
+
+A **profile** is written only where a document's own front matter says
+something different, or where it is worth recording that the conventional
+reading was checked against the document rather than assumed. Profiles live in
+``standard_profiles.py``, one short declaration each.
+
+.. note::
+
+   The last row is not a detail. A document's bit-assignment tables usually
+   *are* the requirement a Rule points at, so capping them would discard the
+   thing the Rule refers to.
+
+   The row above it is the one profiles get written for. A document whose
+   Observations describe an obligation in the words of that obligation will,
+   without a profile, have those Observations read as binding — and an answer
+   then reports the Observation as the requirement instead of the Rule that
+   imposes it.
+
+So: to find out whether a document works, ingest it and look at what came out.
+The manifest records what was extracted and what failed, and ``/standard
+verify`` checks the store against it.
+
+Ingesting a document
+********************
+
+.. code-block:: text
+
+   /standard ingest <pdf> --id <id> --revision <revision>
+                          [--retain-pdf]
+                          [--origin LICENSED_STANDARD|PUBLIC]
+                          [--allow-offload]
+
+The input is a PDF. ``--id`` and ``--revision`` are how the document is named
+afterwards, and they are what ``/standard use`` takes.
+
+.. list-table::
+   :header-rows: 1
+   :widths: 26 74
+
+   * - Flag
+     - Meaning
+   * - ``--origin``
+     - what this document *is*. Defaults to ``LICENSED_STANDARD``, the safe
+       answer, so a document nobody classified is treated as restricted.
+   * - ``--retain-pdf``
+     - keep the original file beside the extracted corpus. Without it the
+       store holds the extraction only.
+   * - ``--allow-offload``
+     - embed this licensed corpus on the configured GPU host anyway, for this
+       one command.
+
+``--origin`` is not bookkeeping. A licensed corpus is **not** sent to a shared
+embedding host: that is refused, and ``--allow-offload`` is the operator
+saying otherwise once. It is a flag rather than a stored property on purpose —
+relabelling the corpus ``PUBLIC`` would buy the same offload *and* tell
+training governance the text is exportable, which is a much larger claim. It
+is also what decides whether the document may travel in a container image
+(:ref:`image-profiles`).
+
+What ingestion produces
+=======================
+
+.. code-block:: text
+
+   <store>/<id>/<revision>/
+     manifest.json          what was extracted, and what failed
+     corpus/                the canonical units
+     source/                the original PDF, with --retain-pdf
+     indexes/lexical/       always built
+     indexes/vector/        when an embedding model is configured
+     indexes/crossrefs/     references between provisions
+
+The vector index is optional: with no embedding model configured, retrieval
+falls back to lexical and says so rather than failing. Where one is
+configured, its revision must be pinned — an unpinned model makes the index
+fingerprint depend on whatever the cache happened to hold.
+
+The manifest is the report:
+
+.. code-block:: text
+
+   page_count               121
+   canonical_unit_count    1109
+   requirement_count         42
+   recommendation_count      54
+   definition_count           2
+   extraction_errors         []
+   human_validation_status  NOT_REVIEWED
+   extractor_version        poppler-structure-v2
+
+``extraction_errors`` and the counts are how you judge whether a document came
+out usable. A specification of 121 pages yielding four provisions did not
+extract; one yielding eleven hundred units with an empty error list did.
+
+``human_validation_status`` starts at ``NOT_REVIEWED`` and stays there until
+somebody says otherwise — extraction is not review, and the field does not
+pretend it is.
+
+The rest of the operator commands
+=================================
+
+.. list-table::
+   :header-rows: 1
+   :widths: 38 62
+
+   * - Command
+     - What it does
+   * - ``/standard list``
+     - the ingested documents and revisions
+   * - ``/standard status``
+     - what is bound right now
+   * - ``/standard use <id> <revision>``
+     - bind one
+   * - ``/standard unbind``
+     - bind nothing
+   * - ``/standard verify [<id> <revision>]``
+     - check the store against its manifest
+   * - ``/standard rebuild [<id> <revision>] [--allow-offload]``
+     - rebuild the indexes without re-extracting
+   * - ``/standard candidates [<id> <revision>]``
+     - alternative extractions held beside the promoted one
+   * - ``/standard promote-candidate <id> <revision> <candidate>``
+     - make a candidate the corpus that answers
+   * - ``/standard approve <id> <revision> [<reviewer>]``
+     - record human validation
+   * - ``/standard build-structure [<id> <revision>]``
+     - build the structure registry ``standard.get_structure`` reads
+
 Binding an authoritative source
 *******************************
 
@@ -37,8 +194,6 @@ answers from two different editions without noticing.
    /standard list                     the ingested documents and revisions
    /standard status                   what is bound right now
    /standard use <id> <revision>      bind one
-   /standard ingest <path>            ingest a document
-   /standard verify                   check the store against its manifest
 
 .. important::
 

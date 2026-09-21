@@ -151,6 +151,117 @@ extract; one yielding eleven hundred units with an empty error list did.
 somebody says otherwise — extraction is not review, and the field does not
 pretend it is.
 
+Seeing what is in the store
+===========================
+
+``/standard list`` reports every ingested document *with its parameters*, and
+marks the one currently bound:
+
+.. code-block:: text
+
+   Available standards:
+
+     ACME-1234.5 2019-R2023  <- bound
+       origin      LICENSED_STANDARD  ·  the document itself is retained
+       extractor   hybrid-span-canonical-v1
+       corpus      13878 units  ·  899 requirements  ·  95 recommendations  ·  355 pages
+       validation  NOT_REVIEWED
+
+     NIST-RS274NGC NISTIR6556
+       origin      PUBLIC  ·  extraction only
+       extractor   poppler-structure-v2
+       corpus      1109 units  ·  42 requirements  ·  54 recommendations  ·  121 pages
+       validation  NOT_REVIEWED
+
+That is the answer to *what do I have, and what is each one*. ``origin`` says
+whether a document may be embedded on a shared host and whether it may travel
+in an image; ``the document itself is retained`` says the original PDF is in
+the store beside the extraction; the corpus counts say whether the extraction
+worked.
+
+``/standard status`` reports the same and much more — index states, cross
+references, retrieval fingerprints, candidates — but **only for the bound
+document**. The binding is shared by every session on the machine, so reading
+``list`` is how you look at an unbound one without changing what everyone else
+is answering from.
+
+A public standard
+=================
+
+``--origin PUBLIC`` is the whole difference, and it buys two things:
+
+* the corpus may be embedded on a configured GPU host without
+  ``--allow-offload``, because there is nothing to keep off it;
+* the document may travel in a ``--profile public`` container image
+  (:ref:`image-profiles`).
+
+Nothing else changes. The extraction, the provisions, the guards and the
+citations are identical — a public document is not a lesser one, it is one
+without a restriction.
+
+.. code-block:: text
+
+   /standard ingest ~/NISTIR6556.pdf --id NIST-RS274NGC --revision NISTIR6556 --origin PUBLIC
+
+A document with no role labels
+==============================
+
+Most documents do not label their provisions the way a VITA-style standard
+does, and they do not need to. Where there are no labels, the kind is read from
+the **modal verb**: *must* makes a requirement, *should* a recommendation,
+*may* a permission, and prose with no modal verb stays informative.
+
+Ingesting NISTIR 6556, which carries no taxonomy of its own, gives:
+
+.. code-block:: text
+
+   1109 units    42 REQUIREMENT    54 RECOMMENDATION    55 MAY
+                 588 UNKNOWN      227 PAGE_FURNITURE   150 FRONT_MATTER
+
+That is a working corpus. ``UNKNOWN`` is not a failure — it is prose that
+obliges nobody, which in a specification is most of it.
+
+Datasheets and other non-prose documents
+========================================
+
+A datasheet ingests, and the result has a different shape, because a datasheet
+**states facts rather than obligations**. Expect few requirement units and a
+great many tables. Three things follow.
+
+**The force machinery simply does not fire.** There are no modalities to
+strengthen or contradict, so the guards that compare a claim against the force
+of its provision have nothing to say. They do not misfire; they stand down.
+
+**Tables carry requirement force**, through the ``unlabelled`` ceiling. For a
+datasheet that is usually the right reading: an absolute-maximum rating or a
+register's reset value binds as firmly as any *shall*.
+
+**The register maps need approving before they can be cited.** A table becomes
+a *candidate* structure at ingestion, and ``standard.get_structure`` serves
+only structures a person has approved:
+
+.. code-block:: text
+
+   /standard candidates <id> <revision>
+   /standard approve-bitfield <id> <revision> <candidate-id> <verdict> <role,role,...>
+   /standard build-structure <id> <revision>
+
+``build-structure`` promotes the approved candidates and only those. An
+unapproved one has no route to an answer however it is asked for — which is
+the point: a bit layout SPEAR guessed at is exactly the kind of thing that
+looks authoritative and is not.
+
+.. important::
+
+   A PDF has no other way in. ``.pdf`` is not among the extensions a corpus
+   indexes, so ``spear-index`` will not read one. If all you want is retrieval
+   over a document — no citations, no force, no approval step — convert it to
+   text or Markdown first and register *that* as a corpus. That is what the
+   ``posix-api`` corpus is: man pages as ``.txt``.
+
+   Use the normative store when you want claims about the document to be
+   **citable and checked**. Use a corpus when you want to find things in it.
+
 The rest of the operator commands
 =================================
 
@@ -161,7 +272,7 @@ The rest of the operator commands
    * - Command
      - What it does
    * - ``/standard list``
-     - the ingested documents and revisions
+     - every ingested document with the parameters it was ingested with
    * - ``/standard status``
      - what is bound right now
    * - ``/standard use <id> <revision>``

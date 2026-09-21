@@ -314,8 +314,10 @@ class ReindexTargetsTheCorpusNotTheCwdTest(unittest.TestCase):
                                       "path": self.root, "kind": "generic"}
         self.rag_chat.CORPUS_ROOT = self.root
         opts = self.rag_chat.reindex_options()
-        self.assertEqual(["--exclude", "agency", "--exclude", "buildroot",
-                          "--exclude", "qemu"], opts)
+        # Spelled as paths: a component named after a directory the umbrella
+        # needs elsewhere (linux, qemu, u-boot) must not take it down with it.
+        self.assertEqual(["--exclude", "./agency", "--exclude", "./buildroot",
+                          "--exclude", "./qemu"], opts)
 
     def test_a_declared_exclusion_is_not_repeated(self):
         self._write({"agency": {"path": f"{self.root}/agency",
@@ -1095,6 +1097,57 @@ class FileCapRefusesRatherThanTruncatesTests(unittest.TestCase):
         self.assertEqual(0, out.returncode, out.stdout + out.stderr)
         self.assertIn("Done:", out.stdout)
         self.assertIn("chunks in notes", out.stdout)
+
+
+class PathScopedExclusionTests(unittest.TestCase):
+    """`--exclude linux` drops every directory so named; `--exclude ./linux`
+    drops the one at the root.
+
+    The Infrabase-family trees (infrabase, opencn-ng, the edgem1 products)
+    vendor their sources in top-level linux/, qemu/ and u-boot/ and keep the
+    recipes that build them under build/meta-*/recipes-*/<same name>. Without
+    the path form, excluding the vendored checkout also deletes the recipes
+    and the ITS files -- the build system the corpus exists for.
+    """
+
+    APP = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp.cleanup)
+        self.root = Path(self.temp.name)
+
+        vendored = self.root / "linux"
+        vendored.mkdir()
+        for i in range(30):
+            (vendored / f"f{i}.c").write_text(f"int x{i};\n")
+
+        recipes = self.root / "build" / "meta-bsp" / "recipes-bsp" / "linux"
+        recipes.mkdir(parents=True)
+        (recipes / "kernel.bb").write_text('SUMMARY = "the kernel"\n')
+
+        conf = self.root / "build" / "conf"
+        conf.mkdir(parents=True)
+        (conf / "local.conf").write_text('IB_PLATFORM = "virt64"\n')
+
+    def run_indexer(self, *args):
+        env = dict(os.environ, SPEAR_DB_PATH=str(self.root / "_chromadb"))
+        return subprocess.run(
+            [sys.executable, os.path.join(self.APP, "index_dir.py"),
+             str(self.root), "--include-build", *args],
+            capture_output=True, text=True, env=env, cwd=self.APP)
+
+    def test_the_path_form_keeps_the_recipe_directory(self):
+        out = self.run_indexer("--exclude", "./linux")
+        self.assertEqual(0, out.returncode, out.stdout + out.stderr)
+        self.assertIn("2 files", out.stdout)
+
+    def test_the_bare_name_still_drops_it_everywhere(self):
+        """Unchanged on purpose: so3 excludes its vendored lvgl and
+        micropython by name, and they sit at two different depths."""
+        out = self.run_indexer("--exclude", "linux")
+        self.assertEqual(0, out.returncode, out.stdout + out.stderr)
+        self.assertIn("1 files", out.stdout)
 
 
 class UmbrellaSessionTests(unittest.TestCase):

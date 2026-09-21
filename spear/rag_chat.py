@@ -6281,14 +6281,22 @@ def reindex_options():
     spec = projects.get(PROJECT) or PROJECT_SPEC or {}
     excludes = list(spec.get("exclude", ()))
 
-    # By basename, because that is what index_dir's SKIP_DIRS matches — the
-    # same spelling so3 already uses for its vendored lvgl and micropython.
+    # As a path relative to the corpus root, not a bare name: index_dir skips
+    # a bare name wherever it occurs, and a component usually shares its name
+    # with a directory the corpus needs — a tree registering its vendored
+    # linux/ would lose build/meta-bsp/recipes-bsp/linux with it. A bare name
+    # already declared by hand (so3's lvgl, micropython) still counts as the
+    # same exclusion, so it is not repeated in the other spelling.
+
+    root = os.path.realpath(CORPUS_ROOT)
 
     for path in corpora_below(projects, CORPUS_ROOT).values():
-        name = os.path.basename(path)
+        rel = os.path.relpath(path, root)
 
-        if name not in excludes:
-            excludes.append(name)
+        if rel in excludes or os.path.basename(path) in excludes:
+            continue
+
+        excludes.append(os.path.join(".", rel))
 
     opts = []
 

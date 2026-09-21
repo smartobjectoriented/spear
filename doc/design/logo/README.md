@@ -28,6 +28,13 @@ this directory holds only the source that generates them.
 | `spear-mark-small.svg` | the mark alone below ~24 px |
 | `spear-icon.svg` | `html_favicon` — the small mark, square, with margin |
 
+There is a sixth rendering with no file: the startup banner of `spear-chat`
+draws the same three stages in half-block characters, beside the wordmark, in
+`rag_chat.banner_art()`. It follows the same rules — warm for the
+authoritative source, accent for everything derived, stages narrowing on one
+axis — and deliberately does **not** use the identity's ink, which is a paper
+colour that on a dark terminal is nearly the background.
+
 Two variants of one mark, not two marks. The small one drops the
 specification's slot, because below about 24 px that slot is a sub-pixel line
 that only muddies the bar it sits in. Everything else — proportions, colours,

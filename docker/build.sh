@@ -65,6 +65,19 @@ esac
 TAG="${TAG:-spear:1.0-$PROFILE}"
 [ -f "$APP/rag_chat.py" ] || { echo "no harness under $APP — set SPEAR_APP" >&2; exit 1; }
 
+# The same machine settings the launcher reads, for the same reason: this is
+# where a deployment says that its rules, skills and benches live outside the
+# checkout. Without it the OPTIONAL table below resolves to the in-tree
+# directories -- which hold a README and nothing else -- and the build reports
+# them as found. The image then ships a harness with no rules and no skills,
+# announcing neither, which is exactly what machine.env exists to prevent on
+# the workstation.
+if [ -r "$APP/machine.env" ]; then
+    echo "   settings  $APP/machine.env"
+    # shellcheck disable=SC1091
+    . "$APP/machine.env"
+fi
+
 EMPTY="$(mktemp -d)"
 trap 'rm -rf "$EMPTY"' EXIT
 

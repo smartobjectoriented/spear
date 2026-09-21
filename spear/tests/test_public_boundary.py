@@ -410,6 +410,39 @@ class TheProductIdentifiesItself(unittest.TestCase):
         self.assertIn("HEIG-VD/REDS", rendered)
         self.assertNotIn("EDGEM", rendered.upper().replace("SPEAR", ""))
 
+    def test_the_banner_carries_the_mark_beside_the_word(self):
+        """The three stages of the logo, narrowing, in the identity's two
+        carrying colours. Never in its ink: #12263A is a paper colour and on
+        the dark terminal most people run it is nearly the background."""
+        import io, sys
+        sys.path.insert(0, str(ROOT))
+        import rag_chat
+
+        out = io.StringIO()
+        stdout, sys.stdout = sys.stdout, out
+        try:
+            rag_chat.banner_art()
+        finally:
+            sys.stdout = stdout
+
+        rendered = out.getvalue()
+
+        self.assertIn(rag_chat._WARM, rendered)
+        self.assertIn(rag_chat._ACCENT, rendered)
+        self.assertNotIn("18;38;58", rendered)
+
+        # Each stage centred on the same axis, or it is not a funnel.
+        axes = {pad + len(glyph) / 2 for glyph, _, pad in rag_chat._BANNER_MARK}
+
+        self.assertEqual(len(axes), 1, f"stages are not centred: {axes}")
+
+        # Narrowing, and the widest one is the authoritative source.
+        widths = [len(glyph) for glyph, _, _ in rag_chat._BANNER_MARK]
+
+        self.assertEqual(widths, sorted(widths, reverse=True))
+        self.assertEqual(rag_chat._BANNER_MARK[0][1], rag_chat._WARM)
+        self.assertEqual(rag_chat._BANNER_MARK[-1][1], rag_chat._ACCENT)
+
     def test_the_help_names_the_current_commands(self):
         """The banner is not the only place a name is printed."""
         source = (ROOT / "rag_chat.py").read_text(encoding="utf-8")

@@ -282,9 +282,55 @@ def handle_standard_command(command: str, operator: StandardOperator) -> str:
 
         values = operator.store.list_standards()
 
-        return ("Available standards:\n" + "\n".join(
-            f"  {standard_id} {revision}" for standard_id, revision in values
-        )) if values else "No standards ingested."
+        if not values:
+            return "No standards ingested."
+
+        # With the parameters each was ingested with, not just its name.
+        #
+        # `status` already reports all of this and reports it only for the
+        # BOUND document, so the only way to see what an unbound one holds was
+        # to bind it -- and the binding is shared by every session on the
+        # machine, which makes "let me look" a change of state for everybody.
+        try:
+            bound = operator.active_binding()
+        except Exception:
+            bound = None
+
+        active = ((bound.standard_id, bound.revision) if bound is not None
+                  else (None, None))
+        lines = ["Available standards:"]
+
+        for standard_id, revision in values:
+            mark = "  <- bound" if (standard_id, revision) == active else ""
+            lines.append(f"\n  {standard_id} {revision}{mark}")
+
+            # A manifest that cannot be read is reported as such rather than
+            # skipped: a document in the store whose parameters are unknown is
+            # the thing a reader most needs to be told about.
+            try:
+                manifest = operator.store.load_manifest(standard_id, revision)
+            except Exception as exc:
+                lines.append(f"    manifest unreadable ({type(exc).__name__})")
+                continue
+
+            retained = ("the document itself is retained"
+                        if manifest.raw_pdf_retained else "extraction only")
+            lines.append(f"    origin      {manifest.source_origin}"
+                         f"  \u00b7  {retained}")
+            lines.append(f"    extractor   {manifest.extractor_version}")
+            lines.append(
+                f"    corpus      {manifest.canonical_unit_count} units"
+                f"  \u00b7  {manifest.requirement_count} requirements"
+                f"  \u00b7  {manifest.recommendation_count} recommendations"
+                f"  \u00b7  {manifest.page_count} pages")
+            lines.append(f"    validation  {manifest.human_validation_status}")
+
+            if manifest.extraction_errors:
+                lines.append(
+                    f"    errors      {len(manifest.extraction_errors)} at "
+                    f"extraction")
+
+        return "\n".join(lines)
 
     if action == "status":
         if args:

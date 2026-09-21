@@ -168,15 +168,40 @@ class EveryOptionalInputIsDeclaredOptional(unittest.TestCase):
     def setUp(self):
         self.script = BUILD_SH.read_text()
 
-    def test_every_named_context_is_resolved_by_the_builder(self):
+    def declared_contexts(self):
+        """Every context build.sh provides, by either of the two mechanisms.
+
+        The OPTIONAL table is one of them: a directory that may or may not
+        exist, falling back to an empty one. The other is a context build.sh
+        STAGES first, because what goes in is a selection rather than a
+        directory -- the normative store is filtered per document, and the
+        baked trees are a named subset of the registry. Both end as
+        --build-context; only the first is a table entry.
+        """
         declared = set(re.findall(r'^\s*"(\w+):SPEAR_\w+:', self.script,
                                   re.MULTILINE))
+        declared |= set(re.findall(r'--build-context "(\w+)=', self.script))
         declared.add("repo")           # the repository itself, always present
 
+        return declared
+
+    def test_every_named_context_is_resolved_by_the_builder(self):
         used = {context for context, _, _ in copies() if context}
 
-        self.assertEqual(used - declared, set(),
+        self.assertEqual(used - self.declared_contexts(), set(),
                          "a COPY names a build context nothing provides")
+
+    def test_the_staged_contexts_are_staged_before_they_are_passed(self):
+        """A --build-context pointing at a directory nobody filled is an
+        empty one, and an empty standards context is a container that opens
+        with no normative store and says nothing about it."""
+        for context, stager in (("standards", "stage-standards.py"),
+                                ("baked", "stage-corpora.py")):
+            with self.subTest(context=context):
+                self.assertIn(stager, self.script)
+                self.assertLess(self.script.index(stager),
+                                self.script.index(f'--build-context "{context}='),
+                                f"{context} is passed before {stager} fills it")
 
     def test_each_optional_context_falls_back_to_an_empty_directory(self):
         self.assertIn('dir="$EMPTY"', self.script)

@@ -88,4 +88,52 @@ else:
     print(f"index: every mounted corpus has its collection ({len(have)} total)")
 PY
 
+# The normative store. An image that carries a standard nothing is bound to
+# opens looking capable and answers every normative question from the source
+# tree -- which is the failure this platform exists to prevent. So say what is
+# there, and bind it when there is no ambiguity about which one is meant.
+#
+# The binding is computed by the harness, never written by hand: it carries
+# fingerprints of the corpus and of the retrieval configuration, and a
+# fabricated one passes inspection and fails later.
+"$APP/bin/python" - <<'PYSTD'
+import sys
+sys.path.insert(0, "/opt/spear/spear")
+import rag_chat
+
+operator = rag_chat.STANDARD_OPERATOR
+
+try:
+    ingested = list(operator.store.list_standards())
+except Exception as exc:
+    print(f"standards: store unavailable ({type(exc).__name__})")
+    raise SystemExit(0)
+
+if not ingested:
+    print("standards: none in this image — normative answers are unavailable")
+    raise SystemExit(0)
+
+try:
+    bound = operator.active_binding()
+except Exception:
+    bound = None
+
+if bound is not None:
+    print(f"standards: bound {bound.standard_id} {bound.revision}")
+elif len(ingested) == 1:
+    standard_id, revision = ingested[0]
+    try:
+        bound = operator.use(standard_id, revision)
+        print(f"standards: bound {bound.standard_id} {bound.revision} "
+              f"(the only one in this image)")
+    except Exception as exc:
+        print(f"standards: {standard_id} {revision} present but could not be "
+              f"bound ({type(exc).__name__})")
+else:
+    print(f"standards: {len(ingested)} available, none bound — "
+          f"/standard use <id> <revision>")
+    for standard_id, revision in ingested:
+        print(f"           {standard_id} {revision}")
+PYSTD
+
 exec "$APP/bin/python" "$APP/rag_chat.py" "$@"

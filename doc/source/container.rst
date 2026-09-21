@@ -196,6 +196,101 @@ The first four variables are the same ones the harness itself reads at runtime
 checkout points one variable at them and both the native run and the image
 follow.
 
+Two further contexts are **staged** rather than pointed at, because neither is
+a directory that happens to be in the right shape already: the normative store
+is filtered per document, and the corpus trees are a named subset of a
+registry that may run to hundreds of gigabytes.
+
+.. _image-profiles:
+
+Two profiles
+============
+
+An image that carries a normative store is one somebody can be handed. What it
+may carry is decided per build, and the default is the one that is safe to give
+to anyone.
+
+.. code-block:: console
+
+   $ docker/build.sh --profile public     --bake so3,so3-doc,avz
+   $ docker/build.sh --profile engagement --bake so3,acme-firmware
+
+.. list-table::
+   :header-rows: 1
+   :widths: 20 80
+
+   * - Profile
+     - What it carries
+   * - ``public``
+     - only normative documents that declare themselves ``PUBLIC``; nothing
+       licensed, nothing of a customer's. Labelled
+       ``redistributable=true``.
+   * - ``engagement``
+     - everything the building host has, licensed documents and the original
+       PDFs included where the store retained them. Labelled
+       ``redistributable=false``.
+
+Which document is which is **never a list kept in this repository**. Every
+ingested document already records ``source_origin`` and ``raw_pdf_retained``
+in its manifest, and ``stage-standards.py`` reads them. A list here would have
+to name a customer's standard in order to exclude it, would go stale on the
+next ingestion, and would leave the whole decision one forgotten edit away from
+shipping a licensed document. A manifest that declares nothing is treated as
+licensed.
+
+.. important::
+
+   The active binding travels only if the document it names travelled. A
+   binding pointing at an absent store is worse than none: the session opens
+   looking bound and answers from nothing. Where the image carries exactly one
+   document, the entrypoint binds it at startup — through the harness, so the
+   fingerprints are computed rather than fabricated.
+
+Baking the trees
+================
+
+``--bake`` copies named registered corpora **into** the image, at the paths the
+generated registry already resolves them to. Nothing is baked by default, and a
+bind mount on ``/corpora`` still shadows whatever was — so a workstation keeps
+working from its own checkouts, and only the handed-over container relies on
+what is inside.
+
+A baked corpus must be registered **and indexed on the host first**. The image
+ships the index; a tree whose collection is absent answers with no retrieval at
+all, which is the whole reason the tool exists.
+
+.. code-block:: console
+
+   $ spear-corpus add acme-firmware "$SPEAR_PILOT_TREE"
+   $ spear-index "$SPEAR_PILOT_TREE"
+   $ docker/build.sh --profile engagement --bake so3,acme-firmware
+
+When ``--bake`` is used the image's registry is restricted to what the image
+actually carries. Otherwise the recipient opens the container to a list of
+corpora they do not have and cannot get.
+
+Publishing, and not publishing
+==============================
+
+.. code-block:: console
+
+   $ docker/push.sh ghcr.io/<org>/spear:1.0-public
+   $ docker/push.sh ghcr.io/<org>/spear-private:1.0-engagement     # refused
+   $ docker/push.sh --allow-push ghcr.io/<org>/spear-private:1.0-engagement
+   $ docker save spear:1.0-engagement | zstd -T0 -19 -o spear.tar.zst
+
+The guard reads the **label**, not the tag. A tag gets retyped, shortened and
+reused; a label travels with the bytes through ``docker save``, a registry and
+back. An image not built by ``build.sh`` carries no label at all and is refused
+rather than guessed at.
+
+.. warning::
+
+   ``--allow-push`` on an engagement image is a decision about a licence and a
+   contract, not about a registry: it puts a licensed corpus and a customer's
+   source on that registry's infrastructure, under whatever access policy it
+   has today. It costs a deliberate word for that reason.
+
 .. _relative-corpus-paths:
 
 Relative corpus paths

@@ -16,7 +16,10 @@ Usage:
     #   use --exclude to decide what belongs in a corpus. Hitting the cap is
     #   now an ERROR, not a warning: see TreeTruncated.
     # --allow-partial: build the truncated index anyway (deliberate only)
-    # --exclude: extra directory names to skip (repeatable)
+    # --exclude: directory to skip (repeatable). A bare name ("lvgl")
+    #   skips every directory so named, wherever it sits; a path
+    #   ("./linux", "doc/build") skips that one directory, relative to
+    #   the root being indexed.
     # --collection: explicit destination collection for a registered corpus
 """
 import os
@@ -133,18 +136,33 @@ MAX_FILE_BYTES = 200_000
 # what belongs in a corpus, which is the honest tool for scope.
 
 MAX_FILES = _max_files or int(os.environ.get("SPEAR_INDEX_MAX_FILES", "60000"))
-SKIP_DIRS |= set(_excludes)
+
+# An exclusion spelled with a separator ("./linux", "doc/build") names ONE
+# directory, relative to the root being indexed; a bare name ("lvgl") skips
+# every directory so named, wherever it sits. The distinction is what makes a
+# vendored checkout excludable in an Infrabase-style tree: its top-level
+# linux/, qemu/ and u-boot/ share their names with the recipe directories
+# build/meta-bsp/recipes-bsp/linux, build/meta-qemu/recipes-qemu/qemu and
+# build/meta-uboot/recipes-uboot/u-boot -- the ITS files and the recipes,
+# which are exactly what such a corpus exists for. Excluded by bare name, the
+# corpus loses them along with the vendored source.
+
+SKIP_REL_PATHS = set()
+
+for _e in _excludes:
+    if "/" in _e:
+        SKIP_REL_PATHS.add(os.path.normpath(_e))
+    else:
+        SKIP_DIRS.add(_e)
 
 # --include-build: index a bitbake/Infrabase build/ tree (recipes in
 # meta-*, conf, classes) WITHOUT its huge generated work dirs. We stop
 # skipping the literal "build" dir and instead skip the heavy subpaths by
 # relative path.
 
-SKIP_REL_PATHS = set()
-
 if _include_build:
     SKIP_DIRS.discard("build")
-    SKIP_REL_PATHS = {
+    SKIP_REL_PATHS |= {
         os.path.join("build", d) for d in
         ("tmp", "sstate-cache", "downloads", "cache", "deploy")
     }

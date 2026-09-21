@@ -59,3 +59,49 @@
 .left h2 {
     text-align: left;
 }
+
+/* ── the SPEAR mark in the sidebar ──────────────────────────────────────
+   The theme's search area is a medium blue and the mark's accent sits close
+   to it, so the lockup is put on a light card the way the sibling project
+   does. The theme's own ".wy-side-nav-search > a img.logo" rule forces a
+   transparent background at the same specificity, which is why this matches
+   that selector and has to win outright. */
+.wy-side-nav-search a img.logo,
+.wy-side-nav-search img.logo {
+    background-color: #eef4f8 !important;
+    padding: 9px 14px;
+    border-radius: 8px;
+    max-width: 82%;
+    width: auto;
+    height: auto;
+}
+
+/* The theme prints the project name under the logo, which here would say
+   SPEAR twice. The wordmark is in the mark. */
+.wy-side-nav-search > a.icon:after {
+    content: none;
+}
+
+/* The landing lockup is a block above the title, never floated: floating it
+   makes the h1 wrap around it, which is what it looked like the first time.
+   It shares the masthead line with the institutional logotype on the right
+   rather than clearing it, so the page reads SPEAR, then the affiliation,
+   then the title -- two marks side by side and neither competing. */
+.rst-content a.spear-lockup {
+    display: block;
+}
+
+.rst-content img.spear-lockup {
+    display: block;
+    float: none;
+    max-width: 100%;
+    height: auto;
+    margin: 6px 0 4px;
+}
+
+/* Narrow viewports: the institutional logotype has already dropped onto its
+   own line by then, and a 380 px lockup on a 420 px screen is the only thing
+   on it. */
+@media screen and (max-width: 768px) {
+    .rst-content img.spear-lockup { width: 260px; }
+}

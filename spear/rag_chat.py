@@ -1100,13 +1100,6 @@ C_BOLD = "\033[1m"
 C_ACCENT = "\033[38;5;77m"    # the platform green
 C_CODE = "\033[38;5;114m"     # soft green for inline code
 
-#: The identity's two carrying colours, as truecolour components, for the
-#: startup mark. Warm is the authoritative source, accent everything derived
-#: from it -- the same distinction the logo makes and the documentation is
-#: built on. The identity's ink is deliberately absent: it is a paper colour.
-_WARM = "216;138;43"          # #D98A2B
-_ACCENT = "14;124;155"        # #0E7C9B
-
 
 # ── Claude Code-style UI ─────────────────────────────────────────────
 
@@ -6619,53 +6612,26 @@ def load_corpus_rules():
 
 # ── main ─────────────────────────────────────────────────────────────
 
-#: The mark, as a terminal can draw it: the three stages of the logo, narrowing.
-#: Half-blocks rather than full ones, so each bar sits across a row boundary
-#: and leaves a blank row above and below it -- which is how the gaps between
-#: the stages survive at six lines tall. (glyph, colour, left pad)
-_BANNER_MARK = (
-    ("▄▄▄▄▄▄▄▄▄▄", _WARM, 0),      # the specification: widest
-    ("▀▀▀▀▀▀▀▀▀▀", _WARM, 0),
-    ("▄▄▄▄▄▄", _ACCENT, 2),        # the evidence weighed
-    ("▀▀▀▀▀▀", _ACCENT, 2),
-    ("▄▄▄▄", _ACCENT, 3),          # the one action
-    ("▀▀", _ACCENT, 4),
-)
-
-_BANNER_WORD = (
-    "███████╗██████╗ ███████╗ █████╗ ██████╗ ",
-    "██╔════╝██╔══██╗██╔════╝██╔══██╗██╔══██╗",
-    "███████╗██████╔╝█████╗  ███████║██████╔╝",
-    "╚════██║██╔═══╝ ██╔══╝  ██╔══██║██╔══██╗",
-    "███████║██║     ███████╗██║  ██║██║  ██║",
-    "╚══════╝╚═╝     ╚══════╝╚═╝  ╚═╝╚═╝  ╚═╝",
-)
-
-#: The wordmark, light teal to the accent. A gradient because the banner
-#: always had one; in the identity's blue-greens because it now has an
-#: identity. NOT in the identity's ink: #12263A is a paper colour, and on the
-#: dark terminal most people run it is very nearly the background.
-_BANNER_GRAD = ("62;168;196", "48;154;184", "34;140;172",
-                "24;130;163", "18;124;158", "14;118;150")
-
-#: Room for the widest mark line, plus a column of air before the wordmark.
-_MARK_WIDTH = 12
-
-
 def banner_art():
-    """The mark beside the wordmark, in the identity's colours.
-
+    """ASCII-art header in the platform gradient.
     Shown first, before the project picker."""
+    art = [
+        "  ███████╗██████╗ ███████╗ █████╗ ██████╗ ",
+        "  ██╔════╝██╔══██╗██╔════╝██╔══██╗██╔══██╗",
+        "  ███████╗██████╔╝█████╗  ███████║██████╔╝",
+        "  ╚════██║██╔═══╝ ██╔══╝  ██╔══██║██╔══██╗",
+        "  ███████║██║     ███████╗██║  ██║██║  ██║",
+        "  ╚══════╝╚═╝     ╚══════╝╚═╝  ╚═╝╚═╝  ╚═╝",
+    ]
+    grad = ["112;196;78", "112;196;78", "94;182;66",
+            "78;168;56", "62;154;48", "56;150;46"]
     print()
 
-    for (glyph, colour, pad), word, rgb in zip(
-            _BANNER_MARK, _BANNER_WORD, _BANNER_GRAD):
-        cell = f"{' ' * pad}{glyph}"
-        print(f"  \033[38;2;{colour}m{cell:<{_MARK_WIDTH}}{C_RST}"
-              f"\033[38;2;{rgb}m{word}{C_RST}")
+    for line, rgb in zip(art, grad):
+        print(f"\033[38;2;{rgb}m{line}{C_RST}")
 
-    print(f"  {'':<{_MARK_WIDTH}}\033[38;2;110;134;154mHEIG-VD/REDS — "
-          f"\033[1;38;2;{_ACCENT}mSpecification-driven Platform for Embedded "
+    print(f"\033[38;2;112;196;78m  HEIG-VD/REDS — \033[1;38;2;56;150;46m"
+          f"Specification-driven Platform for Embedded "
           f"Agentic Reasoning{C_RST}\n")
 
 

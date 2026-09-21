@@ -329,10 +329,10 @@ Smoke test
    b = OpenAICompatibleBackend(OpenAI(base_url='http://127.0.0.1:8080/v1', api_key='not-needed'))
    t = b.complete(system='Reply with exactly the token requested, nothing else.',
                   conversation=[ConversationMessage(role='user',
-                      content=(TextBlock(text='Reply with exactly: EDGEM-BACKEND-OK'),))],
+                      content=(TextBlock(text='Reply with exactly: SPEAR-BACKEND-OK'),))],
                   tools=[], use_tools=False)
    print(t.stop_reason, '|', (t.text or '').strip(), '|', t.tool_calls)"
-   end_turn | EDGEM-BACKEND-OK | ()
+   end_turn | SPEAR-BACKEND-OK | ()
 
 That three-part answer — ``end_turn``, the exact token, an empty tool tuple —
 is the quickest confirmation that serving and the backend contract are both

@@ -1,25 +1,23 @@
 SPEAR documentation
 ======================
 
-Sphinx documentation for the local LLM assistant infrastructure under
-/opt/llm. Layout, configuration and landing page follow the same model as
-soo/infrabase/doc, which is the shared layout across this family of projects:
-doc/Makefile, sources in doc/source/*.rst, configuration in
-doc/source/conf.py, output in doc/build/ (generated — never edit it, never
-index it).
+Sphinx documentation for SPEAR. Layout, configuration and landing page
+follow the shared model of this family of projects: doc/Makefile, sources in
+doc/source/*.rst, configuration in doc/source/conf.py, output in doc/build/
+(generated — never edit it, never index it).
 
 Structure
 ---------
 
 Top-level pages are flat; a topic with several pages gets a directory and an
-eponymous index (harness/harness.rst, model/model.rst), the way infrabase
-groups rootfs/, build_system/ and base_extension/.
+eponymous index (harness/harness.rst, model/model.rst), the way the sibling
+projects group their multi-page topics.
 
-index.rst carries the REDS/HEIG-VD logotype and nothing else of its own: the
-toctree is hidden and numbered, and the landing sections are `.. rst-class::`
-blocks of cross-references. Every page therefore needs a label (`.. _name:`
-above its title) so those references are `:ref:` and break the build if their
-target disappears.
+index.rst carries the REDS/HEIG-VD logotype and the landing prose. The
+toctrees are hidden, numbered and captioned, one per part of the manual, and
+the landing sections below them are definition lists of cross-references.
+Every page therefore needs a label (`.. _name:` above its title) so those
+references are `:ref:` and break the build if their target disappears.
 
 Cross-references are absolute (:doc:`/harness/sandbox`), and so are image
 paths from a subdirectory (/img/...). A relative reference changes meaning

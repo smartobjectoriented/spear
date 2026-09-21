@@ -14,12 +14,24 @@ What SPEAR is
    Overall architecture: entry points, the Python core, model serving and the
    confined tool execution path.
 
-SPEAR is a self-hosted coding assistant that runs entirely on the
-workstation.  No prompt, no source file and no command output leaves the
-machine unless a tool call is explicitly granted the ``network`` capability
-and routed through the sandbox's own network stack.
+SPEAR is a platform for engineering tasks where an agent must reason from an
+authoritative technical source, inspect an implementation, make controlled
+changes to it, and retain the evidence for its conclusions.
 
-It has three parts:
+It is **specification-driven**. A specified system has two sources of truth —
+the specification, which says what is required, and the implementation, which
+says what the code does — and they are not interchangeable. SPEAR keeps the
+two roles distinct throughout: a claim about what is *required* may rest only
+on the authoritative source, while the code may illustrate, compare and
+contradict but never establish. Where the evidence does not support a claim,
+the answer is withheld with the reason rather than issued with a guess. See
+:doc:`/standards`.
+
+It is **self-hosted**. No prompt, no source file and no command output leaves
+the machine unless a tool call is explicitly granted the ``network``
+capability and routed through the sandbox's own network stack.
+
+It has four parts:
 
 **A served model.**
    ``llama-server`` from ``llama.cpp-next`` serves a quantised GGUF model over
@@ -27,9 +39,16 @@ It has three parts:
    :doc:`/model/model_serving`.
 
 **A retrieval corpus.**
-   A Chroma vector store indexed from the source trees the assistant is
-   expected to reason about — SO3, the EDGE-M1 products, LVGL, U-Boot and the
-   LLM infrastructure itself.  See :doc:`/retrieval`.
+   A vector store indexed from the source trees the platform is expected to
+   reason about: an operating system, a build system, a UI stack, a
+   bootloader, or any tree you register.  See :doc:`/retrieval` and
+   :doc:`/projects`.
+
+**A normative store.**
+   The authoritative specifications a session can be bound to, held as
+   provisions rather than as pages: each with its kind, its ordinal, its
+   section and its page, so a claim can cite one and be checked against it.
+   See :doc:`/standards`.
 
 **An execution harness.**
    The part that lets the model actually *do* things: read files, run builds,

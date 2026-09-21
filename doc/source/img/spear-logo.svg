@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 336 104"
+     width="336" height="104" role="img" aria-label="SPEAR — Specification-driven Platform for Embedded Agentic Reasoning">
+  <title>SPEAR — Specification-driven Platform for Embedded Agentic Reasoning</title>
+  <g transform="translate(8 5.6) scale(1.45)">
+    <!-- 1. the specification: the authoritative source -->
+    <path fill="#D98A2B" fill-rule="evenodd"
+          d="M10.5 6 H53.5 A3.5 3.5 0 0 1 57 9.5 V18.5 A3.5 3.5 0 0 1 53.5 22
+             H10.5 A3.5 3.5 0 0 1 7 18.5 V9.5 A3.5 3.5 0 0 1 10.5 6 Z
+             M15 11 H36 A3 3 0 0 1 36 17 H15 A3 3 0 0 1 15 11 Z"/>
+    <!-- 2. the evidence weighed -->
+    <rect x="16" y="26" width="32" height="14" rx="3.2" fill="#0E7C9B"/>
+    <!-- 3. the one action -->
+    <path fill="#0E7C9B" d="M21 44 H43 L32 58 Z"/>
+  </g>
+  <g transform="translate(126.8 19.6) scale(0.72)"
+     fill="none" stroke="#12263A" stroke-width="11"
+     stroke-linecap="round" stroke-linejoin="round">
+      <path d="M40 23 A17.5 17.5 0 1 0 22.5 45 A17.5 17.5 0 1 1 5 67" transform="translate(0 0)"/>
+      <path d="M5.5 80 V10 H26 A17.5 17.5 0 0 1 26 45 H5.5" transform="translate(61 0)"/>
+      <path d="M40 10 H5.5 V80 H40 M5.5 45 H34" transform="translate(118 0)"/>
+      <path d="M5.5 80 L24 10 L42.5 80 M13 56 H35" transform="translate(173 0)"/>
+      <path d="M5.5 80 V10 H25 A16 16 0 0 1 25 42 H5.5 M24 42 L41 80" transform="translate(234 0)"/>
+  </g>
+</svg>

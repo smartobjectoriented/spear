@@ -79,6 +79,13 @@ except ImportError:
 
 html_theme_options = {'body_max_width': '100%'}
 
+# The sidebar mark: the small variant, which drops the specification's slot
+# because below about 24 px it is a sub-pixel line that only muddies the bar
+# it sits in. What survives is the funnel, which is the whole idea. The
+# detailed mark and the landing lockup are in img/ beside it.
+html_logo = 'img/spear-logo-horizontal.svg'
+html_favicon = 'img/spear-icon.svg'
+
 html_static_path = ['_static']
 html_css_files = ['theme_overrides.css']
 

@@ -5,6 +5,11 @@
    :scale: 22%
    :target: https://reds.heig-vd.ch
 
+.. image:: img/spear-logo.svg
+   :alt: SPEAR
+   :width: 380px
+   :class: spear-lockup
+
 .. toctree::
    :maxdepth: 2
    :numbered:

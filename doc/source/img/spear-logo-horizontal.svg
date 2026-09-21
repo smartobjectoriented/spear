@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 227 64"
+     width="227" height="64" role="img" aria-label="SPEAR">
+  <title>SPEAR — Specification-driven Platform for Embedded Agentic Reasoning</title>
+  <g transform="translate(6 2.56) scale(0.92)">
+    <rect x="7" y="6" width="50" height="16" rx="3.6" fill="#D98A2B"/>
+    <rect x="16" y="26" width="32" height="14" rx="3.2" fill="#0E7C9B"/>
+    <path fill="#0E7C9B" d="M21 44 H43 L32 58 Z"/>
+  </g>
+  <g transform="translate(80.88 9.5) scale(0.5)"
+     fill="none" stroke="#12263A" stroke-width="11"
+     stroke-linecap="round" stroke-linejoin="round">
+      <path d="M40 23 A17.5 17.5 0 1 0 22.5 45 A17.5 17.5 0 1 1 5 67" transform="translate(0 0)"/>
+      <path d="M5.5 80 V10 H26 A17.5 17.5 0 0 1 26 45 H5.5" transform="translate(61 0)"/>
+      <path d="M40 10 H5.5 V80 H40 M5.5 45 H34" transform="translate(118 0)"/>
+      <path d="M5.5 80 L24 10 L42.5 80 M13 56 H35" transform="translate(173 0)"/>
+      <path d="M5.5 80 V10 H25 A16 16 0 0 1 25 42 H5.5 M24 42 L41 80" transform="translate(234 0)"/>
+  </g>
+</svg>

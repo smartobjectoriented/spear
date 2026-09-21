@@ -76,6 +76,76 @@ _SUBJECT = ("bit", "bits", "word", "words", "octet", "octets", "offset",
 
 
 
+# A question that asks what something MEANS or how it WORKS. Not a question
+# that asks for something to be DONE: "how do I download the pdf" is a request
+# for an action and binds nothing, which is what keeps the RS274/NGC failure
+# above fixed.
+_ASKS_MEANING = re.compile(
+    r"\b(?:explain|explique|describe|clarify|compare)\b"
+    r"|\bwhat\s+(?:is|are|does|do)\b"
+    r"|\bhow\s+(?:do|does|is|are|should|to)\b"
+    r"|\bdifferences?\s+between\b"
+    r"|\bmeaning\s+of\b"
+    r"|\bcomment\s+(?:fonctionne|marche)\b", re.I)
+
+# ...about the way data is written down and read back. The nouns in _SUBJECT
+# are the THINGS a data-format standard describes; these are what one asks
+# ABOUT them, and they are only ever consulted together with a question that
+# is asking for an explanation.
+_ABOUT_FORMAT = re.compile(
+    r"\b(?:pars(?:e|es|ed|ing)|decod(?:e|es|ed|ing)|encod(?:e|es|ed|ing)|"
+    r"serial(?:is|iz)(?:e|es|ed|ation)|interpret(?:s|ed|ation)?|"
+    r"laid\s+out|lay\s+out|structured?|format(?:s|ted|ting)?|"
+    r"works?|mean(?:s|ing)?|differ(?:s|ent)?|compos(?:ed|ition))\b", re.I)
+
+# ...and a subject that is a NAME rather than an ordinary English word: an
+# acronym, or a word carrying a digit. A data-format standard defines its own
+# vocabulary, and a question about one of its terms cannot be recognised from
+# a list of nouns somebody maintained -- the term is the document's, not the
+# language's. "Explain how the different XYZ work and how it should be parsed"
+# is a question this corpus settles and nothing else does.
+_NAMES_A_TERM = re.compile(r"(?<![\w.])(?:[A-Z]{2,8}[0-9]*s?|\w*\d\w*)(?![\w])")
+
+# The document itself, named as the authority being asked about. "standard"
+# alone is ordinary English and is deliberately not enough anywhere in this
+# module; with a verb of stating or requiring beside it, it is a question
+# about what the document says.
+_SAYS_DOCUMENT = re.compile(
+    r"\b(?:standard|specification|spec|norme)\b[^.?!]{0,60}?"
+    r"\b(?:requires?|required|says?|state[sd]?|defines?|mandates?|"
+    r"specif(?:y|ies|ied)|allows?|forbids?|prescribes?)\b"
+    r"|\b(?:according\s+to|per|under)\s+the\s+"
+    r"(?:standard|specification|spec)\b", re.I)
+
+
+def asks_what_the_document_settles(text):
+    """Is this turn asking what the bound document defines or how it works?
+
+    Two shapes, both needing a question that is asking to be TOLD something:
+
+    * an explanation of how a named technical term works, is composed, or is
+      to be parsed -- the term being the document's own vocabulary, which is
+      exactly what no maintained noun list can contain;
+    * a question about what the document itself requires or says.
+
+    Measured failure this exists for: "Explain how the different <term> work
+    and how it should be parsed", asked with a standard bound, matched no
+    identity term and none of the subject nouns. The turn ran unbound, never
+    called a normative tool, read the source tree instead, and explained the
+    standard from the implementation's comments.
+    """
+    lowered = (text or "")
+
+    if not _ASKS_MEANING.search(lowered):
+        return False
+
+    if _SAYS_DOCUMENT.search(lowered):
+        return True
+
+    return bool(_ABOUT_FORMAT.search(lowered)
+                and _NAMES_A_TERM.search(text or ""))
+
+
 def identity_terms(binding):
     """Every way a user might name this standard, taken from the binding.
 
@@ -157,6 +227,12 @@ def engages(binding, question, *, engaged_before=False, context=""):
                 return True
 
     if _STRUCTURE_ID.search(text):
+        return True
+
+    # A question about what the document defines or how one of its structures
+    # works. Checked against the original casing: an acronym is recognised by
+    # being one.
+    if asks_what_the_document_settles(question or ""):
         return True
 
     for term in identity_terms(binding):

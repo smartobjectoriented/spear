@@ -16,11 +16,11 @@ Branches
 * A finished change becomes a pull request. It is reviewed, then merged into
   ``main``.
 
-The private counterpart — the corpus derived from a licensed standard,
-customer material, evaluation matrices — lives in a separate repository on
-``gitlab.edgemtech.ch``. The split is not a matter of taste: the public
-repository can carry nothing confidential, so the private one does not have
-to sort what is. Nothing from an engagement belongs in a commit here.
+Material that cannot be public — a corpus derived from a licensed
+standard, customer material, evaluation matrices — lives in a separate,
+private repository. The split is not a matter of taste: the public repository
+can carry nothing confidential, so the private one does not have to sort what
+is. Nothing from an engagement belongs in a commit here.
 
 Commits
 *******

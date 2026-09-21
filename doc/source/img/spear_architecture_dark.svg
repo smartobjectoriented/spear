@@ -120,7 +120,7 @@
 <text x="46.0" y="718.1" font-size="9" text-anchor="start" xml:space="preserve" fill="#8fb3d9">not ours</text>
 <rect x="240" y="696" width="268" height="46" rx="0" ry="0" fill="#132a22" stroke="#34d399" stroke-width="1.4"/>
 <text x="374.0" y="716.2" font-size="9" text-anchor="middle" xml:space="preserve" fill="#dcfce7">llama-server (llama.cpp-next)</text>
-<text x="374.0" y="728.1" font-size="9" text-anchor="middle" xml:space="preserve" fill="#dcfce7">Qwen3-Coder-Next Q8_0 · reds-ml</text>
+<text x="374.0" y="728.1" font-size="9" text-anchor="middle" xml:space="preserve" fill="#dcfce7">the served model</text>
 <rect x="518" y="696" width="268" height="46" rx="0" ry="0" fill="#132a22" stroke="#34d399" stroke-width="1.4"/>
 <text x="652.0" y="716.2" font-size="9" text-anchor="middle" xml:space="preserve" fill="#dcfce7">ChromaDB  +  bge-m3</text>
 <text x="652.0" y="728.1" font-size="9" text-anchor="middle" xml:space="preserve" fill="#dcfce7">one collection per corpus</text>

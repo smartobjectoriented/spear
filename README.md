@@ -4,13 +4,39 @@
 
 **📖 Full documentation: <https://smartobjectoriented.github.io/spear/>**
 
-HEIG-VD/REDS. A **fully local, privacy-preserving** AI coding assistant for
-embedded source trees — build systems, hypervisors, UI stacks, or any repo
-you register. Nothing leaves the machine.
+HEIG-VD/REDS. SPEAR combines authoritative specifications, project source
+code and controlled agentic workflows to support **evidence-grounded
+engineering**.
 
-In one sentence: a custom harness around **Qwen3-Coder-Next (80B-A3B, Q8_0,
-MoE, served by llama.cpp)**, with **RAG** over your repos, plus persistent
-memory and skills that make it learn between sessions.
+It is built for tasks where an agent must reason from an authoritative
+technical source, inspect an implementation, make controlled changes to it,
+and retain the evidence for every conclusion it reports. A specified system
+has two sources of truth — the specification says what is *required*, the code
+says what it *does* — and SPEAR keeps the two roles distinct rather than
+letting one stand in for the other.
+
+Everything runs on your own machine. Nothing leaves it unless a tool call is
+explicitly granted network access.
+
+## What it does
+
+- **Authoritative-source grounding** — bind a specification; normative
+  questions are answered from it first, and every claim carries its citation.
+- **Codebase-aware reasoning** — registered trees are indexed and retrieved
+  from, so answers come from *your* project.
+- **Controlled code modification** — investigate, plan, edit, test, review; a
+  file is writable because a planned item named it.
+- **Validation-aware workflows** — how a change will be proved is decided
+  before the code is written.
+- **Traceable evidence** — the closing report is generated from the record of
+  what was retrieved and run, not from the agent's own summary.
+- **Multiple model backends** — any OpenAI-compatible endpoint, local or
+  remote, and the Anthropic API.
+- **Confined execution** — fail-closed: a confinement that cannot be applied
+  is an error, never a silent downgrade.
+
+Where the evidence does not support a claim, SPEAR withholds the answer and
+says why. "Incomplete" is a result, not a failure.
 
 ## Quick start
 
@@ -51,7 +77,10 @@ Running without an index is running a different, much worse assistant.
 | If you want to | Read |
 |---|---|
 | run it | [Getting started](https://smartobjectoriented.github.io/spear/getting_started.html) |
-| use it day to day — commands, `/remember`, guards | [Using the assistant](https://smartobjectoriented.github.io/spear/usage.html) |
+| use it day to day — commands, `/remember`, guards | [spear-chat](https://smartobjectoriented.github.io/spear/usage.html) |
+| bind a specification and read normative answers | [Authoritative standards](https://smartobjectoriented.github.io/spear/standards.html) |
+| understand how a change is made under control | [The engineering workflow](https://smartobjectoriented.github.io/spear/workflow.html) |
+| know why an answer was withheld | [Evidence and guards](https://smartobjectoriented.github.io/spear/guards.html) |
 | understand the confinement — the reason this exists | [Tool execution harness](https://smartobjectoriented.github.io/spear/tool_harness.html) and [Security model](https://smartobjectoriented.github.io/spear/security_model.html) |
 | understand retrieval and corpora | [Retrieval](https://smartobjectoriented.github.io/spear/retrieval.html) |
 | know why this model, and what fine-tuning measured | [Model history](https://smartobjectoriented.github.io/spear/model_history.html) |

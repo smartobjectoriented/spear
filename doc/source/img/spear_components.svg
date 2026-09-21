@@ -15,7 +15,7 @@
 <text x="661.5" y="115.2" font-size="9" text-anchor="middle" xml:space="preserve" fill="#1a1a1a">backend_select.py — 222 l.</text>
 <text x="661.5" y="127.1" font-size="9" text-anchor="middle" xml:space="preserve" fill="#1a1a1a">startup backend picker</text>
 <rect x="790" y="92" width="233" height="52" rx="0" ry="0" fill="#dae8fc" stroke="#6c8ebf" stroke-width="1.4"/>
-<text x="906.5" y="115.2" font-size="9" text-anchor="middle" xml:space="preserve" fill="#1a1a1a">rag_chat.py — 7 758 l.</text>
+<text x="906.5" y="115.2" font-size="9" text-anchor="middle" xml:space="preserve" fill="#1a1a1a">rag_chat.py — 8 044 l.</text>
 <text x="906.5" y="127.1" font-size="9" text-anchor="middle" xml:space="preserve" fill="#1a1a1a">session · corpora · UI · handlers</text>
 <rect x="55" y="150" width="233" height="52" rx="0" ry="0" fill="#dae8fc" stroke="#6c8ebf" stroke-width="1.4"/>
 <text x="171.5" y="173.2" font-size="9" text-anchor="middle" xml:space="preserve" fill="#1a1a1a">index_corpus.py — 445 l.</text>
@@ -32,7 +32,7 @@
 <rect x="35" y="224" width="1010" height="148" rx="8" ry="8" fill="none" stroke="#444444" stroke-width="1.4"/>
 <text x="540.0" y="241.0" font-size="11" text-anchor="middle" xml:space="preserve" fill="#1a1a1a" font-weight="bold">Orchestration  —  one task, bounded and synchronous</text>
 <rect x="55" y="256" width="233" height="52" rx="0" ry="0" fill="#d5e8d4" stroke="#82b366" stroke-width="1.4"/>
-<text x="171.5" y="279.2" font-size="9" text-anchor="middle" xml:space="preserve" fill="#1a1a1a">task_controller.py — 850 l.</text>
+<text x="171.5" y="279.2" font-size="9" text-anchor="middle" xml:space="preserve" fill="#1a1a1a">task_controller.py — 858 l.</text>
 <text x="171.5" y="291.1" font-size="9" text-anchor="middle" xml:space="preserve" fill="#1a1a1a">lifecycle, gates, warnings</text>
 <rect x="300" y="256" width="233" height="52" rx="0" ry="0" fill="#d5e8d4" stroke="#82b366" stroke-width="1.4"/>
 <text x="416.5" y="279.2" font-size="9" text-anchor="middle" xml:space="preserve" fill="#1a1a1a">planning.py — 338 l.</text>
@@ -47,7 +47,7 @@
 <text x="171.5" y="337.2" font-size="9" text-anchor="middle" xml:space="preserve" fill="#1a1a1a">agent_roles.py — 143 l.</text>
 <text x="171.5" y="349.1" font-size="9" text-anchor="middle" xml:space="preserve" fill="#1a1a1a">main · explorer · reviewer · planning</text>
 <rect x="300" y="314" width="233" height="52" rx="0" ry="0" fill="#d5e8d4" stroke="#82b366" stroke-width="1.4"/>
-<text x="416.5" y="337.2" font-size="9" text-anchor="middle" xml:space="preserve" fill="#1a1a1a">tool_exposure.py — 223 l.</text>
+<text x="416.5" y="337.2" font-size="9" text-anchor="middle" xml:space="preserve" fill="#1a1a1a">tool_exposure.py — 261 l.</text>
 <text x="416.5" y="349.1" font-size="9" text-anchor="middle" xml:space="preserve" fill="#1a1a1a">role-aware registry view</text>
 <rect x="545" y="314" width="233" height="52" rx="0" ry="0" fill="#d5e8d4" stroke="#82b366" stroke-width="1.4"/>
 <text x="661.5" y="337.2" font-size="9" text-anchor="middle" xml:space="preserve" fill="#1a1a1a">verification.py — 465 l.</text>
@@ -58,7 +58,7 @@
 <rect x="35" y="388" width="1010" height="148" rx="8" ry="8" fill="none" stroke="#444444" stroke-width="1.4"/>
 <text x="540.0" y="405.0" font-size="11" text-anchor="middle" xml:space="preserve" fill="#1a1a1a" font-weight="bold">Runtime core  —  the model loop and everything that bounds it</text>
 <rect x="55" y="420" width="233" height="52" rx="0" ry="0" fill="#d5e8d4" stroke="#82b366" stroke-width="1.4"/>
-<text x="171.5" y="443.2" font-size="9" text-anchor="middle" xml:space="preserve" fill="#1a1a1a">agent_runtime.py — 4 038 l.</text>
+<text x="171.5" y="443.2" font-size="9" text-anchor="middle" xml:space="preserve" fill="#1a1a1a">agent_runtime.py — 4 632 l.</text>
 <text x="171.5" y="455.1" font-size="9" text-anchor="middle" xml:space="preserve" fill="#1a1a1a">rounds · validation · tool calls</text>
 <rect x="300" y="420" width="233" height="52" rx="0" ry="0" fill="#d5e8d4" stroke="#82b366" stroke-width="1.4"/>
 <text x="416.5" y="443.2" font-size="9" text-anchor="middle" xml:space="preserve" fill="#1a1a1a">model_backend.py — 841 l.</text>
@@ -109,10 +109,10 @@
 <rect x="35" y="716" width="1010" height="264" rx="8" ry="8" fill="none" stroke="#444444" stroke-width="1.4"/>
 <text x="540.0" y="733.0" font-size="11" text-anchor="middle" xml:space="preserve" fill="#1a1a1a" font-weight="bold">Tool lifecycle and security substrate</text>
 <rect x="55" y="748" width="233" height="52" rx="0" ry="0" fill="#d5e8d4" stroke="#82b366" stroke-width="1.4"/>
-<text x="171.5" y="771.2" font-size="9" text-anchor="middle" xml:space="preserve" fill="#1a1a1a">tool_registry.py — 369 l.</text>
+<text x="171.5" y="771.2" font-size="9" text-anchor="middle" xml:space="preserve" fill="#1a1a1a">tool_registry.py — 462 l.</text>
 <text x="171.5" y="783.1" font-size="9" text-anchor="middle" xml:space="preserve" fill="#1a1a1a">7 specs, schemas, roles</text>
 <rect x="300" y="748" width="233" height="52" rx="0" ry="0" fill="#d5e8d4" stroke="#82b366" stroke-width="1.4"/>
-<text x="416.5" y="771.2" font-size="9" text-anchor="middle" xml:space="preserve" fill="#1a1a1a">tool_router.py — 837 l.</text>
+<text x="416.5" y="771.2" font-size="9" text-anchor="middle" xml:space="preserve" fill="#1a1a1a">tool_router.py — 884 l.</text>
 <text x="416.5" y="783.1" font-size="9" text-anchor="middle" xml:space="preserve" fill="#1a1a1a">validate · span · envelope</text>
 <rect x="545" y="748" width="233" height="52" rx="0" ry="0" fill="#d5e8d4" stroke="#82b366" stroke-width="1.4"/>
 <text x="661.5" y="771.2" font-size="9" text-anchor="middle" xml:space="preserve" fill="#1a1a1a">registered handlers (rag_chat)</text>
@@ -181,7 +181,7 @@
 <text x="540.0" y="1177.0" font-size="11" text-anchor="middle" xml:space="preserve" fill="#1a1a1a" font-weight="bold">Outside the harness</text>
 <rect x="55" y="1192" width="233" height="48" rx="0" ry="0" fill="#f8cecc" stroke="#b85450" stroke-width="1.4"/>
 <text x="171.5" y="1213.2" font-size="9" text-anchor="middle" xml:space="preserve" fill="#1a1a1a">llama-server (llama.cpp-next)</text>
-<text x="171.5" y="1225.1" font-size="9" text-anchor="middle" xml:space="preserve" fill="#1a1a1a">Qwen3-Coder-Next Q8_0 · reds-ml</text>
+<text x="171.5" y="1225.1" font-size="9" text-anchor="middle" xml:space="preserve" fill="#1a1a1a">the served model</text>
 <rect x="300" y="1192" width="233" height="48" rx="0" ry="0" fill="#f8cecc" stroke="#b85450" stroke-width="1.4"/>
 <text x="416.5" y="1213.2" font-size="9" text-anchor="middle" xml:space="preserve" fill="#1a1a1a">Anthropic API</text>
 <text x="416.5" y="1225.1" font-size="9" text-anchor="middle" xml:space="preserve" fill="#1a1a1a">optional backend</text>

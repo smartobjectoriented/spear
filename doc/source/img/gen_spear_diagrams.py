@@ -664,7 +664,7 @@ entries = [
     ("corpora/", "27 M", "small vendored trees indexed as own corpora", NEUTRAL),
     ("docker/", "26 K", "image, run wrapper, entrypoint, corpus registry", NEUTRAL),
     ("pod-artifacts-qwen3coder/", "111 K", "remote pod recipes and artefacts", NEUTRAL),
-    ("claude/", "1.9 M", "working notes on the EDGE-M1 and AVZ trees", NEUTRAL),
+    ("claude/", "1.9 M", "working notes on the registered source trees", NEUTRAL),
     ("doc/", "—", "this documentation (Sphinx)", WHITE),
 ]
 LEFT = "align=left;"
@@ -745,7 +745,7 @@ verif= p.box(R, 172, RW, 78, "VerificationPolicy\n\ncurrent-generation evidence 
 
 # row 3 — runtime
 rt   = p.box(L, 282, LW, 88, "AgentRuntime\n\nthe round loop: model turn,\nvalidation, tool calls, budgets", CORE, 10)
-mb   = p.box(M, 282, MW, 88, "ModelBackend\n\nllama.cpp / OpenAI-compatible\nAnthropic\nreds-ml: Qwen3-Coder-Next Q8_0", MODEL, 10)
+mb   = p.box(M, 282, MW, 88, "ModelBackend\n\nllama.cpp / OpenAI-compatible\nAnthropic\nlocal or remote endpoint", MODEL, 10)
 ceng = p.box(R, 282, RW, 88, "ContextEngine + Compaction\nBudgetManager\nProgressMonitor · FailurePolicy\nCancellation", CORE, 10)
 
 # row 4 — tools
@@ -905,7 +905,7 @@ row(1086, [loc("training_readiness") + "\nstate · level · strategy",
 
 # ── outside ──────────────────────────────────────────────────────────────
 p.box(35, 1160, 1010, 92, "Outside the harness", CONT, 11, 1)
-row(1192, ["llama-server (llama.cpp-next)\nQwen3-Coder-Next Q8_0 · reds-ml",
+row(1192, ["llama-server (llama.cpp-next)\nthe served model",
            "Anthropic API\noptional backend",
            "ChromaDB\none collection per corpus",
            "the host: bwrap · systemd\nslirp4netns · the commands"], DANGER, 48)
@@ -998,7 +998,7 @@ p.box(240, 624, 824, 34,
 
 # ── outside ──────────────────────────────────────────────────────────────
 band(680, 74, "Outside", "not ours")
-cells(696, ["llama-server (llama.cpp-next)\nQwen3-Coder-Next Q8_0 · reds-ml",
+cells(696, ["llama-server (llama.cpp-next)\nthe served model",
             "ChromaDB  +  bge-m3\none collection per corpus",
             "the host\nbwrap · systemd · slirp4netns"], D_OUT)
 
@@ -1018,6 +1018,139 @@ p.note(24, 862, 1052, 84,
        "authorization chain rather than two boxes, because nothing reaches "
        "CommandRunner without crossing all of it.", 10,
        style="fillColor=#101a33;strokeColor=#334166;fontColor=#cfe3ff;")
+pages.append(p)
+
+# =========================================================================
+# The engineering workflow — INVESTIGATE, PLAN, EDIT, TEST, REVIEW
+# =========================================================================
+# One page per concept the documentation explains, so the picture and the
+# prose cannot drift: this is the same five stages workflow.rst describes,
+# with the condition that opens each gate written on the arrow.
+p = Page("workflow", 660)
+p.label(0, 8, 1080, 30, "The engineering workflow", 16, True)
+p.label(0, 34, 1080, 18,
+        "Each stage opens only on a condition the runtime can check. A stage "
+        "that cannot open says so; it does not proceed on an assumption.", 10)
+
+STAGE_W, STAGE_H, STAGE_Y = 186, 92, 96
+xs = [30 + i * 212 for i in range(5)]
+
+inv = p.box(xs[0], STAGE_Y, STAGE_W, STAGE_H,
+            "INVESTIGATE\n\nread the authoritative\nsource and the\nimplementation",
+            CORE, 10, 1)
+pln = p.box(xs[1], STAGE_Y, STAGE_W, STAGE_H,
+            "PLAN\n\none recorded item per\nrequirement, each with\nits validation",
+            CORE, 10, 1)
+edt = p.box(xs[2], STAGE_Y, STAGE_W, STAGE_H,
+            "EDIT\n\nwrite only the files a\nplanned item named",
+            CORE, 10, 1)
+tst = p.box(xs[3], STAGE_Y, STAGE_W, STAGE_H,
+            "TEST\n\nrun the validation that\nreaches the changed\nbehaviour",
+            CORE, 10, 1)
+rev = p.box(xs[4], STAGE_Y, STAGE_W, STAGE_H,
+            "REVIEW\n\nreport per requirement\nfrom the ledger",
+            CORE, 10, 1)
+
+p.edge(inv, pln, "both kinds of\nevidence held")
+p.edge(pln, edt, "item accepted")
+p.edge(edt, tst, "file written")
+p.edge(tst, rev, "result recorded")
+
+# The gate and the ledger sit under the stages they govern.
+gate = p.box(xs[1], 236, STAGE_W * 2 + 26, 62,
+             "write gate — a file is writable only because a planned item "
+             "named it", SANDBOX, 10)
+p.edge(pln, gate, "", ARR_D)
+p.edge(gate, edt, "", ARR_D)
+
+led = p.box(30, 330, 1020, 62,
+            "requirement ledger — one row per requirement: its evidence, its "
+            "disposition, its validation.\nThe closing report is read from "
+            "this, not from the answer's prose.", STORE, 10)
+p.edge(inv, led, "", ARR_D)
+p.edge(rev, led, "", ARR_D)
+
+p.box(30, 420, 1020, 56,
+      "replan — a validation that keeps failing the same way reopens PLAN "
+      "rather than being patched again", NEUTRAL, 10)
+
+p.note(30, 496, 1020, 110,
+       "Why the stages are separate rather than one pass:\n"
+       "  \u2022 a requirement nobody read cannot be planned against, so "
+       "INVESTIGATE holds both the authoritative and the implementation side "
+       "before PLAN opens;\n"
+       "  \u2022 deciding how a behaviour will be proved BEFORE writing it is "
+       "what makes TEST a check rather than a description, so a plan item "
+       "carries its validation;\n"
+       "  \u2022 the ledger, not the closing prose, decides whether the turn "
+       "is finished \u2014 which is how \u2018incomplete\u2019 and "
+       "\u2018out of scope\u2019 survive to the report.", 10)
+pages.append(p)
+
+# =========================================================================
+# Authoritative evidence — where a normative claim is allowed to come from
+# =========================================================================
+p = Page("evidence", 700)
+p.label(0, 8, 1080, 30, "Authoritative evidence, and what may rest on it", 16, True)
+p.label(0, 34, 1080, 18,
+        "Two sources, two roles, and one rule: the document is the only "
+        "source of normative force.", 10)
+
+q = p.box(390, 66, 300, 46, "the question asked this turn", CLI, 10)
+
+sc = p.box(390, 138, 300, 50,
+           "scope\nNORMATIVE \u00b7 IMPLEMENTATION \u00b7 MIXED", CORE, 10)
+p.edge(q, sc)
+
+# left: authority. right: implementation.
+p.box(30, 214, 490, 250, "Normative authority", CONT, 12, 1)
+bind = p.box(55, 254, 440, 44,
+             "bound standard \u2014 one document and revision, per machine",
+             CORE, 10)
+stool = p.box(55, 308, 440, 52,
+              "standard.search \u00b7 standard.fetch\n"
+              "standard.get_structure \u00b7 standard.cite", CORE, 10)
+prov = p.box(55, 370, 440, 76,
+             "provision records\n"
+             "identity (Rule / Permission / Observation, ordinal)\n"
+             "modality \u00b7 section \u00b7 page \u00b7 source id", STORE, 10)
+
+p.box(560, 214, 490, 250, "Implementation evidence", CONT, 12, 1)
+ctool = p.box(585, 254, 440, 44,
+              "bash \u00b7 search_corpus \u2014 withheld on a normative turn",
+              NEUTRAL, 10)
+cread = p.box(585, 308, 440, 52,
+              "what a tool actually RETURNED this turn\n"
+              "(not what a file somewhere happens to contain)", NEUTRAL, 10)
+cgnd = p.box(585, 370, 440, 76,
+             "grounds EXISTENCE only\n"
+             "a name in a comment is still just a name:\n"
+             "no modality, no authority, no clause", DANGER, 10)
+
+p.edge(sc, bind, "authoritative first")
+p.edge(bind, stool)
+p.edge(stool, prov)
+p.edge(sc, ctool, "implementation scope", ARR_D)
+p.edge(ctool, cread)
+p.edge(cread, cgnd)
+
+ans = p.box(300, 492, 480, 52,
+            "the answer \u2014 every normative claim carries a citation",
+            WHITE, 11, 1)
+p.edge(prov, ans, "may establish\nwhat is REQUIRED")
+p.edge(cgnd, ans, "may illustrate\nwhat the code DOES", ARR_D)
+
+p.note(30, 568, 1020, 110,
+       "The guards read the two ledgers separately, and that is the whole "
+       "point:\n"
+       "  \u2022 a claim may not be stronger than the provision it cites "
+       "(informative < may < should < shall);\n"
+       "  \u2022 a technical name credited to the document must occur in the "
+       "document;\n"
+       "  \u2022 a count, a maximum or a minimum needs a clause that states "
+       "one \u2014 counting flags in an implementation does not;\n"
+       "  \u2022 where nothing supports the claim, the answer is withheld "
+       "with the reason, rather than issued with a guess.", 10)
 pages.append(p)
 
 # ---- page: the hand-made overview, pasted in ------------------------------

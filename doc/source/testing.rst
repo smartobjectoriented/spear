@@ -150,4 +150,4 @@ Live smoke test
 
 The end-to-end check that serving and the backend contract are both healthy is
 in :doc:`/model/model_serving`; the expected answer is ``end_turn`` /
-``EDGEM-BACKEND-OK`` / empty tool tuple.
+``SPEAR-BACKEND-OK`` / empty tool tuple.

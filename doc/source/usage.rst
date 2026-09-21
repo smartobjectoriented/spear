@@ -1,8 +1,8 @@
 .. _usage:
 
-===================
-Using the assistant
-===================
+==========
+spear-chat
+==========
 
 This page is the day-to-day surface: the commands outside the chat, the
 commands inside it, where the assistant's knowledge comes from and on what
@@ -24,6 +24,52 @@ picker lists them.  Launching in an unregistered multi-component workspace
 offers to split it into one corpus per large sub-tree, so that a huge upstream
 tree never dilutes the index.  :doc:`/retrieval` is the full account.
 
+Permission modes
+================
+
+The first decision a session makes is what the assistant is allowed to do to
+your files. One mode is always in force, and ``--safe`` is the default when
+none is given.
+
+.. list-table::
+   :header-rows: 1
+   :widths: 22 40 38
+
+   * - Mode
+     - Writes and commands
+     - Network
+   * - ``--safe``
+     - refused, not proposed
+     - none
+   * - ``--ask``
+     - each edit and each command is confirmed before it runs
+     - **available**
+   * - ``--auto``
+     - run without asking
+     - none
+
+``--ask`` has the aliases ``--confirm`` and ``--no-bypass``; ``--auto`` has
+``-y``, ``--yolo`` and ``--bypass-permissions``.
+
+.. important::
+
+   ``--ask`` is the only mode with network access, and ``--no-network``
+   removes it there too. An unattended run *with* network is the combination
+   deliberately not offered: confirmation is what makes reaching the network
+   reviewable.
+
+Two further flags bound where writes may land:
+
+``--single-root``
+   Restrict writes to the launch directory. By default the registered corpora
+   are writable too, each mounted at ``/workspaces/<name>`` — a path that
+   works in ``bash`` and in the file tools alike. Relative paths always
+   resolve in the launch directory and never reach them.
+
+``--allow-absolute-paths``
+   Accept host absolute paths into the launch directory. Off by default;
+   ``/workspace/...`` always works.
+
 Command line
 ============
 
@@ -34,19 +80,31 @@ Command line
    * - Command
      - Purpose
    * - ``spear-chat``
-     - the assistant; auto-detects the corpus from the current directory, and
-       shows a picker otherwise
-   * - ``spear-chat --corpus lvgl``
-     - open a registered corpus by name
+     - the assistant; uses the corpus containing the current directory, else
+       an ad-hoc one on it
+   * - ``spear-chat --corpus <name>``
+     - open a registered corpus by name (aliases ``--project``,
+       ``--checkout``)
    * - ``spear-chat --here``
      - ad-hoc, on the current directory
-   * - ``spear-chat -y``
-     - bypass permissions: auto-accept tool actions, network included
+   * - ``spear-chat --with <name>`` / ``--without <name>``
+     - federate an extra corpus into this session, or drop one that would be
+       attached
+   * - ``spear-chat --ask`` / ``--auto`` / ``--safe``
+     - the permission mode, as above
    * - ``spear-chat --no-network``
-     - offline — no network in the shell, and the web tools are not exposed
+     - drop network even in ``--ask``
+   * - ``spear-chat --local`` / ``--remote`` / ``--reds``
+     - which backend to talk to; without one, an interactive launch shows a
+       picker and preselects the last choice
+   * - ``spear-chat --provider anthropic --model <id>``
+     - use the Anthropic API instead of an OpenAI-compatible endpoint
    * - ``spear-chat --ctx 65536 --temp 0.1 …``
-     - session settings that used to be environment variables; ``--help``
-       lists them all
+     - session settings, each also an environment variable; ``--help`` lists
+       them all and the flag wins
+   * - ``spear-chat --record FILE`` / ``--replay FILE``
+     - write down every model turn, or answer from a recording while the
+       tools, files and gates still run for real
    * - ``spear-corpus list|add|rm|scan``
      - manage the corpus registry (``/corpus`` in the chat)
    * - ``spear-server``
@@ -55,6 +113,12 @@ Command line
      - rebuild a corpus with the curated walk
    * - ``spear-index [dir] [--max-files N] [--exclude D]``
      - index any tree
+
+.. note::
+
+   Tools always run in the **current directory**, whatever corpus is
+   attached. To work on another tree, ``cd`` into it — no flag relocates the
+   workspace. See :doc:`/projects`.
 
 ``spear-corpus scan <workspace>`` splits a multi-component tree into
 per-component corpora by file count; the chat offers the same split
@@ -72,8 +136,15 @@ Direct tools, no model in the loop:
 
 Session commands:
 
-   ``/search <q>`` ``/reindex`` ``/history`` ``/skills`` ``/undo`` ``/clear``
-   ``/tools``
+   ``/search <q>`` ``/reindex`` ``/history`` ``/skills`` ``/undo``
+   ``/clear`` (``/new``) ``/tools`` ``/model`` (``/switch``)
+
+``/model`` (or ``/switch``)
+   Change backend or model without leaving the session.
+
+``/clear`` (or ``/new``)
+   Start a fresh conversation. The corpus, its memories and its index are
+   unaffected; only the conversation is dropped.
 
 ``/corpus [list|add|rm|scan]``
    The registry, without leaving the session.  Registering does not switch
@@ -97,9 +168,25 @@ Session commands:
    Save the last exchange as a fine-tuning sample, or log a bad one.  Bad ones
    are never trained on.  See :doc:`/model/training`.
 
+Operator commands
+-----------------
+
+These two are typed in the session and are **never reachable by the model**.
+The agent cannot rebind the document it is being held to, nor drive the
+fine-tuning machinery.
+
+``/standard [status|list|use|ingest|verify]``
+   Ingest a specification, bind one, inspect the binding. The binding decides
+   how normative answers are grounded and is shared by every session on the
+   machine, so check it before trusting one: ``/standard status``. See
+   :doc:`/standards`.
+
+``/finetune``
+   The fine-tuning control plane. See :doc:`/model/training`.
+
 Multi-line paste is supported; ``ctrl+c`` interrupts generation; ``Enter``
 confirms tool prompts; arrows, ``Home``/``End`` and ``ctrl+r`` come from
-readline.
+readline. ``quit``, ``exit`` or ``q`` ends the session.
 
 Web access
 ==========

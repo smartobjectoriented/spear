@@ -304,8 +304,6 @@ class NoStaleProductPrefixEscapes(unittest.TestCase):
             "the same narrative: the path Axolotl was not usable at",
         "doc/source/model_serving.rst":
             "a recorded backend probe and its literal reply",
-        "doc/source/testing.rst":
-            "the same recorded reply",
         "doc/source/operations.rst":
             "a systemctl glob that must match the unit prefix the code emits",
         "pod-artifacts-qwen3coder/gguf-download.log":

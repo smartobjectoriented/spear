@@ -1,8 +1,8 @@
 .. _architecture:
 
-====================
-Harness architecture
-====================
+============
+Architecture
+============
 
 SPEAR separates the interactive application from the provider-neutral task
 runtime and from the security substrate.  The same ``AgentRuntime`` executes

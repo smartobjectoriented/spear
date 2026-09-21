@@ -1,115 +1,162 @@
 .. SPEAR documentation master file.
 
 .. image:: img/REDS-HEIG-VD.png
-   :align: center
-   :scale: 30%
+   :align: right
+   :scale: 22%
    :target: https://reds.heig-vd.ch
 
 .. toctree::
-   :maxdepth: 5
+   :maxdepth: 2
    :numbered:
    :hidden:
+   :caption: The platform
 
    introduction
-   Getting started <getting_started>
-   Using the assistant <usage>
-   directory_layout
    architecture
+   installation
+   Getting started <getting_started>
+
+.. toctree::
+   :maxdepth: 2
+   :numbered:
+   :hidden:
+   :caption: Using SPEAR
+
+   spear-chat <usage>
+   projects
    retrieval
+   Container <container>
+
+.. toctree::
+   :maxdepth: 2
+   :numbered:
+   :hidden:
+   :caption: Evidence-grounded reasoning
+
+   standards
+   workflow
+   guards
+   context
+
+.. toctree::
+   :maxdepth: 2
+   :numbered:
+   :hidden:
+   :caption: Execution and serving
+
    harness/harness
    model/model
+   backends
+
+.. toctree::
+   :maxdepth: 2
+   :numbered:
+   :hidden:
+   :caption: Reference
+
+   configuration
+   directory_layout
+   troubleshooting
    testing
    operations
-   Container <container>
    Coding conventions <coding_conventions>
    Development flow <dev_flow>
    glossary
 
 |
 
-
-.. rst-class:: center
-
+======================================================================
 SPEAR — Specification-driven Platform for Embedded Agentic Reasoning
-####################################################################
+======================================================================
 
-.. rst-class:: left
+SPEAR combines authoritative specifications, project source code and
+controlled agentic workflows to support evidence-grounded engineering.
 
-Setup and environment
-*********************
+It exists for a specific kind of task: one where an agent must reason from an
+**authoritative technical source**, inspect an **implementation**, make
+**controlled changes** to it, and retain the **evidence** for every conclusion
+it reports.
 
-- :ref:`Getting started <getting_started>` — four commands, and the one
-  measurement that explains why the retrieval index is not optional
-- :ref:`Using the assistant <usage>` — the command line, the in-chat
-  commands and the guards
-- :ref:`Containerised deployment <container>` — what the image carries, what
-  it expects mounted, and the two run flags without which the harness
-  refuses every command
+That is not the same problem as writing code. A specified system has two
+sources of truth, and they are not interchangeable — the specification says
+what is required, the implementation says what the code does. An answer that
+takes the first from the second is wrong even when every sentence in it is
+true of the code. SPEAR keeps the two roles distinct, and will withhold an
+answer rather than close the gap with a guess.
 
-.. rst-class:: left
+.. figure:: img/spear_overview.svg
+   :width: 100%
 
-What runs where
-***************
+   Entry points, the platform core, model serving and the confined tool
+   execution path.
 
-- :ref:`Introduction <introduction>` — what this is, and what it is not
-- :ref:`Directory layout <directory_layout>` — the trees, and which one owns
-  what
-- :ref:`Harness architecture <architecture>` — the Python core and the paths
-  through it
-- :ref:`Retrieval <retrieval>` — the corpus, the index, and what retrieval
-  measurably buys
+What SPEAR does
+===============
 
-.. rst-class:: left
+**Authoritative-source grounding**
+    A specification is ingested once and bound to the machine. On a turn that
+    asks what the document defines, the document is read *first*, and every
+    normative claim in the answer carries the provision it rests on.
 
-The confined execution path
-***************************
+**Codebase-aware reasoning**
+    Registered source trees are indexed and retrieved from, so questions about
+    a project are answered from that project rather than from the model's
+    recollection of projects like it.
 
-The reason this documentation exists. One rule governs all of it:
-**fail-closed** — a confinement that cannot be applied is an error, never a
-silent downgrade to a less confined execution.
+**Controlled code modification**
+    A change runs through investigation, planning, editing, testing and
+    review. A file becomes writable because a planned item named it — not
+    because the agent decided to open it.
 
-- :ref:`The tool harness <tool_harness>` — what a tool is, and what is known
-  about a call before it runs
-- :ref:`The security model <security_model>` — the rules that decide whether
-  it runs at all
-- :ref:`Sandbox <sandbox>`, :ref:`network <network>` and
-  :ref:`resource control <resource_control>` — the three confinement layers,
-  in increasing order of subtlety
-- :ref:`Final harness audit <final_harness_audit>` — what was measured
-  against the whole path, rather than what it was designed to do
+**Validation-aware workflows**
+    How a behaviour will be proved is decided before the code that implements
+    it is written, which is what makes the test a check rather than a
+    description.
 
-.. rst-class:: left
+**Traceable evidence and citations**
+    What each turn retrieved, what it read and what it ran is recorded. The
+    closing report is generated from that record, not from the agent's own
+    summary of its work.
 
-The model and its weights
-*************************
+**Multiple model backends**
+    Any OpenAI-compatible endpoint, local or remote, and the Anthropic API.
+    Everything below the application layer is provider-neutral.
 
-- :ref:`Model serving <model_serving>` and :ref:`runtime bootstrap
-  <runtime_bootstrap>` — the quantised weights, the GPU/CPU split, and what
-  must be true before the first token
-- :ref:`Training <training>` — how the harness turns its own usage into a
-  governed dataset
-- :ref:`Model history <model_history>` — what the earlier attempts measured,
-  including the one that cost a rented B200
+**Confined execution**
+    One rule governs the whole execution path: **fail-closed** — a confinement
+    that cannot be applied is an error, never a silent downgrade.
 
-.. rst-class:: left
+Where to start
+==============
 
-Verification and operation
-**************************
+:ref:`Introduction <introduction>` · :ref:`Architecture <architecture>`
+    What the platform is, what it is not, and how its parts fit together.
 
-- :ref:`Testing <testing>` — what the suite covers, and what it deliberately
-  does not
-- :ref:`Operations <operations>` — the observable states and where each one
-  is reported
+:ref:`Installation <installation>` · :ref:`Getting started <getting_started>`
+    Prerequisites, the native and container paths, and a first useful session.
 
-.. rst-class:: left
+:ref:`spear-chat <usage>` · :ref:`Projects and corpora <projects>`
+    The command line, the in-session commands, and how a tree becomes
+    something SPEAR can reason about.
 
-Conventions and development flow
-********************************
+:ref:`Authoritative standards <standards>`
+    The defining feature: binding a specification, what normative evidence is,
+    and why an implementation comment is not authority.
 
-- :ref:`Our coding conventions <coding_conventions>`
-- :ref:`Our development flow <dev_flow>`
-- :ref:`Glossary <glossary>`
+:ref:`The engineering workflow <workflow>` · :ref:`Evidence and guards <guards>`
+    How a change is made under control, and why an answer is sometimes
+    withheld or reported incomplete.
 
-To edit the documentation and to use the correct underlying policy, you can
-read `this documentation style guide
+:ref:`Configuration reference <configuration>` · :ref:`Troubleshooting <troubleshooting>`
+    Every supported setting, and what the common symptoms actually mean.
+
+Project
+=======
+
+SPEAR is developed at the `REDS institute <https://reds.heig-vd.ch>`_ of
+`HEIG-VD <https://www.heig-vd.ch>`_, and is published under the Apache License
+2.0.
+
+To edit this documentation, follow the conventions in ``doc/README`` and the
+`Sphinx style guide
 <https://documentation-style-guide-sphinx.readthedocs.io/en/latest/style-guide.html>`_.

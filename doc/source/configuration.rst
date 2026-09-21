@@ -32,7 +32,9 @@ Files
      - the template for the above
    * - ``spear/machine.env``
      - no
-     - machine-specific environment; sourced by the launcher
+     - machine-specific environment: the one file that names what this
+       deployment keeps outside the checkout. Read by the launcher, by
+       ``spear-corpus`` and by ``docker/build.sh``
    * - ``spear/active-backend.conf``
      - no
      - the backend chosen last

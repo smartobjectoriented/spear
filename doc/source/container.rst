@@ -269,6 +269,83 @@ When ``--bake`` is used the image's registry is restricted to what the image
 actually carries. Otherwise the recipient opens the container to a list of
 corpora they do not have and cannot get.
 
+A deployment's own content, and how it gets in
+==============================================
+
+A deployment keeps what is specific to it **outside the checkout**: its rules,
+its skills, its benches, the trees it works on and the normative documents it
+answers from. ``spear/machine.env`` is the one untracked file that says where
+those live, and it is read by the launcher, by ``spear-corpus`` and — since it
+decides what an image carries — by ``docker/build.sh``.
+
+Everything therefore reaches an image by one of three routes, and none of them
+is a second repository:
+
+.. list-table::
+   :header-rows: 1
+   :widths: 30 70
+
+   * - What
+     - How it gets in
+   * - rules, skills, benches
+     - ``machine.env`` sets ``SPEAR_RULES_DIR`` and the other two;
+       ``build.sh`` resolves them as named contexts
+       (:ref:`optional-build-inputs`)
+   * - the normative store
+     - staged per document by profile (:ref:`image-profiles`)
+   * - the corpus trees
+     - ``--bake``, once each is registered and indexed on the host
+
+.. important::
+
+   ``build.sh`` reads ``machine.env`` for exactly this reason. Without it the
+   three variables are unset, the table falls back to the in-tree directories
+   — a ``README`` in each — and the build reports them as *found*, because
+   they are directories and they exist. The image then ships a harness with no
+   rules and no skills and announces neither: the failure ``machine.env``
+   exists to prevent on a workstation, reproduced in the artefact handed to
+   someone else, where it is harder to notice and impossible to fix from
+   inside.
+
+There is no second image
+------------------------
+
+A deployment's private material is *content*, not an application: there is no
+harness in it, nothing to execute, and so nothing to build an image around. It
+is not packaged separately — it is what makes an ``engagement`` image an
+engagement image.
+
+Start to finish, on the machine that has the content:
+
+.. code-block:: console
+
+   $ spear-corpus add acme-firmware "$SPEAR_PILOT_TREE"   # register…
+   $ spear-index "$SPEAR_PILOT_TREE"                      # …and index
+   $ docker/build.sh --profile engagement --bake so3,acme-firmware
+
+What the build reports is what the image carries:
+
+.. code-block:: text
+
+   settings  …/spear/machine.env
+   rules     …/rules.d
+   skills    …/skills
+   benches   …/benches
+   standards <licensed document>  (LICENSED_STANDARD)
+   standards bound on open: <licensed document>
+   corpora   acme-firmware -> /corpora/…
+
+The recipient opens a container already bound, with the rules, the skills, the
+index and the trees, and nothing to mount.
+
+.. note::
+
+   The variables that *build* a corpus rather than use one — the path to a
+   source PDF, the working tree a pilot drives — are deliberately **not**
+   baked. They name host paths that do not exist in a container, and the
+   corpus they produce is already inside it. They belong on the machine that
+   builds the image, not in what is handed over.
+
 Publishing, and not publishing
 ==============================
 

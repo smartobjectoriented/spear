@@ -23,6 +23,7 @@ import shutil
 import subprocess
 from contextlib import contextmanager
 from pathlib import Path
+import answer_scope
 import embedding
 import evidence_handles
 import skill_library
@@ -7436,6 +7437,28 @@ def main():
         if hist and hist[-1]["role"] == "user":
             hist.pop()
 
+        # Bound here rather than at the AgentContext below, because what this
+        # turn asked for decides what of the conversation may reach the model
+        # and not only which tools may. Called once: it announces the binding
+        # and consumes the read context, so a second call would do both twice.
+
+        turn_binding = standard_binding_for(user_input)
+
+        # Withholding the local tools stopped a normative turn from going and
+        # reading a working tree; it left the working tree an earlier turn had
+        # already been shown sitting in the prompt. A question that stands on
+        # its own words is answered from those words and the document.
+        bound_turn = bool(turn_binding)
+        said_before = next((message["content"] for message in reversed(hist)
+                            if message["role"] == "user"), "")
+        prior_scope = answer_scope.of(answer_scope.spoken_part(said_before),
+                                      standard_bound=bound_turn)
+        turn_scope = answer_scope.of(user_input, prior=prior_scope,
+                                     standard_bound=bound_turn)
+        hist = answer_scope.carried(
+            hist, turn_scope, standard_bound=bound_turn,
+            self_contained=answer_scope.self_contained(user_input))
+
         announce_carried_spec(user_input)
         conversation = canonical_history(hist)
         conversation.append(ConversationMessage("user", (TextBlock(user_msg),)))
@@ -7619,7 +7642,7 @@ def main():
             checkpoint_manager=checkpoint_manager,
             checkpoint=checkpoint,
             budget_manager=task_budget,
-            standard_binding=standard_binding_for(user_input),
+            standard_binding=turn_binding,
             project_commands=project_commands,
             project_root=PROJECT_ROOT,
             project_verifier=verify_project_command,

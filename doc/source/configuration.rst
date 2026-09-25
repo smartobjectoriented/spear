@@ -34,7 +34,11 @@ Files
      - no
      - machine-specific environment: the one file that names what this
        deployment keeps outside the checkout. Read by the launcher, by
-       ``spear-corpus`` and by ``scripts/docker/build.sh``
+       ``spear-corpus`` and by ``scripts/docker/build.sh``. Written by
+       ``scripts/spear-configure``
+   * - ``spear/machine.env.example``
+     - yes
+     - its shape, for reading; ``spear-configure`` writes the real one
    * - ``spear/active-backend.conf``
      - no
      - the backend chosen last

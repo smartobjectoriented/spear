@@ -72,8 +72,9 @@ __pycache__/
 
 # GPU epingle sur machine partagee — voir embedding.py
 /spear/active-gpu.conf
-# reglages d'endpoint propres a la machine — voir spear-chat.sh
+# reglages propres a la machine, ecrits par scripts/spear-configure
 /spear/machine.env
+/spear/machine.env.bak
 
 # Backend endpoints: a host, a user and a key path, per machine and per
 # rental. The tracked *.example files carry the schema and nothing else.

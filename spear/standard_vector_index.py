@@ -6,6 +6,7 @@ import hashlib
 import json
 import math
 import os
+import re
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -381,81 +382,106 @@ def rebuild_vector_index(
     if cache_dir.exists() and cache_dir.is_symlink():
         raise StandardStoreError("embedding cache path uses a symlink")
 
-    vectors: list[list[float] | None] = [None] * len(units)
-    from_cache = [False] * len(units)
-    missing_indexes: list[int] = []
+    import numpy
 
-    for position, text in enumerate(texts):
+    # Rows follow the index's order -- source ids, sorted -- so the matrix
+    # built here is the index's matrix and the cache's, byte for byte.
+    order = sorted(range(len(units)), key=lambda position: units[position].source_id)
+    units = [units[position] for position in order]
+    texts = [texts[position] for position in order]
+    text_hashes = [hashlib.sha256(text.encode("utf-8")).hexdigest() for text in texts]
+
+    cached_rows, cached = _load_cache(store, cache_dir, config_fingerprint)
+    legacy = _legacy_cache_names(cache_dir)
+    matrix = None
+    missing: list[int] = []
+    migrated: list[str] = []
+
+    def rows_for(dimension):
+        nonlocal matrix
+
+        if matrix is None:
+            matrix = numpy.empty((len(units), dimension), dtype="<f4")
+        elif matrix.shape[1] != dimension:
+            raise StandardStoreError("vector dimension mismatch")
+
+        return matrix
+
+    for position, text_hash in enumerate(text_hashes):
         report(progress, "embedding cache", position + 1, len(texts))
-        key = sha256_json({"config": config_fingerprint,
-                           "retrieval_text_sha256": hashlib.sha256(
-                               text.encode("utf-8")).hexdigest()})
-        path = cache_dir / f"{key}.json"
+        row = cached_rows.get(text_hash)
 
-        if path.exists() and not path.is_symlink():
-            try:
-                cached = store._read_json(path)
-                vectors[position] = _already_normalized(cached["vector"])
-            except Exception:
-                # A corrupt or non-unit cache entry is re-embedded, never trusted.
+        if row is not None:
+            vector = numpy.asarray(cached[row], dtype=numpy.float64)
 
-                vectors[position] = None
-            else:
-                from_cache[position] = True
+            # A corrupt or non-unit cache entry is re-embedded, never trusted.
+            if numpy.isfinite(vector).all() and abs(
+                    math.sqrt(float(vector @ vector)) - 1.0) <= UNIT_NORM_TOLERANCE:
+                rows_for(len(vector))[position] = cached[row]
                 continue
-
-        missing_indexes.append(position)
-
-    if missing_indexes:
-        # In chunks, so a corpus of hundreds of thousands of units shows its
-        # progress and does not travel as one payload. A multiple of every
-        # backend's batch size, so each batch holds the same texts it would
-        # have held in one call and the vectors do not move.
-
-        generated = []
-        label = f"embedding ({getattr(embedder, 'compute_label', 'local')})"
-
-        for start in range(0, len(missing_indexes), EMBED_CHUNK):
-            # Unthrottled: one call per chunk is already few, and the
-            # throttle's step would not fall on chunk boundaries.
-            if progress is not None:
-                progress(label, start, len(missing_indexes))
-
-            generated.extend(embedder.embed_documents(
-                [texts[index] for index in missing_indexes[start:start + EMBED_CHUNK]]))
-
-        if progress is not None:
-            progress(label, len(missing_indexes), len(missing_indexes))
-
-        if len(generated) != len(missing_indexes):
-            raise StandardStoreError("embedding backend returned a short result")
-
-        for position, vector in zip(missing_indexes, generated):
-            vectors[position] = list(vector)
-
-    dimension = len(vectors[0] or ())
-    entries = {}
-    text_hashes = {}
-
-    for position, (unit, text, raw_vector) in enumerate(zip(units, texts, vectors)):
-        cached = from_cache[position]
-        vector = (_already_normalized(raw_vector or (), dimension=dimension) if cached
-                  else _normalized(raw_vector or (), dimension=dimension))
-        entries[unit.source_id] = vector
-        text_hash = hashlib.sha256(text.encode("utf-8")).hexdigest()
-        text_hashes[unit.source_id] = text_hash
-
-        if cached:
-            continue
 
         key = sha256_json({"config": config_fingerprint,
                            "retrieval_text_sha256": text_hash})
-        store._atomic_write(cache_dir / f"{key}.json", canonical_json({
-            "schema_version": 1, "vector": vector,
-        }))
 
-    ids = sorted(entries)
-    matrix = encode_vectors([entries[source_id] for source_id in ids], dimension)
+        if f"{key}.json" in legacy:
+            try:
+                vector = _already_normalized(
+                    store._read_json(cache_dir / f"{key}.json")["vector"])
+            except Exception:
+                pass
+            else:
+                rows_for(len(vector))[position] = vector
+                migrated.append(f"{key}.json")
+                continue
+
+        missing.append(position)
+
+    if missing:
+        # In chunks, so a corpus of hundreds of thousands of units shows its
+        # progress, does not travel as one payload, and is never held as
+        # Python lists: each chunk is normalised straight into the matrix.
+        # A multiple of every backend's batch size, so each batch holds the
+        # same texts it would have held in one call and the vectors do not
+        # move.
+
+        label = f"embedding ({getattr(embedder, 'compute_label', 'local')})"
+
+        for start in range(0, len(missing), EMBED_CHUNK):
+            # Unthrottled: one call per chunk is already few, and the
+            # throttle's step would not fall on chunk boundaries.
+            if progress is not None:
+                progress(label, start, len(missing))
+
+            positions = missing[start:start + EMBED_CHUNK]
+            generated = embedder.embed_documents([texts[index] for index in positions])
+
+            if len(generated) != len(positions):
+                raise StandardStoreError("embedding backend returned a short result")
+
+            dimension = len(generated[0]) if generated else 0
+            rows_for(dimension)[positions] = _normalized_rows(generated, dimension)
+
+        if progress is not None:
+            progress(label, len(missing), len(missing))
+
+    if matrix is None or matrix.shape[1] < 1:
+        raise StandardStoreError("vector dimension mismatch")
+
+    dimension = matrix.shape[1]
+    ids = [unit.source_id for unit in units]
+    matrix = encode_vectors(matrix, dimension)
+    _save_cache(store, cache_dir, config_fingerprint, config, text_hashes, matrix)
+
+    # The entries just carried into the single-file cache are dead weight as
+    # files: one each, hundreds of thousands for a large document.
+    for name in migrated:
+        try:
+            (cache_dir / name).unlink()
+        except OSError:
+            pass
+
+    entries = dict.fromkeys(ids)
+    text_hashes = dict(zip(ids, text_hashes))
     index = {
         "schema_version": 2, "standard_id": standard_id, "revision": revision,
         "embedding_config": config, "dimension": dimension, "ids": ids,
@@ -479,6 +505,109 @@ def rebuild_vector_index(
     store.save_vector_index(manifest, index, matrix)
 
     return manifest
+
+
+#: The embedding cache: one float32 matrix per embedding configuration, with
+#: the retrieval-text hash of each row beside it. It used to be one JSON file
+#: per vector, each written with an fsync -- 262 470 of them for the Arm
+#: manual, most of a 25-minute rebuild, and every vector held as a Python
+#: list until the end, 15 GB of it.
+CACHE_SCHEMA_VERSION = 2
+_LEGACY_CACHE_ENTRY = re.compile(r"[0-9a-f]{64}\.json")
+
+
+def _cache_paths(cache_dir: Path, config_fingerprint: str) -> tuple[Path, Path]:
+    return (cache_dir / f"cache-{config_fingerprint}.npy",
+            cache_dir / f"cache-{config_fingerprint}.json")
+
+
+def _load_cache(store, cache_dir: Path, config_fingerprint: str):
+    """({text_sha256: row}, matrix) for this configuration, or ({}, None).
+
+    Anything that does not check out -- a missing file, a checksum that does
+    not match, a shape that disagrees -- is an empty cache: the vectors are
+    embedded again rather than trusted.
+    """
+    import numpy
+
+    matrix_path, meta_path = _cache_paths(cache_dir, config_fingerprint)
+
+    if (not matrix_path.is_file() or not meta_path.is_file()
+            or matrix_path.is_symlink() or meta_path.is_symlink()):
+        return {}, None
+
+    try:
+        meta = store._read_json(meta_path)
+        hashes = meta["text_sha256"]
+        digest = hashlib.sha256()
+
+        with open(matrix_path, "rb") as stream:
+            for block in iter(lambda: stream.read(1 << 24), b""):
+                digest.update(block)
+
+        if (meta.get("schema_version") != CACHE_SCHEMA_VERSION
+                or meta.get("config_fingerprint") != config_fingerprint
+                or digest.hexdigest() != meta.get("sha256")):
+            return {}, None
+
+        matrix = numpy.load(matrix_path, mmap_mode="r", allow_pickle=False)
+
+        if matrix.ndim != 2 or matrix.shape[0] != len(hashes):
+            return {}, None
+    except Exception:
+        return {}, None
+
+    return {text_hash: row for row, text_hash in enumerate(hashes)}, matrix
+
+
+def _save_cache(store, cache_dir: Path, config_fingerprint: str, config,
+                text_hashes: list[str], matrix: bytes) -> None:
+    """Replace this configuration's cache with the vectors of this rebuild."""
+    if cache_dir.exists() and cache_dir.is_symlink():
+        raise StandardStoreError("embedding cache path uses a symlink")
+
+    matrix_path, meta_path = _cache_paths(cache_dir, config_fingerprint)
+    store._atomic_write(matrix_path, matrix)
+    store._atomic_write(meta_path, canonical_json({
+        "schema_version": CACHE_SCHEMA_VERSION,
+        "config_fingerprint": config_fingerprint, "config": config,
+        "sha256": hashlib.sha256(matrix).hexdigest(),
+        "text_sha256": text_hashes,
+    }))
+
+
+def _legacy_cache_names(cache_dir: Path) -> frozenset[str]:
+    """The one-file-per-vector entries a previous format left, read once to
+    migrate them."""
+    try:
+        with os.scandir(cache_dir) as found:
+            return frozenset(entry.name for entry in found
+                             if _LEGACY_CACHE_ENTRY.fullmatch(entry.name))
+    except FileNotFoundError:
+        return frozenset()
+
+
+def _normalized_rows(vectors: Sequence[Sequence[float]], dimension: int):
+    """Unit-length float32 rows, refused whole if any row is not a vector."""
+    import numpy
+
+    try:
+        rows = numpy.asarray(vectors, dtype=numpy.float64)
+    except (TypeError, ValueError):
+        raise StandardStoreError("vector dimension mismatch") from None
+
+    if rows.ndim != 2 or rows.shape[1] != dimension or dimension < 1:
+        raise StandardStoreError("vector dimension mismatch")
+
+    if not numpy.isfinite(rows).all():
+        raise StandardStoreError("vector contains a non-finite value")
+
+    norms = numpy.sqrt(numpy.einsum("ij,ij->i", rows, rows))
+
+    if (norms <= 0).any():
+        raise StandardStoreError("zero-length vector is invalid")
+
+    return (rows / norms[:, None]).astype("<f4")
 
 
 def encode_vectors(rows: Sequence[Sequence[float]], dimension: int) -> bytes:

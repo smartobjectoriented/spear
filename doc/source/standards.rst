@@ -124,6 +124,10 @@ What ingestion produces
      indexes/lexical/       always built
      indexes/vector/        when an embedding model is configured: the
                             vectors as a float32 matrix (vectors.npy)
+     indexes/embedding-cache/
+                            the vectors of the last rebuild, one matrix per
+                            embedding configuration: what a rebuild reuses
+                            instead of embedding again
      verified.json          what was last checked in full, and against which files
      indexes/crossrefs/     references between provisions
      retrieval.json         how this document is searched, once set

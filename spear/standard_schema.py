@@ -513,6 +513,11 @@ class StandardIndexManifest:
             raise StandardSchemaError(f"malformed index manifest: {exc}") from exc
 
 
+#: How a vector index stores its vectors. The JSON one is still parsed, so a
+#: store holding it can be told what to do; only the npy one is searched.
+VECTOR_INDEX_FORMATS = ("canonical-json-float-v1", "float32-npy-v1")
+
+
 @dataclass(frozen=True)
 class StandardVectorIndexManifest:
     standard_id: str
@@ -543,7 +548,7 @@ class StandardVectorIndexManifest:
         if (not self.embedding_model_id or not self.embedding_model_revision
                 or self.embedding_dimension < 1 or self.indexed_source_count < 1
                 or self.normalization_policy != "l2-unit"
-                or self.vector_index_format != "canonical-json-float-v1"
+                or self.vector_index_format not in VECTOR_INDEX_FORMATS
                 or self.vector_index_version < 1
                 or self.schema_version != INDEX_SCHEMA_VERSION):
             raise StandardSchemaError("unsupported vector index")

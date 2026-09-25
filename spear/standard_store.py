@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
-import math
 import os
 import re
 import tempfile
+import time
 from dataclasses import replace
 from pathlib import Path
 from typing import Iterable, Mapping
@@ -30,6 +31,20 @@ INDEX_STATE_READY = "READY"
 INDEX_STATE_REBUILD_REQUIRED = "REBUILD_REQUIRED"
 
 RETRIEVAL_MODES = ("lexical", "vector", "hybrid")
+
+#: The vector index's matrix, beside its index.json: float32, one row per
+#: source id in index["ids"] order. Read by mmap, never parsed.
+VECTORS_FILE = "vectors.npy"
+VECTOR_FORMAT = "float32-npy-v1"
+
+#: Per revision: what was last verified in full, and the on-disk stamp of
+#: the files it was verified from. See StandardStore._verified.
+VERIFICATION_FILE = "verified.json"
+
+#: How long a tree stamp is reused within one process. A search reads the
+#: corpus stamp several times in a row; restat'ing 300 000 files for each is
+#: seconds per query for nothing.
+_TREE_STAMP_TTL = 2.0
 RETRIEVAL_SETTINGS_FILE = "retrieval.json"
 
 
@@ -67,6 +82,133 @@ class StandardStore:
 
         self.root = candidate.resolve()
         os.chmod(self.root, 0o700)
+
+        # What this process has already read, keyed by what it was read from:
+        # (standard, revision, artefact) -> (stamp, value).
+        self._memo: dict[tuple[str, str, str], tuple[object, object]] = {}
+        self._tree_stamps: dict[Path, tuple[float, list | None, str]] = {}
+
+    # ------------------------------------------------------------------
+    # verification stamps
+    #
+    # Checking a document in full -- rehashing every unit, recomputing each
+    # index's fingerprint over its whole content -- was done on EVERY binding
+    # check and every search. For a document of a few hundred pages that was
+    # a fraction of a second. For the Arm A-profile manual, 298 709 units and
+    # a 5.8 GB vector index, it was five minutes, at startup and per query.
+    #
+    # A full check now records the stamp of the files it read: size, mtime,
+    # ctime and inode of each. Until one of them changes on disk the check is
+    # not repeated, the way git trusts its index. Any write -- in place or by
+    # atomic rename -- moves ctime or the inode, so a changed file is always
+    # checked again. `/standard verify` forces a full check regardless.
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _file_stamp(path: Path) -> list[int] | None:
+        try:
+            st = os.stat(path, follow_symlinks=False)
+        except FileNotFoundError:
+            return None
+
+        return [st.st_size, st.st_mtime_ns, st.st_ctime_ns, st.st_ino]
+
+    def _tree_stamp(self, directory: Path) -> str:
+        """One digest over the stamp of every entry of `directory`."""
+        now = time.monotonic()
+        # The directory's own stat moves whenever an entry is added, removed
+        # or renamed over -- which is how the store writes -- and when the
+        # directory itself is moved away. Only an in-place edit of an entry
+        # leaves it alone, and that is what the short reuse window accepts.
+        own = self._file_stamp(directory)
+        cached = self._tree_stamps.get(directory)
+
+        if (cached is not None and now - cached[0] < _TREE_STAMP_TTL
+                and cached[1] == own):
+            return cached[2]
+
+        entries = []
+
+        try:
+            with os.scandir(directory) as found:
+                for entry in found:
+                    st = entry.stat(follow_symlinks=False)
+                    entries.append(f"{entry.name} {st.st_size} {st.st_mtime_ns} "
+                                   f"{st.st_ctime_ns} {st.st_ino}")
+        except FileNotFoundError:
+            entries = ["<absent>"]
+
+        entries.sort()
+        digest = hashlib.sha256("\n".join(entries).encode()).hexdigest()
+        self._tree_stamps[directory] = (now, own, digest)
+
+        return digest
+
+    def _corpus_stamp(self, standard_id: str, revision: str) -> list:
+        directory = self.revision_dir(standard_id, revision)
+
+        return [self._file_stamp(directory / "manifest.json"),
+                self._tree_stamp(directory / "corpus"),
+                self._file_stamp(directory / "source" / "original.pdf")]
+
+    def _index_stamp(self, standard_id: str, revision: str, kind: str,
+                     corpus: list | None = None) -> list:
+        directory = self.revision_dir(standard_id, revision) / "indexes" / kind
+        stamp = [corpus or self._corpus_stamp(standard_id, revision),
+                 self._file_stamp(directory / "manifest.json"),
+                 self._file_stamp(directory / "index.json")]
+
+        if kind == "vector":
+            stamp.append(self._file_stamp(directory / VECTORS_FILE))
+
+        return stamp
+
+    def _verified(self, standard_id: str, revision: str, key: str, stamp) -> bool:
+        path = self.revision_dir(standard_id, revision) / VERIFICATION_FILE
+
+        try:
+            return json.loads(path.read_text("utf-8")).get(key) == stamp
+        except (OSError, ValueError, AttributeError):
+            return False
+
+    def _record_verified(self, standard_id: str, revision: str, key: str,
+                         stamp) -> None:
+        """Remember a full check -- only if nothing moved while it ran."""
+        self._tree_stamps.clear()
+        now = (self._corpus_stamp(standard_id, revision) if key == "corpus"
+               else self._index_stamp(standard_id, revision, key))
+
+        if now != stamp:
+            return
+
+        path = self.revision_dir(standard_id, revision) / VERIFICATION_FILE
+
+        try:
+            record = json.loads(path.read_text("utf-8"))
+            record = record if isinstance(record, dict) else {}
+        except (OSError, ValueError):
+            record = {}
+
+        record[key] = stamp
+
+        try:
+            self._atomic_write(path, canonical_json(record))
+        except OSError:
+            pass                    # a read-only store simply checks again
+
+    def _record_written(self, standard_id: str, revision: str, key: str) -> None:
+        """What the store has just written itself is as checked as it gets:
+        its fingerprint was computed from the very content written."""
+        self._tree_stamps.clear()
+        stamp = (self._corpus_stamp(standard_id, revision) if key == "corpus"
+                 else self._index_stamp(standard_id, revision, key))
+        self._record_verified(standard_id, revision, key, stamp)
+
+    def _forget(self, standard_id: str, revision: str) -> None:
+        self._tree_stamps.clear()
+
+        for key in [key for key in self._memo if key[:2] == (standard_id, revision)]:
+            del self._memo[key]
 
     @staticmethod
     def _component(value: str, name: str) -> str:
@@ -159,6 +301,7 @@ class StandardStore:
         # The manifest is the commit marker and is always written last.
 
         self._atomic_write(existing_path, canonical_json(manifest.to_dict()))
+        self._record_written(manifest.standard_id, manifest.revision, "corpus")
 
         return manifest
 
@@ -192,6 +335,19 @@ class StandardStore:
         return StandardIngestionManifest.from_dict(self._read_json(path))
 
     def load_units(self, standard_id: str, revision: str) -> tuple[StandardDocumentUnit, ...]:
+        """The canonical units, read once per process while the corpus is unchanged."""
+        stamp = self._corpus_stamp(standard_id, revision)
+        memo = self._memo.get((standard_id, revision, "units"))
+
+        if memo is not None and memo[0] == stamp:
+            return memo[1]
+
+        units = self._read_units(standard_id, revision)
+        self._memo[(standard_id, revision, "units")] = (stamp, units)
+
+        return units
+
+    def _read_units(self, standard_id: str, revision: str) -> tuple[StandardDocumentUnit, ...]:
         directory = self.revision_dir(standard_id, revision) / "corpus"
 
         if not directory.is_dir() or directory.is_symlink():
@@ -230,9 +386,24 @@ class StandardStore:
 
         return unit
 
-    def verify_corpus(self, standard_id: str, revision: str) -> StandardIngestionManifest:
+    def verify_corpus(self, standard_id: str, revision: str, *,
+                      force: bool = False) -> StandardIngestionManifest:
+        stamp = self._corpus_stamp(standard_id, revision)
+
+        if not force:
+            memo = self._memo.get((standard_id, revision, "corpus"))
+
+            if memo is not None and memo[0] == stamp:
+                return memo[1]
+
+            if self._verified(standard_id, revision, "corpus", stamp):
+                manifest = self.load_manifest(standard_id, revision)
+                self._memo[(standard_id, revision, "corpus")] = (stamp, manifest)
+
+                return manifest
+
         manifest = self.load_manifest(standard_id, revision)
-        units = self.load_units(standard_id, revision)
+        units = self._read_units(standard_id, revision)
 
         if len(units) != manifest.canonical_unit_count:
             raise StandardStoreError("canonical unit count mismatch")
@@ -246,10 +417,12 @@ class StandardStore:
         retained = self.revision_dir(standard_id, revision) / "source" / "original.pdf"
 
         if retained.exists():
-            import hashlib
-
             if hashlib.sha256(retained.read_bytes()).hexdigest() != manifest.source_pdf_sha256:
                 raise StandardStoreError("retained source PDF checksum mismatch")
+
+        self._record_verified(standard_id, revision, "corpus", stamp)
+        self._memo[(standard_id, revision, "corpus")] = (stamp, manifest)
+        self._memo[(standard_id, revision, "units")] = (stamp, units)
 
         return manifest
 
@@ -272,22 +445,34 @@ class StandardStore:
 
         self._atomic_write(directory / "index.json", canonical_json(dict(index)))
         self._atomic_write(directory / "manifest.json", canonical_json(manifest.to_dict()))
+        self._record_written(manifest.standard_id, manifest.revision, "lexical")
 
     def load_index(
-        self, standard_id: str, revision: str,
+        self, standard_id: str, revision: str, *, force: bool = False,
     ) -> tuple[StandardIndexManifest, Mapping[str, object]]:
         directory = self.revision_dir(standard_id, revision) / "indexes" / "lexical"
 
         if directory.is_symlink():
             raise StandardStoreError("index path uses a symlink")
 
+        stamp = self._index_stamp(standard_id, revision, "lexical")
+        memo = self._memo.get((standard_id, revision, "lexical"))
+
+        if not force and memo is not None and memo[0] == stamp:
+            return memo[1]
+
         manifest = StandardIndexManifest.from_dict(self._read_json(directory / "manifest.json"))
         index = self._read_json(directory / "index.json")
-        source = self.verify_corpus(standard_id, revision)
+        source = self.verify_corpus(standard_id, revision, force=force)
 
         if (manifest.source_pdf_sha256 != source.source_pdf_sha256
                 or manifest.source_corpus_sha256 != source.corpus_manifest_sha256):
             raise StandardStoreError("lexical index is stale for canonical corpus")
+
+        if not force and self._verified(standard_id, revision, "lexical", stamp):
+            self._memo[(standard_id, revision, "lexical")] = (stamp, (manifest, index))
+
+            return manifest, index
 
         expected_fingerprint = sha256_json({
             "indexer_version": manifest.indexer_version,
@@ -303,11 +488,16 @@ class StandardStore:
         ):
             raise StandardStoreError("lexical tokenizer fingerprint mismatch")
 
+        self._record_verified(standard_id, revision, "lexical", stamp)
+        self._memo[(standard_id, revision, "lexical")] = (stamp, (manifest, index))
+
         return manifest, index
 
     def save_vector_index(
         self, manifest: StandardVectorIndexManifest, index: Mapping[str, object],
+        vectors: bytes,
     ) -> None:
+        """`vectors` is the .npy file, whose sha256 index["vectors"] names."""
         source = self.verify_corpus(manifest.standard_id, manifest.revision)
 
         if (manifest.source_pdf_sha256 != source.source_pdf_sha256
@@ -320,25 +510,80 @@ class StandardStore:
         if directory.exists() and directory.is_symlink():
             raise StandardStoreError("vector index path uses a symlink")
 
+        if hashlib.sha256(vectors).hexdigest() != (index.get("vectors") or {}).get("sha256"):
+            raise StandardStoreError("vector data does not match its index")
+
+        # Matrix first, manifest last: the manifest is what makes it an index.
+        self._atomic_write(directory / VECTORS_FILE, vectors)
         self._atomic_write(directory / "index.json", canonical_json(dict(index)))
         self._atomic_write(directory / "manifest.json", canonical_json(manifest.to_dict()))
+        self._record_written(manifest.standard_id, manifest.revision, "vector")
 
     def load_vector_index(
-        self, standard_id: str, revision: str,
+        self, standard_id: str, revision: str, *, force: bool = False,
     ) -> tuple[StandardVectorIndexManifest, Mapping[str, object]]:
+        """The manifest and index; index["matrix"] is the vectors, memory-mapped.
+
+        Row i of the matrix is the vector of index["ids"][i]. The matrix is
+        read by mmap and shared by every search of the process: parsed as
+        JSON it was 5.8 GB and four minutes for a 300 000-unit document.
+        """
+        import numpy
+
         directory = self.revision_dir(standard_id, revision) / "indexes" / "vector"
 
         if directory.is_symlink():
             raise StandardStoreError("vector index path uses a symlink")
 
+        stamp = self._index_stamp(standard_id, revision, "vector")
+        memo = self._memo.get((standard_id, revision, "vector"))
+
+        if not force and memo is not None and memo[0] == stamp:
+            return memo[1]
+
         manifest = StandardVectorIndexManifest.from_dict(
             self._read_json(directory / "manifest.json"))
-        index = self._read_json(directory / "index.json")
-        source = self.verify_corpus(standard_id, revision)
+
+        if manifest.vector_index_format != VECTOR_FORMAT:
+            raise StandardStoreError(
+                f"vector index is in the retired {manifest.vector_index_format} "
+                f"format; rebuild it: /standard rebuild {standard_id} {revision}")
+
+        index = dict(self._read_json(directory / "index.json"))
+        source = self.verify_corpus(standard_id, revision, force=force)
 
         if (manifest.source_pdf_sha256 != source.source_pdf_sha256
                 or manifest.source_corpus_sha256 != source.corpus_manifest_sha256):
             raise StandardStoreError("vector index is stale for canonical corpus")
+
+        stored = index.get("vectors")
+
+        if not isinstance(stored, Mapping) or stored.get("file") != VECTORS_FILE:
+            raise StandardStoreError("vector entries are malformed")
+
+        path = directory / VECTORS_FILE
+
+        if path.is_symlink():
+            raise StandardStoreError("vector index path uses a symlink")
+
+        try:
+            matrix = numpy.load(path, mmap_mode="r", allow_pickle=False)
+        except ValueError as exc:
+            raise StandardStoreError(f"vector data is unreadable: {exc}") from exc
+
+        if force or not self._verified(standard_id, revision, "vector", stamp):
+            self._check_vector_index(standard_id, revision, manifest, index,
+                                     matrix, path)
+            self._record_verified(standard_id, revision, "vector", stamp)
+
+        index["matrix"] = matrix
+        self._memo[(standard_id, revision, "vector")] = (stamp, (manifest, index))
+
+        return manifest, index
+
+    def _check_vector_index(self, standard_id, revision, manifest, index,
+                            matrix, path) -> None:
+        import numpy
 
         expected = sha256_json({
             "vector_index_version": manifest.vector_index_version,
@@ -348,6 +593,17 @@ class StandardStore:
 
         if expected != manifest.vector_index_fingerprint:
             raise StandardStoreError("vector index fingerprint mismatch")
+
+        digest = hashlib.sha256()
+
+        with open(path, "rb") as stream:
+            for block in iter(lambda: stream.read(1 << 24), b""):
+                digest.update(block)
+
+        # The fingerprint covers index.json, which names the matrix's hash;
+        # this is what ties the fingerprint to the vectors themselves.
+        if digest.hexdigest() != index["vectors"].get("sha256"):
+            raise StandardStoreError("vector data checksum mismatch")
 
         config = index.get("embedding_config")
 
@@ -362,15 +618,15 @@ class StandardStore:
                 or index.get("dimension") != manifest.embedding_dimension):
             raise StandardStoreError("vector manifest metadata mismatch")
 
-        entries = index.get("entries")
+        ids = index.get("ids")
 
-        if not isinstance(entries, Mapping):
+        if not isinstance(ids, list) or ids != sorted(set(ids)):
             raise StandardStoreError("vector entries are malformed")
 
         canonical_ids = {unit.source_id for unit in self.load_units(standard_id, revision)
                          if unit.retrievable}
 
-        if set(entries) != canonical_ids or len(entries) != manifest.indexed_source_count:
+        if set(ids) != canonical_ids or len(ids) != manifest.indexed_source_count:
             raise StandardStoreError("vector index has missing or stale source IDs")
 
         text_hashes = index.get("retrieval_text_sha256")
@@ -378,19 +634,20 @@ class StandardStore:
         if not isinstance(text_hashes, Mapping) or set(text_hashes) != canonical_ids:
             raise StandardStoreError("vector retrieval-text hashes are incomplete")
 
-        for vector in entries.values():
-            if (not isinstance(vector, list)
-                    or len(vector) != manifest.embedding_dimension
-                    or not all(isinstance(value, (int, float)) and math.isfinite(value)
-                               for value in vector)):
+        if (matrix.dtype != numpy.dtype("<f4") or matrix.ndim != 2
+                or matrix.shape != (len(ids), manifest.embedding_dimension)
+                or list(index["vectors"].get("shape", ())) != list(matrix.shape)):
+            raise StandardStoreError("vector dimension mismatch")
+
+        # In blocks: a norm over the whole matrix would allocate its size again.
+        for start in range(0, matrix.shape[0], 65536):
+            block = numpy.asarray(matrix[start:start + 65536], dtype=numpy.float64)
+
+            if not numpy.isfinite(block).all():
                 raise StandardStoreError("vector dimension mismatch")
 
-            norm = math.sqrt(sum(float(value) ** 2 for value in vector))
-
-            if abs(norm - 1.0) > 1e-5:
+            if (numpy.abs(numpy.linalg.norm(block, axis=1) - 1.0) > 1e-5).any():
                 raise StandardStoreError("vector normalization mismatch")
-
-        return manifest, index
 
     def save_cross_reference_index(
         self, manifest: StandardCrossReferenceIndexManifest,
@@ -410,23 +667,35 @@ class StandardStore:
 
         self._atomic_write(directory / "index.json", canonical_json(dict(index)))
         self._atomic_write(directory / "manifest.json", canonical_json(manifest.to_dict()))
+        self._record_written(manifest.standard_id, manifest.revision, "crossrefs")
 
     def load_cross_reference_index(
-        self, standard_id: str, revision: str,
+        self, standard_id: str, revision: str, *, force: bool = False,
     ) -> tuple[StandardCrossReferenceIndexManifest, Mapping[str, object]]:
         directory = self.revision_dir(standard_id, revision) / "indexes" / "crossrefs"
 
         if directory.is_symlink():
             raise StandardStoreError("cross-reference index path uses a symlink")
 
+        stamp = self._index_stamp(standard_id, revision, "crossrefs")
+        memo = self._memo.get((standard_id, revision, "crossrefs"))
+
+        if not force and memo is not None and memo[0] == stamp:
+            return memo[1]
+
         manifest = StandardCrossReferenceIndexManifest.from_dict(
             self._read_json(directory / "manifest.json"))
         index = self._read_json(directory / "index.json")
-        source = self.verify_corpus(standard_id, revision)
+        source = self.verify_corpus(standard_id, revision, force=force)
 
         if (manifest.source_pdf_sha256 != source.source_pdf_sha256
                 or manifest.source_corpus_sha256 != source.corpus_manifest_sha256):
             raise StandardStoreError("cross-reference index is stale for canonical corpus")
+
+        if not force and self._verified(standard_id, revision, "crossrefs", stamp):
+            self._memo[(standard_id, revision, "crossrefs")] = (stamp, (manifest, index))
+
+            return manifest, index
 
         expected = sha256_json({
             "resolver_version": manifest.resolver_version,
@@ -466,24 +735,29 @@ class StandardStore:
                 if not isinstance(targets, list) or not set(targets).issubset(canonical_ids):
                     raise StandardStoreError("cross-reference target is stale")
 
+        self._record_verified(standard_id, revision, "crossrefs", stamp)
+        self._memo[(standard_id, revision, "crossrefs")] = (stamp, (manifest, index))
+
         return manifest, index
 
     def binding(self, standard_id: str, revision: str, *, bound_at: str | None = None) -> StandardBinding:
         """The identity a session binds to: the corpus and every index over it."""
 
         manifest = self.verify_corpus(standard_id, revision)
-        index_manifest, _ = self.load_index(standard_id, revision)
+        index_manifest = self._checked_index_manifest(
+            standard_id, revision, "lexical", manifest)
         vector_fingerprint = crossref_fingerprint = None
 
         try:
-            vector_fingerprint = self.load_vector_index(
-                standard_id, revision)[0].vector_index_fingerprint
+            vector_fingerprint = self._checked_index_manifest(
+                standard_id, revision, "vector", manifest).vector_index_fingerprint
         except (FileNotFoundError, StandardStoreError):
             pass
 
         try:
-            crossref_fingerprint = self.load_cross_reference_index(
-                standard_id, revision)[0].cross_reference_index_fingerprint
+            crossref_fingerprint = self._checked_index_manifest(
+                standard_id, revision, "crossrefs",
+                manifest).cross_reference_index_fingerprint
         except (FileNotFoundError, StandardStoreError):
             pass
 
@@ -505,6 +779,58 @@ class StandardStore:
             manifest.source_origin, vector_fingerprint, crossref_fingerprint,
             retrieval_fingerprint,
         )
+
+    def _checked_index_manifest(self, standard_id: str, revision: str,
+                                kind: str, corpus: StandardIngestionManifest):
+        """An index's manifest, trusted only as far as it has been checked.
+
+        A binding needs each index's fingerprint, not its content. Once the
+        index has been checked in full and nothing under it has moved, its
+        manifest says the same thing the whole file would; otherwise the full
+        check runs, and records itself for next time.
+        """
+        stamp = self._index_stamp(standard_id, revision, kind)
+
+        if not self._verified(standard_id, revision, kind, stamp):
+            loader = {"lexical": self.load_index, "vector": self.load_vector_index,
+                      "crossrefs": self.load_cross_reference_index}[kind]
+
+            return loader(standard_id, revision)[0]
+
+        cls = {"lexical": StandardIndexManifest, "vector": StandardVectorIndexManifest,
+               "crossrefs": StandardCrossReferenceIndexManifest}[kind]
+        directory = self.revision_dir(standard_id, revision) / "indexes" / kind
+
+        if directory.is_symlink():
+            raise StandardStoreError(f"{kind} index path uses a symlink")
+
+        manifest = cls.from_dict(self._read_json(directory / "manifest.json"))
+
+        if (manifest.source_pdf_sha256 != corpus.source_pdf_sha256
+                or manifest.source_corpus_sha256 != corpus.corpus_manifest_sha256):
+            raise StandardStoreError(f"{kind} index is stale for canonical corpus")
+
+        return manifest
+
+    def verify_everything(self, standard_id: str, revision: str) -> dict[str, str]:
+        """Check the corpus and every index in full, whatever was recorded."""
+        results = {}
+
+        for name, check in (
+                ("corpus", lambda: self.verify_corpus(standard_id, revision, force=True)),
+                ("lexical", lambda: self.load_index(standard_id, revision, force=True)),
+                ("vector", lambda: self.load_vector_index(standard_id, revision, force=True)),
+                ("crossrefs", lambda: self.load_cross_reference_index(
+                    standard_id, revision, force=True))):
+            try:
+                check()
+                results[name] = "ok"
+            except FileNotFoundError:
+                results[name] = "absent"
+            except StandardStoreError as exc:
+                results[name] = f"FAILED: {exc}"
+
+        return results
 
     # ------------------------------------------------------------------
     # candidate corpora, generations and promotion

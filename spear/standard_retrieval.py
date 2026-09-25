@@ -15,7 +15,7 @@ import standard_query_expansion
 from standard_progress import report
 from standard_store import StandardStore, StandardStoreError
 from standard_vector_index import (
-    LocalStandardEmbedder, cosine_similarity, structural_context,
+    LocalStandardEmbedder, structural_context,
 )
 
 INDEXER_VERSION = "standard-bm25-v1"
@@ -279,12 +279,29 @@ class StandardRetrieval:
         if len(query_vector) != manifest.embedding_dimension:
             raise StandardStoreError("vector dimension mismatch")
 
-        units = {u.source_id: u for u in self.store.load_units(standard_id, revision)}
-        scored = [(cosine_similarity(query_vector, vector), source_id)
-                  for source_id, vector in index["entries"].items()
-                  if section is None or units[source_id].section == section]
+        import numpy
 
-        return sorted(scored, key=lambda x: (-x[0], x[1]))[:self.policy.vector_candidate_count]
+        ids = index["ids"]
+        scores = index["matrix"] @ numpy.asarray(query_vector, dtype=numpy.float32)
+        rows = numpy.arange(len(ids))
+
+        if section is not None:
+            units = {u.source_id: u for u in self.store.load_units(standard_id, revision)}
+            rows = numpy.array([row for row, source_id in enumerate(ids)
+                                if units[source_id].section == section], dtype=int)
+
+        count = self.policy.vector_candidate_count
+
+        # Everything scoring at least the count-th best is kept before the
+        # exact sort, so a tie at the cut is broken by source id exactly as a
+        # full sort would break it.
+        if len(rows) > count:
+            kth = numpy.partition(scores[rows], len(rows) - count)[len(rows) - count]
+            rows = rows[scores[rows] >= kth]
+
+        scored = [(float(scores[row]), ids[row]) for row in rows]
+
+        return sorted(scored, key=lambda x: (-x[0], x[1]))[:count]
 
     def search_response(self, standard_id: str, revision: str, query: str, *,
                         section: str | None = None, limit: int | None = None,

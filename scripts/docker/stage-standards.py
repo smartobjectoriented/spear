@@ -82,7 +82,10 @@ def main() -> int:
             continue
 
         rel = path.relative_to(store)
-        shutil.copytree(path, out / rel, symlinks=True)
+        # verified.json records inodes of THIS filesystem; in the image it
+        # would match nothing, so it is left behind and rebuilt there.
+        shutil.copytree(path, out / rel, symlinks=True,
+                        ignore=shutil.ignore_patterns("verified.json"))
         taken.append((name, origin))
 
         if origin == LICENSED:

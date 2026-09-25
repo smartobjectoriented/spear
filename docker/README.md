@@ -11,11 +11,28 @@ and have the same state you do.
 |---|---|---|
 | harness + venv | image | pinned, reproducible |
 | **bge-m3 embedder** (4.3 GB) | image | downloading it on first run is a 4.3 GB surprise on a machine that may have no HF access |
-| **ChromaDB index** (8.5 GB) | image, *if the building host has one* | re-indexing takes hours *and* needs every corpus tree present — the one thing a newcomer does not have |
-| rules, skills, benches, notes | image, *if present* | a deployment's own content; `build.sh` says which it found |
+| **ChromaDB index** (8.5 GB) | image, *if the building host has one* (private only) | re-indexing takes hours *and* needs every corpus tree present — the one thing a newcomer does not have |
+| rules, skills, benches, notes | image, *if present* (public: tracked files only) | a deployment's own content; `build.sh` says which it found |
 | **normative store** | image, *filtered by profile* | a harness that can bind a standard and no standard to bind answers every normative question from the source tree — the one failure this platform exists to prevent |
 | corpus trees | **mounted**, or baked with `--bake` | working copies change daily; baked is for the container that is handed over with nothing to mount |
 | model weights | **neither** | the harness talks to an endpoint (`--endpoint`), it does not host a model |
+
+## Managing images
+
+From the repository root, once per shell:
+
+```sh
+. ./env.sh                                # puts scripts/ on PATH
+spear-image build private                 # spear:1.0-private
+spear-image build public                  # spear:1.0-public
+spear-image list
+spear-image run private -- --auto
+spear-image save private                  # -> spear-private.tar.zst
+spear-image erase private --cache         # image and the build cache holding its layers
+```
+
+`spear-image --help` lists the rest. It only drives the scripts in
+`scripts/docker/`, which keep every rule below.
 
 ## Two profiles
 
@@ -24,12 +41,15 @@ is what makes it something you hand over rather than something you mount into.
 What it may carry is a per-build decision, and it defaults to the safe one.
 
 ```sh
-scripts/docker/build.sh --profile public     --bake so3,so3-doc,avz
+scripts/docker/build.sh --profile public
 scripts/docker/build.sh --profile private --bake so3,acme-firmware
 ```
 
 **`public`** (the default) takes only normative documents that declare
-themselves `PUBLIC`, and nothing of a customer's. Safe to give to anyone.
+themselves `PUBLIC`, and of rules, skills, benches and notes only what the
+repository tracks: no retrieval index, no baked tree (`--bake` is refused),
+nothing from a deployment's private tree. The build prints `WITHHELD` beside
+whatever it left out. Safe to give to anyone.
 
 **`private`** takes everything this machine has — licensed documents, and
 the original PDFs where the store retained them. The image is labelled

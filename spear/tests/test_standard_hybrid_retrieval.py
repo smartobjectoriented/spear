@@ -18,7 +18,7 @@ from standard_retrieval_eval import (
     StandardRetrievalEvaluationItem, evaluate_retrieval,
 )
 from standard_store import StandardStore, StandardStoreError
-from standard_vector_index import rebuild_vector_index
+from standard_vector_index import encode_vectors, rebuild_vector_index, vector_entries
 import standard_vector_index
 from standard_schema import sha256_json
 from tests.standard_fixture import synthetic_pdf_bytes
@@ -134,7 +134,7 @@ class StandardHybridRetrievalTests(unittest.TestCase):
         self.assertEqual(rebuilt.source_corpus_sha256,
                          self.manifest.corpus_manifest_sha256)
         manifest, index = self.store.load_vector_index("SYNTH-STD", "R1")
-        self.assertEqual(set(index["entries"]), set(self.original_ids))
+        self.assertEqual(set(index["ids"]), set(self.original_ids))
         self.assertEqual(manifest.embedding_model_id, self.embedder.model_id)
         self.assertEqual(manifest.embedding_model_revision, "v1")
 
@@ -165,7 +165,7 @@ class StandardHybridRetrievalTests(unittest.TestCase):
         self.assertEqual(third.vector_index_fingerprint,
                          first.vector_index_fingerprint)
         _, reloaded = self.store.load_vector_index("SYNTH-STD", "R1")
-        self.assertEqual(reloaded["entries"], built["entries"])
+        self.assertEqual(vector_entries(reloaded), vector_entries(built))
         self.assertEqual({path.name: path.read_bytes()
                           for path in sorted(cache.glob("*.json"))}, before)
 
@@ -284,40 +284,62 @@ class StandardHybridRetrievalTests(unittest.TestCase):
 
     def test_vector_corruption_dimension_and_stale_ids_fail_closed(self):
         directory = self.store.revision_dir("SYNTH-STD", "R1") / "indexes" / "vector"
-        original = (directory / "index.json").read_bytes()
-        raw = json.loads(original); first = next(iter(raw["entries"]))
-        raw["entries"][first] = raw["entries"][first][:-1]
-        (directory / "index.json").write_text(json.dumps(raw), encoding="utf-8")
-        with self.assertRaisesRegex(StandardStoreError, "fingerprint mismatch"):
+        original = (directory / "vectors.npy").read_bytes()
+        corrupted = bytearray(original); corrupted[-1] ^= 0xFF
+        (directory / "vectors.npy").write_bytes(bytes(corrupted))
+        with self.assertRaisesRegex(StandardStoreError, "checksum mismatch"):
             self.store.load_vector_index("SYNTH-STD", "R1")
-        (directory / "index.json").write_bytes(original)
+        (directory / "vectors.npy").write_bytes(original)
         self.assertEqual(self.store.verify_corpus("SYNTH-STD", "R1").corpus_manifest_sha256,
                          self.manifest.corpus_manifest_sha256)
 
-    def test_vector_dimension_and_stale_source_validation_after_valid_hash(self):
+    def rewrite_vector_index(self, change):
+        """Apply `change(ids, rows, manifest)` and re-seal every hash, so only
+        the structural checks stand between the result and a search."""
         directory = self.store.revision_dir("SYNTH-STD", "R1") / "indexes" / "vector"
         index = json.loads((directory / "index.json").read_text())
         manifest = json.loads((directory / "manifest.json").read_text())
-        first = next(iter(index["entries"])); index["entries"][first].pop()
+        _, loaded = self.store.load_vector_index("SYNTH-STD", "R1")
+        ids, rows = list(index["ids"]), [list(map(float, row)) for row in loaded["matrix"]]
+        dimension = change(ids, rows, manifest)
+        data = encode_vectors(rows, dimension)
+        index["ids"] = ids
+        index["vectors"]["shape"] = [len(rows), dimension]
+        index["vectors"]["sha256"] = hashlib.sha256(data).hexdigest()
         manifest["vector_index_fingerprint"] = sha256_json({
             "vector_index_version": manifest["vector_index_version"],
             "source_corpus_sha256": manifest["source_corpus_sha256"], "index": index})
+        (directory / "vectors.npy").write_bytes(data)
         (directory / "index.json").write_text(json.dumps(index))
         (directory / "manifest.json").write_text(json.dumps(manifest))
+
+    def test_vector_dimension_and_stale_source_validation_after_valid_hash(self):
+        def shorten(ids, rows, manifest):
+            for row in rows:
+                row.pop()
+            return len(rows[0])
+
+        self.rewrite_vector_index(shorten)
         with self.assertRaisesRegex(StandardStoreError, "dimension mismatch"):
             self.store.load_vector_index("SYNTH-STD", "R1")
         rebuild_vector_index(self.store, "SYNTH-STD", "R1", self.embedder,
                              created_at="fixed")
-        index = json.loads((directory / "index.json").read_text())
-        manifest = json.loads((directory / "manifest.json").read_text())
-        index["entries"]["std-" + "a" * 32] = next(iter(index["entries"].values()))
-        manifest["indexed_source_count"] += 1
-        manifest["vector_index_fingerprint"] = sha256_json({
-            "vector_index_version": manifest["vector_index_version"],
-            "source_corpus_sha256": manifest["source_corpus_sha256"], "index": index})
-        (directory / "index.json").write_text(json.dumps(index))
-        (directory / "manifest.json").write_text(json.dumps(manifest))
+
+        def add_a_stranger(ids, rows, manifest):
+            ids.append("std-" + "f" * 32); rows.append(rows[0])
+            manifest["indexed_source_count"] += 1
+            return len(rows[0])
+
+        self.rewrite_vector_index(add_a_stranger)
         with self.assertRaisesRegex(StandardStoreError, "stale source IDs"):
+            self.store.load_vector_index("SYNTH-STD", "R1")
+
+    def test_the_retired_json_format_asks_for_a_rebuild(self):
+        directory = self.store.revision_dir("SYNTH-STD", "R1") / "indexes" / "vector"
+        manifest = json.loads((directory / "manifest.json").read_text())
+        manifest["vector_index_format"] = "canonical-json-float-v1"
+        (directory / "manifest.json").write_text(json.dumps(manifest))
+        with self.assertRaisesRegex(StandardStoreError, "/standard rebuild SYNTH-STD R1"):
             self.store.load_vector_index("SYNTH-STD", "R1")
 
     def test_the_model_is_loaded_offline_and_no_http_client_is_used(self):

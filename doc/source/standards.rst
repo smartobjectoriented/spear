@@ -122,9 +122,19 @@ What ingestion produces
      corpus/                the canonical units
      source/                the original PDF, with --retain-pdf
      indexes/lexical/       always built
-     indexes/vector/        when an embedding model is configured
+     indexes/vector/        when an embedding model is configured: the
+                            vectors as a float32 matrix (vectors.npy)
+     verified.json          what was last checked in full, and against which files
      indexes/crossrefs/     references between provisions
      retrieval.json         how this document is searched, once set
+
+A document is checked in full once — every unit rehashed, every index's
+fingerprint recomputed — and the stamp of the files it was checked against
+(size, mtime, ctime, inode) is recorded in ``verified.json``. Until one of
+them changes, binding and searching trust that check instead of repeating it:
+for a document of 300 000 units the difference is five minutes against under
+a second. Any write moves a stamp, so a changed file is always checked again;
+``/standard verify`` checks everything regardless.
 
 The vector index is optional: with no embedding model configured, retrieval
 falls back to lexical and says so rather than failing. Where one is
@@ -305,7 +315,7 @@ The rest of the operator commands
    * - ``/standard unbind``
      - bind nothing
    * - ``/standard verify [<id> <revision>]``
-     - check the store against its manifest
+     - check the corpus and every index in full, then the contents table
    * - ``/standard rebuild [<id> <revision>] [--allow-offload]``
      - rebuild the indexes without re-extracting
    * - ``/standard retrieval [<id> <revision>] [<mode>] [--completion <n>]``

@@ -9,16 +9,19 @@ import os
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Protocol, Sequence
+from typing import Mapping, Protocol, Sequence
 
 from standard_schema import (
     StandardVectorIndexManifest, canonical_json, sha256_json,
 )
 from standard_progress import report
-from standard_store import StandardStore, StandardStoreError
+from standard_store import (
+    VECTOR_FORMAT, VECTORS_FILE, StandardStore, StandardStoreError,
+)
 
 
-VECTOR_INDEX_VERSION = 1
+#: 2: the vectors moved out of index.json into a float32 .npy matrix.
+VECTOR_INDEX_VERSION = 2
 EMBEDDING_CONFIG_VERSION = "standard-retrieval-text-v1"
 
 
@@ -451,11 +454,15 @@ def rebuild_vector_index(
             "schema_version": 1, "vector": vector,
         }))
 
+    ids = sorted(entries)
+    matrix = encode_vectors([entries[source_id] for source_id in ids], dimension)
     index = {
-        "schema_version": 1, "standard_id": standard_id, "revision": revision,
-        "embedding_config": config, "dimension": dimension,
-        "entries": dict(sorted(entries.items())),
+        "schema_version": 2, "standard_id": standard_id, "revision": revision,
+        "embedding_config": config, "dimension": dimension, "ids": ids,
         "retrieval_text_sha256": dict(sorted(text_hashes.items())),
+        "vectors": {"file": VECTORS_FILE, "dtype": "float32",
+                    "shape": [len(ids), dimension],
+                    "sha256": hashlib.sha256(matrix).hexdigest()},
     }
     fingerprint = sha256_json({
         "vector_index_version": VECTOR_INDEX_VERSION,
@@ -465,13 +472,33 @@ def rebuild_vector_index(
     manifest = StandardVectorIndexManifest(
         standard_id, revision, source.source_pdf_sha256,
         source.corpus_manifest_sha256, embedder.model_id,
-        embedder.model_revision, dimension, "l2-unit", "canonical-json-float-v1",
+        embedder.model_revision, dimension, "l2-unit", VECTOR_FORMAT,
         VECTOR_INDEX_VERSION, len(entries), config_fingerprint, fingerprint,
         created_at or datetime.now(timezone.utc).isoformat(timespec="seconds"),
     )
-    store.save_vector_index(manifest, index)
+    store.save_vector_index(manifest, index, matrix)
 
     return manifest
+
+
+def encode_vectors(rows: Sequence[Sequence[float]], dimension: int) -> bytes:
+    """The .npy bytes of `rows` as a float32 matrix, deterministically."""
+    import io
+
+    import numpy
+
+    matrix = numpy.asarray(rows, dtype="<f4").reshape(len(rows), dimension)
+    buffer = io.BytesIO()
+    numpy.save(buffer, matrix, allow_pickle=False)
+
+    return buffer.getvalue()
+
+
+def vector_entries(index: Mapping[str, object]) -> dict[str, list[float]]:
+    """{source_id: vector} from a loaded index. For inspection and tests: a
+    search reads index["matrix"] directly."""
+    return {source_id: [float(value) for value in row]
+            for source_id, row in zip(index["ids"], index["matrix"])}
 
 
 def cosine_similarity(left: Sequence[float], right: Sequence[float]) -> float:

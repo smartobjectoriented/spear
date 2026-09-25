@@ -855,9 +855,16 @@ def handle_standard_command(command: str, operator: StandardOperator) -> str:
 
         from standard_ingest import verify_against_contents
 
+        # Everything checked in full, whatever the store has recorded as
+        # already checked: this is the command that exists to find out.
+        integrity = operator.store.verify_everything(standard_id, revision)
+        lines = [f"Integrity of {standard_id} {revision} (checked in full):"]
+        lines += [f"  {name:<10}: {result}" for name, result in integrity.items()]
+        lines.append("")
+
         report = verify_against_contents(operator.store.load_units(standard_id, revision))
 
-        lines = [f"Contents cross-check for {standard_id} {revision}:",
+        lines += [f"Contents cross-check for {standard_id} {revision}:",
                  f"  clauses in the contents table : {report['contents_entries_with_a_page']}",
                  f"  clause headings detected      : {report['headings_detected']}",
                  f"  comparable clauses            : {report['clauses_in_both']}",

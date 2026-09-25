@@ -10,6 +10,7 @@ block sits in -- never the bare fact that a line begins with a digit.
 
 from __future__ import annotations
 
+import contextvars
 import hashlib
 import math
 import re
@@ -30,12 +31,47 @@ from standard_progress import report
 from standard_store import StandardStore, corpus_fingerprint
 
 
-EXTRACTOR_VERSION = "poppler-structure-v2"
+#: v3: clause numbers carrying a part letter (A2.2.5, D24.2.40) are
+#: recognised in documents numbered that way. A document numbered with digits
+#: only is extracted exactly as by v2.
+EXTRACTOR_VERSION = "poppler-structure-v3"
 
 # A line that opens with a number and a title. Matching this makes a line a
 # heading *candidate* only; _classify_heading decides whether it is one.
 
 _NUMBERED = re.compile(r"^(\d+(?:\.\d+)*)\s+(\S.*)$")
+
+# The same, for documents whose clauses carry a part letter: the Arm
+# architecture manuals number A2.2.5 and D24.2.40, never 2.2.5. Which of the
+# two a document uses is decided once, for the whole document
+# (_numbering_scheme), and only then does a letter make a line a candidate --
+# a digits-only document must not start reading "B2 Reserved" in a table as a
+# clause.
+
+_LETTERED = re.compile(r"^([A-Z]\d+(?:\.\d+)*)\s+(\S.*)$")
+_LETTERED_HEADING = re.compile(r"^[A-Z]\d{1,2}(?:\.\d{1,2}){1,3} {2,}\S")
+_DIGITS_HEADING = re.compile(r"^\d{1,2}(?:\.\d{1,2}){1,3} {2,}\S")
+
+# A lettered document repeats its current section at the top of every page,
+# set with one space where the heading itself has several: "A2.2 Armv8-A
+# architecture extensions" over the body, against "A2.2      Armv8-A ..." once,
+# where the section opens. Read as a heading, it would send the section back
+# to A2.2 at every page turn.
+
+_RUNNING_HEADER = re.compile(r"^[A-Z]\d+(?:\.\d+)* \S")
+
+# How many lettered multi-level headings make a document lettered, and by how
+# much they must outnumber digit-only ones.
+_LETTERED_MIN = 20
+_LETTERED_RATIO = 2
+
+_SCHEME: contextvars.ContextVar[re.Pattern] = contextvars.ContextVar(
+    "clause numbering", default=_NUMBERED)
+
+
+def _numbered() -> re.Pattern:
+    """The clause-number pattern of the document being extracted."""
+    return _SCHEME.get()
 _CROSS_REFERENCE = re.compile(
     r"\b(?:see|refer(?:red)?\s+to)\s+(?:section\s+)?(\d+(?:\.\d+)+)\b", re.I,
 )
@@ -199,7 +235,20 @@ def extract_pdf_pages(path: str | Path) -> tuple[tuple[str, ...], tuple[str, ...
 # --------------------------------------------------------------------------
 
 def _clause_parts(number: str) -> tuple[int, ...] | None:
-    """Return the clause components, or None when the number cannot be a clause."""
+    """Return the clause components, or None when the number cannot be a clause.
+
+    A part letter is folded into the first component (A2 -> 102, D24 -> 424),
+    so lettered clauses order and nest like digit-only ones and a new part
+    (D24 -> E1) is never read as the next sibling.
+    """
+    letter = 0
+
+    if number[:1].isalpha():
+        if not "A" <= number[0] <= "Z":
+            return None
+
+        letter, number = ord(number[0]) - ord("A") + 1, number[1:]
+
     parts = number.split(".")
 
     if not 1 <= len(parts) <= _MAX_CLAUSE_DEPTH:
@@ -208,7 +257,10 @@ def _clause_parts(number: str) -> tuple[int, ...] | None:
     if not all(_CLAUSE_COMPONENT.fullmatch(part) for part in parts):
         return None
 
-    return tuple(int(part) for part in parts)
+    values = [int(part) for part in parts]
+    values[0] += letter * 100
+
+    return tuple(values)
 
 
 def _continues(previous: tuple[int, ...] | None, candidate: tuple[int, ...]) -> bool:
@@ -395,16 +447,22 @@ class _Block:
                       layout_kind=self.layout_kind).finish()
 
 
-def _blocks(lines: tuple[_Line, ...], furniture: frozenset[str]) -> list[_Block]:
-    """Group a page's lines into blocks, splitting on blanks and on candidates."""
+def _blocks(lines: tuple[_Line, ...], furniture: frozenset[str],
+            running: frozenset[tuple[int, int]] = frozenset()) -> list[_Block]:
+    """Group a page's lines into blocks, splitting on blanks and on candidates.
+
+    `running` holds (page, ordinal) of running headers: furniture too, but
+    told apart by position rather than by repetition across the document.
+    """
     result: list[_Block] = []
     current: _Block | None = None
 
     for line in lines:
-        is_furniture = _signature(line.text) in furniture
+        is_furniture = (_signature(line.text) in furniture
+                        or (line.page, line.ordinal) in running)
         opens = (line.preceded_by_blank or is_furniture
                  or (current is not None and current.is_furniture)
-                 or _NUMBERED.match(line.text) or _TABLE.match(line.text)
+                 or _numbered().match(line.text) or _TABLE.match(line.text)
                  or _FIGURE.match(line.text) or _ANNEX.match(line.text))
 
         if current is None or opens:
@@ -434,7 +492,7 @@ def _heading_layout_evidence(block: _Block, neighbour: _Block | None) -> bool:
     for it: standing alone, titled, and not one more row of a table already
     running down the page.
     """
-    title = _NUMBERED.match(block.text).group(2)
+    title = _numbered().match(block.text).group(2)
 
     return (block.blank_before > 0
             and len(block.lines) == 1
@@ -458,7 +516,7 @@ def _classify_heading(block: _Block, previous: tuple[int, ...] | None,
                       neighbour: _Block | None, gap_limit: int,
                       ) -> tuple[str, tuple[int, ...]] | None:
     """Accept a block as a clause heading, or return None to leave it as body."""
-    match = _NUMBERED.match(block.text)
+    match = _numbered().match(block.text)
 
     if match is None:
         return None
@@ -467,6 +525,12 @@ def _classify_heading(block: _Block, previous: tuple[int, ...] | None,
     parts = _clause_parts(number)
 
     if parts is None:
+        return None
+
+    # A lettered document's sections have at least two levels (A1.1); a lone
+    # letter-and-number is a name -- A64, T32, the instruction sets -- or a
+    # chapter, whose number every section under it carries anyway.
+    if _numbered() is _LETTERED and len(parts) < 2:
         return None
 
     if block.cells >= 3 or _DOT_LEADER.search(block.text):
@@ -495,7 +559,7 @@ def _classify_heading(block: _Block, previous: tuple[int, ...] | None,
 
 def _title_gap(text: str) -> int:
     """Spaces between a clause number and its title, i.e. how it was set."""
-    match = _NUMBERED.match(text.strip())
+    match = _numbered().match(text.strip())
 
     return 10 ** 6 if match is None else match.start(2) - len(match.group(1))
 
@@ -672,12 +736,66 @@ def _content_type(text: str, modality: StandardModality) -> tuple[StandardConten
     return StandardContentType.UNKNOWN, False
 
 
+def _numbering_scheme(page_lines: tuple[tuple[_Line, ...], ...]) -> re.Pattern:
+    """Digits only, or a part letter first: decided once, for the whole document."""
+    lettered = digits = 0
+
+    for lines in page_lines:
+        for line in lines:
+            if _LETTERED_HEADING.match(line.text):
+                lettered += 1
+            elif _DIGITS_HEADING.match(line.text):
+                digits += 1
+
+    if lettered >= _LETTERED_MIN and lettered > _LETTERED_RATIO * digits:
+        return _LETTERED
+
+    return _NUMBERED
+
+
+def _running_headers(page_lines: tuple[tuple[_Line, ...], ...]
+                     ) -> frozenset[tuple[int, int]]:
+    """The running header of each page of a lettered document, and the part
+    title printed above it: (page, ordinal) of each."""
+    found = set()
+
+    for lines in page_lines:
+        for line in lines[:3]:
+            if _RUNNING_HEADER.match(line.text):
+                found.add((line.page, line.ordinal))
+
+                if line.ordinal == 1:
+                    found.add((line.page, 0))
+
+                break
+
+    return frozenset(found)
+
+
 def canonical_units(
     pages: tuple[str, ...], *, standard_id: str, revision: str,
     pdf_sha256: str, extractor_version: str = EXTRACTOR_VERSION,
     progress=None,
 ) -> tuple[StandardDocumentUnit, ...]:
     page_lines = _page_lines(pages)
+    scheme = _numbering_scheme(page_lines)
+    token = _SCHEME.set(scheme)
+
+    try:
+        return _canonical_units(
+            page_lines, standard_id=standard_id, revision=revision,
+            pdf_sha256=pdf_sha256, extractor_version=extractor_version,
+            progress=progress,
+            running=(_running_headers(page_lines) if scheme is _LETTERED
+                     else frozenset()))
+    finally:
+        _SCHEME.reset(token)
+
+
+def _canonical_units(
+    page_lines, *, standard_id: str, revision: str, pdf_sha256: str,
+    extractor_version: str, progress, running: frozenset[tuple[int, int]],
+) -> tuple[StandardDocumentUnit, ...]:
     gap_limit = _heading_gap_limit(page_lines)
     furniture = _furniture_signatures(page_lines)
     front_matter = _front_matter_pages(page_lines, furniture)
@@ -690,7 +808,7 @@ def canonical_units(
 
     for page_index, lines in enumerate(page_lines, 1):
         report(progress, "structuring pages", page_index, len(page_lines))
-        blocks = _blocks(lines, furniture)
+        blocks = _blocks(lines, furniture, running)
         _mark_columns(blocks)
         neighbour: _Block | None = None
         current_section_reset = False

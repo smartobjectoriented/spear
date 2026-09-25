@@ -21,7 +21,8 @@ from standard_vector_index import (
 INDEXER_VERSION = "standard-bm25-v1"
 TOKENIZER_CONFIG = {"name": "casefold-alnum-compound", "version": 1}
 _TOKEN = re.compile(r"[A-Za-z0-9]+(?:[._/-][A-Za-z0-9]+)*")
-_SECTION_QUERY = re.compile(r"^\s*(?:section|§)?\s*(\d+(?:\.\d+)+)\s*$", re.I)
+# A part letter is allowed: lettered documents number D24.2.67, not 24.2.67.
+_SECTION_QUERY = re.compile(r"^\s*(?:section|§)?\s*([A-Z]?\d+(?:\.\d+)+)\s*$", re.I)
 _SOURCE_QUERY = re.compile(r"^std-[0-9a-f]{32}$")
 
 
@@ -225,7 +226,7 @@ class StandardRetrieval:
             index["document_frequency"], count, query=query)
         k1, b = float(index["bm25"]["k1"]), float(index["bm25"]["b"])
         match = _SECTION_QUERY.match(query)
-        exact_section = match.group(1) if match else None
+        exact_section = match.group(1).upper() if match else None
         scored = []
 
         for source_id, document in index["documents"].items():
@@ -378,7 +379,7 @@ class StandardRetrieval:
 
         units = {u.source_id: u for u in self.store.load_units(standard_id, revision)}
         structural = _SECTION_QUERY.match(query)
-        exact_section = structural.group(1) if structural else None
+        exact_section = structural.group(1).upper() if structural else None
         ordered.sort(key=lambda x: (-int(exact_section is not None and
                                           units[x[1]].section == exact_section),
                                     -x[0], x[1]))

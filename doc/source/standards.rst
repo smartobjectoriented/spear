@@ -182,6 +182,15 @@ The manifest is the report:
 out usable. A specification of 121 pages yielding four provisions did not
 extract; one yielding eleven hundred units with an empty error list did.
 
+Clause numbers are read in one of two schemes, decided once per document:
+digits only (``7.1.5``), or with a part letter (``A2.2.5``, ``D24.2.67``) as
+the Arm architecture manuals number them. In a lettered document only lettered
+numbers of at least two levels open a section — ``A64`` and ``T32`` are names
+— and the running header each page repeats (``A2.2 Armv8-A …``, set with one
+space where the heading has several) is page furniture, not a heading. A
+digits-only document is extracted exactly as before; the scheme only widens
+what a lettered one can be read as.
+
 ``human_validation_status`` starts at ``NOT_REVIEWED`` and stays there until
 somebody says otherwise — extraction is not review, and the field does not
 pretend it is.

@@ -165,7 +165,7 @@ class ExtractionRepairTests(unittest.TestCase):
 
     # -- provenance -------------------------------------------------------
     def test_extractor_version_was_bumped(self):
-        self.assertEqual(EXTRACTOR_VERSION, "poppler-structure-v2")
+        self.assertEqual(EXTRACTOR_VERSION, "poppler-structure-v3")
         self.assertTrue(all(unit.extractor_version == EXTRACTOR_VERSION
                             for unit in self.units))
 

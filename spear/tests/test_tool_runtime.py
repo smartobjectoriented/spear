@@ -723,6 +723,31 @@ class RagChatCompatibilityTests(unittest.TestCase):
             self.assertEqual(self.rag_chat.completion_candidates(
                 "/standard ingest " + typed, typed), [pdf])
 
+    def test_a_long_command_shows_its_phases_on_the_spinner(self):
+        import io
+        from unittest import mock
+
+        class Holder:
+            label = ""
+
+        spinner = Holder()
+        out = io.StringIO()
+
+        with mock.patch("sys.stdout", out), \
+                mock.patch.object(self.rag_chat.time, "time",
+                                  side_effect=[0, 10, 20, 30]):
+            progress = self.rag_chat.SpinnerProgress(spinner)
+            progress("extracting text")
+            progress("writing corpus", 0, 100)
+            progress("writing corpus", 25, 100)
+            self.assertIn("[2] writing corpus 25% (25/100)", spinner.label)
+            self.assertIn("~30s left", spinner.label)
+            progress.finish()
+
+        lines = out.getvalue()
+        self.assertIn("[1] extracting text", lines)
+        self.assertIn("[2] writing corpus", lines)
+
     def test_banner_names_where_rules_skills_and_benches_come_from(self):
         # A missing deployment env file used to fall back to the in-tree
         # directories in silence; the banner is where that must show.

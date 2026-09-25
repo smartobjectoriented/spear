@@ -11,6 +11,7 @@ from dataclasses import replace
 from pathlib import Path
 from typing import Iterable, Mapping
 
+from standard_progress import report
 from standard_schema import (
     HumanValidationStatus, StandardBinding,
     StandardCrossReferenceIndexManifest, StandardDocumentUnit,
@@ -103,6 +104,7 @@ class StandardStore:
     def save_ingestion(
         self, manifest: StandardIngestionManifest,
         units: Iterable[StandardDocumentUnit], *, source_pdf: bytes | None = None,
+        progress=None,
     ) -> StandardIngestionManifest:
         units = tuple(sorted(units, key=lambda item: item.source_id))
 
@@ -135,10 +137,11 @@ class StandardStore:
             path.mkdir(parents=True, exist_ok=True, mode=0o700)
             os.chmod(path, 0o700)
 
-        for unit in units:
+        for position, unit in enumerate(units, 1):
             if (unit.standard_id, unit.revision) != (manifest.standard_id, manifest.revision):
                 raise StandardStoreError("unit belongs to a different standard binding")
 
+            report(progress, "writing corpus", position, len(units))
             self._atomic_write(corpus / f"{unit.source_id}.json", canonical_json(unit.to_dict()))
 
         source_metadata = {

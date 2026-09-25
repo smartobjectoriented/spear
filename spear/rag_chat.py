@@ -82,6 +82,7 @@ from standard_commands import (
     StandardCommandError, StandardOperator, handle_standard_command,
     retrieval_summary, standard_help_lines,
 )
+from standard_progress import TerminalProgress
 from standard_store import StandardStore
 from standard_tools import StandardToolService
 
@@ -276,7 +277,7 @@ TRAINING_STORE = (TrainingStore(f"{STATE_DIR}/audit/training-data")
 # variable for the readers that do not go through this module.
 STANDARD_STORE = StandardStore(
     os.environ.get("SPEAR_STANDARDS_ROOT") or f"{STATE_DIR}/standards")
-STANDARD_OPERATOR = StandardOperator(STANDARD_STORE)
+STANDARD_OPERATOR = StandardOperator(STANDARD_STORE, progress=TerminalProgress())
 STANDARD_TOOL_SERVICE = StandardToolService(STANDARD_STORE)
 
 # Has any turn of this session engaged the bound standard? It widens the scope
@@ -7060,10 +7061,13 @@ def main():
             # enter ToolRegistry, AgentRuntime, or the model provider.
 
             try:
-                print("\n" + handle_standard_command(
-                    user_input, STANDARD_OPERATOR) + "\n")
+                result = handle_standard_command(user_input, STANDARD_OPERATOR)
             except (StandardCommandError, OSError, ValueError) as exc:
-                print(f"\nStandard command error: {exc}\n")
+                result = f"Standard command error: {exc}"
+            finally:
+                STANDARD_OPERATOR.progress.finish()
+
+            print("\n" + result + "\n")
 
             continue
 

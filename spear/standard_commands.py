@@ -10,6 +10,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from standard_ingest import ingest_candidate, ingest_pdf
+from standard_progress import report
 from standard_retrieval import rebuild_lexical_index
 from standard_crossrefs import rebuild_cross_reference_index
 from standard_vector_index import (
@@ -29,9 +30,11 @@ class StandardCommandError(ValueError):
 class StandardOperator:
     """Owns ingestion and binding; intentionally never registered as a model tool."""
 
-    def __init__(self, store: StandardStore) -> None:
+    def __init__(self, store: StandardStore, *, progress=None) -> None:
         self.store = store
         self._active_path = store.root / ".active-binding.json"
+        # Where ingest and rebuild report their phases; see standard_progress.
+        self.progress = progress
 
     def active_binding(self) -> StandardBinding | None:
         if not self._active_path.exists():
@@ -277,6 +280,7 @@ def _build_vector_index(operator, standard_id, revision, allow_offload):
     origin = operator.store.load_manifest(standard_id, revision).source_origin
 
     try:
+        report(operator.progress, "preparing embedder")
         embedder = configured_embedder(origin, allow_offload=allow_offload)
 
         if embedder is None:
@@ -293,7 +297,7 @@ def _build_vector_index(operator, standard_id, revision, allow_offload):
                           "licensed standard pass --allow-offload)")
 
         manifest = rebuild_vector_index(operator.store, standard_id, revision,
-                                        embedder)
+                                        embedder, progress=operator.progress)
     except (RuntimeError, ValueError) as exc:
         return None, str(exc)
 
@@ -504,9 +508,10 @@ def handle_standard_command(command: str, operator: StandardOperator) -> str:
 
             standard_id, revision = active.standard_id, active.revision
 
-        index = rebuild_lexical_index(operator.store, standard_id, revision)
+        index = rebuild_lexical_index(operator.store, standard_id, revision,
+                                      progress=operator.progress)
         crossrefs = rebuild_cross_reference_index(
-            operator.store, standard_id, revision)
+            operator.store, standard_id, revision, progress=operator.progress)
 
         # The vector index needs an embedder that may not be configured here;
         # its absence degrades retrieval rather than failing the rebuild.
@@ -684,6 +689,7 @@ def handle_standard_command(command: str, operator: StandardOperator) -> str:
         manifest = ingest_pdf(
             operator.store, pdf, standard_id=standard_id, revision=revision,
             retain_pdf=retain, source_origin=origin or "LICENSED_STANDARD",
+            progress=operator.progress,
         )
         reclassified = None
 
@@ -692,8 +698,10 @@ def handle_standard_command(command: str, operator: StandardOperator) -> str:
                 standard_id, revision, origin)
             manifest = operator.store.load_manifest(standard_id, revision)
 
-        lexical = rebuild_lexical_index(operator.store, standard_id, revision)
-        crossrefs = rebuild_cross_reference_index(operator.store, standard_id, revision)
+        lexical = rebuild_lexical_index(operator.store, standard_id, revision,
+                                        progress=operator.progress)
+        crossrefs = rebuild_cross_reference_index(operator.store, standard_id, revision,
+                                                  progress=operator.progress)
 
         vector, vector_error = _build_vector_index(
             operator, standard_id, revision, allow_offload)

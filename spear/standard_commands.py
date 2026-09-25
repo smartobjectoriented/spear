@@ -312,6 +312,79 @@ def _build_vector_index(operator, standard_id, revision, allow_offload):
     return manifest, None
 
 
+#: Actions whose first two arguments are <id> <revision> of a stored document.
+_TARGETED_ACTIONS = frozenset({
+    "use", "rebuild", "verify", "candidates", "promote-candidate", "approve",
+    "approve-bitfield", "approval-history", "migrate-approval-history",
+    "build-structure", "retrieval",
+})
+
+_INGEST_OPTIONS = ("--id", "--revision", "--origin", "--retain-pdf",
+                   "--allow-offload", "--candidate", "--layout")
+_ORIGINS = ("LICENSED_STANDARD", "PUBLIC")
+
+
+def complete_standard(words: list[str], text: str, store) -> list[str]:
+    """Candidates for the word being typed after `/standard`.
+
+    `words` are the complete words before it, `/standard` itself excluded.
+    Identifiers and revisions come from the store: they are long, exact, and
+    the only place they are written down is the store itself. A path (ingest)
+    is left to the caller, which knows the filesystem; this returns only what
+    is a property of the command.
+    """
+    def starting(values):
+        return sorted(value for value in set(values) if value.startswith(text))
+
+    if not words:
+        return starting(name for name, _ in STANDARD_ACTIONS)
+
+    action, args = words[0], words[1:]
+
+    try:
+        stored = store.list_standards()
+    except OSError:
+        stored = ()
+
+    if action == "ingest":
+        if args and args[-1] == "--origin":
+            return starting(_ORIGINS)
+
+        if args and args[-1] in {"--id", "--revision"}:
+            return []
+
+        return starting(_INGEST_OPTIONS) if args else []
+
+    if action not in _TARGETED_ACTIONS:
+        return []
+
+    positional = [word for word in args if not word.startswith("--")]
+
+    if len(positional) == 0:
+        ids = [standard_id for standard_id, _ in stored]
+        extra = RETRIEVAL_MODES if action == "retrieval" else ()
+        return starting([*ids, *extra])
+
+    if len(positional) == 1:
+        if action == "retrieval" and positional[0] in RETRIEVAL_MODES:
+            return starting(["--completion"])
+
+        return starting(revision for standard_id, revision in stored
+                        if standard_id == positional[0])
+
+    if action == "retrieval":
+        if args[-1] == "--completion":
+            return []
+
+        return starting([*RETRIEVAL_MODES, "--completion"]
+                        if len(positional) == 2 else ["--completion"])
+
+    if action == "rebuild":
+        return starting(["--allow-offload"])
+
+    return []
+
+
 def handle_standard_command(command: str, operator: StandardOperator) -> str:
     try:
         parts = shlex.split(command)

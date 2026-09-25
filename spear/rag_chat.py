@@ -80,7 +80,7 @@ from training_store import TrainingStore
 import project_build
 from standard_commands import (
     StandardCommandError, StandardOperator, handle_standard_command,
-    retrieval_summary, standard_help_lines,
+    complete_standard, retrieval_summary, standard_help_lines,
 )
 from standard_progress import TerminalProgress
 from standard_store import StandardStore
@@ -6759,8 +6759,79 @@ def banner(collection, history, n_rules, model_name, n_mem=0):
     # it was never meant to mean the operator has to know they exist.
 
     print(f"  {C_DIM}!read !ls !grep !find !edit !run !web   "
-          f"/search /reindex /corpus /history /skills /remember /recall /forget /good /bad /undo /clear /model /tools\n"
-          f"  /standard /finetune{C_RST}\n")
+          f"{' '.join(SESSION_COMMANDS)}\n"
+          f"  {' '.join(OPERATOR_COMMANDS)}{C_RST}\n")
+
+
+#: The slash commands, as the banner lists them and as Tab completes them:
+#: one list, so a command cannot be completed and go unlisted, or the reverse.
+SESSION_COMMANDS = ("/search", "/reindex", "/corpus", "/history", "/skills",
+                    "/remember", "/recall", "/forget", "/good", "/bad",
+                    "/undo", "/clear", "/model", "/tools")
+OPERATOR_COMMANDS = ("/standard", "/finetune")
+
+
+def _path_candidates(text):
+    """Paths completing `text`. A lone directory is opened rather than
+    offered: readline would append a space after it and stop the walk."""
+    import glob
+
+    expanded = os.path.expanduser(text)
+    found = sorted(glob.glob(glob.escape(expanded) + "*"))
+
+    if len(found) == 1 and os.path.isdir(found[0]):
+        inside = sorted(glob.glob(os.path.join(glob.escape(found[0]), "*")))
+        found = inside or [found[0] + "/"]
+
+    home = os.path.expanduser("~")
+
+    if text.startswith("~"):
+        found = ["~" + item[len(home):] if item.startswith(home) else item
+                 for item in found]
+
+    return [item + "/" if os.path.isdir(os.path.expanduser(item))
+            and not item.endswith("/") else item for item in found]
+
+
+def completion_candidates(line, text):
+    """What Tab offers for `text`, the word being typed at the end of `line`.
+
+    Only commands are completed. Everything else is a question to the model,
+    and a completion there would be a guess at what the user means.
+    """
+    words = line.split()
+
+    if not line.startswith("/"):
+        return []
+
+    if not words or (len(words) == 1 and not line.endswith(" ")):
+        return sorted(c for c in SESSION_COMMANDS + OPERATOR_COMMANDS
+                      if c.startswith(text))
+
+    if words[0] != "/standard":
+        return []
+
+    before = words[1:] if line.endswith(" ") else words[1:-1]
+
+    if len(before) == 1 and before[0] == "ingest":
+        return _path_candidates(text)
+
+    return complete_standard(before, text, STANDARD_STORE)
+
+
+_COMPLETIONS = []
+
+
+def _complete(text, state):
+    if state == 0:
+        try:
+            line = readline.get_line_buffer()[:readline.get_endidx()]
+            _COMPLETIONS[:] = completion_candidates(line, text)
+        except Exception:
+            # A completer that raises is silently disabled by readline.
+            _COMPLETIONS[:] = []
+
+    return _COMPLETIONS[state] if state < len(_COMPLETIONS) else None
 
 
 INPUT_HISTORY = f"{STATE_DIR}/.input_history"
@@ -6781,6 +6852,16 @@ def init_readline():
         pass
 
     atexit.register(readline.write_history_file, INPUT_HISTORY)
+
+    # Words split on whitespace only: standard identifiers and revisions hold
+    # '-' and '.', which the default delimiters would cut them at.
+    readline.set_completer_delims(" \t\n")
+    readline.set_completer(_complete)
+
+    if "libedit" in (readline.__doc__ or ""):
+        readline.parse_and_bind("bind ^I rl_complete")
+    else:
+        readline.parse_and_bind("tab: complete")
 
 
 ADHOC_PROMPT = (

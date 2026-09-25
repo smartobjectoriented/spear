@@ -828,7 +828,7 @@ def row(y, items, style=CORE, h=52, fs=9, cols=None, width=None):
 # ── application ──────────────────────────────────────────────────────────
 p.box(35, 60, 1010, 148, "Application  —  the only layer that talks to a human", CONT, 11, 1)
 row(92, ["spear-chat.sh\nREPL launcher, backend flags",
-         "docker/spear-docker.sh\ncontainer, /state, /corpora",
+         "scripts/docker/spear-docker.sh\ncontainer, /state, /corpora",
          loc("backend_select") + "\nstartup backend picker",
          loc("rag_chat") + "\nsession · corpora · UI · handlers"], CLI)
 row(150, [loc("index_corpus") + "\ncurated build-system walk",

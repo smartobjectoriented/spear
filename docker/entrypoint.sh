@@ -33,7 +33,7 @@ without it. Re-run with:
 The first two let an UNPRIVILEGED namespace be created inside the container;
 the third un-masks the /proc paths Docker hides, without which bwrap cannot
 mount a fresh proc inside that namespace. None of them gives the container new
-privileges on the host. docker/spear-docker.sh passes all three.
+privileges on the host. scripts/docker/spear-docker.sh passes all three.
 MSG
     exit 1
 fi
@@ -83,7 +83,7 @@ if absent:
     for line in textwrap.wrap(", ".join(absent), 72):
         print(f"    {line}")
     print("  They will answer without retrieval. Re-index on the host and "
-          "rebuild (docker/build.sh).")
+          "rebuild (scripts/docker/build.sh).")
 else:
     print(f"index: every mounted corpus has its collection ({len(have)} total)")
 PY

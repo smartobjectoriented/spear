@@ -22,7 +22,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent.parent
 DOCKERFILE = ROOT / "docker" / "Dockerfile"
-BUILD_SH = ROOT / "docker" / "build.sh"
+BUILD_SH = ROOT / "scripts" / "docker" / "build.sh"
 
 # The default build context, set by build.sh's last line.
 DEFAULT_CONTEXT = ROOT / "spear"

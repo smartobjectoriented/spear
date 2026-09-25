@@ -2014,7 +2014,7 @@ class SystemdScopeRunner:
 
         # Delegation, not degradation. Inside a container there is no systemd
         # to make a scope with, but the limits are already enforced one level
-        # up -- docker/spear-docker.sh passes --memory, --pids-limit and --cpus
+        # up -- scripts/docker/spear-docker.sh passes --memory, --pids-limit and --cpus
         # that mirror DEFAULT_CGROUP_LIMITS, and sets this variable to say so.
         # The distinction matters: this is not "run unconfined because the
         # mechanism is missing", it is "the contract is honoured by the runtime

@@ -11,10 +11,10 @@
 # Corpora are addressed RELATIVE to SPEAR_CORPUS_ROOT (see projects.docker.json)
 # so this image works for someone whose checkouts are not under /home/operator.
 #
-# Build: docker/build.sh -- the contexts are not the obvious ones, see there.
-#     docker/build.sh                 # from anywhere; wraps both contexts
+# Build: scripts/docker/build.sh -- the contexts are not the obvious ones, see there.
+#     scripts/docker/build.sh                 # from anywhere; wraps both contexts
 # Run:
-#     docker/spear-docker.sh            # see that script for the flags and why
+#     scripts/docker/spear-docker.sh            # see that script for the flags and why
 FROM ubuntu:24.04
 
 ENV DEBIAN_FRONTEND=noninteractive
@@ -117,7 +117,7 @@ COPY --from=baked --chmod=0777 . /corpora/
 # standard to bind: /standard list is empty, every normative question falls
 # back to the source tree, and the one capability this platform is built
 # around is silently absent. Which documents travel is decided per document,
-# from what each one declares about itself -- see docker/stage-standards.py.
+# from what each one declares about itself -- see scripts/docker/stage-standards.py.
 #
 # 0777 because the session WRITES here: history, memories, the audit trail and
 # any standard ingested later all land under SPEAR_STATE_DIR, and the

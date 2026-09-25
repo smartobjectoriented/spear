@@ -19,7 +19,8 @@
 # clean public clone builds a working image that simply carries less. It says
 # which, rather than failing on the first missing one.
 set -e
-REPO="$(cd "$(dirname "$0")/.." && pwd)"
+REPO="$(cd "$(dirname "$0")/../.." && pwd)"
+HERE="$REPO/scripts/docker"
 APP="${SPEAR_APP:-$REPO/spear}"
 
 # THE PROFILE decides what the image is allowed to carry, and it defaults to
@@ -38,7 +39,7 @@ while [ $# -gt 0 ]; do
         --bake=*) BAKE="${1#*=}"; shift ;;
         -h|--help)
             cat <<'USAGE'
-docker/build.sh [TAG] [--profile public|engagement] [--bake name,name,...]
+scripts/docker/build.sh [TAG] [--profile public|engagement] [--bake name,name,...]
 
   --profile public       (default) only normative documents that declare
                          themselves PUBLIC, and of rules, skills, benches and
@@ -157,7 +158,7 @@ done
 # it drifting from projects.json — a corpus added on the host would otherwise be
 # absent from the image with no sign but a "missing" line at startup.
 REGISTRY="$REPO/docker/projects.docker.json"
-"$REPO/docker/gen-registry.py" || echo "   (some corpora were skipped, see above)" >&2
+"$HERE/gen-registry.py" || echo "   (some corpora were skipped, see above)" >&2
 [ -f "$REGISTRY" ] || {
     echo "gen-registry.py produced no $REGISTRY — the image needs one" >&2
     exit 1
@@ -168,12 +169,12 @@ REGISTRY="$REPO/docker/projects.docker.json"
 # what gets baked is a named subset of a 300 GB registry. Neither is a
 # directory that happens to be in the right shape already.
 
-"$REPO/docker/stage-standards.py" --profile "$PROFILE" "$STAGE/standards"
+"$HERE/stage-standards.py" --profile "$PROFILE" "$STAGE/standards"
 CONTEXTS+=(--build-context "standards=$STAGE/standards")
 
 RESTRICT=()
 [ -n "$BAKE" ] && RESTRICT=(--restrict-registry)
-"$REPO/docker/stage-corpora.py" --bake "$BAKE" "${RESTRICT[@]}" "$STAGE/baked" || true
+"$HERE/stage-corpora.py" --bake "$BAKE" "${RESTRICT[@]}" "$STAGE/baked" || true
 CONTEXTS+=(--build-context "baked=$STAGE/baked")
 
 # What the image says about itself. A tarball changes hands and a tag gets
@@ -204,7 +205,7 @@ if [ "$PROFILE" = engagement ]; then
     cat <<MSG
 
   This image carries licensed normative material and customer trees. It is
-  labelled redistributable=false and docker/push.sh will refuse to publish it
+  labelled redistributable=false and scripts/docker/push.sh will refuse to publish it
   without --allow-push. Hand it over as a file:
 
       docker save $TAG | zstd -T0 -19 -o spear-engagement.tar.zst

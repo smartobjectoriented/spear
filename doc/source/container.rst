@@ -212,8 +212,8 @@ to anyone.
 
 .. code-block:: console
 
-   $ docker/build.sh --profile public     --bake so3,so3-doc,avz
-   $ docker/build.sh --profile engagement --bake so3,acme-firmware
+   $ scripts/docker/build.sh --profile public     --bake so3,so3-doc,avz
+   $ scripts/docker/build.sh --profile engagement --bake so3,acme-firmware
 
 .. list-table::
    :header-rows: 1
@@ -263,7 +263,7 @@ all, which is the whole reason the tool exists.
 
    $ spear-corpus add acme-firmware "$SPEAR_PILOT_TREE"
    $ spear-index "$SPEAR_PILOT_TREE"
-   $ docker/build.sh --profile engagement --bake so3,acme-firmware
+   $ scripts/docker/build.sh --profile engagement --bake so3,acme-firmware
 
 When ``--bake`` is used the image's registry is restricted to what the image
 actually carries. Otherwise the recipient opens the container to a list of
@@ -276,7 +276,7 @@ A deployment keeps what is specific to it **outside the checkout**: its rules,
 its skills, its benches, the trees it works on and the normative documents it
 answers from. ``spear/machine.env`` is the one untracked file that says where
 those live, and it is read by the launcher, by ``spear-corpus`` and — since it
-decides what an image carries — by ``docker/build.sh``.
+decides what an image carries — by ``scripts/docker/build.sh``.
 
 Everything therefore reaches an image by one of three routes, and none of them
 is a second repository:
@@ -321,7 +321,7 @@ Start to finish, on the machine that has the content:
 
    $ spear-corpus add acme-firmware "$SPEAR_PILOT_TREE"   # register…
    $ spear-index "$SPEAR_PILOT_TREE"                      # …and index
-   $ docker/build.sh --profile engagement --bake so3,acme-firmware
+   $ scripts/docker/build.sh --profile engagement --bake so3,acme-firmware
 
 What the build reports is what the image carries:
 
@@ -351,9 +351,9 @@ Publishing, and not publishing
 
 .. code-block:: console
 
-   $ docker/push.sh ghcr.io/<org>/spear:1.0-public
-   $ docker/push.sh ghcr.io/<org>/spear-private:1.0-engagement     # refused
-   $ docker/push.sh --allow-push ghcr.io/<org>/spear-private:1.0-engagement
+   $ scripts/docker/push.sh ghcr.io/<org>/spear:1.0-public
+   $ scripts/docker/push.sh ghcr.io/<org>/spear-private:1.0-engagement     # refused
+   $ scripts/docker/push.sh --allow-push ghcr.io/<org>/spear-private:1.0-engagement
    $ docker save spear:1.0-engagement | zstd -T0 -19 -o spear.tar.zst
 
 The guard reads the **label**, not the tag. A tag gets retyped, shortened and
@@ -433,7 +433,7 @@ ones after it are rebuilt.
 .. code-block:: sh
 
    spear-index /path/to/tree     # updates chromadb/ on the workstation
-   docker/build.sh spear:1.1
+   scripts/docker/build.sh spear:1.1
 
 Why retrieval is not served from reds-ml
 ========================================

@@ -68,7 +68,7 @@ If you have an inference endpoint and only want to use SPEAR, Docker is enough:
 
    $ git clone https://github.com/smartobjectoriented/spear ~/spear
    $ cd ~/spear
-   $ docker/build.sh
+   $ scripts/docker/build.sh
 
 The build takes a while, mostly for the embedding model. See :ref:`Container
 <container>` for what the image carries, what it expects mounted, and the two

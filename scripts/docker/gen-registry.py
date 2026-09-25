@@ -29,7 +29,7 @@ import json
 import os
 import sys
 
-REPO = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
+REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.realpath(__file__))))
 HOST_ROOTS = [(os.path.expanduser("~") + "/", ""), ("/opt/llm/", "")]
 
 

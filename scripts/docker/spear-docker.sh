@@ -1,7 +1,7 @@
 #!/bin/bash
 # Run the SPEAR harness container against local checkouts.
 #
-#   docker/spear-docker.sh [--reds] [--endpoint URL] [--state DIR]
+#   scripts/docker/spear-docker.sh [--reds] [--endpoint URL] [--state DIR]
 #                          [--mount DIR]... [-- <harness args>]
 #
 # Every tree is bound at its OWN ABSOLUTE PATH, not remapped under a common
@@ -17,7 +17,7 @@
 # ~/soo/so3/build/tmp/toolchains is the standard example.
 set -e
 HERE="$(cd "$(dirname "$0")" && pwd)"
-REPO="$(cd "$HERE/.." && pwd)"
+REPO="$(cd "$HERE/../.." && pwd)"
 APP="${SPEAR_APP:-$REPO/spear}"
 IMAGE="${SPEAR_IMAGE:-spear:1.0}"
 API_BASE="${SPEAR_API_BASE:-http://127.0.0.1:8082/v1}"

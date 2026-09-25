@@ -1,0 +1,161 @@
+#!/bin/bash
+# Manage SPEAR container images: one entry point over scripts/docker/.
+#
+#     spear-image build   <public|private> [--bake a,b,...] [--tag TAG]
+#     spear-image list
+#     spear-image inspect <public|private|TAG>
+#     spear-image run     <public|private|TAG> [spear-docker options] [-- harness args]
+#     spear-image save    <public|private|TAG> [FILE]
+#     spear-image load    FILE
+#     spear-image push    <public|private|TAG> [--allow-push]
+#     spear-image erase   <public|private|all|TAG> [--cache]
+#
+# A profile names the image scripts/docker/build.sh tags by default,
+# spear:1.0-<profile>. Anything with a ':' is taken as a tag as it is.
+#
+# The scripts underneath keep their own rules -- build.sh decides what a
+# profile may carry, push.sh refuses a private image without
+# --allow-push -- and this one only saves remembering their options. It
+# decides nothing they would not.
+set -e
+
+HERE="$(cd "$(dirname "$(readlink -f "$0")")" && pwd)"
+DOCKER_SCRIPTS="$HERE/docker"
+LABEL=ch.heig-vd.reds.spear
+
+usage() {
+    sed -n '2,20p' "$0" | sed 's/^# \{0,1\}//'
+    exit "${1:-0}"
+}
+
+die() { echo "spear-image: $*" >&2; exit 1; }
+
+# profile or tag -> tag
+image_of() {
+    case "$1" in
+        "") die "name an image: public, private or a tag" ;;
+        public|private) echo "spear:1.0-$1" ;;
+        *:*) echo "$1" ;;
+        *) die "'$1' is neither a profile (public, private) nor a tag" ;;
+    esac
+}
+
+exists() { docker image inspect "$1" >/dev/null 2>&1; }
+
+label() {
+    docker image inspect "$1" \
+        --format "{{ index .Config.Labels \"$LABEL.$2\" }}" 2>/dev/null
+}
+
+[ $# -gt 0 ] || usage 1
+action="$1"; shift
+
+case "$action" in
+    -h|--help|help)
+        usage ;;
+
+    build)
+        profile="$1"
+        case "$profile" in
+            public|private) shift ;;
+            *) die "build needs a profile: public or private" ;;
+        esac
+
+        tag="" bake=()
+
+        while [ $# -gt 0 ]; do
+            case "$1" in
+                --tag) tag="$2"; shift 2 ;;
+                --bake) bake=(--bake "$2"); shift 2 ;;
+                *) die "build: unknown option $1" ;;
+            esac
+        done
+
+        exec "$DOCKER_SCRIPTS/build.sh" ${tag:+"$tag"} --profile "$profile" "${bake[@]}" ;;
+
+    list)
+        # The label, not the repository name: an image retagged for a registry
+        # is still one of ours, and says which profile it is.
+        docker images --filter "label=$LABEL.profile" \
+            --format '{{.Repository}}:{{.Tag}}\t{{.ID}}\t{{.Size}}\t{{.CreatedSince}}' |
+        while IFS=$'\t' read -r name id size created; do
+            printf '%-40s %-11s %-9s redistributable=%-5s %s\n' "$name" \
+                "$(label "$id" profile)" "$size" "$(label "$id" redistributable)" \
+                "$created"
+        done ;;
+
+    inspect)
+        image="$(image_of "$1")"
+        exists "$image" || die "no such image: $image"
+        printf 'image            %s\n' "$image"
+        printf 'profile          %s\n' "$(label "$image" profile)"
+        printf 'redistributable  %s\n' "$(label "$image" redistributable)"
+        printf 'built            %s\n' "$(label "$image" built)"
+        printf 'size             %s\n' "$(docker image inspect "$image" \
+            --format '{{.Size}}' | numfmt --to=iec)" ;;
+
+    run)
+        image="$(image_of "$1")"; shift
+        exists "$image" || die "no such image: $image (spear-image build first)"
+        SPEAR_IMAGE="$image" exec "$DOCKER_SCRIPTS/spear-docker.sh" "$@" ;;
+
+    save)
+        image="$(image_of "$1")"
+        exists "$image" || die "no such image: $image"
+        out="${2:-spear-$(label "$image" profile).tar.zst}"
+        [ -e "$out" ] && die "$out exists; name another file or remove it"
+        command -v zstd >/dev/null || die "zstd is not installed"
+        echo "saving $image -> $out"
+        docker save "$image" | zstd -T0 -19 -o "$out"
+
+        [ "$(label "$image" redistributable)" = false ] && echo \
+            "!! $out carries licensed and customer material: not redistributable" >&2
+        exit 0 ;;
+
+    load)
+        [ -f "$1" ] || die "load needs a file saved by 'spear-image save'"
+        zstd -dc "$1" | docker load ;;
+
+    push)
+        image="$(image_of "$1")"; shift
+        exec "$DOCKER_SCRIPTS/push.sh" "$@" "$image" ;;
+
+    erase)
+        target="$1"; shift || true
+        cache=0
+
+        while [ $# -gt 0 ]; do
+            case "$1" in
+                --cache) cache=1; shift ;;
+                *) die "erase: unknown option $1" ;;
+            esac
+        done
+
+        if [ "$target" = all ]; then
+            mapfile -t images < <(docker images -q --filter "label=$LABEL.profile" | sort -u)
+        else
+            image="$(image_of "$target")"
+            exists "$image" || die "no such image: $image"
+            images=("$image")
+        fi
+
+        if [ "${#images[@]}" -eq 0 ]; then
+            echo "no SPEAR image to erase"
+        else
+            # -f: a registry retag of the same image would otherwise block it.
+            docker rmi -f "${images[@]}"
+        fi
+
+        # The build cache keeps every layer an image was made of -- for an
+        # private image, the licensed documents and customer trees it
+        # copied. Removing the image does not remove those.
+        if [ "$cache" = 1 ]; then
+            docker builder prune -f
+        else
+            echo "(build cache kept; --cache also removes the layers it holds)"
+        fi ;;
+
+    *)
+        echo "spear-image: unknown action '$action'" >&2
+        usage 1 ;;
+esac

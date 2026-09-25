@@ -8,27 +8,71 @@ The container exists to hand the assistant to someone else: the harness, its
 dependencies, the embedder and a prebuilt retrieval index, in one image.  They
 mount their own checkouts and point it at a model endpoint.
 
-Everything about it lives in ``docker/`` at the repository root.
+The image is defined in ``docker/``; the scripts that build, run and
+publish it are in ``scripts/docker/``, and ``scripts/spear-image`` drives them
+(`Managing images`_).
 
 .. list-table::
    :header-rows: 1
-   :widths: 30 70
+   :widths: 38 62
 
    * - File
      - Purpose
-   * - ``Dockerfile``
+   * - ``docker/Dockerfile``
      - The image.  Do not build it by hand — see `Two build contexts`_.
-   * - ``build.sh``
-     - Builds, wrapping both contexts.
-   * - ``spear-docker.sh``
-     - Runs, deriving the mounts and carrying the two ``--security-opt`` flags.
-   * - ``entrypoint.sh``
+   * - ``docker/entrypoint.sh``
      - Refuses to start on the two failures that are otherwise silent.
-   * - ``projects.docker.json``
+   * - ``docker/projects.docker.json``
      - The corpus registry, in **relative** paths.  *Generated* by
        ``gen-registry.py`` and not in the repository.
-   * - ``README.md``
+   * - ``docker/README.md``
      - The short version, for whoever receives the image.
+   * - ``scripts/spear-image``
+     - The operator's entry point: build, list, inspect, run, save, load,
+       push, erase.
+   * - ``scripts/docker/build.sh``
+     - Builds, wrapping both contexts.
+   * - ``scripts/docker/spear-docker.sh``
+     - Runs, deriving the mounts and carrying the two ``--security-opt`` flags.
+   * - ``scripts/docker/push.sh``
+     - Publishes, refusing a ``private`` image without ``--allow-push``.
+   * - ``scripts/docker/stage-*.py``, ``gen-registry.py``
+     - What ``build.sh`` stages into its contexts.
+
+Managing images
+===============
+
+Put the tree's commands on ``PATH`` once per shell, from the repository root:
+
+.. code-block:: console
+
+   $ cd /opt/llm/spear && . ./env.sh
+
+Only ``scripts/`` goes on ``PATH``.  ``scripts/docker/`` holds a ``build.sh``,
+and a shell that has also sourced another tree's ``env.sh`` with a
+``build.sh`` of its own would then have two.
+
+.. code-block:: console
+
+   $ spear-image build private               # spear:1.0-private
+   $ spear-image build private --bake so3,so3-doc
+   $ spear-image build public                # spear:1.0-public
+   $ spear-image list                        # profile and label of each
+   $ spear-image inspect private
+   $ spear-image run private -- --auto       # spear-docker.sh options, then -- harness args
+   $ spear-image save private                # -> spear-private.tar.zst
+   $ spear-image load spear-private.tar.zst
+   $ spear-image push ghcr.io/<org>/spear:1.0-public
+   $ spear-image erase private [--cache]     # or public, all, a tag
+
+A profile names the tag ``build.sh`` gives by default; anything containing a
+``:`` is taken as a tag.  ``spear-image`` decides nothing the scripts under it
+would not: ``build.sh`` still decides what a profile may carry and ``push.sh``
+still refuses a ``private`` image without ``--allow-push``.
+
+``erase --cache`` also prunes the build cache.  Removing a ``private`` image
+does not remove the layers it was built from — the licensed documents and
+customer trees it copied stay in the cache until that is pruned.
 
 Daily use
 =========
@@ -212,7 +256,7 @@ to anyone.
 
 .. code-block:: console
 
-   $ scripts/docker/build.sh --profile public     --bake so3,so3-doc,avz
+   $ scripts/docker/build.sh --profile public
    $ scripts/docker/build.sh --profile private --bake so3,acme-firmware
 
 .. list-table::
@@ -222,9 +266,11 @@ to anyone.
    * - Profile
      - What it carries
    * - ``public``
-     - only normative documents that declare themselves ``PUBLIC``; nothing
-       licensed, nothing of a customer's. Labelled
-       ``redistributable=true``.
+     - only normative documents that declare themselves ``PUBLIC``; of rules,
+       skills, benches and notes only the files the repository tracks; no
+       retrieval index (it holds chunks of every corpus on the host) and no
+       baked tree (``--bake`` is refused). Anything withheld is printed as
+       ``WITHHELD``. Labelled ``redistributable=true``.
    * - ``private``
      - everything the building host has, licensed documents and the original
        PDFs included where the store retained them. Labelled

@@ -206,6 +206,15 @@ def remote_model_revision(model_id: str, target: str) -> str | None:
     except (OSError, subprocess.SubprocessError) as exc:
         raise RuntimeError(f"cannot reach {target}: {exc}") from exc
 
+    # 255 is ssh's own failure: no connection, no authentication. Read as an
+    # empty cache it became "the host resolves the model to nothing", and the
+    # operator went looking for a cache mismatch on a host that was simply
+    # off the network. The remote `cat` failing is the only real "nothing".
+
+    if done.returncode == 255:
+        reason = (done.stderr.strip().splitlines() or ["ssh failed"])[-1]
+        raise RuntimeError(f"cannot reach {target}: {reason}")
+
     return done.stdout.strip() or None
 
 

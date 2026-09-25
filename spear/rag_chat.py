@@ -1951,6 +1951,58 @@ def standard_row():
             f"  {C_DIM}·{C_RST}  {binding.data_origin.lower()}")
 
 
+def content_row(dirs=None):
+    """Where rules, skills and benches come from, on the banner.
+
+    They are relocatable (resource_dir) and a deployment points them at a
+    tree outside the checkout. When the file that does so is missing, the
+    session starts anyway on the near-empty in-tree defaults, and nothing
+    said so: losing a deployment's rules looked exactly like having none.
+    """
+    if dirs is None:
+        dirs = {"rules": RULES_DIR, "skills": SKILLS_DIR, "benches": BENCH_DIR}
+
+    app_dir = os.path.realpath(APP_DIR)
+
+    def is_in_tree(path):
+        return os.path.realpath(path).startswith(app_dir + os.sep)
+
+    # An absent in-tree directory is a plain checkout; an absent external one
+    # is a deployment pointing at something that is not there.
+
+    missing = [name for name, path in dirs.items()
+               if not is_in_tree(path) and not os.path.isdir(path)]
+
+    if all(is_in_tree(path) for path in dirs.values()):
+        row = f"{C_DIM}content:{C_RST}  in-tree  {C_DIM}(no external rules/skills/benches){C_RST}"
+    else:
+        # Grouped by parent, so the usual case -- one deployment tree holding
+        # all three -- reads as that tree rather than as three paths.
+
+        parents = {}
+
+        for name, path in dirs.items():
+            parent = ("in-tree" if is_in_tree(path)
+                      else os.path.dirname(os.path.normpath(path)))
+            parents.setdefault(parent, []).append(name)
+
+        home = os.path.expanduser("~")
+        parts = []
+
+        for parent, names in parents.items():
+            if parent.startswith(home + os.sep):
+                parent = "~" + parent[len(home):]
+
+            parts.append(f"{parent} {C_DIM}({', '.join(names)}){C_RST}")
+
+        row = f"{C_DIM}content:{C_RST}  " + f"  {C_DIM}·{C_RST}  ".join(parts)
+
+    if missing:
+        row += f"  {C_WARN}⚠ missing: {', '.join(missing)}{C_RST}"
+
+    return row
+
+
 def corpus_mention_hint(user_input, projects, current):
     """Name a registered corpus the question mentions but the tools are not in.
 
@@ -6672,6 +6724,7 @@ def banner(collection, history, n_rules, model_name, n_mem=0):
     if standard is not None:
         rows.insert(2, standard)
 
+    rows.insert(-1, content_row())
     rows.append(permissions_row(EXECUTION_MODE))
 
     if WORKSPACE is not None and WORKSPACE.extra_roots:

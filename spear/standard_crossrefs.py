@@ -8,6 +8,7 @@ from datetime import datetime, timezone
 from standard_schema import (
     StandardCrossReferenceIndexManifest, StandardLayoutKind, sha256_json,
 )
+from standard_progress import report
 from standard_store import StandardStore
 
 
@@ -38,7 +39,9 @@ def _section_anchor(unit) -> bool:
 def rebuild_cross_reference_index(
     store: StandardStore, standard_id: str, revision: str, *,
     resolver_version: str = RESOLVER_VERSION, created_at: str | None = None,
+    progress=None,
 ) -> StandardCrossReferenceIndexManifest:
+    report(progress, "verifying corpus")
     source = store.verify_corpus(standard_id, revision)
     units = store.load_units(standard_id, revision)
     sections: dict[str, list] = {}
@@ -50,7 +53,8 @@ def rebuild_cross_reference_index(
     entries = {}
     counts = {"resolved": 0, "ambiguous": 0, "unresolved": 0}
 
-    for unit in units:
+    for position, unit in enumerate(units, 1):
+        report(progress, "cross references", position, len(units))
         literals = list(unit.cross_references)
         known_sections = {literal for literal in literals
                           if re.fullmatch(r"\d+(?:\.\d+)+", literal)}

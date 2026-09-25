@@ -14,6 +14,7 @@ from typing import Protocol, Sequence
 from standard_schema import (
     StandardVectorIndexManifest, canonical_json, sha256_json,
 )
+from standard_progress import report
 from standard_store import StandardStore, StandardStoreError
 
 
@@ -287,6 +288,12 @@ def configured_local_embedder() -> SentenceTransformerStandardEmbedder | None:
 
 UNIT_NORM_TOLERANCE = 1e-6
 
+#: Texts per embed_documents call during a rebuild. The remote path already
+#: ships 20 000 texts per worker process (embedding._embed_remote), each one
+#: paying a model load, so a smaller chunk would only add loads. A multiple of
+#: the worker's batch (16) and of SentenceTransformer's default (32).
+EMBED_CHUNK = 20000
+
 
 def _validated(vector: Sequence[float], *, dimension: int | None = None) -> list[float]:
     values = [float(value) for value in vector]
@@ -331,7 +338,9 @@ def _already_normalized(vector: Sequence[float], *,
 def rebuild_vector_index(
     store: StandardStore, standard_id: str, revision: str,
     embedder: LocalStandardEmbedder, *, created_at: str | None = None,
+    progress=None,
 ) -> StandardVectorIndexManifest:
+    report(progress, "verifying corpus")
     source = store.verify_corpus(standard_id, revision)
     units = [unit for unit in store.load_units(standard_id, revision)
              if unit.retrievable]
@@ -365,6 +374,7 @@ def rebuild_vector_index(
     missing_indexes: list[int] = []
 
     for position, text in enumerate(texts):
+        report(progress, "embedding cache", position + 1, len(texts))
         key = sha256_json({"config": config_fingerprint,
                            "retrieval_text_sha256": hashlib.sha256(
                                text.encode("utf-8")).hexdigest()})
@@ -385,7 +395,25 @@ def rebuild_vector_index(
         missing_indexes.append(position)
 
     if missing_indexes:
-        generated = embedder.embed_documents([texts[index] for index in missing_indexes])
+        # In chunks, so a corpus of hundreds of thousands of units shows its
+        # progress and does not travel as one payload. A multiple of every
+        # backend's batch size, so each batch holds the same texts it would
+        # have held in one call and the vectors do not move.
+
+        generated = []
+        label = f"embedding ({getattr(embedder, 'compute_label', 'local')})"
+
+        for start in range(0, len(missing_indexes), EMBED_CHUNK):
+            # Unthrottled: one call per chunk is already few, and the
+            # throttle's step would not fall on chunk boundaries.
+            if progress is not None:
+                progress(label, start, len(missing_indexes))
+
+            generated.extend(embedder.embed_documents(
+                [texts[index] for index in missing_indexes[start:start + EMBED_CHUNK]]))
+
+        if progress is not None:
+            progress(label, len(missing_indexes), len(missing_indexes))
 
         if len(generated) != len(missing_indexes):
             raise StandardStoreError("embedding backend returned a short result")

@@ -26,6 +26,7 @@ from standard_schema import (
     StandardIngestionManifest, StandardLayoutKind, StandardModality,
     STANDARD_UNIT_SCHEMA_VERSION, make_source_id, source_content_sha256,
 )
+from standard_progress import report
 from standard_store import StandardStore, corpus_fingerprint
 
 
@@ -674,6 +675,7 @@ def _content_type(text: str, modality: StandardModality) -> tuple[StandardConten
 def canonical_units(
     pages: tuple[str, ...], *, standard_id: str, revision: str,
     pdf_sha256: str, extractor_version: str = EXTRACTOR_VERSION,
+    progress=None,
 ) -> tuple[StandardDocumentUnit, ...]:
     page_lines = _page_lines(pages)
     gap_limit = _heading_gap_limit(page_lines)
@@ -686,7 +688,8 @@ def canonical_units(
     previous: tuple[int, ...] | None = None
     after_annex = False
 
-    for lines in page_lines:
+    for page_index, lines in enumerate(page_lines, 1):
+        report(progress, "structuring pages", page_index, len(page_lines))
         blocks = _blocks(lines, furniture)
         _mark_columns(blocks)
         neighbour: _Block | None = None
@@ -980,7 +983,7 @@ def build_manifest(
 def extract_corpus(
     pdf_path: str | Path, *, standard_id: str, revision: str,
     retain_pdf: bool = False, source_origin: str = "LICENSED_STANDARD",
-    ingestion_timestamp: str | None = None,
+    ingestion_timestamp: str | None = None, progress=None,
 ) -> tuple[StandardIngestionManifest, tuple[StandardDocumentUnit, ...], bytes]:
     """Extract a corpus without deciding where -- or whether -- it is stored."""
     source = Path(pdf_path).expanduser()
@@ -990,9 +993,10 @@ def extract_corpus(
 
     pdf_bytes = source.read_bytes()
     pdf_sha = hashlib.sha256(pdf_bytes).hexdigest()
+    report(progress, "extracting text")
     pages, extraction_warnings = extract_pdf_pages(source)
     units = canonical_units(pages, standard_id=standard_id, revision=revision,
-                            pdf_sha256=pdf_sha)
+                            pdf_sha256=pdf_sha, progress=progress)
 
     if not units:
         raise StandardIngestionError("PDF extraction produced no canonical units")
@@ -1083,7 +1087,7 @@ def ingest_pdf(
     store: StandardStore, pdf_path: str | Path, *, standard_id: str,
     revision: str, retain_pdf: bool = False,
     source_origin: str = "LICENSED_STANDARD",
-    ingestion_timestamp: str | None = None,
+    ingestion_timestamp: str | None = None, progress=None,
 ) -> StandardIngestionManifest:
     source = Path(pdf_path).expanduser()
 
@@ -1105,9 +1109,11 @@ def ingest_pdf(
 
     manifest, units, pdf_bytes = extract_corpus(
         source, standard_id=standard_id, revision=revision, retain_pdf=retain_pdf,
-        source_origin=source_origin, ingestion_timestamp=ingestion_timestamp)
+        source_origin=source_origin, ingestion_timestamp=ingestion_timestamp,
+        progress=progress)
 
     # Identical reingestion returns the prior timestamp-bearing manifest.
 
     return store.save_ingestion(
-        manifest, units, source_pdf=(pdf_bytes if retain_pdf else None))
+        manifest, units, source_pdf=(pdf_bytes if retain_pdf else None),
+        progress=progress)

@@ -12,6 +12,7 @@ from standard_schema import (
     StandardCitation, StandardIndexManifest, StandardSchemaError, sha256_json,
 )
 import standard_query_expansion
+from standard_progress import report
 from standard_store import StandardStore, StandardStoreError
 from standard_vector_index import (
     LocalStandardEmbedder, cosine_similarity, structural_context,
@@ -44,7 +45,9 @@ def tokenize(text: str) -> tuple[str, ...]:
 
 def rebuild_lexical_index(store: StandardStore, standard_id: str, revision: str, *,
                           indexer_version: str = INDEXER_VERSION,
-                          created_at: str | None = None) -> StandardIndexManifest:
+                          created_at: str | None = None,
+                          progress=None) -> StandardIndexManifest:
+    report(progress, "verifying corpus")
     source = store.verify_corpus(standard_id, revision)
 
     # Page furniture and contents entries stay in the canonical corpus for
@@ -59,7 +62,8 @@ def rebuild_lexical_index(store: StandardStore, standard_id: str, revision: str,
     documents = {}
     document_frequency: Counter[str] = Counter()
 
-    for unit in units:
+    for position, unit in enumerate(units, 1):
+        report(progress, "lexical index", position, len(units))
         # The same structural context the vector side indexes, so one
         # representation is searched both ways. Empty for a unit whose store
         # recorded no grid, which keeps an older corpus byte-identical.

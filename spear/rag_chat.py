@@ -427,7 +427,7 @@ def save_projects(projects):
         raise SystemExit(
             f"cannot write the corpus registry ({PROJECTS_FILE}): {exc}\n"
             f"Registering a corpus is a host operation — do it there, then "
-            f"rebuild the image (docker/build.sh). A one-off tree can be "
+            f"rebuild the image (scripts/docker/build.sh). A one-off tree can be "
             f"reached with --corpora instead.") from exc
 
 

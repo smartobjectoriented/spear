@@ -28,8 +28,9 @@ import shutil
 import subprocess
 import sys
 
-HERE = pathlib.Path(__file__).resolve().parent
-REPO = HERE.parent
+REPO = pathlib.Path(__file__).resolve().parents[2]
+#: Where the image definition lives, and the registry build.sh generates.
+HERE = REPO / "docker"
 
 #: Never copied into an image. Build products and history, not sources: a
 #: .git alone routinely outweighs the tree it belongs to.

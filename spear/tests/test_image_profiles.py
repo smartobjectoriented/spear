@@ -22,7 +22,7 @@ import unittest
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-STAGER = ROOT.parent / "docker" / "stage-standards.py"
+STAGER = ROOT.parent / "scripts" / "docker" / "stage-standards.py"
 
 PUBLIC = ("ACME-PUB", "R1", {"standard_id": "ACME-PUB", "revision": "R1",
                              "source_origin": "PUBLIC",

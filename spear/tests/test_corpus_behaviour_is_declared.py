@@ -164,7 +164,7 @@ class NoBehaviourHidesBehindTheKind(unittest.TestCase):
 
         # The whole tracked tree, not just the top-level modules: the first
         # version of this guard globbed ROOT/*.py and missed a second copy of
-        # the branch in docker/gen-registry.py, where it could have made the
+        # the branch in scripts/docker/gen-registry.py, where it could have made the
         # container disagree with the platform about a corpus's collection.
         import subprocess
 

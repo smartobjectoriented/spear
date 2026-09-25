@@ -202,7 +202,7 @@ the filesystem root.
 The failure mode these replace is quiet: ``load_rules()`` returns ``""`` for a
 directory that is not there and the skill library returns ``[]``, so a session
 whose content had moved ran with none of it and said nothing.  The same three
-variables are read by ``docker/build.sh`` when it bakes an image
+variables are read by ``scripts/docker/build.sh`` when it bakes an image
 (:ref:`optional-build-inputs`), so one setting covers both.
 
 Persistent state

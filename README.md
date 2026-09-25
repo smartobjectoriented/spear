@@ -46,8 +46,8 @@ to install anything but Docker:
 ```sh
 git clone https://github.com/smartobjectoriented/spear ~/spear
 cd ~/spear
-docker/build.sh                              # ~20 min, mostly the embedder
-docker/spear-docker.sh --reds --auto         # opens the tunnel, then chats
+scripts/docker/build.sh                              # ~20 min, mostly the embedder
+scripts/docker/spear-docker.sh --reds --auto         # opens the tunnel, then chats
 ```
 
 To run it natively instead — which is what you want if you intend to *change*

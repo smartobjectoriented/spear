@@ -19,8 +19,8 @@ the only prerequisite:
 
    $ git clone https://github.com/smartobjectoriented/spear ~/spear
    $ cd ~/spear
-   $ docker/build.sh                        # ~20 min, mostly the embedder
-   $ docker/spear-docker.sh --reds --auto   # opens the tunnel, then chats
+   $ scripts/docker/build.sh                        # ~20 min, mostly the embedder
+   $ scripts/docker/spear-docker.sh --reds --auto   # opens the tunnel, then chats
 
 That image carries the harness and the embedder; you mount your own source
 trees and it talks to the model served on the inference host over an SSH

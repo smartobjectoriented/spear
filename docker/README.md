@@ -24,8 +24,8 @@ is what makes it something you hand over rather than something you mount into.
 What it may carry is a per-build decision, and it defaults to the safe one.
 
 ```sh
-docker/build.sh --profile public     --bake so3,so3-doc,avz
-docker/build.sh --profile engagement --bake so3,acme-firmware
+scripts/docker/build.sh --profile public     --bake so3,so3-doc,avz
+scripts/docker/build.sh --profile engagement --bake so3,acme-firmware
 ```
 
 **`public`** (the default) takes only normative documents that declare
@@ -33,7 +33,7 @@ themselves `PUBLIC`, and nothing of a customer's. Safe to give to anyone.
 
 **`engagement`** takes everything this machine has — licensed documents, and
 the original PDFs where the store retained them. The image is labelled
-`redistributable=false` and `docker/push.sh` refuses to publish it without
+`redistributable=false` and `scripts/docker/push.sh` refuses to publish it without
 `--allow-push`.
 
 Which is which is never a list kept here. Each ingested document already
@@ -73,7 +73,7 @@ putting it in an image, not an alternative to it:
 ```sh
 spear-corpus add acme-firmware "$SPEAR_PILOT_TREE"
 spear-index "$SPEAR_PILOT_TREE"
-docker/build.sh --profile engagement --bake so3,acme-firmware
+scripts/docker/build.sh --profile engagement --bake so3,acme-firmware
 ```
 
 When `--bake` is used the image registry is restricted to what the image
@@ -83,10 +83,10 @@ twenty-two corpora they do not have.
 ## Handing it over
 
 ```sh
-docker/push.sh ghcr.io/<org>/spear:1.0-public          # public: goes
-docker/push.sh ghcr.io/<org>/spear-private:1.0-engagement
+scripts/docker/push.sh ghcr.io/<org>/spear:1.0-public          # public: goes
+scripts/docker/push.sh ghcr.io/<org>/spear-private:1.0-engagement
                                                        # engagement: refused
-docker/push.sh --allow-push ghcr.io/<org>/spear-private:1.0-engagement
+scripts/docker/push.sh --allow-push ghcr.io/<org>/spear-private:1.0-engagement
 docker save spear:1.0-engagement | zstd -T0 -19 -o spear-engagement.tar.zst
 ```
 
@@ -101,9 +101,9 @@ contract, not about a registry. It should cost a deliberate word.
 ## Run
 
 ```sh
-docker/build.sh                                      # never `docker build`
-docker/spear-docker.sh                               # reference layout
-docker/spear-docker.sh --corpora ~/work --endpoint http://127.0.0.1:8082
+scripts/docker/build.sh                                      # never `docker build`
+scripts/docker/spear-docker.sh                               # reference layout
+scripts/docker/spear-docker.sh --corpora ~/work --endpoint http://127.0.0.1:8082
 ```
 
 A fully baked image needs nothing mounted:

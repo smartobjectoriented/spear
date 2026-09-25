@@ -6,8 +6,8 @@
 # retyped, shortened and reused -- so the answer is a LABEL, written at build
 # time, travelling with the bytes through `docker save`, a registry and back.
 #
-#     docker/push.sh ghcr.io/<org>/spear:1.0-public
-#     docker/push.sh --allow-push ghcr.io/<org>/spear-private:1.0-engagement
+#     scripts/docker/push.sh ghcr.io/<org>/spear:1.0-public
+#     scripts/docker/push.sh --allow-push ghcr.io/<org>/spear-private:1.0-engagement
 #
 # --allow-push is not a formality. An engagement image carries a licensed
 # normative corpus -- the original document included, where the store retained
@@ -27,7 +27,7 @@ while [ $# -gt 0 ]; do
     esac
 done
 
-[ "${#ARGS[@]}" -eq 1 ] || { echo "usage: docker/push.sh [--allow-push] <image>" >&2; exit 1; }
+[ "${#ARGS[@]}" -eq 1 ] || { echo "usage: scripts/docker/push.sh [--allow-push] <image>" >&2; exit 1; }
 IMAGE="${ARGS[0]}"
 
 label() {
@@ -44,7 +44,7 @@ OK="$(label redistributable)"
 case "$PROFILE" in
     "")
         echo "$IMAGE carries no SPEAR profile label." >&2
-        echo "It was not built by docker/build.sh; refusing to guess." >&2
+        echo "It was not built by scripts/docker/build.sh; refusing to guess." >&2
         exit 1 ;;
     public) ;;
     engagement)
@@ -61,7 +61,7 @@ infrastructure, under whatever access policy that registry has today.
 
 If that is covered by the agreement you are working under, say so explicitly:
 
-    docker/push.sh --allow-push $IMAGE
+    scripts/docker/push.sh --allow-push $IMAGE
 
 To hand it over without a registry:
 

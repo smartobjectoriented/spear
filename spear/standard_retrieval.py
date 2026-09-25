@@ -394,8 +394,9 @@ class StandardRetrieval:
         # Evidence a primary hit is incomplete without, appended after it
         # and never in front of it. Off unless an operator asks for it, so a
         # store that has not been measured with it behaves exactly as before.
+        budget = self._completion_budget(standard_id, revision)
         companions = self._companions(query, [sid for _, sid in primary],
-                                      expanded, units)
+                                      expanded, units, budget)
 
         results = []
         query_terms = set(tokenize(query))
@@ -449,30 +450,41 @@ class StandardRetrieval:
             binding.retrieval_fingerprint or binding.index_fingerprint,
             retrieval_capability=_capability(mode, used),
             evidence_completion=(STRUCTURAL_COMPLETION if companions
-                                 else NO_COMPLETION if not self._completion_budget()
+                                 else NO_COMPLETION if not budget
                                  else STRUCTURAL_COMPLETION),
-            completion_budget=self._completion_budget())
+            completion_budget=budget)
         self.last_response = response
 
         return response
 
-    @staticmethod
-    def _completion_budget() -> int:
-        """How many companions an operator has asked for. Zero means off."""
+    def _completion_budget(self, standard_id: str, revision: str) -> int:
+        """How many companions an operator has asked for. Zero means off.
+
+        SPEAR_STANDARD_EVIDENCE_COMPLETION wins when set, for one session;
+        otherwise the document's own setting, since that is what was measured.
+        """
+        configured = os.environ.get("SPEAR_STANDARD_EVIDENCE_COMPLETION", "").strip()
+
+        if configured:
+            try:
+                return max(0, int(configured))
+            except ValueError:
+                return 0
+
         try:
-            return max(0, int(os.environ.get("SPEAR_STANDARD_EVIDENCE_COMPLETION", "0")))
-        except ValueError:
+            declared = self.store.load_retrieval_settings(standard_id, revision)
+        except StandardStoreError:
             return 0
 
-    def _companions(self, query, primary, expanded, units):
+        return int(declared.get("evidence_completion", 0))
+
+    def _companions(self, query, primary, expanded, units, budget):
         """Atoms reached from the primary hits along a document relation.
 
         Built from the corpus alone. The benchmark is not readable from here
         and must never be: a retriever that could see its own gold could be
         tuned to questions it is meant to answer blind.
         """
-        budget = self._completion_budget()
-
         if not budget or not primary:
             return []
 

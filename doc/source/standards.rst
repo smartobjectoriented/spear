@@ -124,11 +124,36 @@ What ingestion produces
      indexes/lexical/       always built
      indexes/vector/        when an embedding model is configured
      indexes/crossrefs/     references between provisions
+     retrieval.json         how this document is searched, once set
 
 The vector index is optional: with no embedding model configured, retrieval
 falls back to lexical and says so rather than failing. Where one is
 configured, its revision must be pinned — an unpinned model makes the index
 fingerprint depend on whatever the cache happened to hold.
+
+A corpus is never embedded on the local CPU. A ``PUBLIC`` document is embedded
+on the host ``SPEAR_STANDARD_EMBED_REMOTE`` names; a licensed one only with
+``--allow-offload``. Otherwise the vector index is skipped, as if no model were
+configured, unless ``SPEAR_STANDARD_EMBED_DEVICE`` names a local accelerator.
+
+How a document is searched
+==========================
+
+Retrieval mode (``lexical``, ``vector`` or ``hybrid``) and structural
+completion (how many companion units a search may add) are recorded per
+document, not per machine: what is measured is one document, and binding
+another must not inherit its settings.
+
+.. code-block:: text
+
+   /standard retrieval                              the bound document's settings
+   /standard retrieval lexical --completion 2       set them
+   /standard retrieval <id> <revision> hybrid       for a document not bound
+
+A document that declares nothing gets ``hybrid`` with completion 0.
+``SPEAR_STANDARD_RETRIEVAL_MODE`` and ``SPEAR_STANDARD_EVIDENCE_COMPLETION``
+still override the document for one session; ``/standard status`` and the
+startup banner say when they do.
 
 The manifest is the report:
 
@@ -283,6 +308,8 @@ The rest of the operator commands
      - check the store against its manifest
    * - ``/standard rebuild [<id> <revision>] [--allow-offload]``
      - rebuild the indexes without re-extracting
+   * - ``/standard retrieval [<id> <revision>] [<mode>] [--completion <n>]``
+     - show or set how a document is searched
    * - ``/standard candidates [<id> <revision>]``
      - alternative extractions held beside the promoted one
    * - ``/standard promote-candidate <id> <revision> <candidate>``

@@ -80,7 +80,7 @@ from training_store import TrainingStore
 import project_build
 from standard_commands import (
     StandardCommandError, StandardOperator, handle_standard_command,
-    standard_help_lines,
+    retrieval_summary, standard_help_lines,
 )
 from standard_store import StandardStore
 from standard_tools import StandardToolService
@@ -1947,8 +1947,14 @@ def standard_row():
         return (f"{C_DIM}standard:{C_RST} none bound  {C_DIM}·{C_RST}  "
                 f"{C_DIM}/standard list, /standard use <id> <revision>{C_RST}")
 
+    # How it is searched follows the document, so switching documents
+    # switches it; the banner is where that has to be visible.
+
     return (f"{C_DIM}standard:{C_RST} {binding.standard_id} {binding.revision}"
-            f"  {C_DIM}·{C_RST}  {binding.data_origin.lower()}")
+            f"  {C_DIM}·{C_RST}  {binding.data_origin.lower()}"
+            f"  {C_DIM}·{C_RST}  "
+            + retrieval_summary(STANDARD_STORE, binding.standard_id,
+                                binding.revision))
 
 
 def content_row(dirs=None):

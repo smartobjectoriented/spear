@@ -28,6 +28,9 @@ _GENERATION_ID = re.compile(r"^gen-[0-9a-f]{16}$")
 INDEX_STATE_READY = "READY"
 INDEX_STATE_REBUILD_REQUIRED = "REBUILD_REQUIRED"
 
+RETRIEVAL_MODES = ("lexical", "vector", "hybrid")
+RETRIEVAL_SETTINGS_FILE = "retrieval.json"
+
 
 def candidate_id_for(corpus_manifest_sha256: str) -> str:
     """A candidate is named by what it contains, so re-extraction is idempotent."""
@@ -828,6 +831,52 @@ class StandardStore:
                     result.append((standard.name, revision.name))
 
         return tuple(result)
+
+    def save_retrieval_settings(self, standard_id: str, revision: str, *,
+                                mode: str, evidence_completion: int) -> None:
+        """How this document is searched, stored with the document.
+
+        Retrieval was tuned per deployment, through the environment, while the
+        thing it was measured on is one document: a second standard bound on
+        the same machine inherited the first one's settings. Kept out of every
+        fingerprint on purpose -- the indexes are the same whichever way they
+        are searched.
+        """
+        if mode not in RETRIEVAL_MODES:
+            raise StandardStoreError(
+                f"retrieval mode must be one of {', '.join(RETRIEVAL_MODES)}")
+
+        if (not isinstance(evidence_completion, int)
+                or isinstance(evidence_completion, bool)
+                or evidence_completion < 0):
+            raise StandardStoreError("evidence completion must be a whole number >= 0")
+
+        self.load_manifest(standard_id, revision)
+        path = self.revision_dir(standard_id, revision) / RETRIEVAL_SETTINGS_FILE
+        self._atomic_write(path, canonical_json(
+            {"mode": mode, "evidence_completion": evidence_completion}))
+
+    def load_retrieval_settings(self, standard_id: str,
+                                revision: str) -> Mapping[str, object]:
+        """What save_retrieval_settings recorded, or {} when nothing was.
+
+        A malformed file is an error, not an empty answer: silently searching
+        a validated document some other way is what this file exists to stop.
+        """
+        path = self.revision_dir(standard_id, revision) / RETRIEVAL_SETTINGS_FILE
+
+        if not path.exists() and not path.is_symlink():
+            return {}
+
+        raw = self._read_json(path)
+        mode = raw.get("mode")
+        completion = raw.get("evidence_completion")
+
+        if (mode not in RETRIEVAL_MODES or not isinstance(completion, int)
+                or isinstance(completion, bool) or completion < 0):
+            raise StandardStoreError(f"malformed {RETRIEVAL_SETTINGS_FILE}")
+
+        return {"mode": mode, "evidence_completion": completion}
 
     @staticmethod
     def _read_json(path: Path) -> Mapping[str, object]:

@@ -95,3 +95,22 @@ class AnEmbedderCannotChangeAnExplicitlyLexicalPath(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TheDocumentDeclaresItsOwnMode(unittest.TestCase):
+
+    def mode(self, declared, **environment):
+        with mock.patch.dict(os.environ, environment, clear=True):
+            return standard_tools._configured_mode(declared)
+
+    def test_the_documents_mode_replaces_the_default(self):
+        self.assertEqual(self.mode("lexical"), "lexical")
+        self.assertEqual(self.mode("lexical", SPEAR_STANDARD_RETRIEVAL_MODE=""),
+                         "lexical")
+
+    def test_the_session_variable_still_wins(self):
+        self.assertEqual(self.mode("lexical", SPEAR_STANDARD_RETRIEVAL_MODE="hybrid"),
+                         "hybrid")
+
+    def test_no_declaration_keeps_the_default(self):
+        self.assertEqual(self.mode(None), "hybrid")

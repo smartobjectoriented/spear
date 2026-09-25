@@ -17,7 +17,9 @@ from standard_vector_index import (
     record_offload_disclosure, rebuild_vector_index,
 )
 from standard_schema import StandardBinding, canonical_json
-from standard_store import INDEX_STATE_READY, StandardStore, StandardStoreError
+from standard_store import (
+    INDEX_STATE_READY, RETRIEVAL_MODES, StandardStore, StandardStoreError,
+)
 
 
 class StandardCommandError(ValueError):
@@ -205,6 +207,7 @@ STANDARD_ACTIONS: tuple[tuple[str, str], ...] = (
     ("use", "<id> <revision>"),
     ("status", ""),
     ("rebuild", "[<id> <revision>] [--allow-offload]"),
+    ("retrieval", "[<id> <revision>] [lexical|vector|hybrid] [--completion <n>]"),
     ("unbind", ""),
     ("verify", "[<id> <revision>]"),
     ("candidates", "[<id> <revision>]"),
@@ -231,6 +234,39 @@ def standard_help_lines() -> tuple[str, ...]:
                  for name, arguments in STANDARD_ACTIONS)
 
 
+def retrieval_summary(store, standard_id, revision) -> str:
+    """How the bound document is searched right now, and who decided it.
+
+    The document records its own setting; a session variable may still
+    override it, and an override nobody can see is how a measured document
+    ends up searched some other way.
+    """
+    from standard_tools import _configured_mode
+
+    try:
+        declared = store.load_retrieval_settings(standard_id, revision)
+    except StandardStoreError as exc:
+        return f"UNAVAILABLE ({exc})"
+
+    mode = _configured_mode(declared.get("mode"))
+    env_completion = os.environ.get("SPEAR_STANDARD_EVIDENCE_COMPLETION", "").strip()
+
+    try:
+        completion = (max(0, int(env_completion)) if env_completion
+                      else int(declared.get("evidence_completion", 0)))
+    except ValueError:
+        completion = 0
+
+    overrides = [name for name, value in (
+        ("SPEAR_STANDARD_RETRIEVAL_MODE",
+         os.environ.get("SPEAR_STANDARD_RETRIEVAL_MODE", "").strip()),
+        ("SPEAR_STANDARD_EVIDENCE_COMPLETION", env_completion)) if value]
+    origin = ("overridden by " + ", ".join(overrides) if overrides
+              else "set for this document" if declared else "default")
+
+    return f"{mode}, completion {completion} ({origin})"
+
+
 def _build_vector_index(operator, standard_id, revision, allow_offload):
     """(manifest, error). Its absence degrades retrieval; it never fails a rebuild.
 
@@ -245,6 +281,16 @@ def _build_vector_index(operator, standard_id, revision, allow_offload):
 
         if embedder is None:
             return None, None
+
+        # Embedding a whole corpus on this machine's CPU saturates it for
+        # what the GPU host does in seconds. Skipped, like an unconfigured
+        # model, unless a device was named for it.
+
+        if (getattr(embedder, "target", None) is None
+                and os.environ.get("SPEAR_STANDARD_EMBED_DEVICE", "cpu") == "cpu"):
+            return None, ("not built: this would embed the corpus on the local "
+                          "CPU (set SPEAR_STANDARD_EMBED_DEVICE, or for a "
+                          "licensed standard pass --allow-offload)")
 
         manifest = rebuild_vector_index(operator.store, standard_id, revision,
                                         embedder)
@@ -361,11 +407,23 @@ def handle_standard_command(command: str, operator: StandardOperator) -> str:
             vector_status = (f"Vector: READY\nmodel: {vector.embedding_model_id}\n"
                              f"model revision: {vector.embedding_model_revision}")
         except FileNotFoundError:
-            if os.environ.get("SPEAR_STANDARD_EMBED_MODEL"):
-                vector_status = "Vector: NOT BUILT (run /standard rebuild)"
-            else:
+            # Mirrors configured_embedder without building one: the offloaded
+            # embedder checks the remote host over ssh as it is constructed.
+            remote = os.environ.get("SPEAR_STANDARD_EMBED_REMOTE", "").strip()
+            local_cpu = os.environ.get("SPEAR_STANDARD_EMBED_DEVICE", "cpu") == "cpu"
+
+            if not os.environ.get("SPEAR_STANDARD_EMBED_MODEL"):
                 vector_status = ("Vector: NOT CONFIGURED "
                                  "(no embedding model, lexical retrieval)")
+            elif not local_cpu or (remote and manifest.source_origin != LICENSED_ORIGIN):
+                vector_status = "Vector: NOT BUILT (run /standard rebuild)"
+            elif remote:
+                vector_status = ("Vector: NOT BUILT (licensed, kept off the local "
+                                 "CPU; /standard rebuild --allow-offload would "
+                                 f"send its text to {remote})")
+            else:
+                vector_status = ("Vector: NOT BUILT (no remote embedder, and the "
+                                 "local CPU is not used for a corpus)")
         except Exception as exc:
             vector_status = f"Vector: UNAVAILABLE ({type(exc).__name__})"
 
@@ -402,6 +460,8 @@ def handle_standard_command(command: str, operator: StandardOperator) -> str:
             f"Lexical index: {binding.index_fingerprint}",
             vector_status, crossref_status,
             f"Retrieval fingerprint: {binding.retrieval_fingerprint}",
+            "Retrieval: " + retrieval_summary(operator.store, binding.standard_id,
+                                              binding.revision),
             f"Validation: {manifest.human_validation_status.value}",
             operator.candidate_summary(binding.standard_id, binding.revision),
         ))
@@ -465,6 +525,64 @@ def handle_standard_command(command: str, operator: StandardOperator) -> str:
         return (f"Rebuilt lexical index {index.index_fingerprint}; cross references "
                 f"{crossrefs.cross_reference_index_fingerprint}; vector "
                 f"{vector.vector_index_fingerprint if vector else vector_error or 'not configured'}.")
+
+    if action == "retrieval":
+        usage = ("usage: /standard retrieval [<id> <revision>] "
+                 "[lexical|vector|hybrid] [--completion <n>]")
+        completion = None
+
+        if "--completion" in args:
+            at = args.index("--completion")
+
+            try:
+                completion = int(args[at + 1])
+            except (IndexError, ValueError):
+                raise StandardCommandError(usage) from None
+
+            if completion < 0:
+                raise StandardCommandError(usage)
+
+            args = args[:at] + args[at + 2:]
+
+        mode = None
+
+        if len(args) in {1, 3}:
+            mode = args[-1].lower()
+            args = args[:-1]
+
+            if mode not in RETRIEVAL_MODES:
+                raise StandardCommandError(usage)
+
+        if len(args) == 2:
+            standard_id, revision = args
+        elif not args:
+            active = operator.active_binding()
+
+            if active is None:
+                raise StandardCommandError("no active standard; name one: " + usage)
+
+            standard_id, revision = active.standard_id, active.revision
+        else:
+            raise StandardCommandError(usage)
+
+        if mode is not None or completion is not None:
+            try:
+                current = operator.store.load_retrieval_settings(standard_id, revision)
+            except StandardStoreError:
+                current = {}
+
+            try:
+                operator.store.save_retrieval_settings(
+                    standard_id, revision,
+                    mode=mode or str(current.get("mode", "hybrid")),
+                    evidence_completion=(
+                        completion if completion is not None
+                        else int(current.get("evidence_completion", 0))))
+            except (FileNotFoundError, StandardStoreError) as exc:
+                raise StandardCommandError(str(exc)) from None
+
+        return (f"Retrieval for {standard_id} {revision}: "
+                + retrieval_summary(operator.store, standard_id, revision))
 
     if action == "ingest":
         if not args:

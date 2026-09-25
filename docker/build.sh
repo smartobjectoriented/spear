@@ -41,8 +41,9 @@ while [ $# -gt 0 ]; do
 docker/build.sh [TAG] [--profile public|engagement] [--bake name,name,...]
 
   --profile public       (default) only normative documents that declare
-                         themselves PUBLIC; nothing licensed, nothing of a
-                         customer's. Safe to hand over.
+                         themselves PUBLIC, and of rules, skills, benches and
+                         notes only what the repository tracks; no retrieval
+                         index, no baked corpus. Safe to hand over.
   --profile engagement   everything this machine has, licensed documents and
                          the original PDFs included. NOT redistributable; the
                          image is labelled so, and push is refused unless you
@@ -61,6 +62,15 @@ case "$PROFILE" in
     public|engagement) ;;
     *) echo "--profile must be public or engagement, not '$PROFILE'" >&2; exit 1 ;;
 esac
+
+# A baked corpus is a tree off this host, and nothing records whether it may
+# be passed on -- a customer checkout looks like any other. A public image
+# cannot vouch for it, so it does not carry one.
+if [ "$PROFILE" = public ] && [ -n "$BAKE" ]; then
+    echo "--bake needs --profile engagement: a public image carries no corpus" \
+         "tree, since nothing says which ones may be redistributed" >&2
+    exit 1
+fi
 
 TAG="${TAG:-spear:1.0-$PROFILE}"
 [ -f "$APP/rag_chat.py" ] || { echo "no harness under $APP — set SPEAR_APP" >&2; exit 1; }
@@ -90,16 +100,52 @@ OPTIONAL=(
     "notes:SPEAR_NOTES_DIR:$REPO/claude:shared notes corpus"
 )
 
+# The profile used to decide the normative documents and nothing else: rules,
+# skills, benches, notes and the retrieval index were copied whatever it said.
+# A deployment's machine.env points those at its private tree, and the index
+# holds chunks of every corpus on the host, customer code included -- so a
+# `public` image carried all of it under a redistributable=true label.
+#
+# A public image therefore carries, of these inputs, exactly what the
+# repository publishes: the files git tracks in an in-tree directory. Outside
+# the checkout or ignored by git means withheld, and the build says so. Not
+# "whatever is in the in-tree directory": an untracked file dropped into
+# skills/ is not published either.
+STAGE="$(mktemp -d)"
+trap 'rm -rf "$EMPTY" "$STAGE"' EXIT
+
+publishable() {
+    # The tracked files of $1, copied to $2. Fails if there are none, or if
+    # $1 is not a directory of this checkout.
+    local dir="$1" dest="$2" rel
+    rel="$(realpath -m --relative-to="$REPO" "$dir")"
+    case "$rel" in ../*|/*) return 1 ;; esac
+    git -C "$REPO" rev-parse --git-dir >/dev/null 2>&1 || return 1
+    [ -n "$(git -C "$REPO" ls-files -- "$rel")" ] || return 1
+    mkdir -p "$dest"
+    git -C "$REPO/$rel" ls-files -z | tar -C "$REPO/$rel" --null -T - -cf - \
+        | tar -C "$dest" -xf -
+}
+
 CONTEXTS=()
 for spec in "${OPTIONAL[@]}"; do
     IFS=: read -r name var fallback label <<<"$spec"
     dir="${!var:-$fallback}"
 
-    if [ -d "$dir" ]; then
-        printf '   %-8s %s\n' "$name" "$dir"
-    else
+    if [ ! -d "$dir" ]; then
         printf '   %-8s (absent — image carries no %s)\n' "$name" "$label"
         dir="$EMPTY"
+    elif [ "$PROFILE" = public ]; then
+        if publishable "$dir" "$STAGE/optional/$name"; then
+            printf '   %-8s %s  (tracked files only)\n' "$name" "$dir"
+            dir="$STAGE/optional/$name"
+        else
+            printf '   %-8s %s  WITHHELD — not published by the repository\n' \
+                "$name" "$dir"
+            dir="$EMPTY"
+        fi
+    else
+        printf '   %-8s %s\n' "$name" "$dir"
     fi
 
     CONTEXTS+=(--build-context "$name=$dir")
@@ -121,8 +167,6 @@ REGISTRY="$REPO/docker/projects.docker.json"
 # what may travel is a per-document decision (see stage-standards.py), and
 # what gets baked is a named subset of a 300 GB registry. Neither is a
 # directory that happens to be in the right shape already.
-STAGE="$(mktemp -d)"
-trap 'rm -rf "$EMPTY" "$STAGE"' EXIT
 
 "$REPO/docker/stage-standards.py" --profile "$PROFILE" "$STAGE/standards"
 CONTEXTS+=(--build-context "standards=$STAGE/standards")

@@ -31,9 +31,12 @@ class StandardCommandTests(unittest.TestCase):
             self.assertIn("Validation: NOT_REVIEWED", status)
             self.assertIn("Vector: NOT CONFIGURED", status)
             self.assertNotIn("FileNotFoundError", status)
-            with mock.patch.dict(os.environ, {"SPEAR_STANDARD_EMBED_MODEL": "m"}):
-                self.assertIn("Vector: NOT BUILT", handle_standard_command(
-                    "/standard status", operator))
+            with mock.patch.dict(os.environ, {"SPEAR_STANDARD_EMBED_MODEL": "m",
+                                              "SPEAR_STANDARD_EMBED_REMOTE": "gpu-host"}):
+                status = handle_standard_command("/standard status", operator)
+            # Licensed by default: rebuild would skip it, so it must not say to.
+            self.assertIn("Vector: NOT BUILT (licensed", status)
+            self.assertIn("--allow-offload would send its text to gpu-host", status)
             self.assertIn("Cross references: READY", status)
             self.assertIn("Retrieval fingerprint:", status)
             self.assertIn("Rebuilt lexical index", handle_standard_command(
@@ -104,3 +107,141 @@ class StandardCommandTests(unittest.TestCase):
                             "/standard ingest x.pdf --id X --revision 1 --shell=oops"):
                 with self.assertRaises(StandardCommandError, msg=command):
                     handle_standard_command(command, operator)
+
+
+class RetrievalFollowsTheDocumentTests(unittest.TestCase):
+    """Retrieval settings were machine-wide, measured on one document; a
+    second document bound on the same machine inherited them."""
+
+    CLEAN = {"SPEAR_STANDARD_RETRIEVAL_MODE": "",
+             "SPEAR_STANDARD_EVIDENCE_COMPLETION": ""}
+
+    def operator_with_two(self, directory):
+        root = Path(directory); pdf = root / "fixture.pdf"
+        pdf.write_bytes(synthetic_pdf_bytes())
+        operator = StandardOperator(StandardStore(root / "standards"))
+        for name in ("A-STD", "B-STD"):
+            handle_standard_command(
+                f'/standard ingest "{pdf}" --id {name} --revision R1', operator)
+        return operator
+
+    def test_switching_documents_switches_how_they_are_searched(self):
+        with tempfile.TemporaryDirectory() as directory, \
+                mock.patch.dict(os.environ, self.CLEAN):
+            operator = self.operator_with_two(directory)
+            handle_standard_command(
+                "/standard retrieval A-STD R1 lexical --completion 2", operator)
+            handle_standard_command(
+                "/standard retrieval B-STD R1 hybrid", operator)
+
+            handle_standard_command("/standard use A-STD R1", operator)
+            self.assertIn("Retrieval: lexical, completion 2 (set for this document)",
+                          handle_standard_command("/standard status", operator))
+
+            handle_standard_command("/standard use B-STD R1", operator)
+            self.assertIn("Retrieval: hybrid, completion 0 (set for this document)",
+                          handle_standard_command("/standard status", operator))
+
+    def test_changing_one_setting_keeps_the_other(self):
+        with tempfile.TemporaryDirectory() as directory, \
+                mock.patch.dict(os.environ, self.CLEAN):
+            operator = self.operator_with_two(directory)
+            handle_standard_command("/standard use A-STD R1", operator)
+            handle_standard_command(
+                "/standard retrieval lexical --completion 2", operator)
+
+            self.assertIn("vector, completion 2", handle_standard_command(
+                "/standard retrieval vector", operator))
+            self.assertIn("vector, completion 0", handle_standard_command(
+                "/standard retrieval --completion 0", operator))
+
+    def test_an_undeclared_document_gets_the_default(self):
+        with tempfile.TemporaryDirectory() as directory, \
+                mock.patch.dict(os.environ, self.CLEAN):
+            operator = self.operator_with_two(directory)
+            self.assertIn("hybrid, completion 0 (default)", handle_standard_command(
+                "/standard retrieval A-STD R1", operator))
+
+    def test_the_session_variables_still_win_and_say_so(self):
+        with tempfile.TemporaryDirectory() as directory, \
+                mock.patch.dict(os.environ, self.CLEAN):
+            operator = self.operator_with_two(directory)
+            handle_standard_command(
+                "/standard retrieval A-STD R1 lexical --completion 2", operator)
+
+            with mock.patch.dict(os.environ, {
+                    "SPEAR_STANDARD_RETRIEVAL_MODE": "hybrid",
+                    "SPEAR_STANDARD_EVIDENCE_COMPLETION": "0"}):
+                summary = handle_standard_command(
+                    "/standard retrieval A-STD R1", operator)
+
+            self.assertIn("hybrid, completion 0", summary)
+            self.assertIn("overridden by SPEAR_STANDARD_RETRIEVAL_MODE, "
+                          "SPEAR_STANDARD_EVIDENCE_COMPLETION", summary)
+
+    def test_the_retriever_reads_the_documents_completion_budget(self):
+        from standard_retrieval import StandardRetrieval
+
+        with tempfile.TemporaryDirectory() as directory, \
+                mock.patch.dict(os.environ, self.CLEAN):
+            operator = self.operator_with_two(directory)
+            handle_standard_command(
+                "/standard retrieval A-STD R1 lexical --completion 2", operator)
+            retrieval = StandardRetrieval(operator.store)
+
+            self.assertEqual(retrieval._completion_budget("A-STD", "R1"), 2)
+            self.assertEqual(retrieval._completion_budget("B-STD", "R1"), 0)
+
+    def test_bad_settings_are_refused(self):
+        with tempfile.TemporaryDirectory() as directory:
+            operator = self.operator_with_two(directory)
+            for command in ("/standard retrieval A-STD R1 semantic",
+                            "/standard retrieval A-STD R1 lexical --completion -1",
+                            "/standard retrieval A-STD R1 lexical --completion x",
+                            "/standard retrieval NO-STD R1 lexical"):
+                with self.assertRaises(StandardCommandError, msg=command):
+                    handle_standard_command(command, operator)
+
+            path = operator.store.revision_dir("A-STD", "R1") / "retrieval.json"
+            path.write_text('{"mode": "semantic", "evidence_completion": 0}')
+            self.assertIn("UNAVAILABLE", handle_standard_command(
+                "/standard retrieval A-STD R1", operator))
+
+
+class NoCorpusEmbeddingOnTheLocalCpuTests(unittest.TestCase):
+
+    def test_a_local_cpu_embedder_is_skipped_not_run(self):
+        import standard_commands
+
+        class Local:                        # no `target`: runs on this machine
+            pass
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory); pdf = root / "fixture.pdf"
+            pdf.write_bytes(synthetic_pdf_bytes())
+            operator = StandardOperator(StandardStore(root / "standards"))
+            handle_standard_command(
+                f'/standard ingest "{pdf}" --id A-STD --revision R1', operator)
+
+            with mock.patch.object(standard_commands, "configured_embedder",
+                                   return_value=Local()), \
+                    mock.patch.object(standard_commands,
+                                      "rebuild_vector_index") as rebuilt, \
+                    mock.patch.dict(os.environ):
+                os.environ.pop("SPEAR_STANDARD_EMBED_DEVICE", None)
+                output = handle_standard_command(
+                    "/standard rebuild A-STD R1", operator)
+
+            rebuilt.assert_not_called()
+            self.assertIn("not built", output)
+            self.assertIn("local CPU", output)
+
+            with mock.patch.object(standard_commands, "configured_embedder",
+                                   return_value=Local()), \
+                    mock.patch.object(standard_commands,
+                                      "rebuild_vector_index") as rebuilt, \
+                    mock.patch.dict(os.environ,
+                                    {"SPEAR_STANDARD_EMBED_DEVICE": "cuda"}):
+                handle_standard_command("/standard rebuild A-STD R1", operator)
+
+            rebuilt.assert_called_once()

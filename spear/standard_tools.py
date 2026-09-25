@@ -14,7 +14,7 @@ from typing import Mapping
 from standard_retrieval import StandardRetrieval
 from standard_structure_access import StandardStructureAccess, StructureAccessError
 from standard_schema import StandardBinding
-from standard_store import StandardStore
+from standard_store import RETRIEVAL_MODES, StandardStore, StandardStoreError
 from standard_vector_index import configured_local_embedder
 from tool_registry import (
     ToolCategory, ToolMutability, ToolRegistry, ToolResultPolicy, ToolSpec,
@@ -90,19 +90,22 @@ def _attach_table_rows(fetched):
 #: described as hybrid retrieval for the whole of one investigation -- and it
 #: means the path CHANGES the day somebody configures an embedder. A
 #: deployment whose behaviour has been measured says outright what it wants,
-#: so that measurement keeps describing it.
-_RETRIEVAL_MODES = ("lexical", "vector", "hybrid")
+#: so that measurement keeps describing it -- and since what was measured is
+#: one document, the document says it (StandardStore.save_retrieval_settings).
+_RETRIEVAL_MODES = RETRIEVAL_MODES
 
 
 class StandardConfigurationError(RuntimeError):
     """A deployment asked for something this build cannot give it."""
 
 
-def _configured_mode() -> str:
-    """SPEAR_STANDARD_RETRIEVAL_MODE, or the long-standing default.
+def _configured_mode(declared: str | None = None) -> str:
+    """SPEAR_STANDARD_RETRIEVAL_MODE, else the bound document's own mode
+    (`declared`), else the long-standing default.
 
-    Absent means the default, because a deployment that never set the
-    variable must keep the behaviour it has.
+    The variable still wins, so one session can try another mode without
+    rewriting what the document records. Absent means the default, because a
+    deployment that never set anything must keep the behaviour it has.
 
     Present and misspelled is an ERROR, and that asymmetry is the whole
     point. Treating `lexial` as "unset" would hand back hybrid -- and hybrid
@@ -112,14 +115,15 @@ def _configured_mode() -> str:
     thing it was written to switch off.
     """
     configured = os.environ.get("SPEAR_STANDARD_RETRIEVAL_MODE")
+    fallback = declared or "hybrid"
 
     if configured is None:
-        return "hybrid"
+        return fallback
 
     mode = configured.strip().lower()
 
     if not mode:
-        return "hybrid"     # exported-but-empty is how a shell unsets one
+        return fallback     # exported-but-empty is how a shell unsets one
 
     if mode not in _RETRIEVAL_MODES:
         raise StandardConfigurationError(
@@ -497,7 +501,15 @@ class StandardToolService:
             ) from None
 
         retrieval_fingerprint = binding.retrieval_fingerprint or binding.index_fingerprint
-        key = ("standard.search", retrieval_fingerprint, query, section, limit)
+
+        try:
+            declared = self.retrieval.store.load_retrieval_settings(
+                binding.standard_id, binding.revision).get("mode")
+        except StandardStoreError as exc:
+            raise StandardConfigurationError(str(exc)) from None
+
+        mode = _configured_mode(declared)
+        key = ("standard.search", retrieval_fingerprint, mode, query, section, limit)
 
         if key in context.cache:
             return context.cache[key]
@@ -506,7 +518,7 @@ class StandardToolService:
             response = self.retrieval.search_response(
                 binding.standard_id, binding.revision, query,
                 section=(str(section) if section is not None else None),
-                limit=limit, mode=_configured_mode(),
+                limit=limit, mode=mode,
             )
         except ValueError as exc:
             raise StandardToolRefusal(

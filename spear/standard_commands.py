@@ -829,9 +829,20 @@ def handle_standard_command(command: str, operator: StandardOperator) -> str:
             raise StandardCommandError(f"promotion refused: {exc}") from exc
 
         # The promoted corpus invalidates every index the old binding named, so
-        # the binding is dropped rather than left pointing at stale retrieval.
+        # a binding to IT is dropped rather than left pointing at stale
+        # retrieval. A binding to another document is not this command's to
+        # drop: it is shared by every session on the machine.
 
-        operator.unbind()
+        try:
+            bound = operator.active_binding()
+        except StandardCommandError:
+            bound = None                    # already failing closed
+
+        unbound = bound is None or (bound.standard_id, bound.revision) == (
+            standard_id, revision)
+
+        if unbound:
+            operator.unbind()
 
         return "\n".join((
             f"Promoted {candidate_id} for {standard_id} {revision}.",
@@ -842,7 +853,9 @@ def handle_standard_command(command: str, operator: StandardOperator) -> str:
             "Previous generation retained as "
             f"{'gen-' + previous.corpus_manifest_sha256[:16]}.",
             "Retrieval indexes: REBUILD_REQUIRED.",
-            "Standard binding cleared; existing sessions fail closed.",
+            ("Standard binding cleared; existing sessions fail closed."
+             if unbound else
+             f"Binding to {bound.standard_id} {bound.revision} left as it was."),
             f"Next: /standard rebuild {standard_id} {revision}"
             f" then /standard use {standard_id} {revision}",
         ))

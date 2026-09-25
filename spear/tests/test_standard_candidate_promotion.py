@@ -135,6 +135,34 @@ class CandidatePromotionTests(unittest.TestCase):
         self.assertEqual(self.store.verify_corpus(SID, REV).corpus_manifest_sha256,
                          self.legacy.corpus_manifest_sha256)
 
+    def test_promoting_one_document_leaves_another_bound(self):
+        """The binding is shared by every session on the machine; promoting
+        a second document dropped it, whichever document it named."""
+        from tests.standard_fixture import synthetic_pdf_bytes
+
+        other = self.root / "other.pdf"
+        other.write_bytes(synthetic_pdf_bytes())
+        handle_standard_command(
+            f'/standard ingest "{other}" --id OTHER-STD --revision R9', self.operator)
+        handle_standard_command("/standard use OTHER-STD R9", self.operator)
+        candidate_id, _ = self.make_candidate()
+
+        output = handle_standard_command(
+            f"/standard promote-candidate {SID} {REV} {candidate_id}", self.operator)
+
+        self.assertIn("Binding to OTHER-STD R9 left as it was", output)
+        self.assertEqual(self.operator.active_binding().standard_id, "OTHER-STD")
+
+    def test_promoting_the_bound_document_unbinds_it(self):
+        handle_standard_command(f"/standard use {SID} {REV}", self.operator)
+        candidate_id, _ = self.make_candidate()
+
+        output = handle_standard_command(
+            f"/standard promote-candidate {SID} {REV} {candidate_id}", self.operator)
+
+        self.assertIn("Standard binding cleared", output)
+        self.assertIsNone(self.operator.active_binding())
+
     def test_promotion_keeps_what_the_document_is(self):
         """A PUBLIC standard re-extracted and promoted stayed PUBLIC only by
         luck: the candidate took the licensed default and promotion adopted

@@ -1,6 +1,8 @@
+import os
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 from standard_commands import (
     StandardCommandError, StandardOperator, handle_standard_command,
@@ -24,9 +26,14 @@ class StandardCommandTests(unittest.TestCase):
                 "/standard list", operator))
             self.assertIn("Bound TEST-STD", handle_standard_command(
                 "/standard use TEST-STD TEST-1", operator))
-            status = handle_standard_command("/standard status", operator)
+            with mock.patch.dict(os.environ, {"SPEAR_STANDARD_EMBED_MODEL": ""}):
+                status = handle_standard_command("/standard status", operator)
             self.assertIn("Validation: NOT_REVIEWED", status)
-            self.assertIn("Vector: UNAVAILABLE", status)
+            self.assertIn("Vector: NOT CONFIGURED", status)
+            self.assertNotIn("FileNotFoundError", status)
+            with mock.patch.dict(os.environ, {"SPEAR_STANDARD_EMBED_MODEL": "m"}):
+                self.assertIn("Vector: NOT BUILT", handle_standard_command(
+                    "/standard status", operator))
             self.assertIn("Cross references: READY", status)
             self.assertIn("Retrieval fingerprint:", status)
             self.assertIn("Rebuilt lexical index", handle_standard_command(

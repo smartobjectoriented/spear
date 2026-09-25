@@ -7,9 +7,9 @@
 # time, travelling with the bytes through `docker save`, a registry and back.
 #
 #     scripts/docker/push.sh ghcr.io/<org>/spear:1.0-public
-#     scripts/docker/push.sh --allow-push ghcr.io/<org>/spear-private:1.0-engagement
+#     scripts/docker/push.sh --allow-push ghcr.io/<org>/spear-private:1.0-private
 #
-# --allow-push is not a formality. An engagement image carries a licensed
+# --allow-push is not a formality. A private image carries a licensed
 # normative corpus -- the original document included, where the store retained
 # it -- and a customer's source tree. Publishing one is a decision about a
 # licence and a contract, not about a registry, and it should cost a
@@ -47,7 +47,7 @@ case "$PROFILE" in
         echo "It was not built by scripts/docker/build.sh; refusing to guess." >&2
         exit 1 ;;
     public) ;;
-    engagement)
+    private)
         if [ "$ALLOW" != 1 ]; then
             cat >&2 <<MSG
 Refusing to push $IMAGE.
@@ -55,7 +55,7 @@ Refusing to push $IMAGE.
   profile          $PROFILE
   redistributable  $OK
 
-This image was built with --profile engagement: it carries licensed normative
+This image was built with --profile private: it carries licensed normative
 material and customer source. Publishing it puts both on the registry's
 infrastructure, under whatever access policy that registry has today.
 
@@ -65,11 +65,11 @@ If that is covered by the agreement you are working under, say so explicitly:
 
 To hand it over without a registry:
 
-    docker save $IMAGE | zstd -T0 -19 -o spear-engagement.tar.zst
+    docker save $IMAGE | zstd -T0 -19 -o spear-private.tar.zst
 MSG
             exit 1
         fi
-        echo "!! pushing an engagement image on --allow-push: $IMAGE" >&2 ;;
+        echo "!! pushing a private image on --allow-push: $IMAGE" >&2 ;;
 esac
 
 exec docker push "$IMAGE"

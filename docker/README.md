@@ -25,13 +25,13 @@ What it may carry is a per-build decision, and it defaults to the safe one.
 
 ```sh
 scripts/docker/build.sh --profile public     --bake so3,so3-doc,avz
-scripts/docker/build.sh --profile engagement --bake so3,acme-firmware
+scripts/docker/build.sh --profile private --bake so3,acme-firmware
 ```
 
 **`public`** (the default) takes only normative documents that declare
 themselves `PUBLIC`, and nothing of a customer's. Safe to give to anyone.
 
-**`engagement`** takes everything this machine has — licensed documents, and
+**`private`** takes everything this machine has — licensed documents, and
 the original PDFs where the store retained them. The image is labelled
 `redistributable=false` and `scripts/docker/push.sh` refuses to publish it without
 `--allow-push`.
@@ -67,13 +67,13 @@ behaving exactly as before.
 
 A baked corpus must be **registered and indexed on the host first**: the image
 ships the index, and a tree without its collection answers with no retrieval
-at all. Registering the engagement's pilot tree is therefore a prerequisite of
+at all. Registering the customer's pilot tree is therefore a prerequisite of
 putting it in an image, not an alternative to it:
 
 ```sh
 spear-corpus add acme-firmware "$SPEAR_PILOT_TREE"
 spear-index "$SPEAR_PILOT_TREE"
-scripts/docker/build.sh --profile engagement --bake so3,acme-firmware
+scripts/docker/build.sh --profile private --bake so3,acme-firmware
 ```
 
 When `--bake` is used the image registry is restricted to what the image
@@ -84,10 +84,10 @@ twenty-two corpora they do not have.
 
 ```sh
 scripts/docker/push.sh ghcr.io/<org>/spear:1.0-public          # public: goes
-scripts/docker/push.sh ghcr.io/<org>/spear-private:1.0-engagement
-                                                       # engagement: refused
-scripts/docker/push.sh --allow-push ghcr.io/<org>/spear-private:1.0-engagement
-docker save spear:1.0-engagement | zstd -T0 -19 -o spear-engagement.tar.zst
+scripts/docker/push.sh ghcr.io/<org>/spear-private:1.0-private
+                                                       # private: refused
+scripts/docker/push.sh --allow-push ghcr.io/<org>/spear-private:1.0-private
+docker save spear:1.0-private | zstd -T0 -19 -o spear-private.tar.zst
 ```
 
 The guard reads the label, not the tag: a tag gets retyped and shortened, a
@@ -95,7 +95,7 @@ label travels with the bytes through `docker save`, a registry and back. An
 image not built by `build.sh` carries no label and is refused rather than
 guessed at.
 
-`--allow-push` on an engagement image is a decision about a licence and a
+`--allow-push` on a private image is a decision about a licence and a
 contract, not about a registry. It should cost a deliberate word.
 
 ## Run

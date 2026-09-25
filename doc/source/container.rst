@@ -213,7 +213,7 @@ to anyone.
 .. code-block:: console
 
    $ scripts/docker/build.sh --profile public     --bake so3,so3-doc,avz
-   $ scripts/docker/build.sh --profile engagement --bake so3,acme-firmware
+   $ scripts/docker/build.sh --profile private --bake so3,acme-firmware
 
 .. list-table::
    :header-rows: 1
@@ -225,7 +225,7 @@ to anyone.
      - only normative documents that declare themselves ``PUBLIC``; nothing
        licensed, nothing of a customer's. Labelled
        ``redistributable=true``.
-   * - ``engagement``
+   * - ``private``
      - everything the building host has, licensed documents and the original
        PDFs included where the store retained them. Labelled
        ``redistributable=false``.
@@ -263,7 +263,7 @@ all, which is the whole reason the tool exists.
 
    $ spear-corpus add acme-firmware "$SPEAR_PILOT_TREE"
    $ spear-index "$SPEAR_PILOT_TREE"
-   $ scripts/docker/build.sh --profile engagement --bake so3,acme-firmware
+   $ scripts/docker/build.sh --profile private --bake so3,acme-firmware
 
 When ``--bake`` is used the image's registry is restricted to what the image
 actually carries. Otherwise the recipient opens the container to a list of
@@ -312,8 +312,8 @@ There is no second image
 
 A deployment's private material is *content*, not an application: there is no
 harness in it, nothing to execute, and so nothing to build an image around. It
-is not packaged separately — it is what makes an ``engagement`` image an
-engagement image.
+is not packaged separately — it is what makes a ``private`` image a
+private image.
 
 Start to finish, on the machine that has the content:
 
@@ -321,7 +321,7 @@ Start to finish, on the machine that has the content:
 
    $ spear-corpus add acme-firmware "$SPEAR_PILOT_TREE"   # register…
    $ spear-index "$SPEAR_PILOT_TREE"                      # …and index
-   $ scripts/docker/build.sh --profile engagement --bake so3,acme-firmware
+   $ scripts/docker/build.sh --profile private --bake so3,acme-firmware
 
 What the build reports is what the image carries:
 
@@ -352,9 +352,9 @@ Publishing, and not publishing
 .. code-block:: console
 
    $ scripts/docker/push.sh ghcr.io/<org>/spear:1.0-public
-   $ scripts/docker/push.sh ghcr.io/<org>/spear-private:1.0-engagement     # refused
-   $ scripts/docker/push.sh --allow-push ghcr.io/<org>/spear-private:1.0-engagement
-   $ docker save spear:1.0-engagement | zstd -T0 -19 -o spear.tar.zst
+   $ scripts/docker/push.sh ghcr.io/<org>/spear-private:1.0-private     # refused
+   $ scripts/docker/push.sh --allow-push ghcr.io/<org>/spear-private:1.0-private
+   $ docker save spear:1.0-private | zstd -T0 -19 -o spear.tar.zst
 
 The guard reads the **label**, not the tag. A tag gets retyped, shortened and
 reused; a label travels with the bytes through ``docker save``, a registry and
@@ -363,7 +363,7 @@ rather than guessed at.
 
 .. warning::
 
-   ``--allow-push`` on an engagement image is a decision about a licence and a
+   ``--allow-push`` on a private image is a decision about a licence and a
    contract, not about a registry: it puts a licensed corpus and a customer's
    source on that registry's infrastructure, under whatever access policy it
    has today. It costs a deliberate word for that reason.

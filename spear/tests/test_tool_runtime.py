@@ -702,6 +702,27 @@ class RagChatCompatibilityTests(unittest.TestCase):
         self.assertNotIn("(default)",
                          self.rag_chat.permissions_row(ExecutionMode.AUTO))
 
+    def test_tab_completes_commands_and_nothing_else(self):
+        complete = self.rag_chat.completion_candidates
+        self.assertEqual(complete("/st", "/st"), ["/standard"])
+        self.assertIn("/search", complete("/", "/"))
+        # A question to the model is never completed.
+        self.assertEqual(complete("what does /st", "/st"), [])
+        self.assertEqual(complete("/search reg", "reg"), [])
+
+    def test_tab_opens_a_lone_directory_instead_of_closing_it(self):
+        import os
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as directory:
+            os.mkdir(os.path.join(directory, "standards"))
+            pdf = os.path.join(directory, "standards", "manual.pdf")
+            open(pdf, "w").close()
+            typed = os.path.join(directory, "stan")
+
+            self.assertEqual(self.rag_chat.completion_candidates(
+                "/standard ingest " + typed, typed), [pdf])
+
     def test_banner_names_where_rules_skills_and_benches_come_from(self):
         # A missing deployment env file used to fall back to the in-tree
         # directories in silence; the banner is where that must show.

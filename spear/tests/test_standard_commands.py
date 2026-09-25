@@ -245,3 +245,50 @@ class NoCorpusEmbeddingOnTheLocalCpuTests(unittest.TestCase):
                 handle_standard_command("/standard rebuild A-STD R1", operator)
 
             rebuilt.assert_called_once()
+
+
+class CompletionTests(unittest.TestCase):
+    """Tab after `/standard`: identifiers are long, exact, and written down
+    only in the store."""
+
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        root = Path(self.temp.name); pdf = root / "fixture.pdf"
+        pdf.write_bytes(synthetic_pdf_bytes())
+        self.store = StandardStore(root / "standards")
+        operator = StandardOperator(self.store)
+        for name, revision in (("ACME-STD-1", "R1"), ("ACME-STD-1", "R2"),
+                               ("OTHER-9.2", "2017-R2024")):
+            handle_standard_command(
+                f'/standard ingest "{pdf}" --id {name} --revision {revision}',
+                operator)
+
+    def tearDown(self):
+        self.temp.cleanup()
+
+    def complete(self, words, text):
+        from standard_commands import complete_standard
+        return complete_standard(words, text, self.store)
+
+    def test_actions(self):
+        self.assertEqual(self.complete([], "u"), ["unbind", "use"])
+
+    def test_identifiers_then_that_documents_revisions(self):
+        self.assertEqual(self.complete(["use"], ""), ["ACME-STD-1", "OTHER-9.2"])
+        self.assertEqual(self.complete(["use"], "OT"), ["OTHER-9.2"])
+        self.assertEqual(self.complete(["use", "ACME-STD-1"], ""), ["R1", "R2"])
+        self.assertEqual(self.complete(["use", "ACME-STD-1", "R1"], ""), [])
+
+    def test_retrieval_takes_a_document_or_a_mode(self):
+        self.assertIn("lexical", self.complete(["retrieval"], ""))
+        self.assertIn("OTHER-9.2", self.complete(["retrieval"], ""))
+        self.assertEqual(self.complete(["retrieval", "lexical"], ""),
+                         ["--completion"])
+        self.assertEqual(self.complete(["retrieval", "OTHER-9.2", "2017-R2024"], "h"),
+                         ["hybrid"])
+
+    def test_ingest_options_and_origins(self):
+        self.assertEqual(self.complete(["ingest", "x.pdf"], "--o"), ["--origin"])
+        self.assertEqual(self.complete(["ingest", "x.pdf", "--origin"], ""),
+                         ["LICENSED_STANDARD", "PUBLIC"])
+        self.assertEqual(self.complete(["ingest", "x.pdf", "--id"], ""), [])

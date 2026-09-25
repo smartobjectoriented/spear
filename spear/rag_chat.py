@@ -6772,7 +6772,10 @@ def banner(collection, history, n_rules, model_name, n_mem=0):
         f"{C_DIM}tools in:{C_RST} {cwd}  {C_DIM}(current directory){C_RST}",
     ]
 
-    standard = standard_row()
+    # Checking the binding re-verifies the bound document, which for a
+    # document of hundreds of thousands of units is minutes, not a blink.
+    with Spinner("Checking the bound standard…"):
+        standard = standard_row()
 
     if standard is not None:
         rows.insert(2, standard)

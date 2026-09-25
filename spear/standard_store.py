@@ -1103,6 +1103,10 @@ class StandardStore:
         if review.is_file() and not review.is_symlink():
             os.replace(review, generation / "operator-review.json")
 
+        # What the document IS does not change with how it was extracted: the
+        # promoted corpus keeps the active one's classification. Not part of
+        # the corpus fingerprint, so nothing else moves with it.
+        candidate = replace(candidate, source_origin=active.source_origin)
         self._atomic_write(base / "manifest.json", canonical_json(candidate.to_dict()))
         self._invalidate_indexes(standard_id, revision, "canonical corpus promoted",
                                  candidate.corpus_manifest_sha256)

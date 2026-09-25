@@ -135,6 +135,18 @@ class CandidatePromotionTests(unittest.TestCase):
         self.assertEqual(self.store.verify_corpus(SID, REV).corpus_manifest_sha256,
                          self.legacy.corpus_manifest_sha256)
 
+    def test_promotion_keeps_what_the_document_is(self):
+        """A PUBLIC standard re-extracted and promoted stayed PUBLIC only by
+        luck: the candidate took the licensed default and promotion adopted
+        it, which refused embedding and would have left it out of a public
+        image."""
+        self.store.reclassify_origin(SID, REV, "PUBLIC")
+        candidate_id, _ = self.make_candidate()
+        self.assertEqual(self.store.load_candidate(SID, REV, candidate_id)[0]
+                         .source_origin, "PUBLIC")
+        self.store.promote_candidate(SID, REV, candidate_id)
+        self.assertEqual(self.store.load_manifest(SID, REV).source_origin, "PUBLIC")
+
     def test_promotion_refuses_a_candidate_identical_to_the_active_corpus(self):
         candidate_id, _ = self.make_candidate()
         self.store.promote_candidate(SID, REV, candidate_id)

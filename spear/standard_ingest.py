@@ -1168,17 +1168,23 @@ def compare_extractions(
 def ingest_candidate(
     store: StandardStore, pdf_path: str | Path, *, standard_id: str,
     revision: str, with_layout: bool = False,
-    source_origin: str = "LICENSED_STANDARD",
+    source_origin: str | None = None,
     ingestion_timestamp: str | None = None,
 ) -> tuple[str, dict[str, object]]:
-    """Re-extract into an isolated candidate corpus; nothing becomes active."""
+    """Re-extract into an isolated candidate corpus; nothing becomes active.
+
+    The candidate is the same PDF, so the same document: it takes the active
+    corpus's origin unless told otherwise. It used to take the licensed
+    default, and promoting it quietly reclassified a PUBLIC standard.
+    """
     from standard_layout import extract_layout, layout_bytes
 
     active_manifest = store.load_manifest(standard_id, revision)
     active_units = store.load_units(standard_id, revision)
     manifest, units, _ = extract_corpus(
         pdf_path, standard_id=standard_id, revision=revision,
-        source_origin=source_origin, ingestion_timestamp=ingestion_timestamp)
+        source_origin=source_origin or active_manifest.source_origin,
+        ingestion_timestamp=ingestion_timestamp)
 
     if manifest.source_pdf_sha256 != active_manifest.source_pdf_sha256:
         from standard_store import StandardCollisionError

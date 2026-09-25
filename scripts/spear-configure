@@ -1,0 +1,5 @@
+#!/bin/bash
+# Write spear/machine.env, this machine's local configuration, from what the
+# machine already has. See spear/machine_config.py, or spear-configure --help.
+REPO="$(cd "$(dirname "$(readlink -f "$0")")/.." && pwd)"
+exec "$REPO/spear/bin/python" "$REPO/spear/machine_config.py" "$@"

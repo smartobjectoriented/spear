@@ -94,6 +94,12 @@ def _is_cached(model, env=None):
     setting it afterwards has no effect. The resolution order is the
     documented one.
     """
+    return os.path.isdir(os.path.join(
+        hub_cache_dir(env), "models--" + model.replace("/", "--")))
+
+
+def hub_cache_dir(env=None):
+    """The local Hub cache, resolved in the documented order."""
     env = os.environ if env is None else env
     cache = env.get("HF_HUB_CACHE")
 
@@ -103,8 +109,7 @@ def _is_cached(model, env=None):
             or os.path.expanduser("~/.cache"), "huggingface")
         cache = os.path.join(home, "hub")
 
-    return os.path.isdir(os.path.join(
-        cache, "models--" + model.replace("/", "--")))
+    return cache
 
 
 def should_go_offline(model, env=None):

@@ -113,7 +113,7 @@ What ends up where
    * - ``spear/projects.json``
      - the corpus registry for **this** machine (untracked)
    * - ``spear/machine.env``
-     - machine-specific settings (untracked)
+     - machine-specific settings (untracked), written by ``spear-configure``
    * - ``$SPEAR_STATE_DIR``
      - everything a session accumulates; defaults to
        ``~/.local/state/spear``
@@ -121,6 +121,20 @@ What ends up where
 The two untracked files are the boundary between the platform and the machine.
 Nothing machine-specific belongs in a tracked file — see
 :ref:`Configuration reference <configuration>`.
+
+``machine.env`` is not written by hand. From the repository root:
+
+.. code-block:: console
+
+   $ . ./env.sh                 # puts scripts/ on PATH
+   $ spear-configure            # writes spear/machine.env
+   $ spear-configure --check    # does it still match this machine?
+
+It finds the state directory, a ``spear-private/`` tree beside the checkout,
+and the embedding host with the model revision both ends' caches agree on —
+refusing to pin one they disagree on. A differing file is shown as a diff and
+replaced only on confirmation, kept as ``machine.env.bak``; settings added
+below its local-additions marker survive regeneration.
 
 Checking the installation
 *************************

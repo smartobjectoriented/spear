@@ -351,12 +351,21 @@ def handle_standard_command(command: str, operator: StandardOperator) -> str:
 
         # Vector search and cross references are optional companions to the
         # lexical index; each reports its own absence instead of failing status.
+        #
+        # A missing vector index is the normal state when no embedding model
+        # is configured, and must not read like a broken store.
 
         try:
             vector = operator.store.load_vector_index(
                 binding.standard_id, binding.revision)[0]
             vector_status = (f"Vector: READY\nmodel: {vector.embedding_model_id}\n"
                              f"model revision: {vector.embedding_model_revision}")
+        except FileNotFoundError:
+            if os.environ.get("SPEAR_STANDARD_EMBED_MODEL"):
+                vector_status = "Vector: NOT BUILT (run /standard rebuild)"
+            else:
+                vector_status = ("Vector: NOT CONFIGURED "
+                                 "(no embedding model, lexical retrieval)")
         except Exception as exc:
             vector_status = f"Vector: UNAVAILABLE ({type(exc).__name__})"
 

@@ -82,7 +82,6 @@ from standard_commands import (
     StandardCommandError, StandardOperator, handle_standard_command,
     complete_standard, retrieval_summary, standard_help_lines,
 )
-from standard_progress import TerminalProgress
 from standard_store import StandardStore
 from standard_tools import StandardToolService
 
@@ -277,7 +276,7 @@ TRAINING_STORE = (TrainingStore(f"{STATE_DIR}/audit/training-data")
 # variable for the readers that do not go through this module.
 STANDARD_STORE = StandardStore(
     os.environ.get("SPEAR_STANDARDS_ROOT") or f"{STATE_DIR}/standards")
-STANDARD_OPERATOR = StandardOperator(STANDARD_STORE, progress=TerminalProgress())
+STANDARD_OPERATOR = StandardOperator(STANDARD_STORE)
 STANDARD_TOOL_SERVICE = StandardToolService(STANDARD_STORE)
 
 # Has any turn of this session engaged the bound standard? It widens the scope
@@ -1297,6 +1296,53 @@ class Spinner:
         # It is what the harness last did, and it holds the line until the
         # next activity overwrites it or real output takes it away.
         STATUS.show(f"{C_DIM}  {self.label} {elapsed}{tokens}{C_RST}")
+
+
+class SpinnerProgress:
+    """The phases of a long operator command, on the spinner.
+
+    The phase being worked on is the spinner's label, with its percentage and
+    an estimate where it walks a known count; a phase that ends is left behind
+    as a line of its own with how long it took. A progress line printed beside
+    the spinner would have fought it for the same terminal line.
+    """
+
+    def __init__(self, spinner):
+        self.spinner = spinner
+        self.label = None
+        self.t0 = 0.0
+        self.phase = 0
+
+    def __call__(self, label, done=None, total=None):
+        now = time.time()
+
+        if label != self.label:
+            self._close(now)
+            self.label, self.t0 = label, now
+            self.phase += 1
+
+        text = f"[{self.phase}] {label}"
+        elapsed = now - self.t0
+
+        if done is not None and total:
+            text += f" {done * 100 // total}% ({done}/{total})"
+
+            if 0 < done < total and elapsed >= 1:
+                text += (" ~" + Spinner._fmt_elapsed(elapsed * (total - done) / done)
+                         + " left")
+
+        self.spinner.label = text
+
+    def finish(self):
+        self._close(time.time())
+
+    def _close(self, now):
+        if self.label is not None:
+            with terminal_output():
+                print(f"  {C_DIM}⎿ [{self.phase}] {self.label} "
+                      f"{Spinner._fmt_elapsed(now - self.t0)}{C_RST}")
+
+        self.label = None
 
 
 class Liveness:
@@ -7141,12 +7187,21 @@ def main():
             # Explicit operator branch: ingestion and revision changes never
             # enter ToolRegistry, AgentRuntime, or the model provider.
 
+            label = " ".join(user_input.split()[:2]) + "…"
+
             try:
-                result = handle_standard_command(user_input, STANDARD_OPERATOR)
+                with Spinner(label) as spinner:
+                    STANDARD_OPERATOR.progress = SpinnerProgress(spinner)
+
+                    try:
+                        result = handle_standard_command(user_input,
+                                                         STANDARD_OPERATOR)
+                    finally:
+                        STANDARD_OPERATOR.progress.finish()
             except (StandardCommandError, OSError, ValueError) as exc:
                 result = f"Standard command error: {exc}"
             finally:
-                STANDARD_OPERATOR.progress.finish()
+                STANDARD_OPERATOR.progress = None
 
             print("\n" + result + "\n")
 
@@ -7160,15 +7215,20 @@ def main():
                                            handle_finetune_command)
 
             try:
-                print("\n" + handle_finetune_command(
-                    user_input, operator_training_controller()) + "\n")
+                with Spinner(" ".join(user_input.split()[:2]) + "…"):
+                    result = handle_finetune_command(
+                        user_input, operator_training_controller())
+
+                print("\n" + result + "\n")
             except (FinetuneCommandError, OSError, ValueError) as exc:
                 print(f"\nFine-tuning command error: {exc}\n")
 
             continue
 
         if user_input.startswith("/search "):
-            ctx, files = retrieve_context(collection, user_input[8:], top_k=5)
+            with Spinner("Searching…"):
+                ctx, files = retrieve_context(collection, user_input[8:], top_k=5)
+
             print(f"\nFichiers: {', '.join(sorted(files))}\n{ctx[:3000]}\n")
 
             continue

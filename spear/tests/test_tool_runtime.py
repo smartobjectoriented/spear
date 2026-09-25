@@ -702,6 +702,34 @@ class RagChatCompatibilityTests(unittest.TestCase):
         self.assertNotIn("(default)",
                          self.rag_chat.permissions_row(ExecutionMode.AUTO))
 
+    def test_banner_names_where_rules_skills_and_benches_come_from(self):
+        # A missing deployment env file used to fall back to the in-tree
+        # directories in silence; the banner is where that must show.
+        import os
+        import tempfile
+
+        app_dir = self.rag_chat.APP_DIR
+        in_tree = {name: os.path.join(app_dir, name)
+                   for name in ("rules", "skills", "benches")}
+        row = self.rag_chat.content_row(in_tree)
+        self.assertIn("in-tree", row)
+        self.assertNotIn("missing", row)
+
+        with tempfile.TemporaryDirectory() as directory:
+            external = {name: os.path.join(directory, name)
+                        for name in ("rules", "skills", "benches")}
+            for path in external.values():
+                os.mkdir(path)
+
+            row = self.rag_chat.content_row(external)
+            self.assertIn(directory, row)
+            self.assertIn("rules, skills, benches", row)
+            self.assertNotIn("in-tree", row)
+            self.assertNotIn("missing", row)
+
+            os.rmdir(external["benches"])
+            self.assertIn("missing: benches", self.rag_chat.content_row(external))
+
     def test_session_settings_are_reachable_as_flags(self):
         """They were environment variables only. Nothing in --help mentioned
         them, and configuring one run meant `VAR=x VAR2=y spear-chat` — neither

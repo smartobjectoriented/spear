@@ -49,7 +49,7 @@ _NUMBERED = re.compile(r"^(\d+(?:\.\d+)*)\s+(\S.*)$")
 # clause.
 
 _LETTERED = re.compile(r"^([A-Z]\d+(?:\.\d+)*)\s+(\S.*)$")
-_LETTERED_HEADING = re.compile(r"^[A-Z]\d{1,2}(?:\.\d{1,2}){1,3} {2,}\S")
+_LETTERED_HEADING = re.compile(r"^[A-Z]\d{1,2}(?:\.\d{1,3}){1,3} {2,}\S")
 _DIGITS_HEADING = re.compile(r"^\d{1,2}(?:\.\d{1,2}){1,3} {2,}\S")
 
 # A lettered document repeats its current section at the top of every page,
@@ -118,6 +118,11 @@ _ANNEX = re.compile(r"^\s*(?:annex|appendix)\s+[A-Z0-9]+\b", re.I)
 # bare magnitude or a measurement; it encodes no document's numbering.
 
 _CLAUSE_COMPONENT = re.compile(r"0|[1-9][0-9]?")
+
+# A lettered document's alphabetical lists run past 99 -- C6.2.214, the A64
+# base instructions -- so its components may take a third digit. Only there:
+# in a digits-only document "100" opening a line is a value, not a clause.
+_LETTERED_COMPONENT = re.compile(r"0|[1-9][0-9]{0,2}")
 _MAX_CLAUSE_DEPTH = 4
 _MAX_HEADING_CHARS = 120
 _MAX_SIBLING_STEP = 3
@@ -254,7 +259,14 @@ def _clause_parts(number: str) -> tuple[int, ...] | None:
     if not 1 <= len(parts) <= _MAX_CLAUSE_DEPTH:
         return None
 
-    if not all(_CLAUSE_COMPONENT.fullmatch(part) for part in parts):
+    component = _LETTERED_COMPONENT if letter else _CLAUSE_COMPONENT
+
+    if not all(component.fullmatch(part) for part in parts):
+        return None
+
+    # The first component is the chapter, which stays under 100 even here;
+    # it has to, for the part letter folded into it to keep parts apart.
+    if letter and int(parts[0]) >= 100:
         return None
 
     values = [int(part) for part in parts]

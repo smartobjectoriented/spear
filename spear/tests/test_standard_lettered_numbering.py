@@ -84,6 +84,9 @@ class LetteredNumberingTests(unittest.TestCase):
         self.assertLess(_clause_parts("D24.2"), _clause_parts("E1.1"))
         self.assertEqual(_clause_parts("D24.2.67")[1:], (2, 67))
         self.assertIsNone(_clause_parts("a1.1"))
+        # Alphabetical lists run past 99 in a lettered document, not elsewhere.
+        self.assertLess(_clause_parts("C6.2.99"), _clause_parts("C6.2.100"))
+        self.assertIsNone(_clause_parts("6.2.100"))
         self.assertEqual(_clause_parts("7.1.5"), (7, 1, 5))
 
     def test_a_section_query_may_carry_the_letter(self):

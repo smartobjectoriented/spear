@@ -103,25 +103,25 @@ class APublicImageTakesOnlyWhatSaysPublic(unittest.TestCase):
         self.assertIn("LEFT OUT of a public image", said)
 
 
-class AnEngagementImageTakesEverythingAndSaysSo(unittest.TestCase):
+class APrivateImageTakesEverythingAndSaysSo(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
         self.root = store(self.tmp.name, [PUBLIC, LICENSED])
 
     def test_it_takes_both(self):
-        out, _ = stage(self.root, "engagement")
+        out, _ = stage(self.root, "private")
 
         self.assertEqual(taken(out), {"ACME-PUB R1", "ACME-LIC R2"})
 
     def test_it_names_the_licensed_material_it_carries(self):
-        _, said = stage(self.root, "engagement")
+        _, said = stage(self.root, "private")
 
         self.assertIn("licensed normative material", said)
         self.assertIn("ACME-LIC R2", said)
 
     def test_and_says_when_the_document_itself_is_in_there(self):
-        _, said = stage(self.root, "engagement")
+        _, said = stage(self.root, "private")
 
         self.assertIn("original.pdf", said)
 

@@ -24,7 +24,7 @@ HERE="$REPO/scripts/docker"
 APP="${SPEAR_APP:-$REPO/spear}"
 
 # THE PROFILE decides what the image is allowed to carry, and it defaults to
-# the one that is safe to hand to anyone. `engagement` is the deliberate word
+# the one that is safe to hand to anyone. `private` is the deliberate word
 # for "this image carries licensed and customer material"; there is no way to
 # get there by omission.
 PROFILE=public
@@ -39,13 +39,13 @@ while [ $# -gt 0 ]; do
         --bake=*) BAKE="${1#*=}"; shift ;;
         -h|--help)
             cat <<'USAGE'
-scripts/docker/build.sh [TAG] [--profile public|engagement] [--bake name,name,...]
+scripts/docker/build.sh [TAG] [--profile public|private] [--bake name,name,...]
 
   --profile public       (default) only normative documents that declare
                          themselves PUBLIC, and of rules, skills, benches and
                          notes only what the repository tracks; no retrieval
                          index, no baked corpus. Safe to hand over.
-  --profile engagement   everything this machine has, licensed documents and
+  --profile private   everything this machine has, licensed documents and
                          the original PDFs included. NOT redistributable; the
                          image is labelled so, and push is refused unless you
                          say --allow-push.
@@ -60,15 +60,15 @@ USAGE
 done
 
 case "$PROFILE" in
-    public|engagement) ;;
-    *) echo "--profile must be public or engagement, not '$PROFILE'" >&2; exit 1 ;;
+    public|private) ;;
+    *) echo "--profile must be public or private, not '$PROFILE'" >&2; exit 1 ;;
 esac
 
 # A baked corpus is a tree off this host, and nothing records whether it may
 # be passed on -- a customer checkout looks like any other. A public image
 # cannot vouch for it, so it does not carry one.
 if [ "$PROFILE" = public ] && [ -n "$BAKE" ]; then
-    echo "--bake needs --profile engagement: a public image carries no corpus" \
+    echo "--bake needs --profile private: a public image carries no corpus" \
          "tree, since nothing says which ones may be redistributed" >&2
     exit 1
 fi
@@ -185,7 +185,7 @@ LABELS=(
     --label "ch.heig-vd.reds.spear.built=$(date -Iseconds)"
 )
 
-if [ "$PROFILE" = engagement ]; then
+if [ "$PROFILE" = private ]; then
     LABELS+=(--label "ch.heig-vd.reds.spear.redistributable=false")
 else
     LABELS+=(--label "ch.heig-vd.reds.spear.redistributable=true")
@@ -201,13 +201,13 @@ docker build --build-context "repo=$REPO" "${CONTEXTS[@]}" "${LABELS[@]}" \
 echo
 echo "built $TAG ($PROFILE)"
 
-if [ "$PROFILE" = engagement ]; then
+if [ "$PROFILE" = private ]; then
     cat <<MSG
 
   This image carries licensed normative material and customer trees. It is
   labelled redistributable=false and scripts/docker/push.sh will refuse to publish it
   without --allow-push. Hand it over as a file:
 
-      docker save $TAG | zstd -T0 -19 -o spear-engagement.tar.zst
+      docker save $TAG | zstd -T0 -19 -o spear-private.tar.zst
 MSG
 fi

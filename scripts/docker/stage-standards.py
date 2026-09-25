@@ -13,9 +13,9 @@ exclude it, would go stale the first time a document is ingested, and would
 put the whole decision one forgotten edit away from shipping a licensed PDF.
 
     stage-standards.py --profile public      OUT
-    stage-standards.py --profile engagement  OUT
+    stage-standards.py --profile private  OUT
 
-`public` takes only what declares itself PUBLIC. `engagement` takes
+`public` takes only what declares itself PUBLIC. `private` takes
 everything, and says plainly what that means.
 
 The active binding travels only if the document it names travelled: a binding
@@ -48,7 +48,7 @@ def documents(root: pathlib.Path):
 
 def main() -> int:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--profile", choices=("public", "engagement"), required=True)
+    ap.add_argument("--profile", choices=("public", "private"), required=True)
     ap.add_argument("--store", default=None,
                     help="the normative store (default: $SPEAR_STATE_DIR/standards)")
     ap.add_argument("out", help="directory to stage into (emptied first)")

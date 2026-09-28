@@ -4,7 +4,7 @@
 Security model
 ==============
 
-.. figure:: /img/spear_security.svg
+.. figure:: /img/SPEAR-Security.drawio.png
    :width: 100%
    :alt: Modes, capabilities and the authorization pipeline
 

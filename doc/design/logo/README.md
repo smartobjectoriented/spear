@@ -68,9 +68,8 @@ them — a hand-placed offset goes wrong silently the first time either moves.
 
 ## Where it is wired in
 
-- `doc/source/conf.py` — `html_logo`, `html_favicon`
-- `doc/source/index.rst` — the landing lockup, as a block above the title
-- `doc/source/_static/theme_overrides.css` — the light card behind the sidebar
-  logo (the theme's search area is a medium blue and the accent sits close to
-  it), suppression of the duplicate project name under it, and the rule that
-  keeps the landing lockup a block so the `h1` never wraps around it
+Nowhere in the Sphinx documentation: `doc/` follows the shared
+configuration of its sibling projects verbatim (conf.py, theme_overrides.css, landing page), which has
+no sidebar logo, no favicon and the institutional logotype alone on the
+landing page. The mark is kept here for use outside the manual.
+

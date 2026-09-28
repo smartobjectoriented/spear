@@ -16,7 +16,7 @@ writes.  And freezing a bundle executes no training.  ``freeze`` writes files
 and stops; the command that would train is printed in the bundle's runbook for
 a human to run.
 
-.. figure:: /img/spear_components.svg
+.. figure:: /img/SPEAR-Components.drawio.png
    :width: 100%
    :alt: Component map, including the training band
 

@@ -4,7 +4,7 @@
 Resource control
 ================
 
-.. figure:: /img/spear_cgroup.svg
+.. figure:: /img/SPEAR-Cgroup.drawio.png
    :width: 100%
    :alt: One transient systemd user scope per command
 

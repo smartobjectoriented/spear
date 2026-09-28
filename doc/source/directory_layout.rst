@@ -9,7 +9,7 @@ kinds of content — application code, multi-gigabyte model weights, and
 persistent state — so it is worth knowing which is which before running a
 ``find`` over it.
 
-.. figure:: img/spear_layout.svg
+.. figure:: /img/SPEAR-Layout.drawio.png
    :width: 100%
    :alt: /opt/llm/spear directory layout
 
@@ -293,33 +293,34 @@ This documentation
 ::
 
    doc/
-     Makefile                       make html | latexpdf | diagrams | …
-     requirements.txt               pinned Sphinx toolchain (local and CI)
+     Makefile                       make html | latexpdf | …
+     requirements.txt               Sphinx toolchain (local and CI)
      source/
        conf.py                      Sphinx configuration
+       rstFlatTable.py              the ``flat-table`` directive
        *.rst                        the chapters
        _static/theme_overrides.css  small readability overrides
        img/
-         gen_spear_diagrams.py      generator: writes the .drawio AND the SVGs
-         spear.drawio               editable multi-page source of truth
-         spear_<page>.svg           rendered diagrams used by the HTML build
-         export_png.sh              optional PNG export (see the caveat below)
+         SPEAR.drawio               every diagram, one page each (source)
+         SPEAR-<Page>.drawio.png    the pages exported for the HTML build
 
-To change a diagram, edit ``gen_spear_diagrams.py`` and run ``make diagrams``.
-The ``.drawio`` file can also be opened and edited directly in draw.io or the
-VS Code extension — it is a normal multi-page drawio document, one page per
-diagram — but a subsequent ``make diagrams`` regenerates it from the Python
-description, so keep structural changes in the generator.
+Diagrams follow the convention of the sibling projects.  ``SPEAR.drawio`` is the only source
+and is edited directly in draw.io or the VS Code extension.  Each page the
+documentation uses is exported to ``SPEAR-<Page>.drawio.png`` (one file per
+page, named after the page), and the exported PNG is committed next to the
+``.drawio`` in the same change.  From the command line, with the drawio snap:
 
-.. warning::
+.. code-block:: console
 
-   ``export_png.sh`` depends on the ``drawio`` CLI, which on this machine
-   (snap 30.4.1) fails on **every** input with
-   ``ReferenceError: next is not defined`` raised from its own
-   ``electron.js`` — including a five-element minimal file and the SO3
-   documentation's diagrams.  That is why the SVGs are rendered directly by
-   the generator instead: the documentation build does not depend on the
-   broken CLI.  The script is kept for environments with a working drawio.
+   $ cd doc/source/img
+   $ mkdir -p ~/snap/drawio/common/x && cp SPEAR.drawio ~/snap/drawio/common/x/
+   $ xvfb-run -a drawio -x -f png --scale 1.5 --border 10 -p 1 \
+         -o ~/snap/drawio/common/x/SPEAR-Overview.drawio.png \
+         ~/snap/drawio/common/x/SPEAR.drawio --no-sandbox --disable-gpu
+
+``-p`` is the 1-based page index.  The snap is confined: it cannot read
+``/opt`` nor any hidden directory in ``$HOME`` (``~/.cache`` included), which
+is why the file is staged under ``~/snap/drawio/common``.
 
 Building
 ========
@@ -327,13 +328,12 @@ Building
 .. code-block:: console
 
    $ cd /opt/llm/spear/doc
-   $ make diagrams      # only if a diagram changed
    $ make html
    $ xdg-open build/html/index.html
 
 Sphinx and the RTD theme come from the system Python (``/usr/bin/sphinx-build``),
 not from the ``spear`` virtualenv, which deliberately carries only the
-application's runtime dependencies.  ``doc/requirements.txt`` pins the versions
+application's runtime dependencies.  ``doc/requirements.txt`` lists the toolchain
 for anyone who prefers an isolated environment:
 
 .. code-block:: console

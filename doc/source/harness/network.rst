@@ -9,7 +9,7 @@ at all.  When the ``network`` capability is granted, connectivity is provided
 by attaching ``slirp4netns`` to that private namespace — a user-mode network
 stack, no root, no bridge, no host interface exposed.
 
-.. figure:: /img/spear_network.svg
+.. figure:: /img/SPEAR-Network.drawio.png
    :width: 100%
    :alt: Timing-independent slirp4netns attachment
 

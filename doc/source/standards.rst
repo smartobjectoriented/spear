@@ -13,7 +13,7 @@ code, because it reports a project's decisions as the document's requirements.
 
 SPEAR keeps the two roles apart:
 
-.. figure:: /img/spear_evidence.svg
+.. figure:: /img/SPEAR-Evidence.drawio.png
    :width: 100%
 
    Two sources, two roles. Only the document establishes what is required.

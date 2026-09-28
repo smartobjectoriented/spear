@@ -1,7 +1,13 @@
-# Build dependencies for the SPEAR Sphinx documentation.
-#
-# Pinned so that a CI build and a local build render the same pages; the
-# harness itself is not imported by the documentation build, so nothing else
-# from the project is needed here.
-sphinx==7.2.6
-sphinx-rtd-theme==3.0.2
+sphinx
+sphinx-rtd-theme
+sphinx-toolbox
+sphinx-gallery
+sphinx-autodoc-typehints
+sphinxcontrib-napoleon
+sphinxcontrib-httpdomain
+sphinxcontrib-bibtex
+# conf.py loads sphinxcontrib.plantuml; the sibling projects get it from their CI image,
+# the GitHub runner installs it from here.
+sphinxcontrib-plantuml
+# sphinxcontrib-pdfembed (in the shared list) is not published on PyPI and
+# would fail the install; conf.py does not load it.

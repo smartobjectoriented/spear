@@ -7,21 +7,19 @@ Final harness audit
 This page records the final evidence-driven production profile. It is a
 description of the current implementation, not a promise of model quality.
 
-.. figure:: /img/spear_architecture_dark.svg
+.. figure:: /img/SPEAR-Architecture_dark.drawio.png
    :width: 100%
    :alt: The agent harness in one picture: layers, roles and boundaries
 
    The whole harness on one sheet — the layers, what is on by default, what is
    optional, what is experimental, and where the security boundary runs.
 
-The picture is generated from the same description as the other diagrams, so
-every box in it can be checked against the tree.  It replaced a hand-drawn
+Every box in the picture can be checked against the tree.  It replaced a hand-drawn
 version of the same figure that had ``TaskController`` in two bands and drew
 ``RetryPolicy`` beside ``FailurePolicy`` although the second contains the first
-(``failure_policy.py``).  That drawing is kept as page 12 of
-``source/img/spear.drawio`` and in ``_static/``, because it is a fine overview
-and because a diagram nobody can regenerate is exactly the kind of thing worth
-keeping *next to* the one you can.
+(``failure_policy.py``).  That drawing is kept as the
+``Final_architecture`` page of ``source/img/SPEAR.drawio`` and in ``_static/``,
+because it is a fine overview.
 
 Production maturity
 ===================

@@ -10,7 +10,7 @@ When a turn is going to modify a project, it runs through five stages. Each one
 opens on a condition the runtime can check, and a stage that cannot open says
 so rather than proceeding on an assumption.
 
-.. figure:: /img/spear_workflow.svg
+.. figure:: /img/SPEAR-Workflow.drawio.png
    :width: 100%
 
    The five stages, and the condition that opens each gate.

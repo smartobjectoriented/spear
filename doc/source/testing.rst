@@ -4,7 +4,7 @@
 Testing
 =======
 
-.. figure:: img/spear_testing.svg
+.. figure:: /img/SPEAR-Testing.drawio.png
    :width: 100%
    :alt: Test topology
 

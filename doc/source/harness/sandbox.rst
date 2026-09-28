@@ -4,7 +4,7 @@
 Sandbox
 =======
 
-.. figure:: /img/spear_sandbox.svg
+.. figure:: /img/SPEAR-Sandbox.drawio.png
    :width: 100%
    :alt: Wrapper order and confinement
 

@@ -7,7 +7,7 @@ Introduction
 What SPEAR is
 ================
 
-.. figure:: img/spear_overview.svg
+.. figure:: /img/SPEAR-Overview.drawio.png
    :width: 100%
    :alt: SPEAR overall architecture
 
@@ -55,6 +55,42 @@ It has four parts:
    run tests.  Everything the model proposes is classified, authorized,
    confined and audited before it runs.  This is where most of the engineering
    — and most of this documentation — lives.  See :doc:`/harness/tool_harness`.
+
+What SPEAR does
+===============
+
+**Authoritative-source grounding**
+    A specification is ingested once and bound to the machine. On a turn that
+    asks what the document defines, the document is read *first*, and every
+    normative claim in the answer carries the provision it rests on.
+
+**Codebase-aware reasoning**
+    Registered source trees are indexed and retrieved from, so questions about
+    a project are answered from that project rather than from the model's
+    recollection of projects like it.
+
+**Controlled code modification**
+    A change runs through investigation, planning, editing, testing and
+    review. A file becomes writable because a planned item named it — not
+    because the agent decided to open it.
+
+**Validation-aware workflows**
+    How a behaviour will be proved is decided before the code that implements
+    it is written, which is what makes the test a check rather than a
+    description.
+
+**Traceable evidence and citations**
+    What each turn retrieved, what it read and what it ran is recorded. The
+    closing report is generated from that record, not from the agent's own
+    summary of its work.
+
+**Multiple model backends**
+    Any OpenAI-compatible endpoint, local or remote, and the Anthropic API.
+    Everything below the application layer is provider-neutral.
+
+**Confined execution**
+    One rule governs the whole execution path: **fail-closed** — a confinement
+    that cannot be applied is an error, never a silent downgrade.
 
 Why the harness is the interesting part
 =======================================
@@ -138,3 +174,10 @@ what to look at when it misbehaves (:doc:`/operations`).
 Several sections quote real measurements.  Those numbers come from this
 machine and are labelled as such; :doc:`/harness/resource_control` discusses which of
 them are portable and which are not.
+
+Project
+=======
+
+SPEAR is developed at the `REDS institute <https://reds.heig-vd.ch>`_ of
+`HEIG-VD <https://www.heig-vd.ch>`_, and is published under the Apache License
+2.0.

@@ -54,15 +54,9 @@
 # Sorties générées.
 # ─────────────────────────────────────────────────────────────────────────
 /doc/build/
-# Rendered PNGs: export_png.sh makes them from the tracked SVGs on demand, for
-# a slide or an issue. The SVG is the artifact worth versioning -- it is what
-# the documentation embeds, and it stays crisp at any zoom.
-/doc/source/img/*.png
-# The logotype is not one of them: it is a source asset, not a render of a
-# tracked SVG, and nothing in the tree can reproduce it. Excluded by default
-# and re-admitted by name, so a rendered PNG dropped here tomorrow still does
-# not enter by oversight.
-!/doc/source/img/REDS-HEIG-VD.png
+# conf.py points the plantuml extension at it, as the sibling projects do; no page
+# uses the `uml` directive, so the 22 MB jar is not versioned (doc/README).
+/doc/utils/plantuml.jar
 __pycache__/
 *.pyc
 *.pyo

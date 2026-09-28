@@ -9,7 +9,7 @@ runtime and from the security substrate.  The same ``AgentRuntime`` executes
 the Main, Explorer and Reviewer roles; role configuration supplies isolated
 contexts and structurally filtered tools.
 
-.. figure:: img/spear_agent.svg
+.. figure:: /img/SPEAR-Agent.drawio.png
    :width: 100%
    :alt: Agent harness components and their interactions
 
@@ -105,17 +105,13 @@ associated evidence unavailable.
 Every component
 ===============
 
-.. figure:: img/spear_components.svg
+.. figure:: /img/SPEAR-Components.drawio.png
    :width: 100%
    :alt: Every component of the harness, by layer
 
    The exhaustive map: the forty-nine harness modules grouped by what they
-   own, with the line counts read from the tree when the diagram is
-   regenerated.  Read the bands as ownership rather than as call order.
-
-``./img/export_png.sh components`` renders the same page as a PNG for a slide
-or an issue; it falls back to rasterising the SVG when the drawio CLI is
-unusable, which it usually is.
+   own, with their line counts at the time the diagram was drawn.  Read the
+   bands as ownership rather than as call order.
 
 Training data as a by-product
 =============================

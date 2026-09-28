@@ -1,28 +1,46 @@
 SPEAR documentation
 ======================
 
-Sphinx documentation for SPEAR. Layout, configuration and landing page
-follow the shared model of this family of projects: doc/Makefile, sources in
-doc/source/*.rst, configuration in doc/source/conf.py, output in doc/build/
-(generated — never edit it, never index it).
+Sphinx documentation for SPEAR. The configuration is the one shared by its
+sibling projects' documentation, taken verbatim so the manuals build and
+look the same: doc/Makefile, sources in doc/source/*.rst,
+configuration in doc/source/conf.py, theme overrides in
+doc/source/_static/theme_overrides.css, output in doc/build/ (generated —
+never edit it, never index it).
+
+Only these differ from the shared configuration:
+
+  * conf.py: project, copyright, LaTeX/man titles, and the version string
+    (see below);
+  * requirements.txt: sphinxcontrib-plantuml added (conf.py loads it;
+    the sibling projects get it from their CI image), sphinxcontrib-pdfembed dropped
+    (not on PyPI, so the GitHub runner cannot install it);
+  * doc/utils/plantuml.jar (22 MB) is not versioned: conf.py loads the
+    plantuml extension as the siblings do, but no page uses the `uml`
+    directive. The day one does, copy the jar from a sibling's doc/utils/
+    (it is gitignored here) and decide how CI gets it;
+  * CI is .github/workflows/docs.yml (GitHub Pages) instead of
+    doc/.gitlab-ci.yml, with the same `sphinx-build -W --keep-going` line.
+
+When the shared configuration changes, copy the file over and re-apply
+the differences above. Do not add project-specific styling or options.
 
 Structure
 ---------
 
-Top-level pages are flat; a topic with several pages gets a directory and an
-eponymous index (harness/harness.rst, model/model.rst), the way the sibling
-projects group their multi-page topics.
+index.rst follows the shared landing page: the REDS/HEIG-VD logotype
+centred, one hidden numbered toctree, a centred title, and left-aligned
+sections that list :ref: links. Prose belongs in the chapters, not on the
+landing page.
 
-index.rst carries the REDS/HEIG-VD logotype and the landing prose. The
-toctrees are hidden, numbered and captioned, one per part of the manual, and
-the landing sections below them are definition lists of cross-references.
-Every page therefore needs a label (`.. _name:` above its title) so those
-references are `:ref:` and break the build if their target disappears.
+A topic with several pages gets a directory and an eponymous index
+(harness/harness.rst, model/model.rst). Every page carries a label
+(`.. _name:` above its title) so references to it are :ref: and break the
+build if their target disappears.
 
 Cross-references are absolute (:doc:`/harness/sandbox`), and so are image
 paths from a subdirectory (/img/...). A relative reference changes meaning
-with the directory of the page that writes it, which is exactly what moving
-a page does.
+with the directory of the page that writes it.
 
 Warnings are errors
 -------------------
@@ -50,37 +68,17 @@ runtime dependencies.
 Diagrams
 --------
 
-    make diagrams             # regenerates source/img/spear.drawio AND the SVGs
-
-source/img/gen_spear_diagrams.py is the single description of every diagram.
-Running it writes two things from that one description:
-
-  * spear.drawio        the editable multi-page drawio document (one page per
-                        diagram) — open it in draw.io or the VS Code extension
-                        and every box is editable;
-  * spear_<page>.svg    the rendered diagrams the HTML build consumes.
-
-Keep structural changes in the generator: editing the .drawio by hand works,
-but a subsequent `make diagrams` regenerates it.
-
-Why the SVGs are not exported from the .drawio
-----------------------------------------------
-
-export_png.sh drives the drawio CLI and is kept for environments where that
-CLI works. On this machine it does not: the drawio snap 30.4.1 fails on every
-input with
-
-    Error reading file: <path>
-    ReferenceError: next is not defined
-        at processOneFile (.../app.asar/src/main/electron.js:1256:8)
-
-including a five-element minimal file and the SO3 documentation's own
-diagrams. Rendering the SVGs directly from the generator keeps the
-documentation build independent of that upstream bug, and SVG stays crisp at
-any zoom.
+As in the sibling projects: source/img/SPEAR.drawio holds every diagram, one page
+each, and is edited directly in draw.io. Each page the documentation uses is
+exported to source/img/SPEAR-<Page>.drawio.png and committed with the
+.drawio in the same change; the .rst files reference the PNG
+(/img/SPEAR-<Page>.drawio.png). The command-line export, and why the snap
+needs the file staged under ~/snap/drawio/common, are in
+source/directory_layout.rst ("This documentation").
 
 The version string
 ------------------
 
-conf.py derives `release` from spear/active-model.conf, so the served
+The sibling projects derive `release` from their release tag. SPEAR has no
+release tags, so conf.py derives it from spear/active-model.conf instead: the served
 model appears in the page header and never has to be bumped by hand.

@@ -29,7 +29,7 @@ The two schemas that gate saved measure 155 tokens of a 65536-token window; a
 tool the model cannot see is one it narrates instead of using.
 
 
-.. figure:: /img/spear_harness.svg
+.. figure:: /img/SPEAR-Harness.drawio.png
    :width: 100%
    :alt: Tool execution harness architecture
 

@@ -298,6 +298,166 @@ def sibling_write_refusal(scope: RequestScope | None, target: str) -> str:
 
 
 # ---------------------------------------------------------------------------
+# Shell writes.
+
+# Programs whose file operands are what they write. The destination of cp,
+# mv, install and ln is the last operand; every other operand of these is a
+# target in its own right.
+_LAST_OPERAND_WRITERS = frozenset({"cp", "mv", "install", "ln", "rsync"})
+_ALL_OPERAND_WRITERS = frozenset({"rm", "rmdir", "touch", "mkdir", "truncate",
+                                  "chmod", "chown", "tee", "unlink", "shred"})
+
+# An interpreter handed its program inline: what it writes is not visible to
+# any parser here. It is judged by the paths its text mentions.
+_INLINE_CODE = {"python": {"-c"}, "python3": {"-c"}, "perl": {"-e", "-i", "-pi",
+                "-pie", "-ne"}, "ruby": {"-e"}, "node": {"-e"},
+                "sh": {"-c"}, "bash": {"-c"}, "zsh": {"-c"}, "awk": set(),
+                "gawk": set()}
+_REDIRECT = re.compile(r"^\d*>{1,2}\|?(.*)$")
+
+
+def _shell_destinations(argv):
+    """The paths one shell stage writes, as far as its words say."""
+    binary = Path(argv[0]).name
+    operands = [arg for arg in argv[1:] if not arg.startswith("-")]
+    found = []
+
+    for index, arg in enumerate(argv):
+        match = _REDIRECT.match(arg)
+
+        if match and index:
+            target = match.group(1) or (argv[index + 1]
+                                        if index + 1 < len(argv) else "")
+
+            if target and not target.startswith("&"):
+                found.append(target)
+
+    if binary in _LAST_OPERAND_WRITERS and len(operands) >= 2:
+        found.append(operands[-1])
+        if binary == "mv":
+            found.extend(operands[:-1])    # a move also writes its source away
+    elif binary in _ALL_OPERAND_WRITERS:
+        found.extend(operands[1:] if binary in {"chmod", "chown"} else operands)
+    elif binary == "sed" and any(arg.startswith("-i") or arg == "--in-place"
+                                 for arg in argv[1:]):
+        found.extend(operands[1:])
+    elif binary == "dd":
+        found.extend(arg[3:] for arg in argv[1:] if arg.startswith("of="))
+
+    return [item for item in found if item and not item.startswith("/dev/")]
+
+
+def _opaque(argv):
+    binary = Path(argv[0]).name.rstrip("0123456789.") or Path(argv[0]).name
+    flags = _INLINE_CODE.get(Path(argv[0]).name, _INLINE_CODE.get(binary))
+
+    if flags is None:
+        return False
+
+    return not flags or any(arg in flags or (binary == "perl"
+                                             and arg.startswith("-i"))
+                            for arg in argv[1:])
+
+
+def _expand_in(scope: RequestScope, token: str) -> list[str]:
+    """`token` as the project paths it denotes: globs expanded, or itself."""
+    if not any(char in token for char in "*?["):
+        return [token]
+
+    import glob
+
+    base = scope.root or "."
+    pattern = token if token.startswith("/") else os.path.join(base, token)
+
+    return sorted(glob.glob(pattern))[:200] or [token]
+
+
+def _children_matching(scope: RequestScope, path: str, patterns) -> list[str]:
+    """A directory's entries a find over it could hand to a writer."""
+    import fnmatch
+
+    full = path if os.path.isabs(path) else os.path.join(scope.root or ".", path)
+
+    if not os.path.isdir(full):
+        return []
+
+    return [os.path.join(full, entry.name) for entry in _entries(Path(full))
+            if not patterns or any(fnmatch.fnmatch(entry.name, pattern)
+                                   for pattern in patterns)][:200]
+
+
+def _writes_fed(argv) -> bool:
+    """A writer whose files arrive from stdin or from find: xargs, -exec."""
+    words = [Path(arg).name for arg in argv]
+
+    if words[0] == "xargs" or "-exec" in argv or "-execdir" in argv:
+        rest = argv[1:]
+
+        return any(Path(arg).name in (_ALL_OPERAND_WRITERS
+                                      | _LAST_OPERAND_WRITERS | {"sed", "perl"})
+                   for arg in rest) and (
+            "-i" in rest or any(arg.startswith("-i") for arg in rest)
+            or any(Path(arg).name in _ALL_OPERAND_WRITERS
+                   | _LAST_OPERAND_WRITERS for arg in rest))
+
+    return False
+
+
+_WORD_PATH = re.compile(r"[\w./-]*/[\w./-]+|[\w-]+\.[A-Za-z]\w{0,6}")
+
+
+def shell_write_refusal(command: str, scope: RequestScope | None) -> str:
+    """Why this command writes outside the requested target, or "".
+
+    The same judgement as sibling_write_refusal, applied to what a shell
+    command writes: a redirection, the destination of cp/mv/install, the
+    operands of rm/touch/mkdir/tee/sed -i. An interpreter given its program
+    inline (python -c, perl -i, sh -c, awk) cannot be parsed for its writes,
+    so any sibling path its text mentions is treated as one -- otherwise
+    `python3 -c "open('beta.cfg','w')..."` would be edit_file's refusal with
+    extra steps. Builds and tests name no sibling destination and pass.
+    """
+    if scope is None or scope.broadened or not scope.anchors or not command:
+        return ""
+
+    stages = list(_split_stages(command))
+    # What the whole command names, globs expanded in the project: the
+    # candidates when a write's destination is only known at run time.
+    mentioned = [path for argv in stages for token in argv[1:]
+                 for path in _expand_in(scope, token)]
+    patterns = [argv[index + 1] for argv in stages
+                for index, arg in enumerate(argv[:-1])
+                if arg in ("-name", "-iname")]
+    mentioned += [path for item in list(mentioned)
+                  for path in _children_matching(scope, item, patterns)]
+
+    for argv in stages:
+        destinations = _shell_destinations(argv)
+        candidates = [path for item in destinations
+                      for path in _expand_in(scope, item)]
+
+        # `sed -i ... $f` in a loop, `xargs sed -i`, `find -exec sed -i {}`:
+        # the file is decided by the shell, so every path the command names
+        # is a file it may write.
+        if _opaque(argv) or any("$" in item or "{}" in item
+                                for item in destinations) or (
+                _writes_fed(argv) and not destinations):
+            candidates += mentioned
+            candidates += _WORD_PATH.findall(" ".join(argv[1:]))
+
+        for target in candidates:
+            refusal = sibling_write_refusal(scope, target)
+
+            if refusal:
+                return (refusal.split(" If this file genuinely")[0]
+                        + " A shell command is not a way "
+                        "around this: make the change with edit_file, on "
+                        "the requested target, or give scope_reason there.")
+
+    return ""
+
+
+# ---------------------------------------------------------------------------
 # Workspace discipline.
 
 # Commands that walk a tree. Pointed outside the project they are a search of
@@ -310,12 +470,24 @@ _PATH_TOKEN = re.compile(r"(?:~|\$HOME|\$\{HOME\})(?:/[^\s'\";|&<>()]*)?"
                          r"|/[^\s'\";|&<>()]*")
 
 
+# Words that open a compound command; the program is the word after them.
+_SHELL_KEYWORDS = frozenset({"do", "then", "else", "elif", "time", "!", "{",
+                             "(", "exec", "nohup", "env", "sudo", "command"})
+
+
 def _split_stages(command: str):
+    # find's `-exec ... \;` terminator is not a command separator; `+` ends
+    # the same -exec without looking like one.
+    command = command.replace("\\;", "+").replace("';'", "+")
+
     for stage in re.split(r"&&|\|\||[;|\n]", command):
         try:
             argv = shlex.split(stage, posix=True)
         except ValueError:
             argv = stage.split()
+
+        while argv and argv[0] in _SHELL_KEYWORDS:
+            argv = argv[1:]
 
         if argv:
             yield argv

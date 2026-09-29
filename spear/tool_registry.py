@@ -228,6 +228,14 @@ def _validate_schema(schema: Mapping[str, object]) -> None:
             raise ValueError(f"unsupported schema type for {name}")
 
 
+#: Offered on the writes that can be refused as outside the requested scope,
+#: so the one legitimate way through is visible before the refusal is met.
+_SCOPE_REASON = (
+    "Only when the harness refused this path as outside the requested "
+    "scope: why the requested target cannot work unless this file changes. "
+    "Similarity to the target is not a reason.")
+
+
 def native_tool_specs() -> tuple[ToolSpec, ...]:
     """The current production tool set, independently of provider syntax."""
 
@@ -267,7 +275,8 @@ def native_tool_specs() -> tuple[ToolSpec, ...]:
             "content EXACTLY (read the region first) and be unique. For a "
             "full rewrite use write_file instead.",
             {"type": "object", "properties": {"path": string(),
-             "old_text": string(), "new_text": string()},
+             "old_text": string(), "new_text": string(),
+             "scope_reason": string(_SCOPE_REASON)},
              "required": ["path", "old_text", "new_text"]},
             ToolCategory.FILE_WRITE, ToolMutability.MUTATING,
             ("workspace_write",), ("ask", "auto"), handler_key="edit_file",
@@ -278,7 +287,8 @@ def native_tool_specs() -> tuple[ToolSpec, ...]:
             "Create or fully overwrite a file. For a comprehensive "
             "improvement, pass the COMPLETE new file as content.",
             {"type": "object", "properties": {"path": string(),
-             "content": string()}, "required": ["path", "content"]},
+             "content": string(), "scope_reason": string(_SCOPE_REASON)},
+             "required": ["path", "content"]},
             ToolCategory.FILE_WRITE, ToolMutability.MUTATING,
             ("workspace_write",), ("ask", "auto"), handler_key="write_file",
         ),

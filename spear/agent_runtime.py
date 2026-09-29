@@ -170,6 +170,10 @@ class AgentContext:
     #: offered, and bash runs without workspace write, so the prohibition
     #: cannot be routed around with `sed -i`, `cp` or a redirection.
     read_only: bool = False
+    #: Read-only because the request asked about a change rather than for
+    #: one. Same boundary; the refusals say so instead of citing a
+    #: prohibition the user never wrote.
+    advisory: bool = False
 
     #: How this tree builds and tests itself, and where it lives. A writing
     #: turn is not finished until these pass; without them the harness can
@@ -1044,7 +1048,7 @@ def unverified_write_note(tool_log: Sequence[str], project_runs=(),
     files = ", ".join(changed)
 
     if not runs:
-        return (f"\n\n⚠ {files} changed, and nothing was run afterwards that "
+        return (f"\n\n⚠ UNVERIFIED: {files} changed, and nothing was run afterwards that "
                 f"could show the change works — no build, no test, no lint. "
                 f"Treat the change above as unverified.")
 
@@ -1065,7 +1069,7 @@ def unverified_write_note(tool_log: Sequence[str], project_runs=(),
         declared = tuple(getattr(project_commands, "verifies", lambda: ())())
 
         if declared and syntax_only_verification(runs):
-            return (f"\n\n⚠ {files} changed, and the only thing run afterwards "
+            return (f"\n\n⚠ UNVERIFIED: {files} changed, and the only thing run afterwards "
                     f"compiled the files in isolation. That is not the "
                     f"project's own verification: `{declared[-1][:120]}` was "
                     f"never run, so the change above is unproven at the level "
@@ -1075,7 +1079,7 @@ def unverified_write_note(tool_log: Sequence[str], project_runs=(),
 
     failed = runs[-1][0]
 
-    return (f"\n\n⚠ {files} changed, and the last verification to run did "
+    return (f"\n\n⚠ UNVERIFIED: {files} changed, and the last verification to run did "
             f"not pass: `{failed[:120]}`. The change above is not shown to "
             f"work as written.")
 
@@ -1166,7 +1170,8 @@ _WRITE_REQUEST_RE = re.compile(
     r"all\s+(?:the\s+)?)?(?:\w+\s+){0,2}?(?:modifications?|changes?|edits?|"
     r"task|work|fix(?:es)?)"
     r"|\b(?:implement|write|edit|patch|refactor|rename|add|create|update|fix|"
-    r"modify|remove|delete|adapt|adjust|amend|revise|rework|correct)\b"
+    r"modify|remove|delete|adapt|adjust|amend|revise|rework|correct|move|"
+    r"relocate)\b"
     r"|\b(?:fais|faire|applique|implémente|implementer|implémenter|corrige|"
     r"modifie|modifier|adapte|adapter|ajuste|ajuster|ajoute|écris|ecris)\b",
     re.I)
@@ -1199,7 +1204,23 @@ def wants_write(context, question) -> bool:
     if cached is not None:
         return cached
 
-    pattern = is_write_request(question)
+    # A question about a change is settled here, before the model is asked
+    # and whatever it would answer. "Could we have X in images/ instead?"
+    # was read WRITE by the model, and the turn was then told it was not
+    # finished until a file changed.
+
+    if request_intent.advisory(question, _WRITE_REQUEST_RE):
+        context._write_request = False
+
+        return False
+
+    # Accepting a proposal ("yes, do it") is a write, when there is a
+    # proposal: the previous answer. The question that produced it was not.
+
+    pattern = is_write_request(question) or request_intent.mutation_intent(
+        question, _WRITE_REQUEST_RE,
+        answered=request_intent.answered(getattr(context, "conversation", ())),
+    ) == "write"
     model = None
 
     if not pattern and getattr(context, "judge_intent", False):
@@ -1222,7 +1243,17 @@ def wants_write(context, question) -> bool:
 
 
 def is_write_request(question: str) -> bool:
-    """Did the user ask for the tree to change, in so many words?"""
+    """Did the user ask for the tree to change, in so many words?
+
+    Read sentence by sentence: a verb inside a question about a change
+    ("could we add a flag?") asks for nothing, and an acceptance of the
+    previous proposal ("yes, do it") asks for the change it accepted.
+    """
+    intent = request_intent.mutation_intent(question or "", _WRITE_REQUEST_RE)
+
+    if intent != "unknown":
+        return intent == "write"
+
     return bool(_WRITE_REQUEST_RE.search(question or ""))
 
 
@@ -1315,6 +1346,16 @@ def conclude_demand(question: str, is_write: bool | None = None) -> str:
             "the task as already done -- nothing has been written yet. You "
             "can make more small edits after this one."
         )
+
+    if request_intent.advisory(question or "", _WRITE_REQUEST_RE):
+        return (
+            "You have investigated enough. Conclude now, with no further "
+            "bash/grep/find/cat/read commands. The user asked whether or how "
+            "something could be changed; they did not ask for the change. "
+            "Answer that: say whether it is feasible, what would have to "
+            "change and in which files (cite the exact paths), and the "
+            "trade-offs. Do NOT edit anything -- the change is theirs to ask "
+            "for next.")
 
     return (
         "You have investigated enough. Conclude now, with no further "

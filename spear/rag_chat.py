@@ -1718,7 +1718,7 @@ def audit_rejected_mutation(action, summary, *, paths=()):
 #: Named here rather than inferred from the status: a DENIED envelope may be a
 #: role refusal or a repeat suppression, which are not mutations at all.
 _ROUTER_MUTATION_DENIALS = frozenset({
-    "read_only_task", "execution_mode_denied",
+    "read_only_task", "execution_mode_denied", "outside_requested_scope",
     work_phase.NO_AUTHORITY, work_phase.NO_IMPLEMENTATION,
     work_phase.NO_PLAN, work_phase.REVIEW_IS_READ_ONLY,
 })
@@ -1741,6 +1741,8 @@ _ROUTER_MUTATION_DENIALS = frozenset({
 #: one as an invitation spends its remaining rounds proving it.
 _ROUTER_REFUSAL_NOTICES = {
     "read_only_task": "the task is read-only",
+    "outside_requested_scope": "outside the target the request named",
+    "outside_project": "outside this project",
     # Not permanent, unlike the one above, and the line says so: the turn has
     # not finished working out what it is changing.
     work_phase.NO_AUTHORITY: "the authoritative source has not been read yet",
@@ -4992,6 +4994,17 @@ def _registered_command(context, command):
     )
     result = command_result_text(command_result)
 
+    # The command guessed does not exist. The next guess is how a turn ended
+    # up searching the home directory for somebody else's build.sh: say where
+    # this project keeps its own, and what was found there.
+
+    if getattr(context, "scope", None) is not None:
+        import request_scope
+
+        result += request_scope.missing_command_hint(
+            cmd, (command_result.stdout or "") + (command_result.stderr or ""),
+            command_result.exit_code, context.scope)
+
     # A command that reports the sandbox missing is the only way this is
     # learned; every mutation after it in the same turn is refused.
 
@@ -5028,7 +5041,9 @@ def _registered_command(context, command):
             != CommandClassification.READ_ONLY):
         violations = context.cache.get(READ_ONLY_VIOLATIONS, 0) + 1
         context.cache[READ_ONLY_VIOLATIONS] = violations
-        result = result.rstrip() + "\n" + READ_ONLY_REFUSAL
+        result = result.rstrip() + "\n" + (
+            ADVISORY_REFUSAL if getattr(context, "advisory", False)
+            else READ_ONLY_REFUSAL)
         context.trace.emit(
             EventType.READ_ONLY_VIOLATION, context.task_id,
             status=EventStatus.DETECTED, tool_name="bash",
@@ -5891,6 +5906,85 @@ READ_ONLY_REFUSAL = (
     "evidence already collected."
 )
 
+ADVISORY_REFUSAL = (
+    "The user asked whether or how this could change, not for the change: "
+    "this turn is read-only. Do not try another way to modify the tree. "
+    "Answer with what would have to change, in which files, and why."
+)
+
+
+def _operator_turns(conversation):
+    """The operator's own messages, oldest first, harness nudges excluded."""
+    turns = []
+
+    for message in conversation or ():
+        if (getattr(message, "role", None) != "user"
+                or getattr(message, "authored_by", "operator") != "operator"):
+            continue
+
+        text = "\n".join(getattr(block, "text", "") for block in message.content
+                         if getattr(block, "text", ""))
+
+        if text:
+            turns.append(text)
+
+    return turns
+
+
+def _request_scope(agent_context):
+    """What this turn asked about, for the router to bound writes and reads.
+
+    The previous operator turn is passed along so a bare acceptance ("yes,
+    do it") inherits the target the question it accepts had named.
+    """
+    import request_scope
+
+    root = globals().get("PROJECT_ROOT")
+
+    # The turn's own request, from the state that outlives compaction. Read
+    # from the conversation alone, the scope vanished the first time the
+    # context was compacted -- and with it every bound it enforces, in the
+    # middle of the turn that needed them.
+    state = getattr(agent_context, "working_state", None)
+    current = str(getattr(state, "objective", "") or "")
+    cached = getattr(agent_context, "_request_scope", None)
+
+    if cached is not None and cached[0] == current:
+        return cached[1]
+
+    turns = _operator_turns(getattr(agent_context, "conversation", None))
+
+    if not current and turns:
+        current = turns[-1]
+
+    if not current or not root:
+        return None
+
+    # The operator turn before this one, for an acceptance to inherit from.
+    earlier = [turn for turn in turns
+               if request_scope.operator_text(turn).strip()
+               != request_scope.operator_text(current).strip()]
+    # Only the registered trees that belong to THIS project: a subtree
+    # declared inside its root, wherever it resolves to. The workspace's
+    # extra roots are every corpus on the machine, and one of them is how a
+    # sibling checkout's build.sh passed for this project's own.
+    base = os.path.realpath(root)
+    extra = tuple(dict.fromkeys(
+        path for item in (getattr(WORKSPACE, "extra_roots", ())
+                          if WORKSPACE is not None else ())
+        if str(item) == base or str(item).startswith(base.rstrip("/") + "/")
+        for path in (str(item), os.path.realpath(str(item)))))
+    scope = request_scope.RequestScope.of(
+        current, previous=earlier[-1] if earlier else "",
+        root=root, extra_roots=extra)
+
+    try:
+        agent_context._request_scope = (current, scope)
+    except AttributeError:
+        pass
+
+    return scope
+
 
 def _evidence_in_context(agent_context, tool_call_id):
     """Is the result of that tool call still in the conversation to be sent?
@@ -5940,6 +6034,9 @@ def route_tool_envelope(
         role=(getattr(agent_context, "role", "main")
               if agent_context is not None else "main"),
         read_only=bool(getattr(agent_context, "read_only", False)),
+        advisory=bool(getattr(agent_context, "advisory", False)),
+        scope=(_request_scope(agent_context)
+               if agent_context is not None else None),
         # The session's mode, carried to the one place that can hold every
         # tool to its own declaration. Stated here and nowhere else: the
         # mode is this module's, and the router's job is to enforce what the

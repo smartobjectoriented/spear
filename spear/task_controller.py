@@ -30,7 +30,7 @@ from reviewer import (
 )
 from session_store import SessionEventType, SessionHandle
 from tool_exposure import (
-    READ_ONLY_RULE, READ_ONLY_RULE_ID, ToolExposurePolicy, ToolView,
+    ADVISORY_RULE, READ_ONLY_RULE, READ_ONLY_RULE_ID, ToolExposurePolicy, ToolView,
 )
 from tool_registry import ToolMutability, ToolRegistry
 from tracing import EventStatus, EventType
@@ -380,10 +380,13 @@ class TaskController:
                 AgentRole.MAIN, tuple(item.name for item in definitions),
                 definitions, chars // 4 + (1 if chars else 0), True,
                 "full registry ablation", read_only,
+                read_only and self.tool_exposure_policy.advisory_intent(
+                    request.objective),
             )
 
         context.tools = view.definitions
         context.read_only = view.read_only
+        context.advisory = view.advisory
 
         # The boundary is enforced, and the model still has to understand its
         # mission. Told to name the file that defines `add`, a run reached for
@@ -397,8 +400,11 @@ class TaskController:
             if item.item_id != READ_ONLY_RULE_ID
         ) + ((ContextItem(
             READ_ONLY_RULE_ID, ContextLayer.SYSTEM_RULES, "tool_exposure",
-            READ_ONLY_RULE, 100, Freshness.CURRENT, True,
-            inclusion_reason="the request forbade changing anything",
+            ADVISORY_RULE if view.advisory else READ_ONLY_RULE, 100,
+            Freshness.CURRENT, True,
+            inclusion_reason=("the request asked about a change, not for one"
+                              if view.advisory
+                              else "the request forbade changing anything"),
             truncatable=False,
         ),) if view.read_only else ())
         context.tool_exposure = {

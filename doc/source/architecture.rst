@@ -4,6 +4,34 @@
 Architecture
 ============
 
+.. _infrastructure_overview:
+
+Infrastructure overview
+=======================
+
+Before the internals, the whole platform on one page.  Read it from the left:
+an operator's question or change request enters through ``spear-chat`` and
+reaches the reasoning and control plane, which draws on two sources of
+evidence kept apart on purpose — the authoritative, normative one (standards,
+in warm) and the implementation one (repositories, corpora, local tools and
+build outputs, in blue).  The model backends only reason; everything that
+touches a tree goes through the execution environment and stays inside its
+workspace and read/write boundaries.  What comes out on the right is either
+grounded — an answer, a plan, a change, a validation result — or an explicit
+refusal to answer when the evidence is insufficient.
+
+.. figure:: /img/260929_SPEAR_Overview.png
+   :width: 100%
+   :alt: SPEAR infrastructure: user and session, normative and implementation
+         evidence, model backends, the runtime and control plane, the
+         execution environment, and the outputs
+
+   The SPEAR infrastructure.  The two sources of truth — specification and
+   implementation — are kept separate and reconciled only in the runtime.
+
+Runtime components
+==================
+
 SPEAR separates the interactive application from the provider-neutral task
 runtime and from the security substrate.  The same ``AgentRuntime`` executes
 the Main, Explorer and Reviewer roles; role configuration supplies isolated

@@ -55,7 +55,8 @@ The platform
 ************
 
 - :ref:`Introduction <introduction>`
-- :ref:`Architecture <architecture>`
+- :ref:`Architecture <architecture>`, starting with the
+  :ref:`infrastructure overview <infrastructure_overview>`
 - :ref:`Installation <installation>`
 - :ref:`Getting started <getting_started>`
 

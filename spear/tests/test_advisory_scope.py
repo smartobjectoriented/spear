@@ -255,6 +255,74 @@ class WritesStayOnTheNamedTarget(unittest.TestCase):
         self.assertEqual(envelope.error_category, "outside_project")
 
 
+class ShellWritesObeyTheSameScope(unittest.TestCase):
+    """`--auto` must not turn cp, sed -i or python -c into a way round the
+    refusal edit_file gives."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.root = Path(self.tmp.name)
+        family(self.root)
+        self.scope = request_scope.RequestScope.of(
+            "Please move the image of alpha to images/.", root=str(self.root))
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def refused(self, command):
+        return bool(request_scope.shell_write_refusal(command, self.scope))
+
+    def test_explicit_sibling_destinations_are_refused(self):
+        for command in ("sed -i s/a/b/ cfg/beta.cfg",
+                        "cp cfg/alpha.cfg cfg/beta.cfg",
+                        "echo x > cfg/gamma.cfg",
+                        "echo x >> out/beta/post.sh",
+                        "tee cfg/beta_guest.cfg < cfg/alpha.cfg",
+                        "rm out/gamma/image.bin",
+                        "sed -i s/a/b/ cfg/*.cfg"):
+            with self.subTest(command=command):
+                self.assertTrue(self.refused(command))
+
+    def test_run_time_destinations_cannot_reach_a_sibling(self):
+        for command in ("for f in cfg/*.cfg; do sed -i s/a/b/ $f; done",
+                        "find cfg -name '*.cfg' | xargs sed -i s/a/b/",
+                        "find cfg -name '*.cfg' -exec sed -i s/a/b/ {} \\;",
+                        "python3 -c \"open('cfg/beta.cfg','w').write('x')\"",
+                        "perl -pi -e s/a/b/ cfg/gamma.cfg",
+                        "sh -c 'echo x > cfg/beta.cfg'"):
+            with self.subTest(command=command):
+                self.assertTrue(self.refused(command))
+
+    def test_the_target_shared_files_and_builds_pass(self):
+        for command in ("sed -i s/a/b/ cfg/alpha.cfg",
+                        "sed -i s/a/b/ cfg/alpha*.cfg",
+                        "for f in cfg/alpha*.cfg; do sed -i s/a/b/ $f; done",
+                        "touch common.recipe",
+                        "echo x > src/main.c",
+                        "grep -l x cfg/*.cfg",
+                        "cat cfg/beta.cfg > /tmp/copy",
+                        "find cfg -name '*.cfg' | xargs grep -l x",
+                        "make -C src", "./scripts/build.sh all"):
+            with self.subTest(command=command):
+                self.assertFalse(self.refused(command))
+
+    def test_all_platforms_opens_the_shell_too(self):
+        scope = request_scope.RequestScope.of(
+            "Apply it to all platforms.", root=str(self.root))
+
+        self.assertEqual(request_scope.shell_write_refusal(
+            "sed -i s/a/b/ cfg/*.cfg", scope), "")
+
+    def test_the_router_refuses_it_under_the_scope_category(self):
+        router = ToolRouter(registry())
+        context = ToolExecutionContext(task_id="t", trace=TraceEmitter(),
+                                       cache={}, scope=self.scope)
+        envelope = router.execute(context, "id", "bash",
+                                  {"command": "cp cfg/alpha.cfg cfg/beta.cfg"})
+
+        self.assertEqual(envelope.error_category, "outside_requested_scope")
+
+
 class DiscoveryStaysInTheProject(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()

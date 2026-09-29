@@ -355,11 +355,20 @@ class ToolRouter:
 
             refusal = request_scope.outside_project_refusal(
                 arguments["command"], context.scope)
+            category = "outside_project"
+
+            # And what it writes: the shell obeys the target scope edit_file
+            # does, or --auto turns `cp`, `sed -i` and `python -c` into the
+            # way round it.
+            if not refusal:
+                refusal = request_scope.shell_write_refusal(
+                    arguments["command"], context.scope)
+                category = "outside_requested_scope"
 
             if refusal:
                 return self._early_failure(
                     context, tool_call_id, action_id, name, started,
-                    ToolResultStatus.DENIED, "outside_project",
+                    ToolResultStatus.DENIED, category,
                     f"ERROR: command refused: {refusal}",
                     spec.category.value, (),
                 )

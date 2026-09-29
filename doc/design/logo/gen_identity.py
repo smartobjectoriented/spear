@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
 """The SPEAR identity, emitted from one description.
 
-Concept C: three stages narrowing into one result — the specification is
+The mark: three stages narrowing into one result — the specification is
 read, the evidence is weighed, and exactly one action comes out of it. The
 silhouette is a funnel, wide at the source and single at the result, and the
 two colours carry that meaning rather than decorating it: warm is the
 authoritative source, accent is everything derived from it.
 
-    python3 gen_identity.py        # writes the canonical SVGs into ../../source/img
+    python3 gen_identity.py        # writes the three canonical SVGs into ../../source/img
 
 Everything is drawn here rather than typed into the files, because the mark
 and the wordmark share a stroke weight and a corner radius and those have to
@@ -24,32 +24,39 @@ WARM     = "#D98A2B"
 SUBTITLE = "#4A5A6A"   # reserved for prose beside the mark, not used in it
 
 # ---------------------------------------------------------------- the mark
-# One geometry at every size. The specification's slot is CUT OUT rather than
-# painted white: a white notch is only invisible until the background stops
-# being white, which on the theme's blue sidebar is immediately.
+# Drawn on a 4-unit grid inside the 64 box, so every edge lands on a whole
+# pixel at 16, 32, 48 and 64 px: at 16 px each stage is 4 px tall and the gaps
+# between them are exactly 1 px, instead of the smeared half-pixels an
+# off-grid funnel gives. The three stages keep one height, so the result reads
+# as the last step of a funnel and not as an arrowhead.
+#
+#   specification   x 4..60   y  4..20   warm
+#   reasoning       x 16..48  y 24..40   accent
+#   action          x 20..44  y 44..60   accent, to a single point
 MARK = f'''  <!-- 1. the specification: the authoritative source -->
-  <path fill="{WARM}" fill-rule="evenodd"
-        d="M10.5 6 H53.5 A3.5 3.5 0 0 1 57 9.5 V18.5 A3.5 3.5 0 0 1 53.5 22
-           H10.5 A3.5 3.5 0 0 1 7 18.5 V9.5 A3.5 3.5 0 0 1 10.5 6 Z
-           M15 11 H36 A3 3 0 0 1 36 17 H15 A3 3 0 0 1 15 11 Z"/>
+  <rect x="4" y="4" width="56" height="16" rx="4" fill="{WARM}"/>
   <!-- 2. the evidence weighed -->
-  <rect x="16" y="26" width="32" height="14" rx="3.2" fill="{ACCENT}"/>
+  <rect x="16" y="24" width="32" height="16" rx="4" fill="{ACCENT}"/>
   <!-- 3. the one action -->
-  <path fill="{ACCENT}" d="M21 44 H43 L32 58 Z"/>'''
+  <path fill="{ACCENT}" d="M20 44 H44 L32 60 Z"/>'''
 
-# The same three stages with the slot dropped: below about 24 px it is a
-# sub-pixel line that only muddies the bar it sits in. What survives is the
-# funnel, which is the whole idea.
-MARK_SMALL = f'''  <rect x="7" y="6" width="50" height="16" rx="3.6" fill="{WARM}"/>
-  <rect x="16" y="26" width="32" height="14" rx="3.2" fill="{ACCENT}"/>
-  <path fill="{ACCENT}" d="M21 44 H43 L32 58 Z"/>'''
+# The landing lockup shows the mark at about 90 px, where the specification
+# can carry its line of text. It is CUT OUT rather than painted white -- a
+# white notch is only invisible until the background stops being white -- and
+# it is the only difference: below about 48 px it is a sub-pixel line, so the
+# compact mark, the sidebar and the favicon go without it.
+MARK_LANDING = MARK.replace(
+    f'<rect x="4" y="4" width="56" height="16" rx="4" fill="{WARM}"/>',
+    f'<path fill="{WARM}" fill-rule="evenodd"\n'
+    '        d="M8 4 H56 A4 4 0 0 1 60 8 V16 A4 4 0 0 1 56 20 H8 A4 4 0 0 1 4 16\n'
+    '           V8 A4 4 0 0 1 8 4 Z M14 10 H34 A2 2 0 0 1 34 14 H14 A2 2 0 0 1 14 10 Z"/>')
 
 # ------------------------------------------------------------ the wordmark
 # Monoline geometric capitals: one stroke weight, round caps and joins, the
 # same language as the mark. Drawn on a 70-unit cap height with the baseline
 # at y=80, so a letter's box is 10..80.
 # what the mark and the wordmark actually occupy, for the lockup arithmetic
-MARK_TOP, MARK_H, MARK_W = 6, 52, 64      # y 6..58 inside the 64 box
+MARK_TOP, MARK_H, MARK_W = 4, 56, 64      # y 4..60 inside the 64 box
 CAP_TOP, CAP_H = 10, 70                   # the wordmark's cap band
 
 SW = 11          # stroke weight
@@ -98,17 +105,8 @@ def main():
         (OUT / name).write_text(text)
         written.append(name)
 
-    # the detailed mark, for anywhere it is shown large
+    # the mark: sidebar (html_logo), favicon, and anywhere it stands alone
     write("spear-mark.svg", svg(64, 64, MARK, f"{NAME} mark", FULL))
-
-    # the small mark: sidebar, tab, favicon
-    write("spear-mark-small.svg",
-          svg(64, 64, MARK_SMALL, f"{NAME} mark", FULL))
-
-    # square favicon variant: same small mark, breathing room, on nothing
-    fav = ('  <g transform="translate(6 6) scale(0.8125)">\n'
-           + "\n".join("  " + l for l in MARK_SMALL.splitlines()) + "\n  </g>")
-    write("spear-icon.svg", svg(64, 64, fav, f"{NAME} icon", FULL))
 
     # The two lockups, with the mark and the wordmark optically centred on
     # one line. Computed rather than typed: the mark's box and the cap height
@@ -129,14 +127,14 @@ def main():
         write(name, svg(round(word_x + w + pad), height, mark + "\n" + word,
                         NAME if "horizontal" in name else FULL, FULL))
 
-    # the sidebar lockup takes the small mark: it is shown at about 40 px
-    lockup("spear-logo-horizontal.svg", MARK_SMALL, 0.92, 0.50,
+    # mark + SPEAR, for use outside the manual (README, slides, banners)
+    lockup("spear-logo-horizontal.svg", MARK, 0.92, 0.50,
            height=64, gap=16, pad=6)
 
     # the landing lockup takes the detailed one, and no expansion line: the
     # page prints the full name as its own title just below, and that line
     # was the last thing here that needed a font to be installed.
-    lockup("spear-logo.svg", MARK, 1.45, 0.72, height=104, gap=26, pad=8)
+    lockup("spear-logo.svg", MARK_LANDING, 1.45, 0.72, height=104, gap=26, pad=8)
 
 
     for name in written:

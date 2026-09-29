@@ -15,6 +15,9 @@
 # licence and a contract, not about a registry, and it should cost a
 # deliberate word.
 set -e
+# The release this is: "[spear vX.Y.Z] <script> <args>" on stderr, once.
+_banner="$(dirname "$(readlink -f "$0")")/../common/banner.sh"
+[ -r "$_banner" ] && . "$_banner"
 
 ALLOW=0
 ARGS=()

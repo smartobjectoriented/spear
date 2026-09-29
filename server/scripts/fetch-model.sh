@@ -19,6 +19,10 @@
 # -c so an interrupted fetch resumes instead of starting over.
 set -euo pipefail
 
+# The release this is: "[spear vX.Y.Z] <script> <args>" on stderr, once.
+_banner="$(dirname "$(readlink -f "$0")")/../../scripts/common/banner.sh"
+[ -r "$_banner" ] && . "$_banner"
+
 REPO="${1:-${SPEAR_SERVER_MODEL_REPO:-}}"
 FILE="${2:-${SPEAR_SERVER_MODEL_FILE:-}}"
 DEST="${3:-${SPEAR_SERVER_MODELS_DIR:-}}"

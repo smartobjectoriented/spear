@@ -1,0 +1,32 @@
+v1.0.0 (29 sep 2026)
+
+First release of SPEAR, and the first line with a release branch
+(release/v1.0). It is the runtime as it stood when it was frozen after the
+advisory-question and scope fixes, with the documentation and the visual
+identity that came with it.
+
+	•	An agent harness for evidence-grounded engineering: a specification
+		bound as the authoritative source, the project's own trees indexed
+		and retrieved from, and every reported claim tied to what was
+		retrieved and run. Where the evidence does not support an answer,
+		the answer is withheld and the reason given.
+
+	•	Controlled modification of a tree: investigate, plan, edit, test,
+		review. A question about a change stays read-only; a write lands on
+		the target the request named and on the shared files it depends on,
+		through edit_file and through the shell alike; commands stay inside
+		the project; a change nothing verified is reported as unverified.
+
+	•	Confined execution, fail-closed: every command runs under bubblewrap
+		with its own resource limits, reads and writes are bounded to the
+		declared trees, and network access is granted per mode.
+
+	•	Several model backends behind one provider-neutral runtime: any
+		OpenAI-compatible endpoint, local or through an SSH tunnel to a GPU
+		host, and the Anthropic API. The inference server component, the
+		container images and the fine-tuning machinery ship alongside.
+
+	•	Every entry point prints the release it belongs to when it starts,
+		"[spear v1.0.0] spear-chat --reds --auto", from the git tag
+		(scripts/spearversion.sh); the documentation derives its version from
+		the same helper.

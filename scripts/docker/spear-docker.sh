@@ -17,6 +17,8 @@
 # ~/soo/so3/build/tmp/toolchains is the standard example.
 set -e
 HERE="$(cd "$(dirname "$0")" && pwd)"
+# The release this is: "[spear vX.Y.Z] <script> <args>" on stderr, once.
+[ -r "$HERE/../common/banner.sh" ] && . "$HERE/../common/banner.sh"
 REPO="$(cd "$HERE/../.." && pwd)"
 APP="${SPEAR_APP:-$REPO/spear}"
 IMAGE="${SPEAR_IMAGE:-spear:1.0}"

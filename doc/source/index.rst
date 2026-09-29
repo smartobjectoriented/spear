@@ -32,6 +32,7 @@
    operations
    Coding conventions <coding_conventions>
    Development flow <dev_flow>
+   Release process <release_process>
    glossary
 
 |
@@ -87,6 +88,7 @@ Reference
 - :ref:`Troubleshooting <troubleshooting>`
 - :ref:`Our coding conventions <coding_conventions>`
 - :ref:`Our development flow <dev_flow>`
+- :ref:`Release process <release_process>`
 
 
 To edit the documentation and to use the correct underlying policy, you can read `this documentation style guide <https://documentation-style-guide-sphinx.readthedocs.io/en/latest/style-guide.html>`_.

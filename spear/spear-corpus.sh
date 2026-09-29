@@ -16,6 +16,9 @@
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+# The release this is: "[spear vX.Y.Z] <script> <args>" on stderr, once.
+[ -r "$SCRIPT_DIR/../scripts/common/banner.sh" ] && . "$SCRIPT_DIR/../scripts/common/banner.sh"
+
 # The venv interpreter by absolute path, for the reason spear-chat.sh gives:
 # `activate` hardcodes a path that a relocated tree no longer has, and the
 # fallback to the system python3 lacks every dependency.

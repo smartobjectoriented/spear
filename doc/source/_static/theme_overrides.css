@@ -27,3 +27,16 @@ max-width: none;
 .left h2 {
 	text-align: left;
 }
+
+/* The SPEAR mark is teal and amber, which has poor contrast against the RTD
+ * theme's blue sidebar search area: sit it on a light rounded card, as the
+ * sibling projects do. The theme's own ".wy-side-nav-search > a img.logo"
+ * rule forces "background: transparent" at the same specificity, hence the
+ * matching selector and !important. */
+.wy-side-nav-search a img.logo,
+.wy-side-nav-search img.logo {
+	background-color: #c5ddf5 !important;   /* light blue card */
+	width: 64px;
+	padding: 8px;
+	border-radius: 8px;
+}

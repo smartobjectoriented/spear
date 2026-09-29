@@ -1,6 +1,6 @@
 # SPEAR visual identity
 
-The mark is **concept C**: three stages narrowing into one result.
+The mark is three stages narrowing into one result.
 
 ```
 specification   the authoritative source        warm, widest
@@ -22,21 +22,24 @@ this directory holds only the source that generates them.
 
 | Asset | Role |
 |---|---|
-| `spear-logo-horizontal.svg` | `html_logo` — the sidebar lockup, mark + SPEAR |
-| `spear-logo.svg` | the landing-page lockup, larger mark + SPEAR |
-| `spear-mark.svg` | the mark alone, for anywhere it is shown large |
-| `spear-mark-small.svg` | the mark alone below ~24 px |
-| `spear-icon.svg` | `html_favicon` — the small mark, square, with margin |
+| `spear-mark.svg` | the mark alone: `html_logo` (sidebar) and `html_favicon` |
+| `spear-logo.svg` | the landing-page lockup, mark + SPEAR |
+| `spear-logo-horizontal.svg` | mark + SPEAR, for use outside the manual |
 
-Two variants of one mark, not two marks. The small one drops the
-specification's slot, because below about 24 px that slot is a sub-pixel line
-that only muddies the bar it sits in. Everything else — proportions, colours,
-corner radii — is identical, so the funnel is the same object at every size.
+The mark is drawn on a 4-unit grid inside its 64 box, so every edge falls on a
+whole pixel at 16, 32, 48 and 64 px: at 16 px each stage is 4 px tall and the
+gaps between them exactly 1 px. The three stages keep one height, so the
+result reads as the end of a funnel rather than as an arrowhead.
+
+One mark, with one difference by size: the landing lockup cuts a line of text
+into the specification, where it is about 6 px tall. Below about 48 px that
+line is sub-pixel and only muddies the bar, so the mark used everywhere else
+goes without it. Proportions, colours and corner radii are identical.
 
 The wordmark is monoline geometry, not live text. A logo that renders
 differently on a machine without the right font is not a logo, so **no asset
 here references a font**; the landing lockup carries no expansion line either,
-because the page prints the full name as its own title immediately below it.
+because the page prints the full name as its title immediately below it.
 
 ## Palette
 
@@ -56,20 +59,21 @@ part of a project mark.
 ## Maintaining it
 
 ```sh
-python3 gen_identity.py    # rewrites the five SVGs in doc/source/img
+python3 gen_identity.py    # rewrites the three SVGs in doc/source/img
 python3 proof.py           # renders proof.png: 16/24/32/48/64 px, sidebar,
-                           # light card, dark, monochrome
+                           # light card, dark, monochrome (not committed)
 ```
 
 `gen_identity.py` is the single description. The mark's box and the wordmark's
 cap height are constants there, and the lockups compute their alignment from
 them — a hand-placed offset goes wrong silently the first time either moves.
-`proof.png` itself is disposable and is not committed.
 
 ## Where it is wired in
 
-Nowhere in the Sphinx documentation: `doc/` follows the shared
-configuration of its sibling projects verbatim (conf.py, theme_overrides.css, landing page), which has
-no sidebar logo, no favicon and the institutional logotype alone on the
-landing page. The mark is kept here for use outside the manual.
-
+- `doc/source/conf.py`: `html_logo` and `html_favicon`, both `spear-mark.svg`.
+- `doc/source/_static/theme_overrides.css`: the light card behind the sidebar
+  mark, the same treatment the sibling projects give theirs, because teal on
+  the theme's blue has too little contrast.
+- `doc/source/index.rst`: the landing lockup as a centred block above the
+  title — never floated, which wraps the title around it — then the full
+  name as the title, then the institutional logotype.

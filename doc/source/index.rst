@@ -1,9 +1,9 @@
 .. SPEAR documentation master file.
 
-.. image:: img/REDS-HEIG-VD.png
+.. image:: img/spear-logo.svg
    :align: center
-   :scale: 30%
-   :target: https://reds.heig-vd.ch
+   :width: 336px
+   :alt: SPEAR
 
 .. toctree::
    :maxdepth: 5
@@ -39,8 +39,15 @@
 
 .. rst-class:: center
 
-SPEAR — Specification-driven Platform for Embedded Agentic Reasoning
-####################################################################
+Specification-driven Platform for Embedded Agentic Reasoning
+############################################################
+
+.. image:: img/REDS-HEIG-VD.png
+   :align: center
+   :width: 190px
+   :target: https://reds.heig-vd.ch
+
+|
 
 .. rst-class:: left
 

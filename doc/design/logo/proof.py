@@ -14,22 +14,17 @@ HTML = """<!doctype html><meta charset="utf-8"><style>
  .c>div{{background:#e8f1f8;border-radius:8px;padding:7px 12px;display:flex;align-items:center}}
  .m img{{filter:grayscale(1) contrast(1.4)}} h1{{font-size:18px;margin:20px 24px 4px}}
  .n{{color:#8b98a5;font-size:11px;margin:2px 24px}}
-</style><h1>SPEAR identity — concept C, finalized</h1>
-<div class="r"><div class="l">small mark</div>
- <div class="b w"><img src="{i}/spear-mark-small.svg" height="16">
-  <img src="{i}/spear-mark-small.svg" height="24"><img src="{i}/spear-mark-small.svg" height="32">
-  <img src="{i}/spear-mark-small.svg" height="48"><img src="{i}/spear-mark-small.svg" height="64"></div>
- <div class="b d"><img src="{i}/spear-mark-small.svg" height="16">
-  <img src="{i}/spear-mark-small.svg" height="32"><img src="{i}/spear-mark-small.svg" height="64"></div></div>
+</style><h1>SPEAR identity</h1>
+<div class="r"><div class="l">mark</div>
+ <div class="b w"><img src="{i}/spear-mark.svg" height="16">
+  <img src="{i}/spear-mark.svg" height="24"><img src="{i}/spear-mark.svg" height="32">
+  <img src="{i}/spear-mark.svg" height="48"><img src="{i}/spear-mark.svg" height="64"></div>
+ <div class="b d"><img src="{i}/spear-mark.svg" height="16">
+  <img src="{i}/spear-mark.svg" height="32"><img src="{i}/spear-mark.svg" height="64"></div></div>
 <div class="n">16 · 24 · 32 · 48 · 64 px</div>
-<div class="r"><div class="l">detailed mark</div>
- <div class="b w"><img src="{i}/spear-mark.svg" height="24"><img src="{i}/spear-mark.svg" height="32">
-  <img src="{i}/spear-mark.svg" height="64"><img src="{i}/spear-mark.svg" height="128"></div>
- <div class="b w"><img src="{i}/spear-icon.svg" height="32"><img src="{i}/spear-icon.svg" height="64"></div></div>
-<div class="n">detailed mark at 24 · 32 · 64 · 128 px, then the square icon variant</div>
-<div class="r"><div class="l">sidebar lockup</div>
- <div class="b s"><img src="{i}/spear-logo-horizontal.svg" height="42"></div>
- <div class="b c"><div><img src="{i}/spear-logo-horizontal.svg" height="42"></div></div></div>
+<div class="r"><div class="l">sidebar</div>
+ <div class="b s"><img src="{i}/spear-mark.svg" height="48"></div>
+ <div class="b c"><div><img src="{i}/spear-mark.svg" height="48"></div></div></div>
 <div class="n">bare theme blue, then on the light card the CSS adds</div>
 <div class="r"><div class="l">horizontal</div>
  <div class="b w"><img src="{i}/spear-logo-horizontal.svg" height="60"></div></div>
@@ -37,8 +32,8 @@ HTML = """<!doctype html><meta charset="utf-8"><style>
  <div class="b w"><img src="{i}/spear-logo.svg" height="104"></div></div>
 <div class="r m"><div class="l">monochrome</div>
  <div class="b w"><img src="{i}/spear-logo-horizontal.svg" height="46">
-  <img src="{i}/spear-mark-small.svg" height="32"><img src="{i}/spear-mark-small.svg" height="16"></div>
- <div class="b d"><img src="{i}/spear-mark-small.svg" height="32"></div></div>
+  <img src="{i}/spear-mark.svg" height="32"><img src="{i}/spear-mark.svg" height="16"></div>
+ <div class="b d"><img src="{i}/spear-mark.svg" height="32"></div></div>
 """
 p = HERE / ".proof.html"
 p.write_text(HTML.format(i=IMG.as_uri()))

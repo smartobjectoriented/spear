@@ -2,9 +2,12 @@
      width="227" height="64" role="img" aria-label="SPEAR">
   <title>SPEAR — Specification-driven Platform for Embedded Agentic Reasoning</title>
   <g transform="translate(6 2.56) scale(0.92)">
-    <rect x="7" y="6" width="50" height="16" rx="3.6" fill="#D98A2B"/>
-    <rect x="16" y="26" width="32" height="14" rx="3.2" fill="#0E7C9B"/>
-    <path fill="#0E7C9B" d="M21 44 H43 L32 58 Z"/>
+    <!-- 1. the specification: the authoritative source -->
+    <rect x="4" y="4" width="56" height="16" rx="4" fill="#D98A2B"/>
+    <!-- 2. the evidence weighed -->
+    <rect x="16" y="24" width="32" height="16" rx="4" fill="#0E7C9B"/>
+    <!-- 3. the one action -->
+    <path fill="#0E7C9B" d="M20 44 H44 L32 60 Z"/>
   </g>
   <g transform="translate(80.88 9.5) scale(0.5)"
      fill="none" stroke="#12263A" stroke-width="11"

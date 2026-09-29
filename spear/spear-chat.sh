@@ -43,6 +43,9 @@ if [ -z "${SPEAR_IN_USER_SCOPE:-}" ] \
     exec systemd-run --user --scope --quiet -- "$0" "$@"
 fi
 
+# The release this is: "[spear vX.Y.Z] <script> <args>" on stderr, once.
+[ -r "$SCRIPT_DIR/../scripts/common/banner.sh" ] && . "$SCRIPT_DIR/../scripts/common/banner.sh"
+
 # ── parse the backend selector + optional pod overrides, keep the rest for
 #    rag_chat.py. --pod-host / --pod-port let you point at a pod on the fly
 #    (e.g. after a restart changed the port) without editing pod.conf.

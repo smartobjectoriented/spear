@@ -20,6 +20,8 @@
 set -e
 
 HERE="$(cd "$(dirname "$(readlink -f "$0")")" && pwd)"
+# The release this is: "[spear vX.Y.Z] <script> <args>" on stderr, once.
+[ -r "$HERE/common/banner.sh" ] && . "$HERE/common/banner.sh"
 DOCKER_SCRIPTS="$HERE/docker"
 LABEL=ch.heig-vd.reds.spear
 

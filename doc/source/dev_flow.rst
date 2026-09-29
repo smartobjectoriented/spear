@@ -3,9 +3,9 @@
 Development flow
 ################
 
-An overview of the flow used in SPEAR. It is deliberately short: the project
-has one long-lived branch and no release ceremony, and pretending otherwise
-in a document would not make it true.
+An overview of the flow used in SPEAR. It is deliberately short. Development
+happens on ``main``; how a version is cut from it and maintained afterwards is
+the subject of :ref:`the release process <release_process>`.
 
 Branches
 ********

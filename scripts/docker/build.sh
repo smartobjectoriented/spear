@@ -20,6 +20,8 @@
 # which, rather than failing on the first missing one.
 set -e
 REPO="$(cd "$(dirname "$0")/../.." && pwd)"
+# The release this is: "[spear vX.Y.Z] <script> <args>" on stderr, once.
+[ -r "$REPO/scripts/common/banner.sh" ] && . "$REPO/scripts/common/banner.sh"
 HERE="$REPO/scripts/docker"
 APP="${SPEAR_APP:-$REPO/spear}"
 

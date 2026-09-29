@@ -35,6 +35,8 @@
 set -euo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# The release this is: "[spear vX.Y.Z] <script> <args>" on stderr, once.
+[ -r "$HERE/common/banner.sh" ] && . "$HERE/common/banner.sh"
 REPO="$(cd "$HERE/.." && pwd)"
 MANIFEST="${SPEAR_RUNTIME_MANIFEST:-$REPO/server/runtime/manifest.json}"
 

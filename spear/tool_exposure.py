@@ -25,6 +25,18 @@ READ_ONLY_RULE = (
     "the stated question, then answer immediately."
 )
 
+#: The same boundary, reached by a question rather than a prohibition. Said
+#: differently because the turn owes a different answer: not "nothing may
+#: change" but "say what would change" -- the feasibility, the files, the
+#: trade-offs -- and leave the change to be asked for.
+ADVISORY_RULE = (
+    "READ-ONLY TASK: The user asked whether or how something could be "
+    "changed; they did not ask for the change. Investigate as much as the "
+    "answer needs, then answer it: whether it is feasible, what would have "
+    "to change and in which files, and the trade-offs. Do not edit files or "
+    "run commands that modify the tree -- the change is theirs to request."
+)
+
 
 @dataclass(frozen=True)
 class ToolView:
@@ -37,6 +49,9 @@ class ToolView:
     #: The request forbade changing anything. Not a guess about what the task
     #: needs -- an instruction it gave -- so it binds the command boundary too.
     read_only: bool = False
+    #: Read-only because the request is a question about a change, not a
+    #: prohibition. The boundary is the same; what the turn is told is not.
+    advisory: bool = False
 
 
 class ToolExposurePolicy:
@@ -112,9 +127,29 @@ class ToolExposurePolicy:
 
     @classmethod
     def read_only_intent(cls, objective: str) -> bool:
-        """True when the request forbids changing anything at all."""
+        """True when the request forbids changing anything, or only asks.
 
-        return bool(cls._READ_ONLY_INTENT.search(objective or ""))
+        A question about a change -- "could we move X to Y?", "how could
+        this be restructured?" -- is answered by reading, and a turn that
+        can write will be pushed to, by itself or by a gate. So it gets the
+        same boundary as a prohibition: no write tools, bash without
+        workspace write. The acceptance that follows ("yes, do it") is a
+        new turn with its own reading.
+        """
+
+        return (bool(cls._READ_ONLY_INTENT.search(objective or ""))
+                or cls.advisory_intent(objective))
+
+    @classmethod
+    def advisory_intent(cls, objective: str) -> bool:
+        """A question about a change that asks for none, and prohibits none."""
+        import request_intent
+        from agent_runtime import _WRITE_REQUEST_RE
+
+        if cls._READ_ONLY_INTENT.search(objective or ""):
+            return False
+
+        return request_intent.advisory(objective or "", _WRITE_REQUEST_RE)
 
     @classmethod
     def floor(cls, role: AgentRole, *, read_only: bool = False) -> tuple[str, ...]:
@@ -252,10 +287,13 @@ class ToolExposurePolicy:
                     + len(json.dumps(item.input_schema, sort_keys=True))
                     for item in definitions)
 
+        advisory = read_only and self.advisory_intent(objective)
+
         return ToolView(
             role_name, tuple(item.name for item in definitions), definitions,
             chars // 4 + (1 if chars else 0), True,
-            ("explicit read-only request" if read_only
+            ("advisory question" if advisory
+             else "explicit read-only request" if read_only
              else "deterministic role/task category exposure"),
-            read_only,
+            read_only, advisory,
         )

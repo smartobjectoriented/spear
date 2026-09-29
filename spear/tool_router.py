@@ -210,8 +210,14 @@ class ToolExecutionContext:
     #: workspace write for the whole turn, so a prohibition the tool view
     #: honours cannot be routed around with `sed -i`, `cp` or `>`.
     read_only: bool = False
-
-    #: Whether a mutating action may run yet, asked fresh at every call.
+    #: Read-only because the request is a question about a change. The
+    #: refusal then says so, instead of citing a prohibition nobody wrote.
+    advisory: bool = False
+    #: What the turn asked about, in the tree it runs in (a
+    #: request_scope.RequestScope). Bounds where writes may land among
+    #: analogous targets, and where commands may look. None: unbounded,
+    #: which is every caller that does not know the request.
+    scope: Any = None
     #:
     #: Supplied by the caller because only it holds the turn's lifecycle. It
     #: returns an object with `allowed`, `reason` and `message`; anything
@@ -231,6 +237,11 @@ class ToolExecutionContext:
     #: every declaration honoured as before -- the gate below can only refuse
     #: a mode it was actually told about.
     execution_mode: str = ""
+
+
+#: Where the reasons a turn gave for writing outside its scope are kept, so
+#: the trail shows them next to the write they allowed.
+_SCOPE_REASONS_KEY = "__scope_reasons__"
 
 
 class ToolRouter:
@@ -291,11 +302,67 @@ class ToolRouter:
             return self._early_failure(
                 context, tool_call_id, action_id, name, started,
                 ToolResultStatus.DENIED, "read_only_task",
-                f"ERROR: this task is read-only -- you were asked not to "
-                f"change anything, so '{name}' is refused. Nothing in this "
-                f"turn can write: answer from what you have read.",
+                (f"ERROR: this task is read-only -- the user asked whether "
+                 f"or how something could change, not for the change, so "
+                 f"'{name}' is refused. Nothing in this turn can write: "
+                 f"answer with what would have to change, where, and why."
+                 if context.advisory else
+                 f"ERROR: this task is read-only -- you were asked not to "
+                 f"change anything, so '{name}' is refused. Nothing in this "
+                 f"turn can write: answer from what you have read."),
                 spec.category.value, (),
             )
+
+        # Where the write lands, against what the turn asked about. Reading a
+        # sibling target is how a shared mechanism is understood; writing to
+        # one because grep found the same line there is scope the user did
+        # not give. A stated reason lets it through, and is kept.
+
+        if (context.scope is not None and isinstance(arguments, Mapping)
+                and spec.mutability == ToolMutability.MUTATING):
+            import request_scope
+
+            target = next((arguments[key] for key in ("path", "file_path", "file")
+                           if isinstance(arguments.get(key), str)), "")
+            reason = arguments.get("scope_reason")
+            refusal = request_scope.sibling_write_refusal(context.scope, target)
+
+            if refusal and not (isinstance(reason, str) and reason.strip()):
+                return self._early_failure(
+                    context, tool_call_id, action_id, name, started,
+                    ToolResultStatus.DENIED, "outside_requested_scope",
+                    f"ERROR: '{name}' refused: {refusal}",
+                    spec.category.value, (),
+                )
+
+            if refusal:
+                context.cache.setdefault(_SCOPE_REASONS_KEY, []).append(
+                    {"path": target, "reason": reason.strip()[:500]})
+
+        if isinstance(arguments, Mapping) and "scope_reason" in arguments:
+            arguments = {key: value for key, value in arguments.items()
+                         if key != "scope_reason"}
+
+        # And where a command looks. A project's build is found in the
+        # project; a build.sh in another checkout of the home directory is
+        # that checkout's, and reading it as this one's is how a turn ends up
+        # running somebody else's build.
+
+        if (context.scope is not None and spec.category == ToolCategory.COMMAND
+                and isinstance(arguments, Mapping)
+                and isinstance(arguments.get("command"), str)):
+            import request_scope
+
+            refusal = request_scope.outside_project_refusal(
+                arguments["command"], context.scope)
+
+            if refusal:
+                return self._early_failure(
+                    context, tool_call_id, action_id, name, started,
+                    ToolResultStatus.DENIED, "outside_project",
+                    f"ERROR: command refused: {refusal}",
+                    spec.category.value, (),
+                )
 
         # And the other reason a write may not run yet: the turn has not
         # established what it is changing or why. The read-only gate above

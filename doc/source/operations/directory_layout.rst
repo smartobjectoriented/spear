@@ -301,10 +301,10 @@ This documentation
        *.rst                        the chapters
        _static/theme_overrides.css  small readability overrides
        img/
-         SPEAR.drawio               every diagram, one page each (source)
+         spear.drawio               every diagram, one page each (source)
          SPEAR-<Page>.drawio.png    the pages exported for the HTML build
 
-Diagrams follow the convention of the sibling projects.  ``SPEAR.drawio`` is the only source
+Diagrams follow the convention of the sibling projects.  ``spear.drawio`` is the only source
 and is edited directly in draw.io or the VS Code extension.  Each page the
 documentation uses is exported to ``SPEAR-<Page>.drawio.png`` (one file per
 page, named after the page), and the exported PNG is committed next to the
@@ -313,10 +313,10 @@ page, named after the page), and the exported PNG is committed next to the
 .. code-block:: console
 
    $ cd doc/source/img
-   $ mkdir -p ~/snap/drawio/common/x && cp SPEAR.drawio ~/snap/drawio/common/x/
+   $ mkdir -p ~/snap/drawio/common/x && cp spear.drawio ~/snap/drawio/common/x/
    $ xvfb-run -a drawio -x -f png --scale 1.5 --border 10 -p 1 \
          -o ~/snap/drawio/common/x/SPEAR-Overview.drawio.png \
-         ~/snap/drawio/common/x/SPEAR.drawio --no-sandbox --disable-gpu
+         ~/snap/drawio/common/x/spear.drawio --no-sandbox --disable-gpu
 
 ``-p`` is the 1-based page index.  The snap is confined: it cannot read
 ``/opt`` nor any hidden directory in ``$HOME`` (``~/.cache`` included), which

@@ -68,7 +68,7 @@ runtime dependencies.
 Diagrams
 --------
 
-As in the sibling projects: source/img/SPEAR.drawio holds every diagram, one page
+As in the sibling projects: source/img/spear.drawio holds every diagram, one page
 each, and is edited directly in draw.io. Each page the documentation uses is
 exported to source/img/SPEAR-<Page>.drawio.png and committed with the
 .drawio in the same change; the .rst files reference the PNG

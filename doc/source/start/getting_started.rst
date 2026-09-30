@@ -24,7 +24,7 @@ the only prerequisite:
 
 That image carries the harness and the embedder; you mount your own source
 trees and it talks to the model served on the inference host over an SSH
-tunnel.  :doc:`/container` describes what is baked, what is mounted, and the two
+tunnel.  :doc:`/start/container` describes what is baked, what is mounted, and the two
 ``--security-opt`` flags without which the harness refuses to run any command
 at all.
 
@@ -57,8 +57,8 @@ The native path
 
 To run it natively instead — which is what you want if you intend to change
 the harness, re-index, or register a corpus — start from
-``spear/deploy/install.sh`` and :doc:`/operations`.
+``spear/deploy/install.sh`` and :doc:`/operations/operations`.
 
 Native installation puts the entry points on ``PATH`` through
-``~/.local/bin``; :doc:`/usage` is the tour of what they do, and
-:doc:`/directory_layout` explains what lives where.
+``~/.local/bin``; :doc:`/using/usage` is the tour of what they do, and
+:doc:`/operations/directory_layout` explains what lives where.

@@ -25,7 +25,7 @@ two roles distinct throughout: a claim about what is *required* may rest only
 on the authoritative source, while the code may illustrate, compare and
 contradict but never establish. Where the evidence does not support a claim,
 the answer is withheld with the reason rather than issued with a guess. See
-:doc:`/standards`.
+:doc:`/reasoning/standards`.
 
 It is **self-hosted**. No prompt, no source file and no command output leaves
 the machine unless a tool call is explicitly granted the ``network``
@@ -41,14 +41,14 @@ It has four parts:
 **A retrieval corpus.**
    A vector store indexed from the source trees the platform is expected to
    reason about: an operating system, a build system, a UI stack, a
-   bootloader, or any tree you register.  See :doc:`/retrieval` and
-   :doc:`/projects`.
+   bootloader, or any tree you register.  See :doc:`/using/retrieval` and
+   :doc:`/using/projects`.
 
 **A normative store.**
    The authoritative specifications a session can be bound to, held as
    provisions rather than as pages: each with its kind, its ordinal, its
    section and its page, so a claim can cite one and be checked against it.
-   See :doc:`/standards`.
+   See :doc:`/reasoning/standards`.
 
 **An execution harness.**
    The part that lets the model actually *do* things: read files, run builds,
@@ -168,8 +168,8 @@ What this documentation covers
 The chapters follow the life of a tool call: what may run
 (:doc:`/harness/security_model`), where it runs (:doc:`/harness/sandbox`), how it reaches the
 network if allowed (:doc:`/harness/network`), what resources it may consume
-(:doc:`/harness/resource_control`), how all of that is verified (:doc:`/testing`), and
-what to look at when it misbehaves (:doc:`/operations`).
+(:doc:`/harness/resource_control`), how all of that is verified (:doc:`/operations/testing`), and
+what to look at when it misbehaves (:doc:`/operations/operations`).
 
 Several sections quote real measurements.  Those numbers come from this
 machine and are labelled as such; :doc:`/harness/resource_control` discusses which of

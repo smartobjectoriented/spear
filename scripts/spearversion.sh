@@ -10,7 +10,7 @@
 # When the tree carries no git metadata (a tarball export, a container image,
 # a copy without .git), the SPEAR_VERSION_FALLBACK constant below is printed
 # instead. It is bumped with every release -- see
-# doc/source/release_process.rst.
+# doc/source/contributing/release_process.rst.
 #
 # Used by the banner the entry points print (scripts/common/banner.sh) and by
 # the documentation (doc/source/conf.py).

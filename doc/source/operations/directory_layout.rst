@@ -40,7 +40,7 @@ Top level
      - Everything about the container image: ``Dockerfile``, the build and run
        wrappers, the entrypoint and the relative-path corpus registry.  It sits
        at the root rather than under ``spear/`` because it draws on both
-       (:doc:`/container`).
+       (:doc:`/start/container`).
    * - ``llama.cpp-next/``
      - 1.3 G
      - The ``llama.cpp`` checkout and build providing ``llama-server``.
@@ -122,7 +122,7 @@ The application
      - The startup backend picker.  Writes ``active-backend.conf``.
    * - ``tests/``
      - Forty-four test modules, 851 tests.  ``test_tool_runtime.py`` is the
-       largest; see :doc:`/testing`.
+       largest; see :doc:`/operations/testing`.
 
 Configuration
 =============
@@ -161,11 +161,11 @@ Configuration
      - The tool usage guide handed to the model.
    * - ``rules.d/``
      - Prompt fragments injected per task kind.  ``rules.d/corpora/<name>.md``
-       holds a corpus's orientation map (:doc:`/retrieval`).
+       holds a corpus's orientation map (:doc:`/using/retrieval`).
    * - ``skills/``
      - Task recipes (build debugging, rootfs packages, code quality…), each
        optionally opening with a ``SKILL.md`` frontmatter block read by
-       ``skill_library.py`` (:doc:`/retrieval`).
+       ``skill_library.py`` (:doc:`/using/retrieval`).
 
 .. _resource-directories:
 
@@ -268,7 +268,7 @@ These are on ``PATH`` (via ``~/.local/bin``):
 ``spear-docker``
    The same assistant in a container.  It takes ``spear-chat``'s arguments and
    adds the mounts, the tunnel and the working-directory translation
-   (:doc:`/container`).
+   (:doc:`/start/container`).
 
 ``spear-corpus``
    Manages the ``projects.json`` registry: ``add`` a tree, or ``scan`` a

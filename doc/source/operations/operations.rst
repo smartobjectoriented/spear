@@ -174,7 +174,7 @@ Known environment quirks
    * - ``drawio`` CLI export fails on every file
      - snap 30.4.1 raises ``ReferenceError: next is not defined`` from its own
        ``electron.js``.  The documentation renders its SVGs directly instead
-       (:doc:`/directory_layout`).
+       (:doc:`/operations/directory_layout`).
    * - Network tests flaky under heavy load
      - the slirp readiness wait is a wall-clock timeout; the attachment itself
        is timing-independent (:doc:`/harness/network`).

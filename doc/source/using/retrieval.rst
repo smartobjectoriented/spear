@@ -104,7 +104,7 @@ That root defaults to the **repository root**, so the six corpora that live
 inside the repository (``llama.cpp-next``, ``qwen3-finetune``, ``src``,
 ``spear`` and the two under ``corpora/``) are found wherever the
 repository is cloned, and a container overrides the root with its mount point
-(:doc:`/container`).
+(:doc:`/start/container`).
 
 Federated and shared corpora
 ============================

@@ -119,7 +119,8 @@ class TheManifestIsAContract(unittest.TestCase):
         """
         defaults = MANIFEST["server_defaults"]
 
-        self.assertEqual(defaults["SPEAR_SERVER_CTX"], "98304")
+        self.assertEqual(defaults["SPEAR_SERVER_CTX"], "524288")
+        self.assertEqual(defaults["SPEAR_SERVER_NATIVE_CTX"], "262144")
         self.assertEqual(defaults["SPEAR_SERVER_PARALLEL"], "1")
         self.assertEqual(defaults["SPEAR_SERVER_NGL"], "99")
         self.assertEqual(defaults["SPEAR_SERVER_THREADS"], "16")

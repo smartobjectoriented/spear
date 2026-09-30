@@ -78,6 +78,9 @@ fi
 case "$SPEAR_SERVER_CTX" in
     ''|*[!0-9]*) echo "serve.sh: SPEAR_SERVER_CTX is not a number: $SPEAR_SERVER_CTX" >&2; exit 78 ;;
 esac
+case "${SPEAR_SERVER_NATIVE_CTX:-0}" in
+    *[!0-9]*) echo "serve.sh: SPEAR_SERVER_NATIVE_CTX is not a number: $SPEAR_SERVER_NATIVE_CTX" >&2; exit 78 ;;
+esac
 
 # ── the card ─────────────────────────────────────────────────────────
 # Pinned before llama.cpp enumerates anything: CUDA reads this at
@@ -130,5 +133,19 @@ ARGS=(--model "$SPEAR_SERVER_MODEL"
 [ -n "${SPEAR_SERVER_THREADS:-}" ] && ARGS+=(--threads "$SPEAR_SERVER_THREADS")
 [ "$NCPUMOE" -gt 0 ] 2>/dev/null && ARGS+=(--n-cpu-moe "$NCPUMOE")
 [ -n "$LORA" ] && ARGS+=(--lora "$LORA")
+
+# ── context beyond the trained window ────────────────────────────────
+# Past the length the model was trained at, RoPE positions it has never seen
+# degrade attention; YaRN rescales them. It is static: the scaling applies to
+# every request, short ones included, so it is switched on only when the
+# window asked for actually exceeds the trained one.
+if [ "${SPEAR_SERVER_NATIVE_CTX:-0}" -gt 0 ] \
+        && [ "$SPEAR_SERVER_CTX" -gt "$SPEAR_SERVER_NATIVE_CTX" ]; then
+    SCALE=$(awk -v c="$SPEAR_SERVER_CTX" -v n="$SPEAR_SERVER_NATIVE_CTX" \
+                'BEGIN { printf "%g", c / n }')
+    ARGS+=(--rope-scaling yarn --rope-scale "$SCALE"
+           --yarn-orig-ctx "$SPEAR_SERVER_NATIVE_CTX")
+    echo "context $SPEAR_SERVER_CTX > trained $SPEAR_SERVER_NATIVE_CTX: YaRN x$SCALE" >&2
+fi
 
 exec "$SPEAR_SERVER_LLAMA_BIN" "${ARGS[@]}" "$@"

@@ -10,7 +10,7 @@ POD_HOST=
 POD_PORT=
 
 # Key the provider registered for the pod.
-POD_KEY=$HOME/.ssh/id_pod
+POD_KEY=$HOME/.ssh/your_pod_key
 
 # Model id the pod's server advertises.
 POD_MODEL=

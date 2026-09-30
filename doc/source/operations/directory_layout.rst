@@ -46,7 +46,7 @@ Top level
      - The ``llama.cpp`` checkout and build providing ``llama-server``.
    * - ``qwen3-finetune/``
      - 5.6 G
-     - The fine-tuning working area: LoRA trainers, pod and reds-ml scripts,
+     - The fine-tuning working area: LoRA trainers, pod and GPU-host scripts,
        corpus builders and the load preflight.  The *governed* training path
        lives in the application instead (:doc:`/model/training`).
    * - ``src/``

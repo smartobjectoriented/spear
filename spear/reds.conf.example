@@ -12,8 +12,9 @@
 # file entirely and is the better choice where one exists.
 REDS_HOST=
 
-# Port the inference server listens on ON the remote host.
-REDS_PORT=8000
+# Port the inference server listens on ON the remote host: its
+# SPEAR_SERVER_PORT (8010 in the reference profile).
+REDS_PORT=8010
 
 # Model id advertised by that server: shown in the picker, sent in requests.
 REDS_MODEL=

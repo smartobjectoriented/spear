@@ -8,10 +8,10 @@
 #                systemctl --user daemon-reload
 #                systemctl --user enable --now spear-inference
 #
-#   system unit  add User=/Group= and replace every %h with the account's home,
-#                then install under /etc/systemd/system/. Needed when the
-#                service must run without anyone logged in and linger is not
-#                wanted -- see PERSISTENCE below.
+#   system unit  render-unit.sh --system --account NAME, installed under
+#                /etc/systemd/system/ -- it adds User=/Group= and resolves
+#                %h. Needed when the service must run without anyone logged
+#                in and linger is not wanted -- see PERSISTENCE below.
 #
 # ── what this unit deliberately does NOT contain ─────────────────────
 # No model, no port, no context size, no card, no host. Every one of those is

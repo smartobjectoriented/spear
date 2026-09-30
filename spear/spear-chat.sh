@@ -118,12 +118,13 @@ if [ "$MODE" = anthropic ]; then
     echo "→ ANTHROPIC ${CHOSEN_MODEL:-(default model)} — no local server started"
 elif [ "$MODE" = reds ]; then
     # ── REDS: stable host, tunnel only ──
-    # Deliberately NOT the pod path: reds-server keeps its SSH port across
+    # Deliberately NOT the pod path: the GPU host keeps its SSH port across
     # restarts, so there is nothing to re-enter, and we never install, upload
     # or start anything there — start the inference server yourself.
     # shellcheck disable=SC1090
     [ -f "$SCRIPT_DIR/reds.conf" ] && source "$SCRIPT_DIR/reds.conf"
-    REDS_HOST="${REDS_HOST:-reds-server}"; REDS_PORT="${REDS_PORT:-8000}"
+    REDS_PORT="${REDS_PORT:-8010}"
+    [ -n "${REDS_HOST:-}" ] || { echo "--reds: set REDS_HOST in spear/reds.conf (see reds.conf.example)" >&2; exit 1; }
     # Extra ssh options from reds.conf, so the target is self-contained rather
     # than depending on the operator's personal ~/.ssh/config. Needed on hosts
     # with a low MaxAuthTries: without IdentitiesOnly, ssh offers every key in

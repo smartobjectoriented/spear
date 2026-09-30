@@ -177,5 +177,42 @@ class ThePersistenceCaveatIsStated(unittest.TestCase):
         self.assertIn("/health", README.read_text(encoding="utf-8"))
 
 
+
+class TheSystemUnitIsRenderedNotHandEdited(unittest.TestCase):
+    """The template names %h and no account; a system unit needs both
+    resolved. Done by hand on the first host, and recorded in that unit's
+    header as three adaptations -- which is a script's job."""
+
+    def render(self, *args):
+        import subprocess
+        return subprocess.run(["bash", str(INFERENCE / "render-unit.sh"), *args],
+                              capture_output=True, text=True, timeout=30)
+
+    def test_the_user_unit_is_the_template(self):
+        self.assertEqual(self.render("--user").stdout, UNIT.read_text())
+
+    def test_the_system_unit_makes_exactly_the_three_adaptations(self):
+        out = self.render("--system", "--account", "svc", "--home", "/srv/svc").stdout
+        body = [l for l in out.splitlines() if not l.startswith("#")]
+
+        self.assertIn("User=svc", body)
+        self.assertIn("Group=svc", body)
+        self.assertIn("ExecStart=/srv/svc/spear/server/inference/serve.sh", body)
+        self.assertIn("WantedBy=multi-user.target", body)
+        self.assertFalse([l for l in body if "%h" in l])
+        self.assertIn("StandardOutput=journal", body)
+
+    def test_a_log_file_replaces_the_journal_only_when_asked(self):
+        out = self.render("--system", "--account", "svc", "--home", "/srv/svc",
+                          "--log", "/srv/svc/log/serve.log").stdout
+
+        self.assertIn("StandardOutput=append:/srv/svc/log/serve.log", out)
+        self.assertIn("StandardError=append:/srv/svc/log/serve.log", out)
+
+    def test_a_system_unit_without_an_account_is_refused(self):
+        proc = self.render("--system")
+        self.assertEqual(proc.returncode, 64)
+        self.assertIn("--account", proc.stderr)
+
 if __name__ == "__main__":
     unittest.main()

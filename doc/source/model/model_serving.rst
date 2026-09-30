@@ -4,35 +4,32 @@
 Model serving
 =============
 
-The model runs locally.  ``llama-server`` exposes an OpenAI-compatible API on
-``127.0.0.1:8080`` and nothing else on the machine talks to it.
+The model runs on one GPU host.  ``llama-server`` exposes an OpenAI-compatible
+API on ``127.0.0.1`` only, and clients reach it through an SSH tunnel.  How to
+build that host is :ref:`inference_host`; this page explains what it serves
+and why.
 
 Current profile
 ===============
 
-.. code-block:: console
-
-   $ cat /opt/llm/spear/spear/active-model.conf
-   /srv/spear-runtime/models/gguf/Qwen3-Coder-Next-UD-Q4_K_XL.gguf
-
-   $ cat /opt/llm/spear/spear/active-lora.conf
-   none
-
-The running command line, as launched by ``server/inference/serve.sh``:
+The profile is ``server/runtime/manifest.json``: Qwen3-Coder-Next, Q8_0, in
+four shards (79 GiB), on a 96 GB card.  ``server/inference/serve.sh`` turns the
+deployment's ``config/server.conf`` into this command line:
 
 .. code-block:: console
 
    llama-server
-       --model /srv/spear-runtime/models/gguf/Qwen3-Coder-Next-UD-Q4_K_XL.gguf
-       --ctx-size 32768
+       --model <runtime>/models/gguf/Qwen3-Coder-Next-Q8_0-00001-of-00004.gguf
+       --ctx-size 524288
+       --parallel 1
        --n-gpu-layers 99
-       --n-cpu-moe 99
-       --threads 16
        --flash-attn on
        --cache-type-k q8_0  --cache-type-v q8_0
-       --host 127.0.0.1  --port 8080
+       --host 127.0.0.1  --port 8010
        --jinja
-       --parallel 1
+       --threads 16
+       --rope-scaling yarn --rope-scale 2 --yarn-orig-ctx 262144
+       --override-kv qwen3next.context_length=int:524288
 
 The flags that matter
 =====================
@@ -41,19 +38,25 @@ The flags that matter
    Required.  It enables the model's chat template, and with it native tool
    calling.  Without it the assistant loses structured tool calls entirely.
 
-``--n-gpu-layers 99`` with ``--n-cpu-moe 99``
-   The hybrid offload.  Attention and the KV cache go to the GPU; the
-   mixture-of-experts weights stay in CPU RAM.  This is what makes a large MoE
-   model usable on a laptop-class GPU: VRAM holds the part that is latency
-   critical, system RAM holds the part that is merely large.
+``--n-gpu-layers 99``, and no ``--n-cpu-moe``
+   Everything on the card.  On a smaller GPU, ``SPEAR_SERVER_NCPUMOE`` keeps
+   the mixture-of-experts weights in system RAM while attention and the KV
+   cache stay on the GPU — the hybrid offload that makes this model usable on
+   a laptop-class card, at a large cost in speed.
 
 ``--cache-type-k q8_0 --cache-type-v q8_0``
    Quantised KV cache.  Buys context length at a small quality cost.
 
-``--ctx-size 32768``
-   The usable context.  The harness is aware of it: long tool outputs are
-   truncated at ``max_output_chars`` (10 000 by default) precisely so a single
-   verbose build log cannot evict the conversation.
+``--ctx-size 524288`` and the YaRN flags
+   Twice the 262 144 tokens the model was trained at.  Past that length the
+   RoPE positions are rescaled with YaRN, and the GGUF's ``context_length`` is
+   overridden because ``llama-server`` otherwise caps each slot at it.  Both
+   are added by ``serve.sh`` only when the window exceeds the trained length,
+   since YaRN is static and would otherwise touch every short prompt too.
+   Measured: a fact 40 % into a 311 744-token prompt was recalled exactly, and
+   generation speed did not change.  The harness still truncates long tool
+   outputs at ``max_output_chars`` (10 000 by default) so a single verbose
+   build log cannot evict the conversation.
 
 ``--parallel 1``
    One slot.  This is a single-user assistant; concurrency would only fragment
@@ -62,8 +65,8 @@ The flags that matter
 The launcher holds no flag values
 =================================
 
-``server/inference/serve.sh`` contains no context size, no model path, no port
-and no thread count.  Those come from ``server/config/server.conf``, or from
+``serve.sh`` contains no context size, no model path, no port and no thread
+count.  Those come from ``<runtime>/config/server.conf``, or from
 ``SPEAR_SERVER_*`` in the environment; ``server/config/server.conf.example``
 documents every key.  The script itself contributes only what is a property of
 the *build* rather than of a deployment:
@@ -78,7 +81,11 @@ the *build* rather than of a deployment:
    required for the chat template and therefore for tool calling;
 
 ``--n-cpu-moe``
-   for a mixture-of-experts model, unless a deployment says otherwise.
+   for a mixture-of-experts model, unless a deployment says otherwise;
+
+the YaRN flags
+   derived from ``SPEAR_SERVER_CTX``, ``SPEAR_SERVER_NATIVE_CTX`` and
+   ``SPEAR_SERVER_ARCH`` as above.
 
 Context size has no built-in default at all.  It is the one value two earlier
 implementations disagreed about, so it must be stated by the deployment rather
@@ -92,39 +99,27 @@ Sampling is a client-side decision and lives in ``rag_chat.py``: temperature
 are not safer here — they drive this model into repetition death-loops.  A
 stream circuit-breaker truncates them when they happen anyway.
 
-To survive a session, run the server as a transient unit:
+Changing the model or the adapter
+=================================
 
-.. code-block:: console
-
-   $ sudo systemd-run --unit=spear-llm server/inference/serve.sh --lora <adapter>
-
-Model and adapter switching
-===========================
-
-Resolution order is the same for both, and both are persisted so a restart
-keeps the choice:
-
-.. code-block:: text
-
-   SPEAR_MODEL env   >   active-model.conf   >   built-in default
-   SPEAR_LORA  env   >   active-lora.conf    >   none
-
-``spear-model`` writes those files.  ``server/inference/serve.sh`` validates the result:
-an unreadable model path falls back to the default, and a stale or unreadable
-adapter path is silently ignored rather than failing the launch.
+Both are keys of ``server.conf`` — ``SPEAR_SERVER_MODEL`` and
+``SPEAR_SERVER_LORA`` (``none`` for the base model) — followed by a restart of
+the service.  ``serve.sh`` refuses to start on an unreadable model, and serves
+the base model, saying so, when the adapter is unreadable.
 
 Service placement
 =================
 
-``spear-server`` runs as the transient unit ``spear-llm.service``:
+On the host the server is ``spear-inference.service``, a system unit
+(:ref:`inference_host`, step 6), so it sits in ``system.slice``:
 
 .. code-block:: console
 
-   $ cat /proc/$(pgrep -x llama-server)/cgroup
-   0::/system.slice/spear-llm.service
+   $ cat /proc/$(systemctl show spear-inference -p MainPID --value)/cgroup
+   0::/system.slice/spear-inference.service
 
-This placement is load-bearing for the security model.  The model server sits
-in ``system.slice``; sandboxed tool commands sit in transient scopes under
+This placement is load-bearing for the security model when the harness runs on
+the same machine.  Sandboxed tool commands sit in transient scopes under
 ``user.slice/…/app.slice``.  The two trees are disjoint, so no memory limit,
 OOM kill or task-limit hit inside a tool call can reach the model server.
 :doc:`/harness/resource_control` verifies this explicitly.
@@ -174,8 +169,8 @@ REDS server is a stable host, so none of that applies, and the launcher
 that something answers, and otherwise says so and stops.  Start the inference
 server on that machine yourself.  ``reds.conf`` carries the host (an
 ``~/.ssh/config`` alias is preferred — it already holds the user, key and auth
-quirks), the remote port (8000 for vLLM, 8080 for llama-server) and the model
-id to advertise.
+quirks), the remote port (``SPEAR_SERVER_PORT`` on that host; the profile uses
+8010) and the model id to advertise.
 
 ``model_backend.py`` normalises providers behind one interface, so
 ``rag_chat`` never branches on which model is answering.
@@ -322,11 +317,11 @@ Smoke test
 
 .. code-block:: console
 
-   $ cd /opt/llm/spear/spear
+   $ cd ~/spear/spear              # the client checkout
    $ ./bin/python -c "
    from openai import OpenAI
    from model_backend import OpenAICompatibleBackend, ConversationMessage, TextBlock
-   b = OpenAICompatibleBackend(OpenAI(base_url='http://127.0.0.1:8080/v1', api_key='not-needed'))
+   b = OpenAICompatibleBackend(OpenAI(base_url='http://127.0.0.1:8082/v1', api_key='not-needed'))
    t = b.complete(system='Reply with exactly the token requested, nothing else.',
                   conversation=[ConversationMessage(role='user',
                       content=(TextBlock(text='Reply with exactly: SPEAR-BACKEND-OK'),))],

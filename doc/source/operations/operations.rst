@@ -11,13 +11,15 @@ Health check
 
 .. code-block:: console
 
-   $ systemctl --user list-units 'edgem*'          # or the system unit
-   $ curl -s http://127.0.0.1:8080/v1/models | head -c 200
-   $ cat /proc/$(pgrep -x llama-server)/cgroup
-   0::/system.slice/spear-llm.service
+   host   $ systemctl status spear-inference
+   host   $ curl -s http://127.0.0.1:8010/health
+   {"status":"ok"}
+   host   $ ~/spear/scripts/bootstrap-runtime.sh --root ~/spear-runtime --verify
 
-   $ cd /opt/llm/spear/spear && ./bin/python -m unittest tests.test_tool_runtime
-   Ran 307 tests — OK
+   client $ curl -s http://127.0.0.1:8082/v1/models | head -c 200   # through the tunnel
+   client $ cd ~/spear/spear && ./bin/python -m unittest tests.test_tool_runtime
+
+The server's side is :ref:`inference_host`; its step 9 is the full check.
 
 Reading a failure
 =================
@@ -113,21 +115,24 @@ Switching model
 
 .. code-block:: console
 
-   $ spear-model <name>          # rewrites active-model.conf
-   $ spear-model adapter none    # rewrites active-lora.conf
-   $ systemctl --user restart spear-llm.service    # or re-run spear-server
+   host $ cp -p ~/spear-runtime/config/server.conf{,.bak-$(date +%F)}
+   host $ $EDITOR ~/spear-runtime/config/server.conf   # SPEAR_SERVER_MODEL / _LORA
+   host $ sudo systemctl restart spear-inference
 
-Or, without persisting:
+Or, for one foreground run without persisting:
 
 .. code-block:: console
 
-   $ SPEAR_SERVER_MODEL=/path/to/other.gguf spear-server
+   host $ SPEAR_SERVER_MODEL=/path/to/other.gguf SPEAR_SERVER_ROOT=~/spear-runtime \
+              ~/spear/server/inference/serve.sh
 
 Logs and audit
 ==============
 
-``llama-server.log``
-   Server-side: model load, context, slot activity.
+Server log
+   Server-side: model load, context, slot activity.  In the journal
+   (``sudo journalctl -u spear-inference``), or in the file the unit was
+   rendered with ``--log``.
 
 ``audit/tool-actions.jsonl``
    One record per mutating tool attempt.  Metadata only — no file contents, no

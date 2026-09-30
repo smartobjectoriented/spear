@@ -3,7 +3,7 @@
 
   "profile": {
     "name": "qwen3-coder-next-q8-cuda13",
-    "description": "The deployment this manifest was measured against: one 96 GB Blackwell card, CUDA 13, a Q8_0 Qwen3-Coder-Next served at 98304 tokens, and a bge-m3 embedding worker whose vectors were shown bit-identical to the worker it replaced.",
+    "description": "The deployment this manifest was measured against: one 96 GB Blackwell card, CUDA 13, a Q8_0 Qwen3-Coder-Next served at 524288 tokens (YaRN x2 over its trained 262144), and a bge-m3 embedding worker whose vectors were shown bit-identical to the worker it replaced.",
     "validated": "2026-09-14",
     "notes": "A profile, not a requirement. Nothing here names a host, an account, a card or a filesystem path: the machine-specific values (root, GPU UUID, port) are supplied to bootstrap-runtime.sh, never written here."
   },

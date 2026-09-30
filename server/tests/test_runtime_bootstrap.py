@@ -407,5 +407,16 @@ class ItDetectsAWrongLlamaRevision(unittest.TestCase):
         self.assertIn("wrong-revision", result.stdout)
 
 
+
+class TheEmbedLauncherKeepsItsWeightsInTheRuntime(unittest.TestCase):
+    def test_hf_home_defaults_inside_the_runtime(self):
+        """Left unset, bge-m3 went into ~/.cache/huggingface -- on a shared
+        account, a cache that belongs to other people."""
+        script = (ROOT / "scripts" / "bootstrap-runtime.sh").read_text()
+        launcher = script.split("<<'LAUNCHER'", 1)[1].split("\nLAUNCHER", 1)[0]
+
+        self.assertIn('export HF_HOME="${HF_HOME:-$RT/hf}"', launcher)
+        self.assertLess(launcher.index("HF_HOME"), launcher.index("exec "))
+
 if __name__ == "__main__":
     unittest.main()

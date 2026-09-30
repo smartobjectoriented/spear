@@ -327,6 +327,9 @@ set -e
 RT="$(cd "$(dirname "$0")" && pwd)"
 [ -r "$RT/gpu.conf" ] && export SPEAR_GPU_UUID="$(sed -n '1p' "$RT/gpu.conf")"
 export SPEAR_EMBED_DEVICE="${SPEAR_EMBED_DEVICE:-cuda}"
+# The weights stay in the runtime, not in ~/.cache/huggingface: on a shared
+# account that cache is other people's, and filling it is invisible to them.
+export HF_HOME="${HF_HOME:-$RT/hf}"
 exec "$RT/venv/bin/python" "${SPEAR_CHECKOUT:-$HOME/spear}/server/embed/worker.py"
 LAUNCHER
         chmod +x "$LAUNCH"

@@ -119,11 +119,26 @@ class Serving(unittest.TestCase):
 
     def test_a_window_past_the_trained_one_turns_yarn_on(self):
         self.serve(env=self.complete(SPEAR_SERVER_CTX="524288",
-                                     SPEAR_SERVER_NATIVE_CTX="262144"))
+                                     SPEAR_SERVER_NATIVE_CTX="262144",
+                                     SPEAR_SERVER_ARCH="qwen3next"))
         served = self.served()
         self.assertEqual(served["--rope-scaling"], "yarn")
         self.assertEqual(served["--rope-scale"], "2")
         self.assertEqual(served["--yarn-orig-ctx"], "262144")
+
+    def test_the_trained_length_is_raised_so_the_slot_is_not_capped(self):
+        """Without it llama-server served 262144 of the 524288 asked for."""
+        self.serve(env=self.complete(SPEAR_SERVER_CTX="524288",
+                                     SPEAR_SERVER_NATIVE_CTX="262144",
+                                     SPEAR_SERVER_ARCH="qwen3next"))
+        self.assertIn("qwen3next.context_length=int:524288",
+                      self.argv.read_text())
+
+    def test_yarn_without_the_architecture_is_refused(self):
+        proc = self.serve(expect=78, env=self.complete(
+            SPEAR_SERVER_CTX="524288", SPEAR_SERVER_NATIVE_CTX="262144"))
+        self.assertIn("SPEAR_SERVER_ARCH", proc.stderr)
+        self.assertFalse(self.argv.exists())
 
     def test_a_window_within_the_trained_one_is_not_scaled(self):
         """YaRN is static: it would cost every short request for nothing."""

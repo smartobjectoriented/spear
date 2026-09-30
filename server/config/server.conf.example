@@ -40,6 +40,10 @@ SPEAR_SERVER_CTX=32768
 # scale factor. Unset: the window is served as asked, with no scaling -- right
 # as long as it stays within the trained length.
 #SPEAR_SERVER_NATIVE_CTX=262144
+# Required with it: the model's GGUF `general.architecture`. llama-server caps
+# a slot at the trained length read from `<arch>.context_length`, so serve.sh
+# overrides that key -- and needs its name.
+#SPEAR_SERVER_ARCH=qwen3next
 
 # ---------------------------------------------------------------- optional
 

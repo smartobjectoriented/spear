@@ -143,8 +143,18 @@ if [ "${SPEAR_SERVER_NATIVE_CTX:-0}" -gt 0 ] \
         && [ "$SPEAR_SERVER_CTX" -gt "$SPEAR_SERVER_NATIVE_CTX" ]; then
     SCALE=$(awk -v c="$SPEAR_SERVER_CTX" -v n="$SPEAR_SERVER_NATIVE_CTX" \
                 'BEGIN { printf "%g", c / n }')
+    # llama-server caps each slot at the trained length it reads from the
+    # GGUF, YaRN or not: measured, --ctx-size 524288 served 262144. Raising
+    # that metadata key is what lets the slot use the window; the key is
+    # named after the architecture, which a shell cannot read from the file.
+    [ -n "${SPEAR_SERVER_ARCH:-}" ] || {
+        echo "serve.sh: SPEAR_SERVER_ARCH is required past the trained context" >&2
+        echo "  (the GGUF general.architecture, e.g. qwen3next)" >&2
+        exit 78
+    }
     ARGS+=(--rope-scaling yarn --rope-scale "$SCALE"
-           --yarn-orig-ctx "$SPEAR_SERVER_NATIVE_CTX")
+           --yarn-orig-ctx "$SPEAR_SERVER_NATIVE_CTX"
+           --override-kv "$SPEAR_SERVER_ARCH.context_length=int:$SPEAR_SERVER_CTX")
     echo "context $SPEAR_SERVER_CTX > trained $SPEAR_SERVER_NATIVE_CTX: YaRN x$SCALE" >&2
 fi
 

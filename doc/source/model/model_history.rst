@@ -25,7 +25,7 @@ and they run at different speeds::
                                                                         assistant
 
 **Retrieval** brings *content* on the fly — indexed code and documentation,
-refreshed by a reindex, no retraining (:doc:`/retrieval`).
+refreshed by a reindex, no retraining (:doc:`/using/retrieval`).
 
 **A QLoRA adapter** brings *behaviour* — domain style, vocabulary, reflexes —
 frozen into a small adapter served with ``--lora`` on top of the frozen base.
@@ -33,7 +33,7 @@ Only about 0.1 % of the weights are trained, which is why a run costs a few
 dollars (:doc:`/model/training`).
 
 **Memory and skills** are immediate, local context that the model writes
-itself, with confirmation, and recalls across sessions (:doc:`/retrieval`).
+itself, with confirmation, and recalls across sessions (:doc:`/using/retrieval`).
 
 The contextual-learning loop — skills plus memory — is comparable to what Nous
 Research's Hermes Agent does.  What is unusual here is that the same system

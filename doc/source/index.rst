@@ -6,34 +6,18 @@
    :alt: SPEAR
 
 .. toctree::
-   :maxdepth: 5
+   :maxdepth: 3
    :numbered:
    :hidden:
 
-   introduction
-   architecture
-   installation
-   Getting started <getting_started>
-   spear-chat <usage>
-   projects
-   retrieval
-   Container <container>
-   standards
-   workflow
-   guards
-   context
+   overview/index
+   start/index
+   using/index
+   reasoning/index
    harness/harness
    model/model
-   backends
-   configuration
-   directory_layout
-   troubleshooting
-   testing
-   operations
-   Coding conventions <coding_conventions>
-   Development flow <dev_flow>
-   Release process <release_process>
-   glossary
+   operations/index
+   contributing/index
 
 |
 
@@ -52,43 +36,59 @@ Specification-driven Platform for Embedded Agentic Reasoning
 
 .. rst-class:: left
 
-The platform
-************
+Overview
+********
 
-- :ref:`Introduction <introduction>`
-- :ref:`Architecture <architecture>`, starting with the
-  :ref:`infrastructure overview <infrastructure_overview>`
-- :ref:`Installation <installation>`
-- :ref:`Getting started <getting_started>`
+- :ref:`Overview <part_overview>`: :ref:`Introduction <introduction>`, :ref:`Architecture <architecture>`, :ref:`Glossary <glossary>`
+
+.. rst-class:: left
+
+Getting started
+***************
+
+- :ref:`Getting started <part_start>`: :ref:`Quick start <getting_started>`, :ref:`Installation <installation>`, :ref:`Containerised environment <container>`
 
 .. rst-class:: left
 
 Using SPEAR
 ***********
 
-- :ref:`spear-chat <usage>`
-- :ref:`Projects and corpora <projects>`
-- :ref:`Containerised environment <container>`
+- :ref:`Using SPEAR <part_using>`: :ref:`spear-chat <usage>`, :ref:`Projects and corpora <projects>`, :ref:`Retrieval <retrieval>`, :ref:`Configuration reference <configuration>`
 
 .. rst-class:: left
 
 Evidence-grounded reasoning
 ***************************
 
-- :ref:`Authoritative standards <standards>`
-- :ref:`The engineering workflow <workflow>`
-- :ref:`Evidence and guards <guards>`
+- :ref:`Evidence-grounded reasoning <part_reasoning>`: :ref:`Authoritative standards <standards>`, :ref:`The engineering workflow <workflow>`, :ref:`Evidence and guards <guards>`
 
 .. rst-class:: left
 
-Reference
-*********
+The confined execution path
+***************************
 
-- :ref:`Configuration reference <configuration>`
-- :ref:`Troubleshooting <troubleshooting>`
-- :ref:`Our coding conventions <coding_conventions>`
-- :ref:`Our development flow <dev_flow>`
-- :ref:`Release process <release_process>`
+- :ref:`The confined execution path <harness>`
+
+.. rst-class:: left
+
+The model and its weights
+*************************
+
+- :ref:`The model and its weights <model>`
+
+.. rst-class:: left
+
+Operations and reference
+************************
+
+- :ref:`Operations and reference <part_operations>`: :ref:`Operations <operations>`, :ref:`Troubleshooting <troubleshooting>`, :ref:`Testing <testing>`
+
+.. rst-class:: left
+
+Contributing
+************
+
+- :ref:`Contributing <part_contributing>`: :ref:`Coding conventions <coding_conventions>`, :ref:`Development flow <dev_flow>`, :ref:`Release process <release_process>`
 
 
 To edit the documentation and to use the correct underlying policy, you can read `this documentation style guide <https://documentation-style-guide-sphinx.readthedocs.io/en/latest/style-guide.html>`_.

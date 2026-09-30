@@ -188,7 +188,7 @@ class TheOrganisationIsNamedOnlyWhereItMustBe(unittest.TestCase):
             "quotes the measured incident it was written for",
         "spear/tests/test_public_boundary.py":
             "this file: the needles and the reasons",
-        "doc/source/retrieval.rst":
+        "doc/source/using/retrieval.rst":
             "reports measurements made against a real build system, including "
             "the 37-question recall figure",
     }
@@ -268,7 +268,7 @@ class NoStaleProductPrefixEscapes(unittest.TestCase):
             "the same narrative: the path Axolotl was not usable at",
         "doc/source/model_serving.rst":
             "a recorded backend probe and its literal reply",
-        "doc/source/operations.rst":
+        "doc/source/operations/operations.rst":
             "a systemctl glob that must match the unit prefix the code emits",
         "pod-artifacts-qwen3coder/gguf-download.log":
             "a download log from one run; evidence, not source",

@@ -22,7 +22,7 @@ and a collection derived from its path.
 The active corpus is auto-detected from the current directory; otherwise a
 picker lists them.  Launching in an unregistered multi-component workspace
 offers to split it into one corpus per large sub-tree, so that a huge upstream
-tree never dilutes the index.  :doc:`/retrieval` is the full account.
+tree never dilutes the index.  :doc:`/using/retrieval` is the full account.
 
 Permission modes
 ================
@@ -118,7 +118,7 @@ Command line
 
    Tools always run in the **current directory**, whatever corpus is
    attached. To work on another tree, ``cd`` into it — no flag relocates the
-   workspace. See :doc:`/projects`.
+   workspace. See :doc:`/using/projects`.
 
 ``spear-corpus scan <workspace>`` splits a multi-component tree into
 per-component corpora by file count; the chat offers the same split
@@ -179,7 +179,7 @@ fine-tuning machinery.
    Ingest a specification, bind one, inspect the binding. The binding decides
    how normative answers are grounded and is shared by every session on the
    machine, so check it before trusting one: ``/standard status``. See
-   :doc:`/standards`.
+   :doc:`/reasoning/standards`.
 
 ``/finetune``
    The fine-tuning control plane. See :doc:`/model/training`.

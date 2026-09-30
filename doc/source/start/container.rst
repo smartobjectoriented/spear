@@ -8,6 +8,9 @@ The container exists to hand the assistant to someone else: the harness, its
 dependencies, the embedder and a prebuilt retrieval index, in one image.  They
 mount their own checkouts and point it at a model endpoint.
 
+This chapter is for whoever **builds** the images.  To run a published one,
+read :ref:`container_run` instead.
+
 The image is defined in ``docker/``; the scripts that build, run and
 publish it are in ``scripts/docker/``, and ``scripts/spear-image`` drives them
 (`Managing images`_).
@@ -92,11 +95,14 @@ inside would mean shipping the keys and ``~/.ssh/config`` into an image meant
 to be handed around; ``--network host`` makes ``127.0.0.1`` the same thing on
 both sides anyway.
 
-**The current directory is translated.**  The harness runs its tools in the
-cwd, whatever the corpus (:doc:`/using/retrieval`), so the host cwd is mapped to the
-matching path under ``/corpora`` and passed as the container's working
-directory.  Without it every session would start at the mount root and
-``cd ~/soo/so3/so3`` would mean nothing.
+**Every tree is bound at its own absolute path.**  The harness runs its tools
+in the cwd, whatever the corpus (:doc:`/using/retrieval`), and build systems
+record absolute paths — CMake caches, BitBake stamps, toolchain locations — so
+a tree mounted elsewhere builds against compilers that are not there.  An
+identity mount keeps both working, and the host cwd needs no translation: it is
+passed as the container's working directory unchanged.  This is the
+workstation mode; a colleague without the repository mounts under ``/corpora``
+instead (:ref:`container_run`).
 
 **Session state is written outside the image**, as the host user.  History,
 memories, trajectories and the audit trail accumulate; ``docker run --rm``
@@ -397,10 +403,16 @@ Publishing, and not publishing
 
 .. code-block:: console
 
-   $ scripts/docker/push.sh ghcr.io/<org>/spear:1.0-public
-   $ scripts/docker/push.sh ghcr.io/<org>/spear-private:1.0-private     # refused
-   $ scripts/docker/push.sh --allow-push ghcr.io/<org>/spear-private:1.0-private
-   $ docker save spear:1.0-private | zstd -T0 -19 -o spear.tar.zst
+   $ docker tag spear:1.0-public ghcr.io/smartobjectoriented/spear:<version>-public
+   $ scripts/docker/push.sh ghcr.io/smartobjectoriented/spear:<version>-public
+   $ scripts/docker/push.sh <private-registry>/spear:<version>-private            # refused
+   $ scripts/docker/push.sh --allow-push <private-registry>/spear:<version>-private
+
+A ``public`` image goes to the GitHub container registry of the project, where
+:ref:`container_run` tells colleagues to pull it from.  A ``private`` image
+goes only to the private registry of the organisation that owns its content;
+where that is, and how its users run it, is documented with that content, not
+here.
 
 The guard reads the **label**, not the tag. A tag gets retyped, shortened and
 reused; a label travels with the bytes through ``docker save``, a registry and

@@ -17,6 +17,23 @@ class StandardStoreSecurityTests(unittest.TestCase):
                 with self.assertRaises(StandardStoreError):
                     store.revision_dir(standard, revision)
 
+    def test_a_store_owned_by_someone_else_opens_as_shipped(self):
+        """A container image ships its store owned by root and runs as the
+        host user; tightening the mode there is EPERM and made the baked
+        standards unreachable."""
+        from unittest import mock
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory) / "standards"
+            root.mkdir(mode=0o777)
+            os.chmod(root, 0o777)
+
+            with mock.patch("standard_store.os.getuid",
+                            return_value=os.getuid() + 1):
+                StandardStore(root)
+
+            self.assertEqual(root.stat().st_mode & 0o777, 0o777)
+
     def test_symlink_escape_is_rejected(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory) / "standards"; root.mkdir()

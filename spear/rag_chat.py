@@ -344,6 +344,7 @@ def operator_training_controller():
 #   indexer      "buildsystem" (curated BitBake/Yocto walk) or "generic"
 #   autoindex    build a missing index on first sight (default: no)
 #   prompt_file  a domain prompt for this corpus (default: the generic one)
+#   public       the tree may be named in a public image (default: no)
 #
 # One key used to imply all four. It meant a registry entry did not say what
 # its corpus did, and that the four could not be used apart.
@@ -6538,7 +6539,7 @@ def reindex_command():
 # No "/corpus" prefix in it: the same string answers the slash command, where
 # the user has already typed it, and the spear-corpus CLI, where it is wrong.
 CORPUS_USAGE = ("usage: list | add <name> [path] [--kind K] [--indexer I] "
-                "[--autoindex] [--prompt-file F] | rm <name> | "
+                "[--autoindex] [--public] [--prompt-file F] | rm <name> | "
                 "scan [path] [--min N]")
 
 # What a corpus name may hold. Every existing one passes (sye_sol,
@@ -6666,6 +6667,9 @@ def handle_corpus_command(args, current=None):
 
         if "--autoindex" in flags:
             spec["autoindex"] = True
+
+        if "--public" in flags:
+            spec["public"] = True
         projects[name] = spec
         err = _save_registry(projects)
 

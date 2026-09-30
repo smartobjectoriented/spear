@@ -160,7 +160,7 @@ done
 # it drifting from projects.json — a corpus added on the host would otherwise be
 # absent from the image with no sign but a "missing" line at startup.
 REGISTRY="$REPO/docker/projects.docker.json"
-"$HERE/gen-registry.py" || echo "   (some corpora were skipped, see above)" >&2
+"$HERE/gen-registry.py" --profile "$PROFILE" || echo "   (some corpora were skipped, see above)" >&2
 [ -f "$REGISTRY" ] || {
     echo "gen-registry.py produced no $REGISTRY — the image needs one" >&2
     exit 1

@@ -21,7 +21,9 @@ HERE="$(cd "$(dirname "$0")" && pwd)"
 [ -r "$HERE/../common/banner.sh" ] && . "$HERE/../common/banner.sh"
 REPO="$(cd "$HERE/../.." && pwd)"
 APP="${SPEAR_APP:-$REPO/spear}"
-IMAGE="${SPEAR_IMAGE:-spear:1.0}"
+# The workstation image: private, because this mode mounts the host's own
+# registry and trees. No build ever produced the bare spear:1.0 this was.
+IMAGE="${SPEAR_IMAGE:-spear:$("$REPO/scripts/spearversion.sh")-private}"
 API_BASE="${SPEAR_API_BASE:-http://127.0.0.1:8082/v1}"
 MODEL_NAME="${SPEAR_MODEL_NAME:-qwen3}"
 STATE="${SPEAR_STATE_DIR:-$HOME/.spear/state}"

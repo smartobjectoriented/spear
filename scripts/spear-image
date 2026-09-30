@@ -11,7 +11,8 @@
 #     spear-image erase   <public|private|all|TAG> [--cache]
 #
 # A profile names the image scripts/docker/build.sh tags by default,
-# spear:1.0-<profile>. Anything with a ':' is taken as a tag as it is.
+# spear:<version>-<profile>, the version being scripts/spearversion.sh's.
+# Anything with a ':' is taken as a tag as it is.
 #
 # The scripts underneath keep their own rules -- build.sh decides what a
 # profile may carry, push.sh refuses a private image without
@@ -23,6 +24,7 @@ HERE="$(cd "$(dirname "$(readlink -f "$0")")" && pwd)"
 # The release this is: "[spear vX.Y.Z] <script> <args>" on stderr, once.
 [ -r "$HERE/common/banner.sh" ] && . "$HERE/common/banner.sh"
 DOCKER_SCRIPTS="$HERE/docker"
+VERSION="$("$HERE/spearversion.sh")"
 LABEL=ch.heig-vd.reds.spear
 
 usage() {
@@ -36,7 +38,7 @@ die() { echo "spear-image: $*" >&2; exit 1; }
 image_of() {
     case "$1" in
         "") die "name an image: public, private or a tag" ;;
-        public|private) echo "spear:1.0-$1" ;;
+        public|private) echo "spear:$VERSION-$1" ;;
         *:*) echo "$1" ;;
         *) die "'$1' is neither a profile (public, private) nor a tag" ;;
     esac

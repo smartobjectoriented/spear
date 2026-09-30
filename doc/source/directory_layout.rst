@@ -68,7 +68,7 @@ Top level
        ``posix-api``) — they answer questions no product tree contains.
    * - ``claude/``
      - 1.9 M
-     - Working notes on the EDGE-M1 and AVZ trees, kept as Markdown.
+     - Working notes on the product and AVZ trees, kept as Markdown.
    * - ``doc/``
      - —
      - This documentation.

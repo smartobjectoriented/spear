@@ -3,9 +3,12 @@
 Measures what **actually** lands in the prompt, without ever calling the LLM:
 a few seconds per run, so it is usable on every change.
 
-    ./bin/python eval/run_eval.py                      # edgem1_verdin
-    ./bin/python eval/run_eval.py --collection adhoc_xxxxxxxx
+    ./bin/python eval/run_eval.py --collection adhoc_xxxxxxxx --questions q.json
     ./bin/python eval/run_eval.py --json /tmp/run.json # per-question detail
+
+`SPEAR_EVAL_COLLECTION` and `SPEAR_EVAL_QUESTIONS` supply the defaults. No
+question set ships with this repository: a set describes one tree, and the one
+measured below belongs to a private build system.
 
 ## Metric
 
@@ -28,7 +31,7 @@ and French-over-English-code is precisely what the embedder has to handle.
 
 ## Ground truth
 
-`retrieval.json`. The `identifier` targets were picked among identifiers
+The question file: a JSON list of `{q, kind, expect[, ident]}`. The `identifier` targets were picked among identifiers
 **present in exactly one file** of the corpus, verified by a full scan at
 generation time — no ambiguous target. The `prose` targets are a human
 judgement.
@@ -69,7 +72,7 @@ Reproduce:
 
 ## Production
 
-`edgem1_verdin` moved to bge-m3 (4260 chunks). End-to-end measurement on the
+The build-system index moved to bge-m3 (4260 chunks). End-to-end measurement on the
 real collection:
 
     prose 75%   identifier 100%   path 100%   ->  GLOBAL 85%

@@ -120,7 +120,7 @@ class CorpusKindDoesNotDecide(unittest.TestCase):
         rules has no access to the thing that used to gate them."""
         source = inspect.getsource(TaskController)
 
-        for name in ("PROJECT_KIND", "edgem1", "prompt_file", "ADHOC_PROMPT"):
+        for name in ("PROJECT_KIND", "prompt_file", "ADHOC_PROMPT"):
             with self.subTest(name=name):
                 self.assertNotIn(name, source)
 

@@ -29,14 +29,38 @@ if __name__ == "__main__" and ("--help" in sys.argv[1:] or "-h" in sys.argv[1:])
           "usage: spear-reindex [checkout]   (default: the current directory)")
     raise SystemExit(0)
 
+
+def parse_args(argv):
+    """(tree, collection). Unknown flags -- the --exclude and --include-build
+    the session passes to both indexers -- are skipped, not taken as the tree."""
+    root = collection = None
+    it = iter(argv)
+
+    for a in it:
+        if a == "--collection":
+            collection = next(it, None)
+        elif a == "--exclude":
+            next(it, None)
+        elif not a.startswith("-") and root is None:
+            root = a
+
+    return root, collection
+
+
 # The tree to index: the one named, or the one the caller is standing in.
 # It used to default to a checkout that existed on a single workstation.
 
-PROJECT_ROOT = os.path.abspath(
-    sys.argv[1] if len(sys.argv) > 1 else os.getcwd())
+_root, _collection = parse_args(sys.argv[1:])
+PROJECT_ROOT = os.path.abspath(_root or os.getcwd())
 
 DB_PATH = os.environ.get("SPEAR_DB_PATH") or os.path.join(APP_DIR, "chromadb")
-COLLECTION_NAME = "edgem1_" + os.path.basename(PROJECT_ROOT)
+
+# The session names the collection it queries (rag_chat.reindex_command).
+# Standalone, the name is derived exactly as the session derives it for an
+# unpinned corpus, so the two agree without being told.
+
+COLLECTION_NAME = _collection or "adhoc_" + hashlib.md5(
+    os.path.realpath(PROJECT_ROOT).encode()).hexdigest()[:8]
 
 TEXT_EXTENSIONS = {
     ".bbclass", ".bb", ".bbappend", ".inc", ".conf",
@@ -172,9 +196,6 @@ def chunk_text(text, filepath, chunk_size=CHUNK_SIZE, overlap=CHUNK_OVERLAP):
 
 
 def classify_file(relpath):
-    if relpath.startswith("build/meta-e1c/"):
-        return "capsule-layer"
-
     if relpath.startswith("build/meta-bsp/"):
         return "bsp"
 
@@ -204,6 +225,9 @@ def classify_file(relpath):
 
     if relpath.startswith("build/meta/"):
         return "core-bitbake"
+
+    if relpath.startswith("build/meta-"):
+        return "product-layer"
 
     if relpath.startswith("build/conf/"):
         return "build-config"
@@ -270,7 +294,7 @@ def collect_files():
                 if should_index(fpath):
                     files.append((fpath, os.path.relpath(fpath, PROJECT_ROOT)))
 
-    # home_assistant/ (virt64 checkout, home-assistant branch): small
+    # home_assistant/ (present on some checkouts): small
     # curated directory — index all its text files, including those without
     # an extension (st, startchrome) and the Dockerfiles.
 

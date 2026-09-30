@@ -56,14 +56,14 @@ class DefinitionScoreTest(unittest.TestCase):
         """$contains is tokenised: searching a file name also brings back
         neighbours sharing a token. The path must be decisive."""
         target = "# File: linux_6.6-verdin.bb\n\nrequire linux.inc\n"
-        noise = ("# File: e1c-verdin.cfg\n\n" +
+        noise = ("# File: board-verdin.cfg\n\n" +
                  "\n".join(["linux_6.6-verdin.bb"] * 8))
         self.assertGreater(
             rag_chat._definition_score(
                 target, {"filepath": "recipes/linux_6.6-verdin.bb"},
                 "linux_6.6-verdin.bb"),
             rag_chat._definition_score(
-                noise, {"filepath": "files/e1c-verdin.cfg"},
+                noise, {"filepath": "files/board-verdin.cfg"},
                 "linux_6.6-verdin.bb"))
 
     def test_header_is_not_counted_as_body(self):
@@ -95,11 +95,16 @@ class RetrieveContextTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         import chromadb
+        name = os.environ.get("SPEAR_EVAL_COLLECTION")
+
+        if not name:
+            raise unittest.SkipTest("SPEAR_EVAL_COLLECTION not set")
+
         try:
             cls.col = chromadb.PersistentClient(
-                path=rag_chat.DB_PATH).get_collection("edgem1_verdin")
+                path=rag_chat.DB_PATH).get_collection(name)
         except Exception:
-            raise unittest.SkipTest("index edgem1_verdin absent")
+            raise unittest.SkipTest(f"index {name} absent")
 
     def test_identifier_reaches_the_prompt(self):
         _, seen = rag_chat.retrieve_context(self.col, "ou est defini __sys_empty ?")

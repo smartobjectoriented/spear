@@ -284,7 +284,7 @@ class ReindexTargetsTheCorpusNotTheCwdTest(unittest.TestCase):
     def test_a_buildsystem_corpus_uses_the_curated_indexer(self):
         """Declared by the registry entry, not inferred from its type.
 
-        The curated walk was selected by `kind == "edgem1"`, which meant a
+        The curated walk was selected by one hard-coded `kind` value, which meant a
         corpus could not ask for it without also taking a collection name, an
         autoindex policy and a domain prompt it might not want.
         """
@@ -297,8 +297,8 @@ class ReindexTargetsTheCorpusNotTheCwdTest(unittest.TestCase):
         cmd = self.rag_chat.reindex_command()
         self.assertTrue(cmd[1].endswith("index_corpus.py"), cmd)
         self.assertIn(f"{self.root}/agency", cmd)
-        # The curated walk derives its own collection; nothing to name.
-        self.assertNotIn("--collection", cmd)
+        # Told the collection the session queries, like the generic walk.
+        self.assertIn("--collection", cmd)
 
     def test_the_generic_indexer_is_the_default(self):
         cmd = self.rag_chat.reindex_command()
@@ -1103,7 +1103,7 @@ class PathScopedExclusionTests(unittest.TestCase):
     """`--exclude linux` drops every directory so named; `--exclude ./linux`
     drops the one at the root.
 
-    The Infrabase-family trees (infrabase, opencn-ng, the edgem1 products)
+    The Infrabase-family trees (infrabase, opencn-ng and the products built on them)
     vendor their sources in top-level linux/, qemu/ and u-boot/ and keep the
     recipes that build them under build/meta-*/recipes-*/<same name>. Without
     the path form, excluding the vendored checkout also deletes the recipes

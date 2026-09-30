@@ -2,7 +2,10 @@
 """RETRIEVAL-ONLY eval harness: measures what actually lands in the prompt,
 without ever calling the LLM. A few seconds per run.
 
-    ./bin/python eval/run_eval.py [--collection edgem1_verdin] [--json out.json]
+    ./bin/python eval/run_eval.py --collection NAME --questions FILE [--json out.json]
+
+The question set describes one tree, so it lives with that tree's owner, not
+here: SPEAR_EVAL_QUESTIONS and SPEAR_EVAL_COLLECTION supply the defaults.
 
 Metric: recall@k = did the question see AT LEAST ONE of its expected files in
 the injected context? We read the `seen` set returned by retrieve_context, so
@@ -24,16 +27,25 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 
 def main():
     argv = sys.argv[1:]
-    coll_name = "edgem1_verdin"
+    coll_name = os.environ.get("SPEAR_EVAL_COLLECTION")
+    questions_file = os.environ.get("SPEAR_EVAL_QUESTIONS")
     out_json = None
 
     if "--collection" in argv:
         coll_name = argv[argv.index("--collection") + 1]
 
+    if "--questions" in argv:
+        questions_file = argv[argv.index("--questions") + 1]
+
+    if not coll_name or not questions_file:
+        sys.exit("run_eval: name the collection and the question set "
+                 "(--collection/--questions or SPEAR_EVAL_COLLECTION/"
+                 "SPEAR_EVAL_QUESTIONS)")
+
     if "--json" in argv:
         out_json = argv[argv.index("--json") + 1]
 
-    questions = json.load(open(os.path.join(HERE, "retrieval.json")))
+    questions = json.load(open(questions_file))
     col = chromadb.PersistentClient(path=rag_chat.DB_PATH).get_collection(coll_name)
 
     rows, timings = [], []

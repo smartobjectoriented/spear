@@ -23,8 +23,8 @@ From the repository root, once per shell:
 
 ```sh
 . ./env.sh                                # puts scripts/ on PATH
-spear-image build private                 # spear:1.0-private
-spear-image build public                  # spear:1.0-public
+spear-image build private                 # spear:<version>-private
+spear-image build public                  # spear:<version>-public
 spear-image list
 spear-image run private -- --auto
 spear-image save private                  # -> spear-private.tar.zst
@@ -103,11 +103,11 @@ twenty-two corpora they do not have.
 ## Handing it over
 
 ```sh
-scripts/docker/push.sh ghcr.io/<org>/spear:1.0-public          # public: goes
-scripts/docker/push.sh ghcr.io/<org>/spear-private:1.0-private
+scripts/docker/push.sh ghcr.io/<org>/spear:<version>-public          # public: goes
+scripts/docker/push.sh ghcr.io/<org>/spear-private:<version>-private
                                                        # private: refused
-scripts/docker/push.sh --allow-push ghcr.io/<org>/spear-private:1.0-private
-docker save spear:1.0-private | zstd -T0 -19 -o spear-private.tar.zst
+scripts/docker/push.sh --allow-push ghcr.io/<org>/spear-private:<version>-private
+docker save spear:<version>-private | zstd -T0 -19 -o spear-private.tar.zst
 ```
 
 The guard reads the label, not the tag: a tag gets retyped and shortened, a
@@ -132,7 +132,7 @@ A fully baked image needs nothing mounted:
 docker run --rm -it \
   --security-opt seccomp=unconfined --security-opt apparmor=unconfined \
   --security-opt systempaths=unconfined \
-  spear:1.0-public --endpoint http://host.docker.internal:8082
+  spear:<version>-public --endpoint http://host.docker.internal:8082
 ```
 
 `build.sh` is not a convenience wrapper: the image is assembled from several
@@ -181,5 +181,5 @@ that layer and the ones after it are rebuilt.
 
 ```sh
 spear-index /path/to/tree        # updates chromadb/ on the workstation
-docker build -f docker/Dockerfile -t spear:1.1 .
+scripts/docker/build.sh --profile private
 ```

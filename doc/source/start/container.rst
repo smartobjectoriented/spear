@@ -57,19 +57,21 @@ and a shell that has also sourced another tree's ``env.sh`` with a
 
 .. code-block:: console
 
-   $ spear-image build private               # spear:1.0-private
+   $ spear-image build private               # spear:<version>-private
    $ spear-image build private --bake so3,so3-doc
-   $ spear-image build public                # spear:1.0-public
+   $ spear-image build public                # spear:<version>-public
    $ spear-image list                        # profile and label of each
    $ spear-image inspect private
    $ spear-image run private -- --auto       # spear-docker.sh options, then -- harness args
    $ spear-image save private                # -> spear-private.tar.zst
    $ spear-image load spear-private.tar.zst
-   $ spear-image push ghcr.io/<org>/spear:1.0-public
+   $ spear-image push ghcr.io/<org>/spear:<version>-public
    $ spear-image erase private [--cache]     # or public, all, a tag
 
-A profile names the tag ``build.sh`` gives by default; anything containing a
-``:`` is taken as a tag.  ``spear-image`` decides nothing the scripts under it
+A profile names the tag ``build.sh`` gives by default,
+``spear:<version>-<profile>``, where the version is the release the tree is
+(``scripts/spearversion.sh``: the latest ``v*`` tag, else the release line);
+anything containing a ``:`` is taken as a tag.  ``spear-image`` decides nothing the scripts under it
 would not: ``build.sh`` still decides what a profile may carry and ``push.sh``
 still refuses a ``private`` image without ``--allow-push``.
 
@@ -403,7 +405,7 @@ Publishing, and not publishing
 
 .. code-block:: console
 
-   $ docker tag spear:1.0-public ghcr.io/smartobjectoriented/spear:<version>-public
+   $ docker tag spear:<version>-public ghcr.io/smartobjectoriented/spear:<version>-public
    $ scripts/docker/push.sh ghcr.io/smartobjectoriented/spear:<version>-public
    $ scripts/docker/push.sh <private-registry>/spear:<version>-private            # refused
    $ scripts/docker/push.sh --allow-push <private-registry>/spear:<version>-private
@@ -491,7 +493,7 @@ ones after it are rebuilt.
 .. code-block:: sh
 
    spear-index /path/to/tree     # updates chromadb/ on the workstation
-   scripts/docker/build.sh spear:1.1
+   scripts/docker/build.sh --profile private
 
 Why retrieval is not served from the GPU host
 =============================================

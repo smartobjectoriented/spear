@@ -6,8 +6,8 @@
 # retyped, shortened and reused -- so the answer is a LABEL, written at build
 # time, travelling with the bytes through `docker save`, a registry and back.
 #
-#     scripts/docker/push.sh ghcr.io/<org>/spear:1.0-public
-#     scripts/docker/push.sh --allow-push ghcr.io/<org>/spear-private:1.0-private
+#     scripts/docker/push.sh ghcr.io/<org>/spear:<version>-public
+#     scripts/docker/push.sh --allow-push ghcr.io/<org>/spear-private:<version>-private
 #
 # --allow-push is not a formality. A private image carries a licensed
 # normative corpus -- the original document included, where the store retained

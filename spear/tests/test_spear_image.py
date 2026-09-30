@@ -11,12 +11,14 @@ from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[2]
 SPEAR_IMAGE = REPO / "scripts" / "spear-image"
+VERSION = subprocess.run([str(REPO / "scripts" / "spearversion.sh")],
+                         capture_output=True, text=True).stdout.strip()
 
 FAKE_DOCKER = """#!/bin/bash
 echo "docker $*" >> "$DOCKER_LOG"
 case "$1 $2" in
     "image inspect")
-        [ "$3" = spear:1.0-private ] || exit 1
+        [ "$3" = "$EXPECTED_PRIVATE" ] || exit 1
         case "$*" in
             *redistributable*) echo false ;;
             *profile*) echo private ;;
@@ -37,7 +39,8 @@ class SpearImageTests(unittest.TestCase):
         self.log = Path(self.temp.name) / "docker.log"
         self.log.write_text("")
         self.env = dict(os.environ, PATH=f"{bin_dir}:{os.environ['PATH']}",
-                        DOCKER_LOG=str(self.log))
+                        DOCKER_LOG=str(self.log),
+                        EXPECTED_PRIVATE=f"spear:{VERSION}-private")
 
     def tearDown(self):
         self.temp.cleanup()
@@ -66,22 +69,28 @@ class SpearImageTests(unittest.TestCase):
     def test_a_profile_names_the_tag_build_sh_gives(self):
         result = self.run_image("inspect", "private")
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertIn("spear:1.0-private", result.stdout)
+        self.assertIn(f"spear:{VERSION}-private", result.stdout)
         self.assertIn("redistributable  false", result.stdout)
 
     def test_erase_removes_the_image_and_keeps_the_cache_unless_asked(self):
         self.run_image("erase", "private")
         log = self.log.read_text()
-        self.assertIn("docker rmi -f spear:1.0-private", log)
+        self.assertIn(f"docker rmi -f spear:{VERSION}-private", log)
         self.assertNotIn("builder prune", log)
 
         self.run_image("erase", "private", "--cache")
         self.assertIn("docker builder prune -f", self.log.read_text())
 
+    def test_the_tag_is_the_release_not_a_constant(self):
+        """The tags said 1.0 while the release line was 0.2."""
+        self.assertRegex(VERSION, r"^\d+\.\d+\.\d+$")
+        result = self.run_image("inspect", "private")
+        self.assertIn(f"spear:{VERSION}-private", result.stdout)
+
     def test_a_missing_image_is_reported(self):
         result = self.run_image("run", "public")
         self.assertNotEqual(result.returncode, 0)
-        self.assertIn("no such image: spear:1.0-public", result.stderr)
+        self.assertIn(f"no such image: spear:{VERSION}-public", result.stderr)
 
 
 class EnvShTests(unittest.TestCase):

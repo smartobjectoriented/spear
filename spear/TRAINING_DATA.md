@@ -88,7 +88,7 @@ quantize, evaluate, or deploy adapters.
 
 `/finetune doctor` checks local training-control configuration without SSH.
 `/finetune doctor --remote` performs bounded, read-only diagnostics against
-the configured `reds-ml` alias and caches a bounded machine manifest at
+the configured SSH alias of the training host and caches a bounded machine manifest at
 `audit/training-data/remote-readiness.json`. It never prints keys, passwords,
 environment variables, or full package inventories. `/finetune status` reads
 that cache and never performs a fresh SSH probe merely to display status.
@@ -110,11 +110,11 @@ uv installation and Qwen3-Next extra dependencies are not installed
 automatically.
 
 If SSH authentication is unavailable, configure the normal OpenSSH alias so
-`ssh reds-ml` succeeds non-interactively from the SPEAR account. Use an
+`ssh <training-host>` succeeds non-interactively from the SPEAR account. Use an
 operator-managed agent/key setup; SPEAR never edits SSH config, asks for
 passwords, copies keys, or weakens host verification.
 
-## Dedicated reds-ml environment (FT4C)
+## Dedicated training-host environment (FT4C)
 
 The provisioned operator-owned root is named by `remote_root`; the
 original `/srv/edgem-training` path was unavailable. It contains a private uv

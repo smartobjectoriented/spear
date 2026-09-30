@@ -1,9 +1,9 @@
 SPEAR training host setup
 ============================
 
-This is an operator runbook for a future ``reds-ml`` Qwen3-Coder-Next
+This is an operator runbook for a future ``<training-host>`` Qwen3-Coder-Next
 experiment. FT4B diagnostics found that the current SPEAR execution account
-cannot authenticate through the bare ``reds-ml`` target, while the explicit
+cannot authenticate through the bare ``<training-host>`` target, while the explicit
 operator destination/identity works. No setup command below has been executed by
 SPEAR. Do not use these instructions to modify the inference service or its
 environment.
@@ -67,7 +67,7 @@ current workflow cannot interrupt inference.
 Separate inference and training
 -------------------------------
 
-The inference service previously exposed by ``reds-ml:8010`` is not a training
+The inference service previously exposed by ``<training-host>:8010`` is not a training
 environment. Use a dedicated training account/environment and a dedicated root,
 for example ``/srv/training`` (replace this with an operator-approved
 absolute path). Do not stop inference, reuse its process identity, overwrite its
@@ -79,8 +79,8 @@ SSH operator configuration
 From the account that runs SPEAR, configure the existing OpenSSH alias and
 verify both commands non-interactively::
 
-  ssh reds-ml true
-  ssh reds-ml hostname
+  ssh <training-host> true
+  ssh <training-host> hostname
 
 Use the normal key/agent and host-key configuration managed by the operator.
 Do not add passwords, private keys, or custom authentication logic to SPEAR.

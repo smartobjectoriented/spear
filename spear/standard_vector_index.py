@@ -163,6 +163,19 @@ class OffloadedStandardEmbedder:
 
     @property
     def compute_label(self) -> str:
+        """Which machine computed the vectors, without saying where it is.
+
+        The label enters the index fingerprint, so it must tell two hosts
+        apart; it also travels wherever the index does -- into a public
+        image, among others -- so it must not be the ssh target itself,
+        which is an account and an address.
+        """
+        return offload_label(self.target)
+
+    @property
+    def legacy_compute_label(self) -> str:
+        """The label indexes were stamped with before: the target verbatim.
+        Read once, to carry an existing cache over without re-embedding."""
         return f"offload:{self.target}"
 
     def __post_init__(self) -> None:
@@ -192,6 +205,10 @@ class OffloadedStandardEmbedder:
 
     def embed_query(self, text: str) -> list[float]:
         return self._local.embed_query(text)
+
+
+def offload_label(target: str) -> str:
+    return "offload:host-" + hashlib.sha256(target.encode("utf-8")).hexdigest()[:12]
 
 
 def remote_model_revision(model_id: str, target: str) -> str | None:
@@ -392,6 +409,19 @@ def rebuild_vector_index(
     text_hashes = [hashlib.sha256(text.encode("utf-8")).hexdigest() for text in texts]
 
     cached_rows, cached = _load_cache(store, cache_dir, config_fingerprint)
+
+    # A cache stamped with the previous, verbatim label holds the vectors this
+    # configuration would compute -- same model, revision and host; only the
+    # label changed. Reused, then removed below, since it names the host.
+    relabelled = None
+    legacy_label = getattr(embedder, "legacy_compute_label", None)
+
+    if cached is None and legacy_label and legacy_label != config["compute"]:
+        legacy_fingerprint = sha256_json({**config, "compute": legacy_label})
+        cached_rows, cached = _load_cache(store, cache_dir, legacy_fingerprint)
+
+        if cached is not None:
+            relabelled = legacy_fingerprint
     legacy = _legacy_cache_names(cache_dir)
     matrix = None
     missing: list[int] = []
@@ -471,6 +501,13 @@ def rebuild_vector_index(
     ids = [unit.source_id for unit in units]
     matrix = encode_vectors(matrix, dimension)
     _save_cache(store, cache_dir, config_fingerprint, config, text_hashes, matrix)
+
+    if relabelled is not None:
+        for stale in _cache_paths(cache_dir, relabelled):
+            try:
+                stale.unlink()
+            except OSError:
+                pass
 
     # The entries just carried into the single-file cache are dead weight as
     # files: one each, hundreds of thousands for a large document.

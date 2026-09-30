@@ -21,7 +21,7 @@ if command -v nvidia-smi >/dev/null; then
                --format=csv,noheader | sed 's/^/    /'
     echo "  driver: $(nvidia-smi --query-gpu=driver_version --format=csv,noheader | head -1)"
     # List ALL toolkits: the nvcc on PATH is often a stale distro package (on
-    # reds-ml it reports 12.0 while /usr/local/cuda is 13.0), and sm_120 needs
+    # the reference GPU host it reports 12.0 while /usr/local/cuda is 13.0), and sm_120 needs
     # >= 12.8.
     echo "  CUDA compilers (sm_120 needs >= 12.8):"
     for C in /usr/bin/nvcc /usr/local/cuda/bin/nvcc /usr/local/cuda-1*/bin/nvcc; do

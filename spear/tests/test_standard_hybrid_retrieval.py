@@ -427,6 +427,43 @@ class StandardHybridRetrievalTests(unittest.TestCase):
         self.assertNotEqual(local.vector_index_fingerprint,
                             remote.vector_index_fingerprint)
 
+    def test_the_offload_label_names_no_host_and_the_old_cache_is_reused(self):
+        """The label travels with the index -- into a public image among
+        others -- and it used to be the ssh target, account and address.
+        Relabelling reuses the vectors: nothing is embedded again."""
+        target = "svc@192.0.2.7"
+
+        class Before(FixtureSemanticEmbedder):
+            compute_label = f"offload:{target}"
+
+        class After(FixtureSemanticEmbedder):
+            compute_label = standard_vector_index.offload_label(target)
+            legacy_compute_label = f"offload:{target}"
+
+            def embed_documents(self, texts):
+                raise AssertionError(f"re-embedded {len(texts)} texts")
+
+        rebuild_vector_index(self.store, "SYNTH-STD", "R1", Before(), created_at="a")
+        after = rebuild_vector_index(self.store, "SYNTH-STD", "R1", After(),
+                                     created_at="a")
+
+        self.assertNotIn("192.0.2.7", After.compute_label)
+        self.assertNotIn("svc", After.compute_label)
+        self.assertEqual(standard_vector_index.offload_label(target),
+                         standard_vector_index.offload_label(target))
+        self.assertNotEqual(standard_vector_index.offload_label(target),
+                            standard_vector_index.offload_label("other@192.0.2.8"))
+
+        revision_dir = self.store.revision_dir("SYNTH-STD", "R1")
+        for path in revision_dir.rglob("*.json"):
+            with self.subTest(file=path.name):
+                self.assertNotIn("192.0.2.7", path.read_text())
+
+        index = json.loads((revision_dir / "indexes" / "vector" / "index.json")
+                           .read_text())
+        self.assertEqual(index["embedding_config"]["compute"], After.compute_label)
+        self.assertTrue(after.vector_index_fingerprint)
+
     def test_an_operator_override_lets_a_licensed_corpus_offload(self):
         """--allow-offload is per command and never stored. Relabelling the
         corpus PUBLIC would buy the same offload AND tell training governance

@@ -81,7 +81,12 @@ class StandardStore:
             raise StandardStoreError("standard root cannot be a symlink")
 
         self.root = candidate.resolve()
-        os.chmod(self.root, 0o700)
+
+        # Tightened only when it is ours. A container image ships its store
+        # owned by root and runs as the host user: chmod on a directory one
+        # does not own is EPERM, and the baked standards were unreachable.
+        if self.root.stat().st_uid == os.getuid():
+            os.chmod(self.root, 0o700)
 
         # What this process has already read, keyed by what it was read from:
         # (standard, revision, artefact) -> (stamp, value).

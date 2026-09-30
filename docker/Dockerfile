@@ -65,6 +65,16 @@ from sentence_transformers import SentenceTransformer; \
 SentenceTransformer('BAAI/bge-m3')" \
     && find /opt/spear/hf -name '*.onnx' -delete 2>/dev/null || true
 
+# Chroma's own default embedder (MiniLM, ONNX), which the skill library and the
+# conversation archive still use. Chroma fetches it into ~/.cache on first use,
+# and a container runs with a HOME of the caller's choosing: every fresh state
+# directory meant a 79 MB download, and none at all offline. Fetched here into
+# a fixed home; the entrypoint links it into whichever HOME the run has.
+RUN HOME=/opt/spear/chroma-home "$APP/bin/python" -c "\
+from chromadb.utils.embedding_functions import ONNXMiniLM_L6_V2; \
+ONNXMiniLM_L6_V2()(['warm'])" \
+    && chmod -R a+rX /opt/spear/chroma-home
+
 # The prebuilt index, then the code.
 # --chmod on the COPY itself, not a later RUN: a separate chmod would rewrite
 # every file into a second 4.2 GB layer. ChromaDB opens its sqlite read-write
@@ -125,6 +135,10 @@ COPY --from=baked --chmod=0777 . /corpora/
 COPY --from=standards --chmod=0777 . /opt/spear/state/standards/
 RUN chmod 0777 /opt/spear/state
 ENV SPEAR_STATE_DIR=/opt/spear/state
+# The standards store is BAKED, the state directory is the caller's: a run that
+# mounts its own state (every documented one does) would otherwise look for the
+# store under it and open with no standard at all.
+ENV SPEAR_STANDARDS_ROOT=/opt/spear/state/standards
 # NOT in /usr/local/bin: the host's copy of that directory is mounted over
 # it (189 toolchain symlinks that ib.md tells the operator to put there),
 # which would hide the entrypoint and stop the container dead.

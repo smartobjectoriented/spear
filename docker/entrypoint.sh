@@ -136,4 +136,13 @@ else:
         print(f"           {standard_id} {revision}")
 PYSTD
 
+# Chroma's MiniLM model, baked at build time (see the Dockerfile), made visible
+# under whatever HOME this run was given. Best effort: an unwritable HOME only
+# costs the download it would have cost anyway.
+ONNX=/opt/spear/chroma-home/.cache/chroma/onnx_models
+if [ -d "$ONNX" ] && [ ! -e "$HOME/.cache/chroma/onnx_models" ]; then
+    mkdir -p "$HOME/.cache/chroma" 2>/dev/null \
+        && ln -s "$ONNX" "$HOME/.cache/chroma/onnx_models" 2>/dev/null || true
+fi
+
 exec "$APP/bin/python" "$APP/rag_chat.py" "$@"

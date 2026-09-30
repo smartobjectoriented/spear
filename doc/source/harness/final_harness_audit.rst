@@ -18,7 +18,7 @@ Every box in the picture can be checked against the tree.  It replaced a hand-dr
 version of the same figure that had ``TaskController`` in two bands and drew
 ``RetryPolicy`` beside ``FailurePolicy`` although the second contains the first
 (``failure_policy.py``).  That drawing is kept as the
-``Final_architecture`` page of ``source/img/SPEAR.drawio`` and in ``_static/``,
+``Final_architecture`` page of ``source/img/spear.drawio`` and in ``_static/``,
 because it is a fine overview.
 
 Production maturity

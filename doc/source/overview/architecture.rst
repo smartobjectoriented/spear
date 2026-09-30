@@ -20,7 +20,7 @@ workspace and read/write boundaries.  What comes out on the right is either
 grounded — an answer, a plan, a change, a validation result — or an explicit
 refusal to answer when the evidence is insufficient.
 
-.. figure:: /img/260929_SPEAR_Overview.png
+.. figure:: /img/SPEAR-Infrastructure.drawio.png
    :width: 100%
    :alt: SPEAR infrastructure: user and session, normative and implementation
          evidence, model backends, the runtime and control plane, the

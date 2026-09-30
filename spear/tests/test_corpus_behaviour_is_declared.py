@@ -6,7 +6,7 @@ which system prompt the session ran on, and -- through that prompt -- whether
 the normative evidence contract was present at all, plus how history and
 memory files were named.
 
-None of that was visible in the registry. An entry said `"kind": "edgem1"`
+None of that was visible in the registry. An entry named one product kind
 and the behaviour lived in six branches elsewhere, so a corpus could not ask
 for the curated indexer without also taking a collection name, an autoindex
 policy and a domain prompt it might not want; and a reader of the registry
@@ -83,14 +83,16 @@ class TheIndexerIsDeclared(Registry):
         self.assertEqual(rag_chat.corpus_indexer(), "generic")
         self.assertTrue(rag_chat.reindex_command()[1].endswith("index_dir.py"))
 
-    def test_only_the_generic_indexer_is_told_the_collection(self):
-        """The curated walk derives its own name; telling it another would
-        index into a collection and query a different one."""
-        self.register(kind="generic")
-        self.assertIn("--collection", rag_chat.reindex_command())
+    def test_both_indexers_are_told_the_collection(self):
+        """Left to derive its own name, the curated walk indexed into one
+        collection while the session queried another."""
+        for indexer in ("generic", "buildsystem"):
+            with self.subTest(indexer=indexer):
+                self.register(indexer=indexer)
+                cmd = rag_chat.reindex_command()
 
-        self.register(indexer="buildsystem")
-        self.assertNotIn("--collection", rag_chat.reindex_command())
+                self.assertEqual(rag_chat.COLLECTION_NAME,
+                                 cmd[cmd.index("--collection") + 1])
 
 
 class AutoindexIsDeclared(Registry):
@@ -131,7 +133,7 @@ class ThePromptIsDeclared(Registry):
         source = inspect.getsource(rag_chat.main)
 
         self.assertIn('corpus_property("prompt_file")', source)
-        self.assertNotIn('PROJECT_KIND != "edgem1"', source)
+        self.assertNotIn('PROJECT_KIND !=', source)
         self.assertNotIn('PROJECT_KIND ==', source)
 
 
@@ -159,7 +161,7 @@ class TheCollectionIsPinnedOrDerived(Registry):
 
 class NoBehaviourHidesBehindTheKind(unittest.TestCase):
     def test_production_code_has_no_kind_equality_branch(self):
-        """Not `edgem1` specifically: ANY behavioural test of `kind`."""
+        """Not one product kind specifically: ANY behavioural test of `kind`."""
         import re
 
         # The whole tracked tree, not just the top-level modules: the first
@@ -254,8 +256,6 @@ class NoBehaviourHidesBehindTheKind(unittest.TestCase):
     def test_the_cli_offers_each_behaviour_separately(self):
         """One flag that switched four things at once is how they became
         invisible."""
-        self.assertNotIn("--edgem1", rag_chat.CORPUS_USAGE)
-
         body = (ROOT / "rag_chat.py").read_text(encoding="utf-8")
         for flag in ("--kind", "--indexer", "--autoindex", "--prompt-file"):
             with self.subTest(flag=flag):

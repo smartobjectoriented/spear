@@ -2730,7 +2730,7 @@ def init_chromadb():
 
 # ── hybrid lexical + dense ───────────────────────────────────────────
 # MiniLM's cosine distance does NOT discriminate identifiers: measured on
-# edgem1_verdin, the query "ou est defini __sys_empty" returns 12 chunks all
+# a build-system index, the query "ou est defini __sys_empty" returns 12 chunks all
 # within 0.635-0.669 — the same band as an off-topic question (0.72-0.80). With
 # 0.03 between the 1st and the 12th, the dense ranking means nothing there.
 # Chroma's full-text filter, on the other hand, cuts clean (syscalls.c in
@@ -6527,15 +6527,12 @@ def reindex_command():
     curated = corpus_indexer() == "buildsystem"
     script = (f"{APP_DIR}/index_corpus.py" if curated
               else f"{APP_DIR}/index_dir.py")
-    cmd = [sys.executable, script, CORPUS_ROOT] + reindex_options()
+    # Both indexers are told which collection this session queries. The
+    # curated walk used to derive its own from the tree's basename, which
+    # agreed with the session only when the registry pinned that same name.
 
-    # The curated walk derives its own collection name and takes no --collection;
-    # the generic one is told which collection this session queries.
-
-    if not curated:
-        cmd += ["--collection", COLLECTION_NAME]
-
-    return cmd
+    return ([sys.executable, script, CORPUS_ROOT] + reindex_options()
+            + ["--collection", COLLECTION_NAME])
 
 
 # No "/corpus" prefix in it: the same string answers the slash command, where
@@ -7466,7 +7463,7 @@ def main():
             # The global counterpart of /remember. /remember writes to
             # memories-<corpus>.md and is invisible in every other corpus,
             # which is the wrong home for something like "never rewrite an
-            # existing copyright header" -- true in SO3, in edgem1 and in
+            # existing copyright header" -- true in SO3, in the build-system trees and in
             # pos_sol alike. This lands in the always-injected rules instead.
 
             note = user_input[len("/recall"):].strip()

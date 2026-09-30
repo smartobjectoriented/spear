@@ -5,7 +5,7 @@ Retrieval
 =========
 
 The assistant is expected to answer questions about specific code bases —
-SO3, the EDGE-M1 products, LVGL, U-Boot — that no general model has memorised.
+SO3, BitBake-based build systems, LVGL, U-Boot — that no general model has memorised.
 Retrieval is what closes that gap.
 
 Corpus
@@ -82,10 +82,10 @@ Projects
    {
      "so3":       { "path": "/home/operator/soo/so3/so3",  "kind": "generic" },
      "verdin":    { "path": ".../verdin", "kind": "buildsystem",
-                    "collection": "edgem1_verdin", "indexer": "buildsystem",
+                    "collection": "bsp_verdin", "indexer": "buildsystem",
                     "autoindex": true, "prompt_file": "system-prompt.md" },
      "virt64":    { "path": ".../virt64", "kind": "buildsystem",
-                    "collection": "edgem1_virt64", "indexer": "buildsystem",
+                    "collection": "bsp_virt64", "indexer": "buildsystem",
                     "autoindex": true, "prompt_file": "system-prompt.md" },
      "lvgl":      { "path": "/home/operator/work/lvgl", "kind": "generic" },
      "spear":{ "path": "/opt/llm/spear/spear",         "kind": "generic" }
@@ -340,7 +340,7 @@ Three levels exist, and choosing between them is the whole question:
 
 ``/recall`` exists because ``/remember`` was the wrong home for something like
 *never rewrite an existing copyright header, only extend its year range*: that
-is true in SO3, in the EDGE-M1 trees and in ``pos_sol`` alike, and written per
+is true in SO3, in the build-system trees and in ``pos_sol`` alike, and written per
 corpus it would be invisible in all the others.  A recalled line is dated and
 appended to ``rules-learned.md``, which ``load_rules()`` injects after
 ``rules.d/*.md`` on **every** request.

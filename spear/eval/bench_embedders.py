@@ -1,7 +1,10 @@
 #!/usr/bin/env python3
-"""Embedder bake-off, measured on eval/retrieval.json.
+"""Embedder bake-off, measured on the retrieval question set.
 
-Re-embeds the chunks ALREADY indexed in edgem1_verdin rather than re-walking
+The question set and the source collection describe one tree and are supplied
+by its owner: SPEAR_EVAL_QUESTIONS and SPEAR_EVAL_COLLECTION.
+
+Re-embeds the chunks ALREADY indexed in that collection rather than re-walking
 the tree: the chunking is then strictly identical from one candidate to the
 next, so we measure the embedder and nothing else. Writes into `bench_<tag>`
 collections — production is never touched.
@@ -27,7 +30,8 @@ import chromadb
 import rag_chat
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-SOURCE = "edgem1_verdin"
+SOURCE = os.environ.get("SPEAR_EVAL_COLLECTION", "")
+QUESTIONS = os.environ.get("SPEAR_EVAL_QUESTIONS", "")
 RESULTS = os.path.join(HERE, "bench_results.json")
 
 # name -> (document prefix, query prefix, trust_remote_code)
@@ -152,7 +156,7 @@ def retrieve(col, qvec, query, hybrid):
 
 def score(model, coll_name):
     _, q_pfx, trust = MODELS[model]
-    questions = json.load(open(os.path.join(HERE, "retrieval.json")))
+    questions = json.load(open(QUESTIONS))
     col = chromadb.PersistentClient(path=rag_chat.DB_PATH).get_collection(coll_name)
 
     qvecs = [None] * len(questions)
@@ -220,6 +224,10 @@ def main():
 
     if model not in MODELS:
         sys.exit(f"unknown: {model} (see --list)")
+
+    if not SOURCE or not QUESTIONS:
+        sys.exit("bench_embedders: set SPEAR_EVAL_COLLECTION and "
+                 "SPEAR_EVAL_QUESTIONS")
 
     print(f"[{model}]")
 

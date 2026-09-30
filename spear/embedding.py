@@ -596,7 +596,7 @@ def collection_model(collection):
 # The indexers used to delete the collection BEFORE rebuilding it. A crash
 # along the way (GPU OOM, source tree gone, ctrl-c) left the index empty, and
 # nothing reported it at the next launch — the chat simply answered without
-# context. That happened on 2026-08-20 to edgem1_verdin. So we build alongside,
+# context. That happened on 2026-08-20 to a build-system index. So we build alongside,
 # and only swap once indexing has succeeded.
 
 STAGING_SUFFIX = "__building"

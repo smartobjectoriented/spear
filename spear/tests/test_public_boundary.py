@@ -19,12 +19,13 @@ The needles are assembled from fragments. Spelled out, they would appear in
 this file, and the scan -- which reads every tracked file, this one included
 -- would find its own assertion list and fail on its own evidence.
 
+PRIVATE PRODUCTS are not named at all. The build-system indexes of one
+organisation's product line keep their collection names, but those names are
+pinned in the machine's gitignored registry, not written here; the question
+set and notes about that product live in the private repository.
+
 DELIBERATELY NOT CHECKED HERE, and pending rather than accepted:
 
-  edgem1      a corpus KIND, bound to live state: two registry entries and two
-              Chroma collections holding 8 609 rows. Renaming the literal
-              without migrating both would silently empty those indexes, which
-              is a state migration and not a branding edit.
   edgemtech   the container registry and the fine-tuning corpus builders still
               name one organisation's product trees. That is customer-specific
               functionality to externalize, not text to rewrite: the client
@@ -83,6 +84,9 @@ class NoPrivateDeploymentValue(unittest.TestCase):
         "re" + "ds-ml@",                # user@host, as typed into ssh
         "gitlab." + "edgemtech.ch",     # a private forge
         "id_pod" + "_gpu",              # a private key filename
+        "edgem" + "1",                  # a private product line
+        "EDGE" + "-M1",                 # the same, as it is spelled
+        "meta-" + "e1c",                # its product layer
         "arma" + "suisse",              # a customer
         "GPU-ac" + "51ffcd",            # a real card's UUID
     )
@@ -166,19 +170,9 @@ class TheOrganisationIsNamedOnlyWhereItMustBe(unittest.TestCase):
     """
 
     NEEDLES = ("EDGEM" + "Tech", "edgem" + "tech", "Infra" + "base",
-               "infra" + "base", "edgem" + "1")
-
-    #: Substrings that are the persistent Chroma collection identifiers. They
-    #: name indexes that exist; renaming the literal abandons 8 609 rows.
-    PERSISTENT = ("edgem1_verdin", "edgem1_virt64")
+               "infra" + "base")
 
     JUSTIFIED = {
-        "spear/index_corpus.py":
-            "derives the collection name that produced the two persistent "
-            "indexes; the literal IS their identity",
-        "spear/rag_chat.py":
-            "one anecdote naming the trees a copyright-header rule was "
-            "observed against",
         "spear/tool_runtime.py":
             "a measured incident: the entry points a path check refused",
         "spear/index_dir.py":
@@ -192,11 +186,6 @@ class TheOrganisationIsNamedOnlyWhereItMustBe(unittest.TestCase):
             "quotes the measured incident it was written for",
         "spear/tests/test_tool_runtime.py":
             "quotes the measured incident it was written for",
-        "spear/tests/test_corpus_behaviour_is_declared.py":
-            "names the retired corpus kind to assert no behaviour hides behind "
-            "it any more",
-        "spear/tests/test_normative_binding_reaches_every_corpus.py":
-            "names the retired corpus kind in the same absence assertion",
         "spear/tests/test_public_boundary.py":
             "this file: the needles and the reasons",
         "doc/source/retrieval.rst":
@@ -205,7 +194,7 @@ class TheOrganisationIsNamedOnlyWhereItMustBe(unittest.TestCase):
     }
 
     def scan_ignoring_persistent(self):
-        """Occurrences that are not one of the persistent identifiers."""
+        """Lines that mention one of the needles, per file."""
         found = {}
 
         for path in tracked():
@@ -215,8 +204,7 @@ class TheOrganisationIsNamedOnlyWhereItMustBe(unittest.TestCase):
                 continue
 
             hits = [line for line in body.splitlines()
-                    if any(n in line for n in self.NEEDLES)
-                    and not any(p in line for p in self.PERSISTENT)]
+                    if any(n in line for n in self.NEEDLES)]
 
             if hits:
                 found[str(path.relative_to(REPO))] = len(hits)
@@ -236,23 +224,6 @@ class TheOrganisationIsNamedOnlyWhereItMustBe(unittest.TestCase):
         stale = sorted(set(self.JUSTIFIED) - found)
 
         self.assertEqual(stale, [], "these files no longer mention it")
-
-    def test_the_persistent_identifiers_are_still_reachable(self):
-        """They are exempt because they name live indexes. If the registry
-        stopped pinning them, the exemption would be protecting nothing."""
-        import json
-
-        registry = ROOT / "projects.json"
-
-        if not registry.exists():
-            self.skipTest("no local registry on this machine")
-
-        pinned = {spec.get("collection")
-                  for spec in json.loads(registry.read_text()).values()}
-
-        for name in self.PERSISTENT:
-            with self.subTest(collection=name):
-                self.assertIn(name, pinned)
 
 
 class NoStaleProductPrefixEscapes(unittest.TestCase):
@@ -279,8 +250,6 @@ class NoStaleProductPrefixEscapes(unittest.TestCase):
     #: Substrings whose presence on a line exempts that line. Each names
     #: something that exists and cannot be renamed by editing a string.
     PERSISTENT = (
-        "edgem1_verdin",        # Chroma collection, 4260 rows
-        "edgem1_virt64",        # Chroma collection, 4349 rows
         "edgem_skills",         # Chroma collection, the skill library
         "edgem_archive",        # Chroma collection, the conversation archive
         ".edgem-rules.md",      # written by hand in users' own trees
@@ -288,16 +257,11 @@ class NoStaleProductPrefixEscapes(unittest.TestCase):
 
     JUSTIFIED = {
         # --- persistent identifiers, named where they are defined ---
-        "spear/index_corpus.py":
-            "derives the collection name that produced the two build-system "
-            "indexes; the literal IS their identity",
         ".gitignore":
             "guards a 47 GB directory this deployment still has on disk; "
             "renaming the rule without moving the directory exposes it",
 
         # --- historical evidence: transcripts and measured incidents ---
-        "spear/rag_chat.py":
-            "one anecdote naming the trees a copyright rule was observed against",
         "spear/TRAINING_DATA.md":
             "narrates a run against a path that was actually tried",
         "spear/doc/source/training_host_setup.rst":
@@ -320,14 +284,10 @@ class NoStaleProductPrefixEscapes(unittest.TestCase):
             "asserts the retired environment namespace is gone",
         "spear/tests/test_client_server_boundary.py":
             "asserts the retired launcher and remote path are gone",
-        "spear/tests/test_corpus_behaviour_is_declared.py":
-            "names the retired corpus kind to assert no behaviour hides behind it",
         "spear/tests/test_normative_binding_reaches_every_corpus.py":
             "names the retired corpus kind in an absence assertion",
         "spear/tests/test_normative_contract.py":
             "asserts the contract names no particular project",
-        "spear/tests/test_indexing.py":
-            "quotes the measured incident it was written for",
     }
 
     def offenders(self):

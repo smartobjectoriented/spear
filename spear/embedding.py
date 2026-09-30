@@ -41,7 +41,7 @@ MODELS = {
 
 # ── GPU pinning on a shared host ─────────────────────────────────────
 # On a multi-GPU host, torch takes the first VISIBLE card — which may belong to
-# somebody else (on reds-ml one of the two Blackwells is 91 GB busy). We pin by
+# somebody else (on the reference host one of the two Blackwells is 91 GB busy). We pin by
 # UUID rather than by index: the index changes across reboots or with the
 # enumeration order, the UUID does not.
 #

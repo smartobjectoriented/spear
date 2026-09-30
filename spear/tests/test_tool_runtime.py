@@ -507,7 +507,7 @@ class RagChatCompatibilityTests(unittest.TestCase):
         self.assertEqual(label("openai-compatible", "http://127.0.0.1:8081/v1"),
                          "remote/pod vLLM")
         # Generic: a port number cannot name a host. This used to assert
-        # "reds-server (RTX PRO 6000)" and kept claiming it after reds.conf
+        # a hard-coded host name and kept claiming it after reds.conf
         # was repointed at another machine.
         self.assertEqual(label("openai-compatible", "http://127.0.0.1:8082/v1"),
                          "reds tunnel")

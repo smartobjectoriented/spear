@@ -82,6 +82,8 @@ class NoPrivateDeploymentValue(unittest.TestCase):
         "10.190." + "161.59",           # the institute's GPU host
         "/home/re" + "ds-ml",           # its account
         "re" + "ds-ml@",                # user@host, as typed into ssh
+        "re" + "ds-ml",                 # the host itself, by name
+        "re" + "ds-server",             # a personal ssh alias for another one
         "gitlab." + "edgemtech.ch",     # a private forge
         "id_pod" + "_gpu",              # a private key filename
         "edgem" + "1",                  # a private product line

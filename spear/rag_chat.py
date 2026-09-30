@@ -1920,7 +1920,7 @@ def backend_label(provider, api_base):
         return "anthropic API"
 
     # The launcher knows which host it tunnelled to; a port number does not.
-    # This line used to read "reds-server (RTX PRO 6000)" for anything on
+    # This line used to read a hard-coded host name for anything on
     # :8082, and kept saying so after reds.conf was repointed at another
     # machine — the banner then named a host we were not talking to.
 

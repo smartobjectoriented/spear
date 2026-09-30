@@ -78,7 +78,7 @@ __pycache__/
 
 # Per-machine configuration: these hold ABSOLUTE paths, so tracking them means
 # every sync overwrites the target machine's settings with the author's. That
-# is exactly what happened on reds-ml — a git reset --hard silently repointed
+# is exactly what happened on the GPU host — a git reset --hard silently repointed
 # all 15 corpora at /home/operator paths that do not exist there, and at a
 # model file on the wrong host. See projects.example.json for the schema.
 /spear/projects.json

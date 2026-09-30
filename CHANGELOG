@@ -1,7 +1,7 @@
-v1.0.0 (30 sep 2026)
+v0.2.0 (30 sep 2026)
 
 First release of SPEAR, and the first line with a release branch
-(release/v1.0). It is the runtime as it stood when it was frozen after the
+(release/v0.2). It is the runtime as it stood when it was frozen after the
 advisory-question and scope fixes, with the documentation and the visual
 identity that came with it.
 
@@ -27,6 +27,6 @@ identity that came with it.
 		container images and the fine-tuning machinery ship alongside.
 
 	•	Every entry point prints the release it belongs to when it starts,
-		"[spear v1.0.0] spear-chat --reds --auto", from the git tag
+		"[spear v0.2.0] spear-chat --reds --auto", from the git tag
 		(scripts/spearversion.sh); the documentation derives its version from
 		the same helper.

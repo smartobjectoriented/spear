@@ -26,15 +26,15 @@ Three git objects work together, and GitHub surfaces them in different places:
      - ``main``
      - Continuous development (the next, unreleased version).
    * - ``release/vX.Y`` branch
-     - ``release/v1.0``
+     - ``release/v0.2``
      - Long-lived maintenance line for a minor version. Patch fixes land here
        and are tagged.
    * - Tag ``vX.Y.Z``
-     - ``v1.0.0``
+     - ``v0.2.0``
      - Immutable point marking a delivered version. Release candidates use the
-       ``-rc`` suffix (``v1.0.1-rc``).
+       ``-rc`` suffix (``v0.2.1-rc``).
    * - GitHub Release
-     - "SPEAR v1.0.0"
+     - "SPEAR v0.2.0"
      - The release page (notes + assets), attached to a tag. Exactly one is
        flagged *Latest*; ``-rc`` tags are published as *pre-release*.
 
@@ -59,7 +59,7 @@ The served model is not part of the version: it is chosen per deployment
 (``spear/active-model.conf``, ``machine.env``) and changes without a release.
 
 Release candidates append ``-rc`` (optionally ``-rcN`` for successive
-candidates), e.g. ``v1.1.0-rc``.
+candidates), e.g. ``v0.3.0-rc``.
 
 Which release is running?
 *************************
@@ -69,11 +69,11 @@ once per invocation — also when it runs another one (``spear-image`` runs the
 scripts under ``scripts/docker``, ``spear-chat`` re-executes itself under
 ``systemd-run``)::
 
-   [spear v1.0.0] spear-chat --reds --auto
+   [spear v0.2.0] spear-chat --reds --auto
 
 The version comes from ``scripts/spearversion.sh``, which reads the git release
 tag (``git describe``) and keeps only the base version: a tagged commit and
-development on top of ``v1.0.0`` both report ``1.0.0``, while ``-rc`` is kept.
+development on top of ``v0.2.0`` both report ``0.2.0``, while ``-rc`` is kept.
 A tree without git metadata — a tarball, a container image — falls back to
 the ``SPEAR_VERSION_FALLBACK`` constant of that script.
 ``spearversion.sh`` can also be run on its own. The documentation derives its
@@ -86,10 +86,10 @@ Branch layout
 
    main ──●──●──●──●──●──●───────►   development (next version)
            \
-   release/v1.0  ●──●──●             maintenance line for 1.0.x
-                 │  │  └─ v1.0.1     (tags live on the branch)
-                 │  └──── v1.0.1-rc
-                 └─────── v1.0.0
+   release/v0.2  ●──●──●             maintenance line for 0.2.x
+                 │  │  └─ v0.2.1     (tags live on the branch)
+                 │  └──── v0.2.1-rc
+                 └─────── v0.2.0
 
 While a minor line has not diverged from ``main`` yet (no work started on the
 next minor), its ``release/vX.Y`` branch and ``main`` may point at the same
@@ -107,9 +107,9 @@ kinds of fix:
   Nothing special — it is an ordinary commit on ``main`` and ships in the next
   ``vX.Y.0``. Do *not* touch any release branch.
 * **A fix for an already-published version** (e.g. a guard that lets through
-  what it should refuse in ``v1.0.0``) that must ship *before* the next
+  what it should refuse in ``v0.2.0``) that must ship *before* the next
   version. Only this case uses the patch-release procedure below: the fix lands
-  on ``release/v1.0`` (tagged ``v1.0.1``) and is also carried to ``main`` so it
+  on ``release/v0.2`` (tagged ``v0.2.1``) and is also carried to ``main`` so it
   is not lost at the next minor.
 
 In other words, what sends a change to ``release/vX.Y`` is the need to patch a
@@ -126,21 +126,21 @@ fast-forwarding.
 
 .. code-block:: sh
 
-   git checkout release/v1.0
+   git checkout release/v0.2
    git cherry-pick <sha>          # or commit the fix directly
-   # bump SPEAR_VERSION_FALLBACK in scripts/spearversion.sh to 1.0.1
+   # bump SPEAR_VERSION_FALLBACK in scripts/spearversion.sh to 0.2.1
 
    # optional: publish a candidate first
-   git tag -a v1.0.1-rc -m "spear v1.0.1-rc"
-   git push origin release/v1.0 v1.0.1-rc
-   gh release create v1.0.1-rc --title "SPEAR v1.0.1-rc" \
-       --target release/v1.0 --prerelease --generate-notes
+   git tag -a v0.2.1-rc -m "spear v0.2.1-rc"
+   git push origin release/v0.2 v0.2.1-rc
+   gh release create v0.2.1-rc --title "SPEAR v0.2.1-rc" \
+       --target release/v0.2 --prerelease --generate-notes
 
    # final release
-   git tag -a v1.0.1 -m "spear v1.0.1"
-   git push origin release/v1.0 v1.0.1
-   gh release create v1.0.1 --title "SPEAR v1.0.1" \
-       --target release/v1.0 --latest --notes-file <notes>
+   git tag -a v0.2.1 -m "spear v0.2.1"
+   git push origin release/v0.2 v0.2.1
+   gh release create v0.2.1 --title "SPEAR v0.2.1" \
+       --target release/v0.2 --latest --notes-file <notes>
 
 Cutting a new minor release (``vX.Y.0``)
 ****************************************
@@ -153,13 +153,13 @@ tag:
 .. code-block:: sh
 
    git checkout main
-   git checkout -b release/v1.1
-   git push -u origin release/v1.1
+   git checkout -b release/v0.3
+   git push -u origin release/v0.3
 
-   git tag -a v1.1.0 -m "spear v1.1.0"
-   git push origin v1.1.0
-   gh release create v1.1.0 --title "SPEAR v1.1.0" \
-       --target release/v1.1 --latest --notes-file <notes>
+   git tag -a v0.3.0 -m "spear v0.3.0"
+   git push origin v0.3.0
+   gh release create v0.3.0 --title "SPEAR v0.3.0" \
+       --target release/v0.3 --latest --notes-file <notes>
 
 The release notes are the version's ``CHANGELOG`` entry.
 

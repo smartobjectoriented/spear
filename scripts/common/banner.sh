@@ -3,7 +3,7 @@
 # Prints which SPEAR release is running, on stderr so it never mixes with
 # what a script writes on stdout:
 #
-#     [spear v1.0.0] spear-chat --reds --auto
+#     [spear v0.2.0] spear-chat --reds --auto
 #
 # Once per invocation, not once per script: scripts call each other
 # (spear-image runs scripts/docker/build.sh, spear-chat re-executes itself

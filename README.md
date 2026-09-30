@@ -102,7 +102,7 @@ development happens on `main`, and every minor version gets a long-lived
 or `vX.Y.Z-rc` for candidates). Each tag has a matching
 [GitHub Release](https://github.com/smartobjectoriented/spear/releases).
 Every entry point prints the release it belongs to when it starts
-(`[spear v1.0.0] spear-chat --reds --auto`); `scripts/spearversion.sh` prints
+(`[spear v0.2.0] spear-chat --reds --auto`); `scripts/spearversion.sh` prints
 it on its own.
 
 The full procedure — cutting patch and minor releases, tagging and publishing —
@@ -116,7 +116,7 @@ land there and are tagged as patch releases.
 
 | Line | Branch | Latest release | Status |
 |------|--------|----------------|--------|
-| 1.0  | [`release/v1.0`](https://github.com/smartobjectoriented/spear/tree/release/v1.0) | [v1.0.0](https://github.com/smartobjectoriented/spear/releases/tag/v1.0.0) | Current stable |
+| 0.2  | [`release/v0.2`](https://github.com/smartobjectoriented/spear/tree/release/v0.2) | [v0.2.0](https://github.com/smartobjectoriented/spear/releases/tag/v0.2.0) | Current stable |
 
 See all versions on the
 [Releases page](https://github.com/smartobjectoriented/spear/releases).

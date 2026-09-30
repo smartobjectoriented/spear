@@ -117,6 +117,25 @@ class Serving(unittest.TestCase):
         self.serve(env={"SPEAR_SERVER_CTX": "131072"})
         self.assertEqual(self.served()["--ctx-size"], "131072")
 
+    def test_a_window_past_the_trained_one_turns_yarn_on(self):
+        self.serve(env=self.complete(SPEAR_SERVER_CTX="524288",
+                                     SPEAR_SERVER_NATIVE_CTX="262144"))
+        served = self.served()
+        self.assertEqual(served["--rope-scaling"], "yarn")
+        self.assertEqual(served["--rope-scale"], "2")
+        self.assertEqual(served["--yarn-orig-ctx"], "262144")
+
+    def test_a_window_within_the_trained_one_is_not_scaled(self):
+        """YaRN is static: it would cost every short request for nothing."""
+        self.serve(env=self.complete(SPEAR_SERVER_CTX="131072",
+                                     SPEAR_SERVER_NATIVE_CTX="262144"))
+        self.assertNotIn("--rope-scaling", self.served())
+
+    def test_a_non_numeric_native_context_is_refused(self):
+        proc = self.serve(expect=78,
+                          env=self.complete(SPEAR_SERVER_NATIVE_CTX="big"))
+        self.assertIn("not a number", proc.stderr)
+
     def test_extra_arguments_reach_the_server(self):
         self.serve("--verbose", env=self.complete())
         self.assertIn("--verbose", self.served())

@@ -35,6 +35,12 @@ SPEAR_SERVER_MODEL=/srv/spear-runtime/models/gguf/Model-Q8_0-00001-of-00004.gguf
 # a number nobody chose.
 SPEAR_SERVER_CTX=32768
 
+# The context length the model was TRAINED at (its GGUF `context_length`).
+# When SPEAR_SERVER_CTX exceeds it, serve.sh enables YaRN with the ratio as
+# scale factor. Unset: the window is served as asked, with no scaling -- right
+# as long as it stays within the trained length.
+#SPEAR_SERVER_NATIVE_CTX=262144
+
 # ---------------------------------------------------------------- optional
 
 # Interface and port. 127.0.0.1 keeps the server off the network: reach it

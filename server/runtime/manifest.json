@@ -86,7 +86,8 @@
   },
 
   "server_defaults": {
-    "SPEAR_SERVER_CTX": "98304",
+    "SPEAR_SERVER_CTX": "524288",
+    "SPEAR_SERVER_NATIVE_CTX": "262144",
     "SPEAR_SERVER_PARALLEL": "1",
     "SPEAR_SERVER_NGL": "99",
     "SPEAR_SERVER_THREADS": "16",

@@ -18,6 +18,11 @@ Two rewrites happen here, and both are about things that move:
               `spear/` prefix, because that is where the repository is
               mounted inside /corpora.
 
+  profile     A public image carries only the corpora marked "public": true.
+              The registry is a map of the building machine's trees -- names,
+              paths, federations -- and a private tree must not be named in an
+              image anyone may pull. Unmarked means private.
+
   collections The chroma collection is named EXPLICITLY, computed from the
               resolved HOST path. The derivation is an md5 of the absolute
               path, so under /corpora the same tree hashes differently and the
@@ -73,7 +78,19 @@ def host_registry():
 
 
 def main():
+    profile = "private"
+
+    if "--profile" in sys.argv:
+        profile = sys.argv[sys.argv.index("--profile") + 1]
+
     src = host_registry()
+    withheld = []
+
+    if profile == "public":
+        withheld = sorted(n for n, s in src.items()
+                          if isinstance(s, dict) and s.get("public") is not True)
+        src = {n: s for n, s in src.items() if n not in withheld}
+
     out, skipped = {}, []
     for name, spec in src.items():
         if not isinstance(spec, dict):
@@ -88,6 +105,10 @@ def main():
         entry = dict(spec)
         entry["path"] = rel
         entry["collection"] = collection_of(spec, resolved)
+
+        # A federation may not name what the image withholds.
+        if "corpora" in entry:
+            entry["corpora"] = [c for c in entry["corpora"] if c in src]
         out[name] = entry
 
     target = os.path.join(REPO, "docker", "projects.docker.json")
@@ -95,6 +116,9 @@ def main():
         json.dump(out, handle, indent=2, ensure_ascii=False)
         handle.write("\n")
     print(f"   registry: {len(out)} corpora -> docker/projects.docker.json")
+    if withheld:
+        print(f"   registry: {len(withheld)} corpora not marked public, "
+              f"WITHHELD from a public image")
     for name, raw in skipped:
         print(f"   SKIPPED {name}: {raw} is under no known root", file=sys.stderr)
     return 1 if skipped else 0

@@ -57,7 +57,8 @@ fi
 # handed around is the opposite of the point, and --network host makes
 # 127.0.0.1 the same thing on both sides.
 if [ "$REDS" = 1 ]; then
-    REDS_HOST="${REDS_HOST:-reds-server}"; REDS_PORT="${REDS_PORT:-8000}"
+    REDS_PORT="${REDS_PORT:-8010}"
+    [ -n "${REDS_HOST:-}" ] || { echo "--reds: set REDS_HOST in spear/reds.conf (see reds.conf.example)" >&2; exit 1; }
     read -r -a REDS_SSH_ARGS <<< "${REDS_SSH_OPTS:-}"
     LPORT=8082
     API_BASE="http://127.0.0.1:$LPORT/v1"

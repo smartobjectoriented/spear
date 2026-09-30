@@ -493,8 +493,8 @@ ones after it are rebuilt.
    spear-index /path/to/tree     # updates chromadb/ on the workstation
    scripts/docker/build.sh spear:1.1
 
-Why retrieval is not served from reds-ml
-========================================
+Why retrieval is not served from the GPU host
+=============================================
 
 The obvious economy is to move the embedder and the index onto the machine
 that already serves the model, and keep a thin client here.  It was costed on
@@ -530,13 +530,13 @@ turn.  It would need a persistent service behind the tunnel.)
 It was declined for three reasons, in increasing order of weight:
 
 * **It ends offline operation.**  Retrieval is what turns 18 % into 90 % on the
-  build-system audit.  Making it require a VPN and a reachable reds-ml means a
+  build-system audit.  Making it require a VPN and a reachable GPU host means a
   session on a train is not a degraded session, it is a different assistant.
 * **It empties the container of its purpose.**  The image exists so that
   retrieval works the moment it starts, on a machine that may have no Hugging
   Face access at all.  A 5 GB image that needs a tunnel to answer anything is a
   different product, not a smaller one.
-* **reds-ml is a shared login.**  Collections are named from the corpus's
+* **The GPU host is a shared login.**  Collections are named from the corpus's
   absolute path, so two people indexing ``~/soo/so3`` under that account would
   write into the same collection.  Fixing that means per-user prefixes and a
   shared ChromaDB on a filesystem that already had 104 GB free against a 97 GB

@@ -6,6 +6,7 @@ supervisor for when that "whatever" should not be a terminal.
 
     serve.sh                    the server, configured, foreground
     spear-inference.service     a systemd template for supervising it
+    render-unit.sh              that template as a user or a system unit
     install-llamacpp.sh         builds the llama.cpp binary serve.sh runs
 
 ## Configuration comes first
@@ -48,9 +49,20 @@ loginctl show-user "$USER" -p Linger
 | `loginctl enable-linger "$USER"` | the user manager runs from boot | changes how the machine treats the account — on a shared host, its administrator |
 | install as a **system** unit | supervised by pid 1 | needs root |
 
-For a system unit, add `User=` and `Group=`, replace every `%h` with the
-account's home (systemd does not expand `%h` the same way there), and install
-under `/etc/systemd/system/`.
+For a system unit, `render-unit.sh` makes the adaptations — `User=`/`Group=`,
+every `%h` replaced by the account's home (under pid 1 `%h` is root's), and
+`WantedBy=multi-user.target` — and prints the result:
+
+```sh
+render-unit.sh --system --account svc \
+    | sudo tee /etc/systemd/system/spear-inference.service >/dev/null
+sudo systemctl daemon-reload
+sudo systemctl enable --now spear-inference
+```
+
+`--log FILE` sends the output to a file instead of the journal. Operate a
+system unit with `sudo systemctl …` and `sudo journalctl -u spear-inference`
+(no `--user`).
 
 Neither is a detail of deploying a model server. Pick deliberately.
 

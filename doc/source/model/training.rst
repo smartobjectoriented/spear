@@ -279,7 +279,7 @@ it up, with a lease file so two operators cannot both believe they hold it.
 Where it runs today
 ===================
 
-The training host is the REDS machine (``reds-ml``), whose reserved card is an
+The training host is the inference host (:ref:`inference_host`), whose reserved card is an
 RTX PRO 6000 Blackwell with 96 GiB.  The objective is that this card is
 sufficient and no GPU is rented.
 

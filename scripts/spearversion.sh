@@ -1,11 +1,11 @@
 #!/bin/sh
-# Print the SPEAR release version, e.g. "1.0.0".
+# Print the SPEAR release version, e.g. "0.2.0".
 #
 # The version is derived from the git release tag (vX.Y.Z) of the tree this
 # script belongs to, so it never has to be bumped by hand. Only the base
 # version is kept: the "-<commits>-g<hash>" and "-dirty" suffixes git-describe
 # adds on a commit past the tag are stripped, so both the tagged commit and
-# development on top of v1.0.0 report "1.0.0". An "-rc" suffix is kept.
+# development on top of v0.2.0 report "0.2.0". An "-rc" suffix is kept.
 #
 # When the tree carries no git metadata (a tarball export, a container image,
 # a copy without .git), the SPEAR_VERSION_FALLBACK constant below is printed
@@ -17,7 +17,7 @@
 #
 # Usage: spearversion.sh
 
-SPEAR_VERSION_FALLBACK="1.0.0"
+SPEAR_VERSION_FALLBACK="0.2.0"
 
 _tree=$(cd "$(dirname "$(readlink -f "$0")")/.." && pwd)
 

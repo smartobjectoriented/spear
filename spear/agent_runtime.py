@@ -118,6 +118,11 @@ class AgentContext:
     context_limit: int
     compaction_policy: CompactionPolicy = field(default_factory=CompactionPolicy)
     compaction_artifact: CompactionArtifact | None = None
+    #: Tool results the conversation holds but the last request did not
+    #: carry -- folded into a compaction summary or left out by the composer.
+    #: The guards that say "you already have this" ask here, because the
+    #: conversation keeps every block whatever the model was actually sent.
+    dropped_tool_results: frozenset[str] = frozenset()
     provider: str | None = None
     model: str | None = None
     output_reserve: int | None = None
@@ -501,12 +506,18 @@ _REPEAT_REFUSE = 3
 _REPEAT_MIN_CHARS = 200
 
 
-def _repeated_result(seen, envelope) -> int:
+def _repeated_result(seen, envelope, visible=lambda _call_id: True) -> int:
     """How many times this exact result has come back this turn.
 
     Mutations are exempt: writing the same content twice is idempotent and
     fine. Failures are exempt too -- the same error twice is the tree
     telling the truth twice, and the repair loop depends on hearing it.
+
+    Only deliveries the model can still see are counted. A turn compacted,
+    re-read the recipe the summary had folded away, and was refused it as
+    "already given 2 times": given, and then taken away. A refused call is
+    not recorded, since it delivered nothing; while every delivery stays
+    visible the count only grows, so the refusal stands as before.
     """
     text = envelope.text or ""
 
@@ -514,9 +525,15 @@ def _repeated_result(seen, envelope) -> int:
         return 0
 
     key = hashlib.sha256(text.encode("utf-8", "replace")).hexdigest()
-    seen[key] = seen.get(key, 0) + 1
+    delivered = [call_id for call_id in seen.get(key, ()) if visible(call_id)]
+    count = len(delivered) + 1
 
-    return seen[key]
+    if count < _REPEAT_REFUSE:
+        delivered.append(envelope.tool_call_id)
+
+    seen[key] = delivered
+
+    return count
 
 
 def _with_repeat_note(envelope, count):
@@ -1545,6 +1562,14 @@ def _conversation_context_items(
     return tuple(items)
 
 
+def _tool_result_ids(messages) -> frozenset[str]:
+    """The tool calls whose results these messages carry."""
+    return frozenset(
+        block.tool_call_id for message in messages
+        for block in getattr(message, "content", ()) or ()
+        if isinstance(block, ToolResultBlock) and block.content)
+
+
 def _render_context_snapshot(
     snapshot: ContextSnapshot,
 ) -> tuple[str, tuple[ConversationMessage, ...]]:
@@ -1890,7 +1915,7 @@ class AgentRuntime:
         only_tools: tuple[str, ...] | None = None
         wrap_up_warned = landed = False
         validation_demands = next_item_demands = 0
-        seen_results: dict[str, int] = {}
+        seen_results: dict[str, list[str]] = {}
         last_write_redirect = -WRITE_REDIRECT_SPACING
         last_clause_redirect = -WRITE_REDIRECT_SPACING
         last_build_output = ""
@@ -2737,7 +2762,9 @@ class AgentRuntime:
                     # nothing counted them as repeats. What tells a loop from
                     # progress is that the answer stopped changing.
 
-                    same = _repeated_result(seen_results, envelope)
+                    same = _repeated_result(
+                        seen_results, envelope,
+                        lambda call_id: call_id not in context.dropped_tool_results)
 
                     if same >= _REPEAT_NOTICE:
                         repeats += 1
@@ -4226,6 +4253,8 @@ class AgentRuntime:
         request = self._compact_context(context, request)
         snapshot = context.context_engine.compose(request)
         system, selected = _render_context_snapshot(snapshot)
+        context.dropped_tool_results = (
+            _tool_result_ids(context.conversation) - _tool_result_ids(selected))
 
         return snapshot, system, selected
 

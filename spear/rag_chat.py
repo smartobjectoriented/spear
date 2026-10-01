@@ -6268,10 +6268,96 @@ def save_learned_rule(note):
         handle.write(f"- {line}  ({time.strftime('%Y-%m-%d')})\n")
 
 
+_RULE_HEADER = re.compile(r"\A---\s*\n(.*?)\n---\s*(?:\n|\Z)", re.S)
+
+
+def rule_scope(content):
+    """(scope, body) of a rules.d file.
+
+    A rule file may begin with a header declaring where it applies:
+
+        ---
+        scope: corpus <name>[, <name>...]   the session's corpus, or one it
+                                            federates
+        scope: path <dir>                   the session's tree lies under <dir>
+        scope: global                       everywhere (the same as no header)
+        ---
+
+    Without a header a rule is global, which is what every rules.d file was
+    until one tree's build commands, platforms and scripts were written into
+    them and reached every session on every tree. Returns scope None when a
+    header is present but says nothing SPEAR can match: such a rule claims a
+    scope it cannot prove, and is not injected anywhere.
+    """
+    match = _RULE_HEADER.match(content)
+
+    if not match:
+        return ("global",), content
+
+    body = content[match.end():].strip()
+    found = re.search(r"^scope:\s*(.+)$", match.group(1), re.M)
+
+    if not found:
+        return None, body
+
+    kind, _, value = found.group(1).strip().partition(" ")
+    values = tuple(item for item in re.split(r"[,\s]+", value.strip()) if item)
+
+    if kind == "global" and not values:
+        return ("global",), body
+
+    if kind in ("corpus", "path") and values:
+        return (kind,) + values, body
+
+    return None, body
+
+
+def session_scope():
+    """What a scoped rule is matched against: this session's own corpus and
+    the corpora it federates (its own parts -- not the shared ones attached
+    to every session), and the trees it runs in."""
+    names = {PROJECT} if PROJECT else set()
+
+    if PROJECT and PROJECT.startswith("workspace:"):
+        names.add(PROJECT.split(":", 1)[1])
+
+    names |= set(PROJECT_SPEC.get("corpora") or ())
+    roots = {os.path.realpath(root) for root in (PROJECT_ROOT, CORPUS_ROOT) if root}
+
+    return names, roots
+
+
+def rule_applies(scope):
+    if scope is None:
+        return False
+
+    if scope[0] == "global":
+        return True
+
+    names, roots = session_scope()
+
+    if scope[0] == "corpus":
+        return any(name in names for name in scope[1:])
+
+    for directory in scope[1:]:
+        base = os.path.realpath(os.path.expanduser(directory))
+
+        if any(root == base or root.startswith(base.rstrip("/") + "/")
+               for root in roots):
+            return True
+
+    return False
+
+
 def load_rules():
-    """Concatenates the rules from rules.d/*.md (alphabetical order →
-    numeric prefixes NN-name.md). Always injected into the system prompt,
-    hence guaranteed seen by the model — keep them compact (RULES_BUDGET)."""
+    """The rules from rules.d/*.md that apply to this session, in file-name
+    order (numeric prefixes NN-name.md), followed by the learned rules.
+
+    A rule with no scope header is global and always injected. A rule that
+    declares a scope is injected only in a session that matches it -- its
+    own corpus, a corpus it federates, or a tree under its path -- and a rule
+    whose scope cannot be read is injected nowhere (rule_scope). Keep them
+    compact: whatever applies is on every request (RULES_BUDGET)."""
 
     if not os.path.isdir(RULES_DIR):
         return ""
@@ -6283,9 +6369,9 @@ def load_rules():
             continue
 
         with open(os.path.join(RULES_DIR, fname), "r") as f:
-            content = f.read().strip()
+            scope, content = rule_scope(f.read().strip())
 
-        if not content:
+        if not content or not rule_applies(scope):
             continue
 
         title = os.path.splitext(fname)[0]

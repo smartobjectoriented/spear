@@ -153,20 +153,9 @@ elif [ "$MODE" = reds ]; then
     # Name the host we actually tunnelled to, and hand it to the banner —
     # rag_chat cannot infer it from a port number.
     export SPEAR_BACKEND_LABEL="${REDS_HOST##*@} (tunnel :$LPORT)"
-    # Take the context window from the server rather than from a local
-    # default. The harness trimmed every prompt to 32k while the remote
-    # llama-server was serving 65k, silently wasting half the window — and a
-    # value copied into reds.conf would drift the day the server is restarted
-    # with different flags. An explicit SPEAR_CTX still wins.
-    if [ -z "${SPEAR_CTX:-}" ]; then
-        SRV_CTX=$(curl -sf --max-time 5 "http://127.0.0.1:$LPORT/props" 2>/dev/null \
-            | "$PY" -c 'import sys,json;print(json.load(sys.stdin).get("default_generation_settings",{}).get("n_ctx",""))' 2>/dev/null)
-        case "$SRV_CTX" in
-            ''|*[!0-9]*) ;;                       # no answer, or not a number
-            *) export SPEAR_CTX="$SRV_CTX"
-               echo "  context window: $SPEAR_CTX (from the server)" ;;
-        esac
-    fi
+    # The context window is asked of the server by rag_chat itself, for
+    # every way of starting it -- not here, where only this mode got it. An
+    # explicit SPEAR_CTX still wins.
     echo "→ REDS model '$SPEAR_MODEL_NAME' on $REDS_HOST"
 elif [ "$MODE" = remote ]; then
     # ── REMOTE: SSH tunnel laptop:8081 -> pod:8080 (vLLM) ──

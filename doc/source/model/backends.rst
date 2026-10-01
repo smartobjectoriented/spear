@@ -78,7 +78,13 @@ request to the server — it is what the client budgets against, and setting it
 above what the server actually serves produces requests the server refuses
 whole.
 
-Where the endpoint reports its own window, the launcher reads it and uses that.
+When ``SPEAR_CTX`` is not set, the client asks the endpoint at startup —
+llama.cpp's ``/props`` (``n_ctx``, per slot) or vLLM's ``/v1/models``
+(``max_model_len``) — and uses what it reports. If neither answers, it falls
+back to 32768 and says so. The startup line names the source::
+
+   context window: 524288 (server /props)
+   context window: 32768 (default: server did not report a window — /props: URLError; ...)
 
 Two settings interact with it:
 
@@ -129,7 +135,7 @@ ends.
    * - ``--model``
      - model id sent with the request
    * - ``--ctx`` / ``SPEAR_CTX``
-     - context window in tokens (default 32768)
+     - context window in tokens (default: asked of the server, else 32768)
    * - ``--temp`` / ``SPEAR_TEMP``
      - sampling temperature (default 0.25)
    * - ``--max-tokens`` / ``SPEAR_MAX_TOKENS``

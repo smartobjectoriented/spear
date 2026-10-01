@@ -4815,13 +4815,36 @@ def _already_in_evidence(context, command):
 
     seen = context.cache.setdefault(REGIONS_READ, {})
     generation = _mutation_generation(context)
-    fresh = [block for block in blocks
-             if seen.get(block) != generation]
 
-    for block in blocks:
-        seen[block] = generation
+    # Each block remembers the call that showed it, so "already above" is
+    # said only while that result is still in what the model is sent. A
+    # compaction that folded it away makes the block new again.
+
+    def still_shown(block):
+        record = seen.get(block)
+
+        if not record or record[0] != generation:
+            return False
+
+        shown_by = record[1]
+        available = getattr(context, "evidence_available", None)
+
+        if shown_by is None or available is None:
+            return True
+
+        try:
+            return bool(available(shown_by))
+        except Exception:
+            return True
+
+    fresh = [block for block in blocks if not still_shown(block)]
 
     if fresh:
+        shown_by = (getattr(context, "metadata", None) or {}).get("tool_call_id")
+
+        for block in blocks:
+            seen[block] = (generation, shown_by)
+
         return ""
 
     where = sorted({block.split("#", 1)[0] for block in blocks})
@@ -6072,6 +6095,13 @@ def _evidence_in_context(agent_context, tool_call_id):
     spelling of the same read.
     """
 
+    # The conversation keeps every block; compaction and the composer change
+    # only what is SENT. A result left out of the last request is gone as far
+    # as the model is concerned, whatever the conversation still holds.
+
+    if tool_call_id in (getattr(agent_context, "dropped_tool_results", None) or ()):
+        return False
+
     conversation = getattr(agent_context, "conversation", None) or ()
 
     for message in conversation:
@@ -6098,6 +6128,7 @@ def route_tool_envelope(
     if phase_ledger is not None:
         cache[WORK_PHASE] = phase_ledger
 
+    tool_call_id = tool_call_id or new_action_id("tool_call")
     execution_context = ToolExecutionContext(
         task_id=task_id or new_task_id(),
         trace=trace or TRACE,
@@ -6127,16 +6158,14 @@ def route_tool_envelope(
         write_gate=(phase_ledger.may_write
                     if phase_ledger is not None and phase_ledger.engaged
                     else None),
-        metadata={"standard_binding": getattr(agent_context, "standard_binding", None)},
+        metadata={"standard_binding": getattr(agent_context, "standard_binding", None),
+                  "tool_call_id": tool_call_id},
     )
 
     execution_context.command_executor = lambda command: _registered_command(
         execution_context, command,
     )
-    envelope = TOOL_ROUTER.execute(
-        execution_context, tool_call_id or new_action_id("tool_call"),
-        name, args,
-    )
+    envelope = TOOL_ROUTER.execute(execution_context, tool_call_id, name, args)
 
     # A mutation the router refused never reaches the handler, so the handler
     # never files it. The mutation trail is this module's, not the routing

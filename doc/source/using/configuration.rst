@@ -75,7 +75,7 @@ Endpoint and model
    * - ``--model``
      - model id
    * - ``--ctx`` · ``SPEAR_CTX``
-     - context window in tokens (default 32768)
+     - context window in tokens (default: asked of the server, else 32768)
    * - ``--temp`` · ``SPEAR_TEMP``
      - sampling temperature (default 0.25)
    * - ``--max-tokens`` · ``SPEAR_MAX_TOKENS``

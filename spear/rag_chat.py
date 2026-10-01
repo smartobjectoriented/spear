@@ -122,7 +122,7 @@ COLLECTION = None
 
 ENV_OPTIONS = {
     "--api-base": ("SPEAR_API_BASE", "OpenAI-compatible endpoint URL"),
-    "--ctx": ("SPEAR_CTX", "context window in tokens (default 32768)"),
+    "--ctx": ("SPEAR_CTX", "context window in tokens (default: asked of the server, else 32768)"),
     "--max-tokens": ("SPEAR_MAX_TOKENS", "cap on one reply"),
     "--temp": ("SPEAR_TEMP", "sampling temperature (default 0.25)"),
     "--max-tool-rounds": ("SPEAR_MAX_TOOL_ROUNDS", "tool rounds per task"),
@@ -3818,7 +3818,82 @@ def sanitize_history(history):
     return clean
 
 
-CTX_LIMIT = int(os.environ.get("SPEAR_CTX", "32768"))
+DEFAULT_CTX = 32768
+CTX_LIMIT = int(os.environ.get("SPEAR_CTX", str(DEFAULT_CTX)))
+
+#: Where CTX_LIMIT came from, said with the number so a fallback is never
+#: mistaken for what the server reported. Settled in main().
+CTX_SOURCE = "SPEAR_CTX" if os.environ.get("SPEAR_CTX") else "default"
+
+
+def served_context_window(api_base, timeout=5):
+    """(tokens, endpoint) the server says it serves, or (None, reason).
+
+    The default above is a guess, and too small a guess is not harmless:
+    started without SPEAR_CTX against a server holding 524288 tokens, a turn
+    budgeted for 32768, compacted its history twice in six minutes with a
+    twentieth of the real window in use, and spent the rest of the turn
+    re-reading what the summaries had dropped. The launcher asked the server
+    in one of its modes; every other way of starting the client did not.
+
+    llama.cpp states it in /props, per slot, which is the figure that bounds
+    one request. vLLM states it as max_model_len on /v1/models. A training
+    length (llama.cpp's meta.n_ctx_train) is not what the server serves and
+    is never used.
+    """
+    import urllib.request
+
+    root = re.sub(r"/v1/?$", "", (api_base or "").rstrip("/"))
+
+    def fetch(url):
+        with urllib.request.urlopen(url, timeout=timeout) as response:
+            return json.loads(response.read().decode("utf-8", "replace"))
+
+    probes = (
+        ("/props", lambda data: (data.get("default_generation_settings")
+                                 or {}).get("n_ctx")),
+        ("/v1/models", lambda data: next(
+            (item.get("max_model_len") for item in data.get("data") or ()
+             if isinstance(item, dict) and item.get("max_model_len")), None)),
+    )
+    failures = []
+
+    for path, pick in probes:
+        try:
+            value = pick(fetch(root + path))
+        except Exception as exc:
+            failures.append(f"{path}: {type(exc).__name__}")
+            continue
+
+        if isinstance(value, int) and not isinstance(value, bool) and value > 0:
+            return value, path
+
+        failures.append(f"{path}: no window stated")
+
+    return None, "; ".join(failures)
+
+
+def resolve_context_window(environ, api_base, *, provider="openai-compatible",
+                           discover=served_context_window):
+    """(tokens, source): an explicit SPEAR_CTX, else the server, else the default.
+
+    The source is reported as it is. A fallback says it is a fallback and
+    why; it is never presented as something the server said.
+    """
+    explicit = (environ.get("SPEAR_CTX") or "").strip()
+
+    if explicit:
+        return int(explicit), "SPEAR_CTX"
+
+    if provider == "anthropic":
+        return DEFAULT_CTX, "default: provider not asked"
+
+    value, where = discover(api_base)
+
+    if value:
+        return value, f"server {where}"
+
+    return DEFAULT_CTX, f"default: server did not report a window — {where}"
 
 
 def _approx_tokens(s):
@@ -7138,6 +7213,7 @@ def compaction_policy_from_environment():
 
 
 def main():
+    global CTX_LIMIT, CTX_SOURCE
     global TRACE_PROVIDER, TRACE_MODEL, STANDARD_ENGAGED_BEFORE, STANDARD_READ_CONTEXT
     global STANDARD_PRIOR_CLAUSES, STANDARD_PRIOR_ANSWER
     global STANDARD_PRIOR_REQUIREMENTS
@@ -7199,6 +7275,14 @@ def main():
         return
 
     TRACE_PROVIDER = provider
+
+    # An explicit SPEAR_CTX (or --ctx) wins; otherwise the server is asked.
+    # A replay contacts no server, so it keeps what it was given.
+
+    if not os.environ.get(session_replay.REPLAY_ENV, "").strip():
+        CTX_LIMIT, CTX_SOURCE = resolve_context_window(
+            os.environ, LLAMA_SERVER_URL, provider=provider)
+        print(f"  context window: {CTX_LIMIT} ({CTX_SOURCE})")
 
     history = load_history()
     n_rules = base_prompt.count("\n## Rule: ")

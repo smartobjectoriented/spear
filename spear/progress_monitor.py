@@ -7,6 +7,7 @@ import re
 import shlex
 from dataclasses import dataclass, field
 from typing import Mapping
+from tool_registry import COMMAND_TOOLS
 
 
 def _normalise_command(command: str) -> str:
@@ -135,7 +136,7 @@ def action_fingerprint(tool_name: str, arguments: Mapping[str, object]) -> str:
 
     data = dict(arguments)
 
-    if tool_name == "bash" and isinstance(data.get("command"), str):
+    if tool_name in COMMAND_TOOLS and isinstance(data.get("command"), str):
         looked_at = _inspected_path(data["command"])
 
         if looked_at is not None:
@@ -181,7 +182,7 @@ class ProgressMonitor:
 
         # A windowed read of lines not yet shown is progress of its own.
 
-        if tool_name == "bash" and isinstance(arguments.get("command"), str):
+        if tool_name in COMMAND_TOOLS and isinstance(arguments.get("command"), str):
             evidence = tuple(evidence) + read_evidence(arguments["command"])
 
         new_evidence = any(item and item not in self._evidence for item in evidence)

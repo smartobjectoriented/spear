@@ -5,6 +5,7 @@ Claude Code-style UI (⏺ bullets, ⎿ tool results, spinner, box).
 Hybrid tool system: explicit !commands + auto-detection + LLM tool calls.
 """
 
+import dataclasses
 import os
 import re
 import sys
@@ -24,6 +25,7 @@ import subprocess
 from contextlib import contextmanager
 from pathlib import Path
 import answer_scope
+from agent import tools as coding_tools
 import embedding
 import evidence_handles
 import skill_library
@@ -69,7 +71,8 @@ from session_store import (
     new_session_id,
 )
 from tool_registry import (
-    ToolCategory, ToolMutability, ToolRegistry, ToolSpec, native_tool_specs,
+    CODING_TOOL_NAMES, ToolCategory, ToolMutability, ToolRegistry, ToolSpec,
+    coding_tool_specs, native_tool_specs,
 )
 from tool_router import (
     ToolExecutionContext, ToolHandlerResult, ToolResultStatus, ToolRouter,
@@ -2188,8 +2191,15 @@ def read_file(path):
 SIGPIPE_EXIT = 141
 
 
-def run_cmd_result(cmd, need_confirm=True, cancellation=None, execution_mode=None):
-    """Return the security substrate's structured command result."""
+def run_cmd_result(cmd, need_confirm=True, cancellation=None, execution_mode=None,
+                   exec_cmd=None, timeout=None, output_chars=None):
+    """Return the security substrate's structured command result.
+
+    `cmd` is what is classified and authorised. `exec_cmd`, when given, is
+    what runs in its place: the same command inside a harness-built script
+    (the terminal's carried-over session), never anything the policy did not
+    judge. `timeout` replaces the sandbox's default for this call.
+    """
     mode = execution_mode or EXECUTION_MODE
     assessment = COMMAND_POLICY.classify(cmd)
     authorization = COMMAND_POLICY.authorize(assessment, mode,
@@ -2220,13 +2230,32 @@ def run_cmd_result(cmd, need_confirm=True, cancellation=None, execution_mode=Non
     availability = COMMAND_RUNNER.ensure_sandbox(WORKSPACE, profile)
 
     if availability.ok:
-        argv = (list(assessment.argv) if assessment.classification
+        argv = (shell_argv(exec_cmd) if exec_cmd
+                else list(assessment.argv) if assessment.classification
                 != CommandClassification.SHELL_COMPLEX
                 else shell_argv(cmd))
-        result = COMMAND_RUNNER.run_sandboxed(
-            WORKSPACE, argv, profile, availability=availability,
-            cancellation=cancellation,
-        )
+        sandbox = COMMAND_RUNNER.sandbox
+        default_timeout = getattr(sandbox, "timeout_seconds", None)
+        default_chars = getattr(sandbox, "max_output_chars", None)
+
+        try:
+            if timeout and default_timeout is not None:
+                sandbox.timeout_seconds = timeout
+
+            if output_chars and default_chars is not None:
+                sandbox.max_output_chars = max(default_chars, output_chars)
+
+            result = COMMAND_RUNNER.run_sandboxed(
+                WORKSPACE, argv, profile, availability=availability,
+                cancellation=cancellation,
+            )
+        finally:
+            if default_timeout is not None:
+                sandbox.timeout_seconds = default_timeout
+
+            if default_chars is not None:
+                sandbox.max_output_chars = default_chars
+
         sandboxed = True
     else:
         result = availability
@@ -2259,7 +2288,7 @@ def run_cmd_result(cmd, need_confirm=True, cancellation=None, execution_mode=Non
                     "find <dir> -name '<pat>' -not -path '*/build/tmp/*' "
                     "-not -path '*/.git/*'. Or grep -rn '<sym>' <subdir>.")
 
-        return ToolResult("timeout", f"timed out (45s){hint}")
+        return ToolResult("timeout", f"timed out ({timeout or 45}s){hint}")
 
     return result
 
@@ -4313,7 +4342,6 @@ def load_tool_guide():
 
 TOOL_GUIDE = load_tool_guide()
 
-
 def show_diff(old_text, new_text, max_lines=14):
     """Show the lines that actually CHANGED.
 
@@ -4907,7 +4935,23 @@ def _was_read_this_turn(cache, fpath):
 
 def _classified_handler_result(
     text, *, mutation=False, affected_paths=(), read_paths=(), metadata=None,
+    status=None, exit_code=None,
 ):
+    # A JSON result says how it went in its own fields, so the caller that
+    # built it states the status rather than this function guessing it from
+    # the first word of the text.
+    if status is not None:
+        failed = status not in {ToolResultStatus.OK, ToolResultStatus.CACHED}
+
+        return ToolHandlerResult(
+            text=text, status=status, exit_code=exit_code,
+            metadata=metadata or {}, mutation=mutation and not failed,
+            affected_paths=tuple(affected_paths) if not failed else (),
+            read_paths=tuple(read_paths) if not failed else (),
+            error_category=status.value if failed else None,
+            error_summary=text.splitlines()[0][:240] if failed else None,
+        )
+
     exit_match = re.search(r"\(exit\s+(-?\d+)\)", text)
     exit_code = int(exit_match.group(1)) if exit_match else None
 
@@ -5091,6 +5135,7 @@ def _registered_command(context, command):
                         or context.role in {"explorer", "reviewer", "planning"}
                         else None),
     )
+
     result = command_result_text(command_result)
 
     # The command guessed does not exist. The next guess is how a turn ended
@@ -5917,6 +5962,131 @@ def _registered_fetch_url(context, args):
                                       affected_paths=affected)
 
 
+# ------------------------------------------------------------------
+# The agent core's host: SPEAR's control plane, wired to this module's
+# policy. The core (agent/) decides what to call and how results read; every
+# path, write, deletion and command it asks for crosses the same checks as
+# any other tool call here.
+
+_GENERATED_RE = re.compile(
+    r"DO NOT (?:MODIFY|EDIT)|auto(?:matically)?[ -]?generated|@generated",
+    re.IGNORECASE)
+
+_CORE_LABELS = {"read_file": "Read", "search_files": "Search", "patch": "Update",
+                "write_file": "Write", "delete_file": "Delete", "terminal": "Terminal"}
+
+
+def _core_summary(name, arguments):
+    if name == "terminal":
+        return str(arguments.get("command") or "")
+    if name == "search_files":
+        return f"{arguments.get('pattern', '')}  {arguments.get('path') or '.'}"
+    return str(arguments.get("path") or "")
+
+
+def coding_host(agent_context, cache, record):
+    """The control plane for one coding turn, as an agent.host.Host."""
+    from control_plane import SpearHost
+    from agent.host import CommandOutcome
+
+    def context():
+        return _execution_context(agent_context, cache,
+                                  task_id=getattr(agent_context, "task_id", None),
+                                  cancellation=getattr(agent_context, "cancellation", None),
+                                  phase_ledger=getattr(agent_context, "work_phase", None))
+
+    def authorize(name, arguments):
+        print()
+        tool_use(_CORE_LABELS.get(name, name), _core_summary(name, arguments),
+                 color=C_ACCENT if name in ("patch", "write_file", "delete_file") else C_TOOL)
+        return TOOL_ROUTER.authorize(context(), name, arguments)
+
+    def resolve(path, purpose):
+        return str(resolve_path(path))
+
+    def write(resolved, content, action):
+        label = _workspace_label(Path(resolved))
+
+        if cache.get(SANDBOX_DOWN):
+            return "the sandbox is unavailable"
+
+        refused = safe_mode_refusal(action)
+
+        if refused:
+            audit_denied_mutation(action, "safe mode", paths=(resolved,))
+            return "this session does not allow writes"
+
+        if is_excluded_path(Path(resolved)):
+            return f"{label} is a snapshot or third-party copy"
+
+        try:
+            with open(resolved, "r", encoding="utf-8", errors="replace") as handle:
+                head = handle.read(600)
+        except OSError:
+            head = ""
+
+        if re.search(r"/generated/|/build/tmp/", resolved) or _GENERATED_RE.search(head):
+            return f"{label} is a generated file — change its source"
+
+        blocked = authorize_mutation(f"Modify {C_BOLD}{label}{C_RST} ?",
+                                     action=action, paths=(Path(resolved),))
+
+        if blocked is not None:
+            return blocked.to_legacy_text()
+
+        _capture_checkpoint_path(context(), Path(resolved))
+
+        try:
+            os.makedirs(os.path.dirname(resolved), exist_ok=True)
+
+            with open(resolved, "w", encoding="utf-8", errors="surrogateescape",
+                      newline="") as handle:
+                handle.write(content)
+        except OSError as exc:
+            return str(exc)
+
+        _record_mutation(context(), Path(resolved))
+        audit_mutation_result(action, f"OK: {label}", paths=(Path(resolved),))
+
+        return None
+
+    def delete(resolved, reason):
+        result = _registered_delete_file(context(), {"path": resolved, "reason": reason})
+        return None if result.status == ToolResultStatus.OK else result.text
+
+    def run(command, script, timeout, output_chars):
+        ctx = context()
+        result = run_cmd_result(
+            command, need_confirm=False, cancellation=ctx.cancellation,
+            exec_cmd=script, timeout=timeout, output_chars=output_chars,
+            execution_mode=(ExecutionMode.SAFE
+                            if ctx.read_only or _write_gate_closed(ctx)
+                            or ctx.role in {"explorer", "reviewer", "planning"}
+                            else None))
+        status = {"ok": "ok", "failed": "ok", "denied": "denied",
+                  "cancelled": "cancelled", "timeout": "timeout"}.get(result.status, "error")
+
+        return CommandOutcome(status, (result.stdout or "") + (result.stderr or ""),
+                              result.exit_code, result.summary or "")
+
+    def recorded(item):
+        tool_result(("refused" if item.refused else
+                     "ok" if item.ok else "failed") + (
+            f" (exit {item.exit_code})" if item.exit_code not in (None, 0) else ""))
+        print()
+        record(item)
+
+    return SpearHost(workspace_root=str(WORKSPACE.root), authorize=authorize,
+                     resolve=resolve, write=write, delete=delete, run=run,
+                     record=recorded)
+
+
+def _core_only(context, args):
+    """The coding tools run inside the agent core; nothing else may call them."""
+    return _classified_handler_result(
+        "ERROR: this tool runs only in the agent core", status=ToolResultStatus.DENIED)
+
+
 def build_tool_registry():
     registry = ToolRegistry()
     handlers = {
@@ -5929,9 +6099,12 @@ def build_tool_registry():
         "search_corpus": _registered_search_corpus,
         "search_internet": _registered_search_internet,
         "fetch_url": _registered_fetch_url,
+        "read_file": _core_only,
+        "search_files": _core_only,
+        "patch": _core_only,
     }
 
-    for spec in native_tool_specs():
+    for spec in native_tool_specs() + coding_tool_specs():
         registry.register(spec, handlers.get(spec.name))
 
     hidden = (
@@ -5989,6 +6162,7 @@ NETWORK_ENABLED = "--no-network" not in sys.argv[1:]
 _UNBOUND_TOOL_NAMES = frozenset(
     spec.name for spec in TOOL_REGISTRY.list_specs(model_visible=True)
     if not spec.name.startswith("standard.")
+    and spec.name not in CODING_TOOL_NAMES
     and (NETWORK_ENABLED or spec.category != ToolCategory.WEB))
 CANONICAL_TOOLS = TOOL_REGISTRY.definitions_for_model(names=_UNBOUND_TOOL_NAMES)
 TOOLS = TOOL_REGISTRY.openai_definitions_for_model(names=_UNBOUND_TOOL_NAMES)
@@ -6114,21 +6288,9 @@ def _evidence_in_context(agent_context, tool_call_id):
     return False
 
 
-def route_tool_envelope(
-    name, args, cache, *, task_id=None, trace=None, tool_call_id=None,
-    cancellation=None, agent_context=None,
-):
-    # The turn's lifecycle, when it governs this turn. The handler that
-    # records a plan reaches it through the cache, and the router reaches the
-    # decision it makes through `write_gate` -- one object, two doors, and no
-    # way for the two to disagree about the same turn.
-
-    phase_ledger = getattr(agent_context, "work_phase", None)
-
-    if phase_ledger is not None:
-        cache[WORK_PHASE] = phase_ledger
-
-    tool_call_id = tool_call_id or new_action_id("tool_call")
+def _execution_context(agent_context, cache, *, task_id=None, trace=None,
+                       tool_call_id=None, cancellation=None, phase_ledger=None):
+    """The tool execution context a turn's calls are judged and run in."""
     execution_context = ToolExecutionContext(
         task_id=task_id or new_task_id(),
         trace=trace or TRACE,
@@ -6159,12 +6321,33 @@ def route_tool_envelope(
                     if phase_ledger is not None and phase_ledger.engaged
                     else None),
         metadata={"standard_binding": getattr(agent_context, "standard_binding", None),
-                  "tool_call_id": tool_call_id},
+                  "tool_call_id": tool_call_id,
+                  "execution_core": getattr(agent_context, "execution_core", "legacy")},
     )
 
+    return execution_context
+
+
+def route_tool_envelope(
+    name, args, cache, *, task_id=None, trace=None, tool_call_id=None,
+    cancellation=None, agent_context=None,
+):
+    # The turn's lifecycle, when it governs this turn. The handler that
+    # records a plan reaches it through the cache, and the router reaches the
+    # decision it makes through `write_gate` -- one object, two doors, and no
+    # way for the two to disagree about the same turn.
+
+    phase_ledger = getattr(agent_context, "work_phase", None)
+
+    if phase_ledger is not None:
+        cache[WORK_PHASE] = phase_ledger
+
+    tool_call_id = tool_call_id or new_action_id("tool_call")
+    execution_context = _execution_context(
+        agent_context, cache, task_id=task_id, trace=trace, tool_call_id=tool_call_id,
+        cancellation=cancellation, phase_ledger=phase_ledger)
     execution_context.command_executor = lambda command: _registered_command(
-        execution_context, command,
-    )
+        execution_context, command)
     envelope = TOOL_ROUTER.execute(execution_context, tool_call_id, name, args)
 
     # A mutation the router refused never reaches the handler, so the handler
@@ -7205,8 +7388,8 @@ ADHOC_PROMPT = (
     "You are HEIG-VD/REDS AI, an expert embedded-software assistant running "
     "in ad-hoc mode: you operate on the user's CURRENT directory (shown "
     "below). Assume nothing about its layout from any other project you "
-    "may know -- inspect the actual directory with your tools "
-    "(ls, grep -rn, cat) before answering. Your long-term memory (the "
+    "may know -- inspect the actual directory with your tools before "
+    "answering. Your long-term memory (the "
     "'## Memories' section, saved via the remember tool) and conversation "
     "history persist across sessions."
 )
@@ -7961,6 +8144,7 @@ def main():
         # already been shown sitting in the prompt. A question that stands on
         # its own words is answered from those words and the document.
         bound_turn = bool(turn_binding)
+
         said_before = next((message["content"] for message in reversed(hist)
                             if message["role"] == "user"), "")
         prior_scope = answer_scope.of(answer_scope.spoken_part(said_before),
@@ -8106,6 +8290,11 @@ def main():
             context_items=task_context_items,
             conversation=conversation,
             tools=(),
+            # What the agent core needs from this client: its host (the
+            # control plane), and the project context its prompt carries.
+            coding_host=lambda ctx, cache, record: coding_host(ctx, cache, record),
+            coding_context="".join(part for part in (global_rules, project_rules,
+                                                     memories_ctx, skills_ctx) if part),
             tool_executor=lambda ctx, call_id, name, args, cache: route_tool_envelope(
                 name, dict(args), cache, task_id=ctx.task_id,
                 trace=ctx.trace, tool_call_id=call_id,
@@ -8251,6 +8440,11 @@ def main():
             if not mutation_permitted(context):
                 return result
 
+            # The coding loop changes files through its tools only; a code
+            # block in its prose is prose.
+            if getattr(context, "execution_core", "legacy") == "coding":
+                return result
+
             block, language = extract_code_block_with_language(
                 result.final_response or "\n".join(result.transcript),
             )
@@ -8369,6 +8563,11 @@ def main():
                     enable_compaction=benchmark_toggle("compaction"),
                     selected_memory=benchmark_toggle("selected_memory"),
                     role_aware_tools=benchmark_toggle("role_aware_tools"),
+                    # Unbound turns run on the coding loop unless the operator
+                    # asks for the legacy one (an ablation switch).
+                    coding_core=(os.environ.get("SPEAR_EXECUTION_CORE", "coding")
+                                 .strip().lower() != "legacy"),
+                    retrieval_available=COLLECTION is not None,
                     enable_review_repair=(
                         benchmark_toggle("reviewer", default=False)
                         and benchmark_toggle("review_repair", default=False)

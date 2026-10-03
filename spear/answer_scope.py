@@ -74,7 +74,8 @@ _CHANGE = re.compile(
 
 #: Tools that reach a working tree. By category, so a tool added later is
 #: covered by what it is rather than by being remembered here.
-LOCAL_CATEGORIES = frozenset({ToolCategory.COMMAND, ToolCategory.FILE_WRITE})
+LOCAL_CATEGORIES = frozenset({ToolCategory.COMMAND, ToolCategory.FILE_READ,
+                              ToolCategory.FILE_WRITE})
 
 
 def of(message, *, prior=None, standard_bound=False):

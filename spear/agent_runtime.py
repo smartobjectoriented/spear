@@ -123,6 +123,15 @@ class AgentContext:
     #: The guards that say "you already have this" ask here, because the
     #: conversation keeps every block whatever the model was actually sent.
     dropped_tool_results: frozenset[str] = frozenset()
+    #: Which runtime runs the turn: "coding" for the agent core (agent/),
+    #: "legacy" for the loop that serves standard-bound turns.
+    execution_core: str = "legacy"
+    #: The agent core's host factory, (context, cache, record) -> Host, and
+    #: the project context its system prompt carries. Set by the client.
+    coding_host: Any = None
+    coding_context: str = ""
+    #: The agent core path's verdict, once decided (completion.Verdict).
+    core_verdict: Any = None
     provider: str | None = None
     model: str | None = None
     output_reserve: int | None = None
@@ -470,7 +479,7 @@ _SYSTEM_CONTEXT_LAYERS = {
     ContextLayer.CONVERSATION_SUMMARY,
     ContextLayer.RETRIEVED_CONTEXT,
 }
-_WRITE_TOOLS = ("edit_file", "write_file", "append_file")
+_WRITE_TOOLS = ("edit_file", "patch", "write_file", "append_file")
 
 #: The tool that opens the write gate. It belongs with the writing tools
 #: wherever the harness narrows a round to them: a round offered nothing but
@@ -626,10 +635,7 @@ def strip_fabrications(text: str) -> str:
 
 
 from standard_answer_policy import STOPPED_BY_BUDGET
-
-
-# What the sandbox refused rather than ran: the tool never executed, so the
-# round produced nothing the model could use.
+from tool_registry import COMMAND_TOOLS
 _REFUSED = frozenset({ToolResultStatus.DENIED, ToolResultStatus.UNKNOWN_TOOL,
                       ToolResultStatus.INVALID_ARGUMENTS})
 
@@ -799,6 +805,19 @@ _VERIFYING = frozenset({
 _EXIT_CODE_RE = re.compile(r"\(exit (\d+)\)")
 
 
+def _unescaped(command: str) -> str:
+    """The command as it was run, not as the log's JSON spelled it."""
+    try:
+        return json.loads(f'"{command}"')
+    except ValueError:
+        return command
+
+
+def _refused(output: str) -> bool:
+    """A command the boundary refused did not run, so it proved nothing."""
+    return output.lstrip().startswith(("ERROR", "REFUSED"))
+
+
 def _verification_runs(tool_log: Sequence[str], policy=None) -> list[tuple[str, bool]]:
     """Every command after the last write that verifies anything, and whether
     it succeeded. Configuring a build is not building it: `cmake -S . -B
@@ -821,17 +840,18 @@ def _verification_runs(tool_log: Sequence[str], policy=None) -> list[tuple[str, 
 
         if name in _WRITE_TOOLS and output.startswith("OK"):
             last_change, runs = index, []
-        elif name == "bash" and last_change >= 0:
+        elif name in COMMAND_TOOLS and last_change >= 0:
             # The command itself, not the JSON around it: classify_command
             # anchors on the start of the string, and `./test_command` inside
             # {"command": "..."} matches nothing.
             found = re.search(r'"command"\s*:\s*"(.*)"\s*\}?\s*$', head)
-            command = found.group(1) if found else ""
+            command = _unescaped(found.group(1)) if found else ""
             category, _ = policy.classify_command(command, changed_paths=changed)
 
             if category in _VERIFYING:
                 found = _EXIT_CODE_RE.search(output)
-                runs.append((command, found is None or found.group(1) == "0"))
+                runs.append((command, not _refused(output)
+                             and (found is None or found.group(1) == "0")))
 
     return runs
 
@@ -853,7 +873,7 @@ def unverified_change(tool_log: Sequence[str]) -> bool:
 
         if name in _WRITE_TOOLS and output.startswith("OK"):
             last_change, ran_after = index, False
-        elif name == "bash" and last_change >= 0:
+        elif name in COMMAND_TOOLS and last_change >= 0:
             ran_after = True
 
     return last_change >= 0 and not ran_after
@@ -1438,7 +1458,7 @@ def turn_evidence(tool_log: Sequence[str]) -> str:
         head, _, output = entry.partition("\n")
         name = head.split(" ", 1)[0]
 
-        if name == "bash":
+        if name in COMMAND_TOOLS:
             commands += 1
 
             if output.startswith("ERROR:") or re.search(r"\(exit [1-9]", output):
@@ -1859,10 +1879,56 @@ def work_order_gap(context, tool_log, cache):
     return order, missing
 
 
+def _core_envelope(record) -> ToolResultEnvelope:
+    """An agent-core call as SPEAR's working state and evidence record it."""
+    status = (ToolResultStatus.DENIED if record.refused
+              else ToolResultStatus.TIMEOUT if record.timed_out
+              else ToolResultStatus.OK if record.ok else ToolResultStatus.FAILED)
+    text = record.result or ""
+
+    return ToolResultEnvelope(
+        record.call_id, new_action_id(record.name), record.name, record.ok, status,
+        text, text, "command" if record.name in COMMAND_TOOLS else "file",
+        0.0, len(text.encode("utf-8", "replace")), exit_code=record.exit_code,
+        mutation=bool(record.changed_paths), affected_paths=tuple(record.changed_paths),
+        read_paths=tuple(record.read_paths),
+        error_category=None if record.ok else status.value,
+        error_summary=None if record.ok else text[:240])
+
+
+def _core_history(conversation) -> tuple[list[dict], str]:
+    """Earlier turns as plain {"role", "content"} messages, and the request."""
+    turns = []
+
+    for message in conversation:
+        content = "".join(block.text for block in message.content
+                          if isinstance(block, TextBlock)).strip()
+
+        if content and message.role in ("user", "assistant"):
+            turns.append({"role": message.role, "content": content})
+
+    request = turns.pop()["content"] if turns and turns[-1]["role"] == "user" else ""
+
+    return turns, request
+
+
+def _relative_to(context):
+    root = getattr(context, "project_root", "") or os.getcwd()
+
+    def label(path):
+        path = str(path)
+        return os.path.relpath(path, root) if path.startswith(root.rstrip("/") + "/") else path
+
+    return label
+
+
 class AgentRuntime:
     """Reusable execution lifecycle. Instances contain no task state."""
 
     def run(self, context: AgentContext, *, defer_completion: bool = False) -> AgentResult:
+        if context.execution_core == "coding":
+            return self._run_core(context, defer_completion=defer_completion)
+
         transcript: list[str] = []
         tool_log = context.session_tool_log
         trajectory = context.session_trajectory
@@ -2600,7 +2666,7 @@ class AgentRuntime:
                     if context.budget_manager is not None:
                         context.budget_manager.consume(BudgetKind.TOOL_CALLS)
 
-                        if call.name == "bash":
+                        if call.name in COMMAND_TOOLS:
                             context.budget_manager.ensure_available(
                                 BudgetKind.COMMAND_EXECUTIONS
                             )
@@ -2716,7 +2782,7 @@ class AgentRuntime:
                         if envelope.mutation:
                             phase.note_write(envelope.affected_paths)
 
-                    if (context.budget_manager is not None and call.name == "bash"
+                    if (context.budget_manager is not None and call.name in COMMAND_TOOLS
                             and envelope.status != ToolResultStatus.CACHED):
                         context.budget_manager.consume(BudgetKind.COMMAND_EXECUTIONS)
 
@@ -3590,6 +3656,125 @@ class AgentRuntime:
 
         # A deferred completion leaves the task and its checkpoint open for the
         # controller to review, repair, or roll back before closing them.
+
+        if not defer_completion:
+            self.complete(context, result)
+
+        return result
+
+    # ------------------------------------------------------------------
+    # The agent core (agent/), for implementation turns.
+    #
+    # The core runs the turn: its prompt, its tools, its loop. This method
+    # only connects it to SPEAR: it supplies the control plane as the
+    # core's host, records every call into the working state, the evidence
+    # and the canonical tool log, and gives the answer SPEAR's verdict.
+
+    def _run_core(self, context: AgentContext, *,
+                  defer_completion: bool = False) -> AgentResult:
+        from agent import loop as core_loop
+        from agent import prompt as core_prompt
+        import completion
+
+        transcript: list[str] = []
+        tool_log = context.session_tool_log
+        trajectory = context.session_trajectory
+        cache: dict[Any, Any] = {}
+        did_modify = False
+
+        def record(item):
+            nonlocal did_modify
+            envelope = _core_envelope(item)
+            self._record_tool_result(context, envelope)
+            evidence = context.verification_policy.evidence_for_tool(
+                envelope, dict(item.arguments), context.working_state)
+
+            if evidence is not None:
+                self._record_verification(context, evidence)
+
+            if item.changed_paths:
+                did_modify = True
+
+            tool_log.append(completion.canonical_entry(item, _relative_to(context)))
+            trajectory.append({"tool": item.name, "arguments": dict(item.arguments),
+                               "result": item.result[:4000],
+                               "action_id": envelope.action_id,
+                               "status": envelope.status.value})
+            self._persist_session(
+                context, SessionEventType.TOOL_ACTION_COMPLETED,
+                {"tool_call_id": item.call_id, "action_id": envelope.action_id,
+                 "status": envelope.status.value})
+
+        self._start_task(context)
+        definitions = [{"type": "function", "function": {
+            "name": tool.name, "description": tool.description,
+            "parameters": dict(tool.input_schema)}} for tool in context.tools]
+        names = [item["function"]["name"] for item in definitions]
+        backend = context.backend
+        system = core_prompt.build(
+            cwd=getattr(context, "project_root", "") or os.getcwd(),
+            tool_names=names, model=getattr(backend, "model", None) or context.model or "",
+            project_rules=context.coding_context)
+        history, request = _core_history(context.conversation)
+        host = context.coding_host(context, cache, record)
+
+        def model(messages, tools, max_tokens):
+            label = "Thinking…" if len(messages) <= 2 + len(history) else "Analyzing results…"
+
+            with context.observer.model_activity(label) as tick:
+                return backend.complete_messages(messages, tools, max_tokens=max_tokens,
+                                                 on_token=tick)
+
+        try:
+            core = core_loop.run(
+                model=model, host=host, system=system, history=history,
+                request=request, tool_definitions=definitions,
+                max_iterations=context.max_model_rounds,
+                max_tool_calls=context.max_tool_actions,
+                context_window=context.context_limit,
+                cancelled=lambda: context.cancellation.is_cancelled)
+        except (KeyboardInterrupt, OperationCancelled) as exc:
+            summary = (exc.reason if isinstance(exc, OperationCancelled)
+                       else "interrupted by user")
+
+            if context.working_state.terminal_status == TerminalStatus.RUNNING:
+                context.apply_state_event(StateEventType.TASK_INTERRUPTED, summary=summary)
+
+            return self._result(context, RuntimeTerminalReason.INTERRUPTED, "",
+                                transcript, tool_log, trajectory, did_modify, False,
+                                None, cache, error_category=FailureKind.INTERRUPTED.value,
+                                error_summary=summary)
+
+        reason = {
+            "completed": RuntimeTerminalReason.COMPLETED,
+            "iterations": RuntimeTerminalReason.ROUND_BUDGET_EXHAUSTED,
+            "tool_budget": RuntimeTerminalReason.TOOL_BUDGET_EXHAUSTED,
+            "context": RuntimeTerminalReason.BUDGET_EXHAUSTED,
+            "halted": RuntimeTerminalReason.STALLED,
+            "truncated": RuntimeTerminalReason.INVALID_TURN,
+            "model_error": RuntimeTerminalReason.MODEL_FAILURE,
+            "cancelled": RuntimeTerminalReason.INTERRUPTED,
+        }[core.stop]
+
+        if reason in (RuntimeTerminalReason.STALLED, RuntimeTerminalReason.MODEL_FAILURE,
+                      RuntimeTerminalReason.INVALID_TURN, RuntimeTerminalReason.INTERRUPTED) \
+                and context.working_state.terminal_status == TerminalStatus.RUNNING:
+            context.apply_state_event(StateEventType.TASK_FAILED,
+                                      summary=core.error or core.stop)
+
+        verdict = completion.decide(
+            tool_log, project_runs=project_build_runs(context, tool_log),
+            project_commands=getattr(context, "project_commands", None))
+        context.core_verdict = verdict
+        final = completion.qualify(core.final, verdict)
+
+        result = self._result(
+            context, reason, final, transcript, tool_log, trajectory, did_modify,
+            reason in (RuntimeTerminalReason.ROUND_BUDGET_EXHAUSTED,
+                       RuntimeTerminalReason.TOOL_BUDGET_EXHAUSTED,
+                       RuntimeTerminalReason.BUDGET_EXHAUSTED),
+            None, cache, error_category=core.error and "model_error",
+            error_summary=core.error, completion_deferred=defer_completion)
 
         if not defer_completion:
             self.complete(context, result)
@@ -4562,7 +4747,12 @@ class AgentRuntime:
         # Checked here rather than at the rendering layer: the evidence lives
         # here, and a claim contradicted by it must not reach history either.
 
-        claim_note = unsupported_change_claim(response or "", tool_log, did_modify)
+        # A coding turn's verdict is the agent core path's (completion.py):
+        # decided once and written into the answer, not appended twice.
+        core_verdict = context.core_verdict
+
+        claim_note = ("" if core_verdict is not None else
+                      unsupported_change_claim(response or "", tool_log, did_modify))
 
         if claim_note:
             response = (response or "") + claim_note
@@ -4579,7 +4769,7 @@ class AgentRuntime:
         write_note = unverified_write_note(
             tool_log, runs, getattr(context, "project_commands", None))
 
-        if write_note:
+        if write_note and core_verdict is None:
             response = (response or "") + write_note
 
         broken, output = next(((command, text) for command, status, text in runs

@@ -12,6 +12,7 @@ from model_backend import ToolDefinition
 
 class ToolCategory(StrEnum):
     COMMAND = "command"
+    FILE_READ = "file_read"
     FILE_WRITE = "file_write"
     RETRIEVAL = "retrieval"
     MEMORY = "memory"
@@ -234,6 +235,55 @@ _SCOPE_REASON = (
     "Only when the harness refused this path as outside the requested "
     "scope: why the requested target cannot work unless this file changes. "
     "Similarity to the target is not a reason.")
+
+
+#: The coding loop's file and command vocabulary. Names, parameters and
+#: descriptions follow Hermes Agent's tools of the same names (0cbc6e37, MIT,
+#: Copyright (c) 2025 Nous Research; see THIRD_PARTY_NOTICES.md), trimmed of
+#: what SPEAR does not provide (document extraction, background processes,
+#: PTYs). Exposed only by the coding toolset; every other view leaves them out.
+CODING_TOOL_NAMES = ("read_file", "search_files", "patch", "terminal")
+
+#: The tools that run a shell command. Whatever the model calls it, a
+#: command is a command to every check that reads one.
+COMMAND_TOOLS = frozenset({"bash", "terminal"})
+
+
+def coding_schemas() -> dict:
+    """The coding tools' model-facing schemas: Hermes', trimmed as listed.
+
+    Kept as data (agent/tool_schemas.json) so the difference from what
+    Hermes sends is a reviewable list of edits, not a rewrite.
+    """
+    import json
+    import os
+
+    with open(os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                           "agent", "tool_schemas.json"), encoding="utf-8") as handle:
+        data = json.load(handle)
+
+    return {name: value for name, value in data.items() if not name.startswith("_")}
+
+
+def coding_tool_specs() -> tuple[ToolSpec, ...]:
+    schemas = coding_schemas()
+    reading = frozenset({"main", "explorer", "reviewer", "planning"})
+    shape = {
+        "read_file": (ToolCategory.FILE_READ, ToolMutability.READ_ONLY,
+                      ("workspace_read",), ("safe", "ask", "auto"), reading),
+        "search_files": (ToolCategory.FILE_READ, ToolMutability.READ_ONLY,
+                         ("workspace_read",), ("safe", "ask", "auto"), reading),
+        "patch": (ToolCategory.FILE_WRITE, ToolMutability.MUTATING,
+                  ("workspace_write",), ("ask", "auto"), frozenset({"main"})),
+        "terminal": (ToolCategory.COMMAND, ToolMutability.CONDITIONAL,
+                     ("dynamic_command_policy",), ("safe", "ask", "auto"), reading),
+    }
+
+    return tuple(
+        ToolSpec(name, schemas[name]["description"], schemas[name]["parameters"],
+                 category, mutability, capabilities, modes, roles=roles,
+                 handler_key=name)
+        for name, (category, mutability, capabilities, modes, roles) in shape.items())
 
 
 def native_tool_specs() -> tuple[ToolSpec, ...]:

@@ -15,6 +15,7 @@ from typing import Mapping, Sequence
 
 from tool_router import ToolResultEnvelope
 from working_state import VerificationOutcome, WorkingState
+from tool_registry import COMMAND_TOOLS
 
 
 class VerificationCategory(StrEnum):
@@ -153,6 +154,7 @@ _COMPILER = re.compile(r"(?:^|[/ ])(?:gcc|g\+\+|cc|c\+\+|clang|clang\+\+)(?:\s|$
 _LINT = re.compile(r"(?:^|[/ ])(?:ruff|flake8|pylint|eslint|stylelint|shellcheck|golangci-lint)(?:\s|$)", re.I)
 _STATIC = re.compile(r"(?:^|[/ ])(?:mypy|pyright|tsc|clang-tidy|cppcheck|cargo check)(?:\s|$)", re.I)
 _EXECUTION = re.compile(r"(?:^|[;&|]\s*)(?:python\d*|node|ruby|perl|java|dotnet run|cargo run|go run|\./[^ ]+)(?:\s|$)", re.I)
+_QUOTED = re.compile(r"'[^']*'|\"(?:\\.|[^\"\\])*\"")
 _TARGETED = re.compile(r"(?:^|[/ ])(?:diff|cmp|grep|rg)(?:\s|$)", re.I)
 
 # What a directly invoked tool is ABOUT.  A command that neither names a
@@ -236,7 +238,10 @@ class VerificationPolicy:
         if _STATIC.search(normalized):
             return VerificationCategory.STATIC_ANALYSIS, VerificationCoverage.PARTIAL
 
-        if _EXECUTION.search(normalized):
+        # Outside quoted text: `grep "a\|python b" f` runs grep, and the
+        # word inside its pattern made it read as a Python run that passed.
+
+        if _EXECUTION.search(self._normalize(_QUOTED.sub("''", command))):
             return self._direct_invocation(
                 VerificationCategory.EXECUTION, VerificationCoverage.PARTIAL,
                 normalized, changed_paths, self._execution_languages(normalized))
@@ -257,7 +262,7 @@ class VerificationPolicy:
                           *, project_bench: bool = False) -> VerificationEvidence | None:
         """Evidence from an observed tool result, or None if it proves nothing."""
 
-        if envelope.tool_name != "bash" and not project_bench:
+        if envelope.tool_name not in COMMAND_TOOLS and not project_bench:
             return None
 
         command = str(arguments.get("command", ""))

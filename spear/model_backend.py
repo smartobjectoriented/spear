@@ -16,7 +16,7 @@ from dataclasses import dataclass
 from enum import StrEnum
 from typing import Callable, Literal, Mapping, Protocol, Sequence
 
-from openai import APIConnectionError, APIStatusError
+from openai import APIConnectionError, APIStatusError, APITimeoutError
 
 
 class ModelBackendConfigurationError(RuntimeError):
@@ -176,6 +176,34 @@ class OpenAICompatibleBackend:
         )
         self._sleep = sleep_fn
 
+    def _sampling(self) -> dict[str, object]:
+        """The sampling fields sent with each request.
+
+        None when the server's own configuration should apply -- what a
+        client that states no sampling gets (SPEAR_SAMPLING=server). The agent
+        core never comes here: its requests carry no sampling at all.
+        """
+        if os.environ.get("SPEAR_SAMPLING", "").strip().lower() == "server":
+            return {}
+
+        return {
+            "temperature": self.temperature,
+            "top_p": 0.8,
+            "extra_body": {
+                "chat_template_kwargs": {"enable_thinking": False},
+                "top_k": 20,
+                "repeat_penalty": 1.05,
+                "repetition_penalty": 1.05,
+            },
+        }
+
+    def complete_messages(self, messages, tools, *, max_tokens: int,
+                          on_token=None) -> "RawTurn":
+        """The agent core's call: its own history, Hermes' request shape."""
+        return complete_raw_messages(self.client, model=self.model, messages=messages,
+                                     tools=tools, max_tokens=max_tokens,
+                                     on_token=on_token, sleep=self._sleep)
+
     def discover_model_name(self) -> str | None:
         try:
             return self.client.models.list().data[0].id
@@ -326,17 +354,10 @@ class OpenAICompatibleBackend:
         kwargs: dict[str, object] = {
             "model": self.model,
             "messages": self._openai_messages(system, conversation),
-            "temperature": self.temperature,
-            "top_p": 0.8,
             "max_tokens": self.max_tokens,
             "stream": True,
-            "extra_body": {
-                "chat_template_kwargs": {"enable_thinking": False},
-                "top_k": 20,
-                "repeat_penalty": 1.05,
-                "repetition_penalty": 1.05,
-            },
         }
+        kwargs.update(self._sampling())
 
         if use_tools:
             kwargs["tools"] = self._openai_tools(tools)
@@ -434,6 +455,119 @@ class OpenAICompatibleBackend:
             tuple(canonical_calls),
             self._stop_reason(finish_reason, bool(canonical_calls)),
         )
+
+
+@dataclass(frozen=True)
+class RawTurn:
+    """One completion as the wire returned it, for a caller that keeps its
+    own OpenAI-format history (the agent core)."""
+    text: str
+    calls: tuple[dict, ...]          # {"id", "name", "arguments"} (raw JSON text)
+    finish_reason: str | None
+    reasoning: str = ""
+    usage: Mapping[str, int] | None = None
+    error: str | None = None
+
+
+def complete_raw_messages(client, *, model: str, messages, tools, max_tokens: int,
+                          on_token=None, sleep=time.sleep,
+                          timeout: float = 1800.0, attempts: int = 3) -> RawTurn:
+    """One streamed chat completion with exactly the given messages.
+
+    The request is the one Hermes Agent sends a custom OpenAI-compatible
+    endpoint (agent/transports/chat_completions.py, 0cbc6e37): model,
+    messages, tools, max_tokens, stream with usage -- and no temperature,
+    top_p, tool_choice or stop, so the server's own sampling applies. The
+    read timeout is Hermes' local-endpoint 1800 s; transient failures are
+    retried up to `attempts` times with Hermes' jittered backoff (2 s base,
+    doubling, 60 s cap, up to 50% jitter; agent/retry_utils.py). A server
+    still loading its model is waited for, as SPEAR always has.
+    """
+    import random
+
+    kwargs = {"model": model, "messages": list(messages), "max_tokens": max_tokens,
+              "stream": True, "stream_options": {"include_usage": True},
+              "timeout": timeout}
+
+    if tools:
+        kwargs["tools"] = list(tools)
+
+    failure = "model call failed"
+    attempt = 0
+
+    while attempt < attempts:
+        try:
+            stream = client.chat.completions.create(**kwargs)
+            text, reasoning, calls, finish, usage = [], [], {}, None, None
+
+            for chunk in stream:
+                if getattr(chunk, "usage", None):
+                    usage = {"prompt_tokens": getattr(chunk.usage, "prompt_tokens", 0),
+                             "completion_tokens": getattr(chunk.usage, "completion_tokens", 0)}
+
+                if not getattr(chunk, "choices", None):
+                    continue
+
+                choice = chunk.choices[0]
+                finish = getattr(choice, "finish_reason", None) or finish
+                delta = getattr(choice, "delta", None)
+
+                if delta is None:
+                    continue
+
+                if getattr(delta, "content", None):
+                    text.append(delta.content)
+
+                    if on_token:
+                        on_token()
+
+                extra = (getattr(delta, "reasoning_content", None)
+                         or (getattr(delta, "model_extra", None) or {}).get("reasoning_content"))
+
+                if extra:
+                    reasoning.append(str(extra))
+
+                for item in getattr(delta, "tool_calls", None) or ():
+                    slot = calls.setdefault(item.index, {"id": None, "name": "", "arguments": []})
+
+                    if getattr(item, "id", None):
+                        slot["id"] = item.id
+
+                    function = getattr(item, "function", None)
+
+                    if function is not None:
+                        if getattr(function, "name", None):
+                            slot["name"] += function.name
+
+                        if getattr(function, "arguments", None):
+                            slot["arguments"].append(function.arguments)
+
+                    if on_token:
+                        on_token()
+
+            return RawTurn("".join(text), tuple(
+                {"id": slot["id"] or f"call_{index}", "name": slot["name"],
+                 "arguments": "".join(slot["arguments"])}
+                for index, slot in sorted(calls.items())), finish, "".join(reasoning), usage)
+        except APIStatusError as exc:
+            if exc.status_code == 503 and "loading" in str(exc).lower():
+                sleep(5)
+                continue
+
+            if exc.status_code < 500 and exc.status_code not in (408, 429):
+                return RawTurn("", (), None, error=f"HTTP {exc.status_code}: {exc}")
+
+            failure = f"HTTP {exc.status_code}: {exc}"
+        except (APIConnectionError, APITimeoutError) as exc:
+            failure = f"{type(exc).__name__}: {exc}"
+
+        attempt += 1
+
+        if attempt < attempts:
+            delay = min(2 * 2 ** (attempt - 1), 60)
+            sleep(delay + random.uniform(0, delay * 0.5))
+
+    return RawTurn("", (), None, error=failure)
 
 
 def anthropic_credentials_available() -> bool:

@@ -254,9 +254,13 @@ class EveryMutatingToolDeclaresItsModes(unittest.TestCase):
 
         import rag_chat
 
-        source = inspect.getsource(rag_chat.route_tool_envelope)
+        # Every tool call's context, the router's and the agent core's, is
+        # built in one place.
+        source = inspect.getsource(rag_chat._execution_context)
 
         self.assertIn("execution_mode=str(EXECUTION_MODE)", source)
+        self.assertIn("_execution_context(", inspect.getsource(rag_chat.route_tool_envelope))
+        self.assertIn("_execution_context(", inspect.getsource(rag_chat.coding_host))
 
     def test_only_the_router_reaches_a_handler(self):
         """CASE 9 -- no production path dispatches around the gate."""

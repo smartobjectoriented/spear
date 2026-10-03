@@ -34,8 +34,12 @@ REFUSED = "refused: {}"
 class SpearHost:
     def __init__(self, *, workspace_root: str, authorize: Callable,
                  resolve: Callable, write: Callable, delete: Callable,
-                 run: Callable, record: Callable):
+                 run: Callable, record: Callable, collation_locale: str | None = None):
         self.workspace_root = workspace_root
+        # The locale the sandboxed commands run under (LANG/LC_ALL), so a
+        # listing the core makes itself is ordered the way the model's own
+        # `ls` in that sandbox would order it.
+        self.collation_locale = collation_locale
         self._authorize = authorize
         self._resolve = resolve
         self._write = write

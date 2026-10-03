@@ -205,7 +205,7 @@ class TheCheckLivesInOnePlace(unittest.TestCase):
 
         import tool_router
 
-        source = inspect.getsource(tool_router.ToolRouter.execute)
+        source = inspect.getsource(tool_router.ToolRouter._policy_gate)
         gate = source[source.index("spec.execution_modes"):]
         gate = gate[:gate.index("_early_failure") + 200]
 

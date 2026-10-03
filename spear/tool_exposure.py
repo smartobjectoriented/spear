@@ -10,7 +10,8 @@ from dataclasses import dataclass
 
 from agent_roles import AgentRole, AgentRoleSpec
 from model_backend import ToolDefinition
-from tool_registry import ToolCategory, ToolMutability, ToolRegistry
+from tool_registry import (CODING_TOOL_NAMES, ToolCategory, ToolMutability,
+                           ToolRegistry, coding_schemas)
 
 
 #: Said once, in the words the turn needs: what is forbidden, and what to do
@@ -102,6 +103,20 @@ class ToolExposurePolicy:
     _READ_FLOOR = ("bash", "search_corpus")
     _WRITE_FLOOR = ("edit_file", "write_file")
 
+    # The coding toolset: what an implementation turn works with, chosen by
+    # task type rather than by guessing from words. read_file, search_files,
+    # patch and terminal are the file and command vocabulary; write_file is
+    # for creating or wholly replacing a file.
+    _CODING_READ = ("read_file", "search_files", "terminal")
+    # delete_file is SPEAR's: Hermes deletes with `rm` in its terminal, which
+    # SPEAR's sandbox refuses so that every deletion is a declared, audited
+    # file operation.
+    _CODING_WRITE = ("patch", "write_file", "delete_file")
+    # An implementation turn gets the project's own index when it has one,
+    # and nothing else: no web, no memory, no standards. A turn that needs
+    # those is routed elsewhere.
+    _CODING_EXTRAS = frozenset({ToolCategory.RETRIEVAL})
+
     # An explicit prohibition, and only an explicit one. The object has to be
     # general -- "without editing files", "do not change anything",
     # "read-only" -- because a prohibition scoped to one named file is the
@@ -152,7 +167,8 @@ class ToolExposurePolicy:
         return request_intent.advisory(objective or "", _WRITE_REQUEST_RE)
 
     @classmethod
-    def floor(cls, role: AgentRole, *, read_only: bool = False) -> tuple[str, ...]:
+    def floor(cls, role: AgentRole, *, read_only: bool = False,
+              toolset: str | None = None) -> tuple[str, ...]:
         """The tools this role keeps no matter what the objective says.
 
         The floor guarantees a way to work; it does not grant one the request
@@ -160,6 +176,12 @@ class ToolExposurePolicy:
         and bash itself runs without workspace write, so the prohibition is
         not something the model can route around with `sed -i` or `>`.
         """
+
+        if toolset == "coding":
+            if role == AgentRole.MAIN and not read_only:
+                return cls._CODING_READ + cls._CODING_WRITE
+
+            return cls._CODING_READ
 
         if role == AgentRole.MAIN and not read_only:
             return cls._READ_FLOOR + cls._WRITE_FLOOR
@@ -171,6 +193,7 @@ class ToolExposurePolicy:
         objective: str = "", mutation_expected: bool | None = None,
         web_enabled: bool = False, memory_write_enabled: bool = False,
         standard_bound: bool = False, prior_scope: str | None = None,
+        toolset: str | None = None, retrieval_available: bool = True,
     ) -> ToolView:
         """The tools a role may see for this objective.
 
@@ -186,6 +209,20 @@ class ToolExposurePolicy:
         candidates = registry.list_specs(
             role=role_name.value, model_visible=True, names=allowed,
         )
+
+        # The task type picks the vocabulary. A coding turn gets the coding
+        # tools and the optional extras; every other view keeps the tools it
+        # always had and never sees the coding ones.
+
+        if toolset == "coding":
+            candidates = tuple(
+                tool for tool in candidates
+                if tool.name in self._CODING_READ + self._CODING_WRITE
+                or (tool.category in self._CODING_EXTRAS
+                    and not tool.name.startswith("standard.")))
+        else:
+            candidates = tuple(tool for tool in candidates
+                               if tool.name not in CODING_TOOL_NAMES)
 
         # An explicit prohibition first: it is an instruction, not a guess,
         # and it wins over every verb _MUTATION can find.
@@ -243,6 +280,12 @@ class ToolExposurePolicy:
             if tool.category == ToolCategory.WEB and not web_enabled:
                 continue
 
+            # Corpus retrieval answers from an index; a turn with none
+            # attached has nothing for it to search.
+
+            if tool.name == "search_corpus" and not retrieval_available:
+                continue
+
             if tool.name == "fetch_url" and not self._NETWORK_INTENT.search(objective):
                 continue
 
@@ -261,7 +304,7 @@ class ToolExposurePolicy:
         # role was already allowed: a guaranteed set is not a way around the
         # role boundary, and the read-only roles keep no write tools.
 
-        floor = self.floor(role_name, read_only=read_only)
+        floor = self.floor(role_name, read_only=read_only, toolset=toolset)
         keep = {tool.name for tool in selected}
         keep.update(tool.name for tool in candidates if tool.name in floor)
         selected = [tool for tool in candidates if tool.name in keep]
@@ -280,8 +323,15 @@ class ToolExposurePolicy:
             selected = [tool for tool in selected
                         if tool.category not in answer_scope.LOCAL_CATEGORIES]
 
+        # The coding toolset's write_file is Hermes', whose schema differs
+        # from the legacy one sharing its name.
+        overrides = coding_schemas() if toolset == "coding" else {}
         definitions = tuple(ToolDefinition(
-            tool.name, tool.description, dict(tool.input_schema)
+            tool.name,
+            overrides[tool.name]["description"] if tool.name in overrides
+            else tool.description,
+            dict(overrides[tool.name]["parameters"]) if tool.name in overrides
+            else dict(tool.input_schema),
         ) for tool in selected)
         chars = sum(len(item.name) + len(item.description)
                     + len(json.dumps(item.input_schema, sort_keys=True))

@@ -253,12 +253,26 @@ class ToolRouter:
         self.registry = registry
         self.hooks = hooks or HookManager()
 
-    def execute(
-        self, context: ToolExecutionContext, tool_call_id: str,
-        name: str, arguments: Mapping[str, object],
-    ) -> ToolResultEnvelope:
-        action_id = new_action_id(name)
-        started = time.monotonic()
+    def authorize(self, context: ToolExecutionContext, name: str,
+                  arguments: Mapping[str, object]) -> str | None:
+        """The hard-policy verdict alone: None to allow, or the refusal text.
+
+        Exactly the gates `execute` applies before it runs anything --
+        cancellation, unknown tool, role, read-only and advisory turns,
+        target and sibling write scope, project and shell scope, the write
+        gate, the session's mode, argument validation -- and none of what
+        follows them: no repetition ledger, no result cache, no execution.
+        It is what an execution core that runs its own tools asks first.
+        """
+        envelope = self._policy_gate(context, "authorize", new_action_id(name),
+                                     name, arguments, time.monotonic(), {})
+
+        return None if envelope is None else envelope.text
+
+    def _policy_gate(self, context: ToolExecutionContext, tool_call_id: str,
+                     action_id: str, name: str, arguments: Mapping[str, object],
+                     started: float, gate: dict) -> ToolResultEnvelope | None:
+        """The refusal envelope, or None with spec/arguments/keys in `gate`."""
 
         # The gates below all fail before the span opens, so a call that never
         # ran is never traced as one that did.
@@ -448,6 +462,28 @@ class ToolRouter:
                 f"ERROR: invalid arguments for {name}: {validation_error}",
                 spec.category.value, argument_keys,
             )
+
+        gate.update(spec=spec, arguments=arguments, argument_keys=argument_keys)
+
+        return None
+
+
+    def execute(
+        self, context: ToolExecutionContext, tool_call_id: str,
+        name: str, arguments: Mapping[str, object],
+    ) -> ToolResultEnvelope:
+        action_id = new_action_id(name)
+        started = time.monotonic()
+
+        gate: dict = {}
+        refused = self._policy_gate(context, tool_call_id, action_id, name,
+                                    arguments, started, gate)
+
+        if refused is not None:
+            return refused
+
+        spec, arguments, argument_keys = (gate["spec"], gate["arguments"],
+                                          gate["argument_keys"])
 
         # Before anything runs: has this exact call already failed twice, or
         # already been answered from cache? The fingerprint covers the

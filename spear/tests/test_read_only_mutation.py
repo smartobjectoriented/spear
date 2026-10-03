@@ -201,13 +201,16 @@ class TheRouterRefusesWhoeverAsks(unittest.TestCase):
                     getattr(spec, "mutability", None), ToolMutability.MUTATING)
 
     def test_the_gate_runs_before_the_handler(self):
-        source = inspect.getsource(
-            sys.modules["tool_router"].ToolRouter.execute)
-        gate = source.index("context.read_only")
+        router = sys.modules["tool_router"].ToolRouter
+        source = inspect.getsource(router.execute)
+        gate = source.index("self._policy_gate(")
         dispatch = source.index("spec.handler_key") if "spec.handler_key" in source \
-            else len(source)
+            else source.index("self.registry.handler(name)")
 
         self.assertLess(gate, dispatch)
+        # The gates themselves live in _policy_gate, the one place both the
+        # router's own dispatch and the agent core's authorize() ask.
+        self.assertIn("context.read_only", inspect.getsource(router._policy_gate))
 
 
 class SafeModeSaysSoFirst(unittest.TestCase):

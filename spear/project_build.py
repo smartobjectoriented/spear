@@ -106,6 +106,29 @@ def _cmake_side(root):
                                           re.I | re.S) else ""
 
 
+def _make_test_target(root):
+    """`make test` or `make check` if the Makefile declares one, else "".
+
+    A Makefile is a build, not a promise of tests: probing `make test` on a
+    tree with no such target reported "the project does not pass its own
+    tests" for a change that had built and been checked.
+    """
+    for name in ("Makefile", "makefile"):
+        try:
+            with open(os.path.join(root, name), encoding="utf-8", errors="replace") as handle:
+                text = handle.read()
+        except OSError:
+            continue
+
+        targets = set(re.findall(r"^([A-Za-z0-9_.-]+)\s*:(?!=)", text, re.M))
+
+        for target in ("test", "check"):
+            if target in targets:
+                return f"make {target}"
+
+    return ""
+
+
 def probe(root, *, infer_unittest=False):
     """The build and test commands this tree actually supports.
 
@@ -126,7 +149,7 @@ def probe(root, *, infer_unittest=False):
             "cmake")
 
     if here("Makefile") or here("makefile"):
-        return ProjectCommands("make", "make test", "make")
+        return ProjectCommands("make", _make_test_target(root), "make")
 
     if here("Cargo.toml"):
         return ProjectCommands("cargo build", "cargo test", "cargo")

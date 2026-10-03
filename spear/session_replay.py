@@ -98,6 +98,25 @@ class RecordingBackend:
     def discover_model_name(self):
         return self.inner.discover_model_name()
 
+    def complete_messages(self, messages, tools, **kwargs):
+        turn = self.inner.complete_messages(messages, tools, **kwargs)
+
+        with self._lock:
+            with open(self.path, "a", encoding="utf-8") as handle:
+                handle.write(json.dumps({
+                    "kind": "raw_turn", "text": turn.text,
+                    "calls": list(turn.calls), "finish_reason": turn.finish_reason,
+                }, ensure_ascii=False) + "\n")
+
+        return turn
+
+    # The runtime reads the reply budget off whatever backend it holds;
+    # recording must not hide it.
+
+    @property
+    def max_tokens(self):
+        return getattr(self.inner, "max_tokens", None)
+
     def complete(self, **kwargs):
         turn = self.inner.complete(**kwargs)
 

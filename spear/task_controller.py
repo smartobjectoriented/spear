@@ -77,6 +77,11 @@ class TaskRequest:
     enable_compaction: bool = True
     selected_memory: bool = True
     role_aware_tools: bool = True
+    #: Run an unbound turn on the coding loop with the coding toolset. Off by
+    #: default; the interactive client turns it on.
+    coding_core: bool = False
+    #: Whether a corpus index is attached for search_corpus to search.
+    retrieval_available: bool = True
     enable_review_repair: bool = False
     standard_binding: Mapping[str, object] | None = None
 
@@ -345,6 +350,8 @@ class TaskController:
             import answer_scope
 
             bound = context.standard_binding is not None
+            coding = request.coding_core and not bound
+            context.execution_core = "coding" if coding else "legacy"
             view = self.tool_exposure_policy.select(
                 self.registry, AgentRole.MAIN, objective=request.objective,
                 web_enabled=request.web_enabled,
@@ -355,6 +362,8 @@ class TaskController:
                 # about the thing it points at.
                 prior_scope=answer_scope.prior_scope(
                     context.conversation, standard_bound=bound),
+                toolset="coding" if coding else None,
+                retrieval_available=request.retrieval_available,
             )
         else:
             # Controlled ablation: expose the same registry definitions in
@@ -521,7 +530,9 @@ class TaskController:
                 "active.\n\n" + agent_result.final_response
             )
 
-        if (agent_result.final_response and verification.status in {
+        # A coding turn's answer already carries the agent core path's verdict.
+        if (agent_result.final_response and context.execution_core != "coding"
+                and verification.status in {
             CompletionVerificationStatus.UNVERIFIED,
             CompletionVerificationStatus.PARTIALLY_VERIFIED,
             CompletionVerificationStatus.FAILED,

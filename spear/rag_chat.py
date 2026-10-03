@@ -57,7 +57,7 @@ from context_engine import (ContextEngine, ContextItem, ContextLayer, Freshness,
                             working_state_context_item)
 from compaction import CompactionMode, CompactionPolicy
 from agent_runtime import (
-    AgentContext, AgentRuntime, changed_files,
+    AgentContext, AgentRuntime,
     strip_fabrications, turn_evidence, unverified_change, validate_agent_turn,
     verify_demand,
 )
@@ -8709,7 +8709,7 @@ def main():
             save_trajectory(
                 user_input, trajectory, response_text, verdict,
                 "project_build" if built is not None
-                else "change" if changed_files(tool_log) else "answer")
+                else "change" if runtime_result.changed_paths else "answer")
 
         # don't print a noisy "(no response)" when an analysis was already
         # shown in the transcript this turn — just close the turn quietly.

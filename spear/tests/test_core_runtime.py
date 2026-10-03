@@ -65,6 +65,21 @@ class CoreTurn(unittest.TestCase):
         self.assertEqual(context.core_verdict.state, "VERIFIED", result.tool_log)
         self.assertEqual(result.final_response, "Done. It prints beta.")
 
+    def test_a_long_patch_with_its_path_last_is_still_a_change(self):
+        # The model's own key order: a long old_string first pushed "path"
+        # past the tool log's 200-character head, and the turn was NO_CHANGE.
+        long_line = "echo " + "alpha" * 60
+        result, context = self.run_turn([
+            turn("", call("c0", "terminal", command=f"printf '%s\\n' '{long_line}' >> a.sh")),
+            turn("", call("c1", "patch", old_string=long_line,
+                          new_string=long_line.replace("alpha", "beta"), path="a.sh")),
+            turn("Done. The change is complete.")])
+
+        self.assertNotIn('"path"', result.tool_log[1].partition("\n")[0])
+        self.assertEqual(context.core_verdict.state, "UNVERIFIED")
+        self.assertEqual(result.changed_paths, ("a.sh",))
+        self.assertTrue(result.final_response.startswith("**UNVERIFIED**"))
+
 
 class _Recording:
     """The fake host, with the runtime's record callback attached."""

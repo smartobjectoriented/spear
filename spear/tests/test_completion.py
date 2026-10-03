@@ -29,7 +29,7 @@ def record(name, arguments, result, **kwargs):
 
 
 def log(*records):
-    return [completion.canonical_entry(item) for item in records]
+    return [completion.evidence(item) for item in records]
 
 
 PATCH = record("patch", {"path": "src/a.sh"}, json.dumps({"success": True}),
@@ -39,7 +39,7 @@ PATCH = record("patch", {"path": "src/a.sh"}, json.dumps({"success": True}),
 def terminal_record(command, output, code, **kwargs):
     return record("terminal", {"command": command},
                   json.dumps({"output": output, "exit_code": code, "error": None}),
-                  ok=code == 0, exit_code=code, **kwargs)
+                  ok=code == 0, command=command, exit_code=code, **kwargs)
 
 
 class Verdict(unittest.TestCase):
@@ -68,6 +68,54 @@ class Verdict(unittest.TestCase):
                          json.dumps({"error": "refused: not allowed"}), ok=False, refused=True)
 
         self.assertEqual(completion.decide(log(PATCH, refused)).state, "UNVERIFIED")
+
+
+class StructuredEvidence(unittest.TestCase):
+    """What changed and what ran are read from the records, never from the
+    compact text: that text cuts its head at 200 characters, and a model that
+    sends a long old_string before the path once turned a changed turn into
+    NO_CHANGE -- no UNVERIFIED on an answer that had edited two files."""
+
+    LONG = "\t# keep the board working copy\n" * 20
+
+    def patch_with_path(self, where):
+        fields = [("old_string", self.LONG), ("new_string", self.LONG + "x")]
+        fields.insert({"first": 0, "middle": 1, "last": 2}[where], ("path", "src/a.bb"))
+
+        return record("patch", dict(fields), json.dumps({"success": True}),
+                      changed_paths=("src/a.bb",))
+
+    def test_the_path_position_does_not_change_the_verdict(self):
+        for after in ((), (terminal_record("make", "ok", 0),),
+                      (terminal_record("make", "error", 2),)):
+            verdicts = {}
+
+            for where in ("first", "middle", "last"):
+                verdicts[where] = completion.decide(log(self.patch_with_path(where), *after))
+
+            with self.subTest(after=[item.command for item in after]):
+                self.assertEqual(len(set(verdicts.values())), 1, verdicts)
+                self.assertEqual(verdicts["last"].changed, ("src/a.bb",))
+                self.assertNotEqual(verdicts["last"].state, "NO_CHANGE")
+
+    def test_the_compact_text_is_a_display_only(self):
+        entry = completion.canonical_entry(self.patch_with_path("last"))
+
+        self.assertNotIn('"path"', entry.partition("\n")[0])
+        self.assertEqual(completion.changed_files(log(self.patch_with_path("last"))),
+                         ("src/a.bb",))
+
+    def test_a_long_verification_command_still_counts(self):
+        command = "make " + " ".join(f"TARGET_{index}=1" for index in range(60))
+
+        self.assertEqual(completion.decide(log(PATCH, terminal_record(command, "ok", 0))).state,
+                         "VERIFIED")
+
+    def test_a_refused_write_changed_nothing(self):
+        refused = record("patch", {"path": "src/a.sh"}, json.dumps({"error": "refused"}),
+                         ok=False, refused=True)
+
+        self.assertEqual(completion.decide(log(refused)).state, "NO_CHANGE")
 
 
 class Qualify(unittest.TestCase):

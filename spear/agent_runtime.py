@@ -132,6 +132,9 @@ class AgentContext:
     coding_context: str = ""
     #: The agent core path's verdict, once decided (completion.Verdict).
     core_verdict: Any = None
+    #: The agent core path's structured evidence (completion.Evidence), one
+    #: per call. What changed is read from here, not from the tool log text.
+    core_evidence: Any = None
     provider: str | None = None
     model: str | None = None
     output_reserve: int | None = None
@@ -469,6 +472,9 @@ class AgentResult:
     # it were noise, and until now every unjudged turn was filed as
     # "unrated" alongside turns the project had actually verified.
     project_build_ok: bool | None = None
+
+    # The files the turn changed, as established by the turn's evidence.
+    changed_paths: tuple[str, ...] = ()
 
 
 _SYSTEM_CONTEXT_LAYERS = {
@@ -1042,6 +1048,18 @@ def requirement_matrix_note(phase, answer="") -> str:
     return "\n".join(lines)
 
 
+def turn_changed_files(context, tool_log) -> tuple[str, ...]:
+    """The files the turn changed: from the agent core's structured evidence
+    when the turn ran there, from the tool log otherwise."""
+    log = getattr(context, "core_evidence", None)
+
+    if log is not None:
+        import completion
+        return completion.changed_files(log)
+
+    return tuple(changed_files(tool_log))
+
+
 def unverified_write_note(tool_log: Sequence[str], project_runs=(),
                           project_commands=None) -> str:
     """What to append when a turn changed files and never showed they work.
@@ -1071,6 +1089,15 @@ def unverified_write_note(tool_log: Sequence[str], project_runs=(),
     if not changed:
         return ""
 
+    return write_note(changed, _verification_runs(tool_log), project_runs,
+                      project_commands)
+
+
+def write_note(changed, runs, project_runs=(), project_commands=None) -> str:
+    """unverified_write_note on facts already established: the files that
+    changed and the verification runs after the last change. The agent core
+    path (completion.decide) establishes them from structured records."""
+
     # The harness's own run of the project's build and tests counts here too.
     # Without this the note said "nothing was run afterwards" to a turn whose
     # tree had just been built and tested by the harness -- and a warning the
@@ -1081,7 +1108,6 @@ def unverified_write_note(tool_log: Sequence[str], project_runs=(),
     if any(status in {"passed", "failed"} for _, status, _ in project_runs):
         return ""
 
-    runs = _verification_runs(tool_log)
     files = ", ".join(changed)
 
     if not runs:
@@ -1714,7 +1740,7 @@ def project_build_runs(context, tool_log):
     root = getattr(context, "project_root", "") or "."
     verifier = getattr(context, "project_verifier", None)
 
-    if commands is None or not changed_files(tool_log):
+    if commands is None or not turn_changed_files(context, tool_log):
         return ()
 
     state = getattr(context, "working_state", None)
@@ -3682,6 +3708,9 @@ class AgentRuntime:
         cache: dict[Any, Any] = {}
         did_modify = False
 
+        if context.core_evidence is None:
+            context.core_evidence = []
+
         def record(item):
             nonlocal did_modify
             envelope = _core_envelope(item)
@@ -3696,6 +3725,7 @@ class AgentRuntime:
                 did_modify = True
 
             tool_log.append(completion.canonical_entry(item, _relative_to(context)))
+            context.core_evidence.append(completion.evidence(item, _relative_to(context)))
             trajectory.append({"tool": item.name, "arguments": dict(item.arguments),
                                "result": item.result[:4000],
                                "action_id": envelope.action_id,
@@ -3763,7 +3793,7 @@ class AgentRuntime:
                                       summary=core.error or core.stop)
 
         verdict = completion.decide(
-            tool_log, project_runs=project_build_runs(context, tool_log),
+            context.core_evidence, project_runs=project_build_runs(context, tool_log),
             project_commands=getattr(context, "project_commands", None))
         context.core_verdict = verdict
         final = completion.qualify(core.final, verdict)
@@ -4170,7 +4200,7 @@ class AgentRuntime:
             provider=context.provider, model=context.model,
             metadata={
                 "tool_call_count": len(result.tool_log),
-                "changed_file_count": len(changed_files(result.tool_log)),
+                "changed_file_count": len(result.changed_paths),
                 "response_chars": len(result.final_response),
                 "round_budget_exhausted": result.budget_exhausted,
             },
@@ -4781,7 +4811,7 @@ class AgentRuntime:
         # and a corpus that confuses them teaches the confusion.
 
         unjudged = any(status == "not_run" for _, status, _ in runs)
-        build_ok = (None if commands is None or not changed_files(tool_log)
+        build_ok = (None if commands is None or not turn_changed_files(context, tool_log)
                     or unjudged else not broken)
 
         # The harness just ran the project's own build and tests against the
@@ -4852,7 +4882,7 @@ class AgentRuntime:
 
         if order:
             response = (response or "") + work_order.record(
-                order, changed_files(tool_log), missing)
+                order, list(turn_changed_files(context, tool_log)), missing)
 
         return AgentResult(
             task_id=context.task_id,
@@ -4877,6 +4907,7 @@ class AgentRuntime:
             execution_cache=cache,
             completion_deferred=completion_deferred,
             project_build_ok=build_ok,
+            changed_paths=turn_changed_files(context, tool_log),
         )
 
 

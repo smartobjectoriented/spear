@@ -4,13 +4,18 @@ The agent core decides when it has answered; it does not decide whether the
 answer is true. That is decided here, from what the turn's tools actually
 did, and it is written into the answer itself:
 
-  canonical_entry   one line per call in the form SPEAR's checks read --
-                    what changed ("OK: <path> updated"), what ran and how it
-                    ended ("(exit N)", "ERROR: ..."), what was refused --
-                    whatever the model-facing result looked like.
+  evidence          the structured record of one call: what it changed,
+                    which command it ran and how that ended, whether it was
+                    refused. Taken from the ToolRecord's own fields, never
+                    from any rendering of it.
+  canonical_entry   the compact text of one call for the transcript and the
+                    tool log ("OK: <path> updated", "(exit N)", "ERROR: ...").
+                    A display: its head is cut to 200 characters, so nothing
+                    is decided from it.
   decide            VERIFIED when files changed and the last verification
                     run after the change completed and passed; UNVERIFIED
                     when files changed without that; NO_CHANGE otherwise.
+                    Decided from the structured evidence alone.
   qualify           an UNVERIFIED answer opens with the verdict, and every
                     sentence that asserts success unconditionally is marked
                     as unverified where it stands, so the answer cannot say
@@ -33,6 +38,53 @@ class Verdict:
     state: str          # VERIFIED | UNVERIFIED | NO_CHANGE
     changed: tuple[str, ...]
     reason: str = ""
+
+
+@dataclass(frozen=True)
+class Evidence:
+    """One call as the evidence plane reads it."""
+    name: str
+    changed: tuple[str, ...]        # files this call changed, labelled
+    command: str | None = None      # the terminal command, in full
+    exit_code: int | None = None
+    refused: bool = False
+    timed_out: bool = False
+
+
+def evidence(record: ToolRecord, label=lambda path: path) -> Evidence:
+    changed = (tuple(label(path) for path in record.changed_paths)
+               if record.name in WRITE_TOOLS and not record.refused else ())
+
+    return Evidence(record.name, changed, record.command, record.exit_code,
+                    record.refused, record.timed_out)
+
+
+def changed_files(log) -> tuple[str, ...]:
+    """Every file the turn changed, in the order it first changed."""
+    return tuple(dict.fromkeys(path for item in log for path in item.changed))
+
+
+def verification_runs(log, policy=None) -> list[tuple[str, bool]]:
+    """Every verifying command after the last change, and whether it passed:
+    ran (not refused), finished (not timed out), and exited 0."""
+    from agent_runtime import _VERIFYING
+    from verification import VerificationPolicy
+
+    policy = policy or VerificationPolicy()
+    changed = changed_files(log)
+    runs, after_change = [], False
+
+    for item in log:
+        if item.changed:
+            runs, after_change = [], True
+        elif item.name == "terminal" and after_change and item.command:
+            category, _ = policy.classify_command(item.command, changed_paths=changed)
+
+            if category in _VERIFYING:
+                runs.append((item.command, not item.refused and not item.timed_out
+                             and item.exit_code == 0))
+
+    return runs
 
 
 def canonical_entry(record: ToolRecord, label=lambda path: path) -> str:
@@ -76,15 +128,16 @@ def canonical_entry(record: ToolRecord, label=lambda path: path) -> str:
     return f"{head}\n{record.result[:400]}"
 
 
-def decide(tool_log, *, project_runs=(), project_commands=None) -> Verdict:
-    from agent_runtime import changed_files, unverified_write_note
+def decide(log, *, project_runs=(), project_commands=None) -> Verdict:
+    """`log` is the turn's Evidence, in call order."""
+    from agent_runtime import write_note
 
-    changed = tuple(changed_files(tool_log))
+    changed = changed_files(log)
 
     if not changed:
         return Verdict("NO_CHANGE", ())
 
-    note = unverified_write_note(tool_log, project_runs, project_commands)
+    note = write_note(changed, verification_runs(log), project_runs, project_commands)
 
     if note:
         return Verdict("UNVERIFIED", changed, note.strip().removeprefix("⚠ UNVERIFIED:").strip())

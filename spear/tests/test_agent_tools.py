@@ -33,7 +33,8 @@ class ReadFile(unittest.TestCase):
     def test_numbered_window_with_continuation(self):
         payload = self.read(3, 2)
 
-        self.assertEqual(payload["content"], "3|line 3\n4|line 4")
+        # Hermes numbers the empty element after the window's last newline.
+        self.assertEqual(payload["content"], "3|line 3\n4|line 4\n5|")
         self.assertTrue(payload["truncated"])
         self.assertIn("Use offset=5 to continue reading", payload["hint"])
         self.assertEqual(payload["total_lines"], 10)

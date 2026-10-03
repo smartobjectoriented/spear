@@ -6076,9 +6076,11 @@ def coding_host(agent_context, cache, record):
         print()
         record(item)
 
+    from tool_runtime import SandboxSpec
+
     return SpearHost(workspace_root=str(WORKSPACE.root), authorize=authorize,
                      resolve=resolve, write=write, delete=delete, run=run,
-                     record=recorded)
+                     record=recorded, collation_locale=SandboxSpec().locale)
 
 
 def _core_only(context, args):

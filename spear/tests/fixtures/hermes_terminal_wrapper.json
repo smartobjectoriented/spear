@@ -1,0 +1,62 @@
+{
+ "_source": "Captured from Hermes Agent v0.21.0 (0cbc6e37) itself, local backend, LANG=en_US.UTF-8 (LC_ALL, LC_COLLATE unset): tools.terminal_tool.terminal_tool (each case as the first command of a session, and later in one session), file_tools.read_file_tool on missing files (similar_files), file_tools.patch_tool. <DIR> is the scratch directory; 'files' are the names created in <DIR>/sub.",
+ "files": [
+  "BSP_upper.inc",
+  "bsp-rpi4.inc",
+  "bsp-virt64x.inc",
+  "bsp.virt.inc",
+  "bsp_10.inc",
+  "bsp_9.inc",
+  "bsp_arm_common.inc",
+  "bsp_rpi4.inc",
+  "bsp_rpi4_64.inc",
+  "bsp_virt32.inc",
+  "deep",
+  "edit.txt"
+ ],
+ "terminal_cases": {
+  "A_not_found": "nosuchcmd_xyz",
+  "B_syntax": "for x in; do echo; done)",
+  "C_builtin": "cd /nonexistent_dir_xyz",
+  "D_redirect": "cat < /nonexistent_file_xyz",
+  "D2_redirect_write": "echo x > /nonexistent_dir_xyz/f",
+  "E_success": "echo ok",
+  "F_multiline": "echo one\necho two\nnosuchcmd_after_two\necho three",
+  "G_cwd_change": "cd sub && pwd",
+  "H_env": "printf '%s|%s|%s|%s|%s\\n' \"$AI_AGENT\" \"$HERMES_AGENT\" \"$LANG\" \"${LC_ALL-unset}\" \"${LC_COLLATE-unset}\""
+ },
+ "terminal_first": {
+  "A_not_found": "{\"output\": \"/usr/bin/bash: line 5: nosuchcmd_xyz: command not found\", \"exit_code\": 127, \"error\": null, \"hint\": \"`nosuchcmd_xyz` is not installed or not on PATH. Verify with `which nosuchcmd_xyz`; install it or use an absolute path instead of retrying the same command.\"}",
+  "B_syntax": "{\"output\": \"/usr/bin/bash: eval: line 5: syntax error near unexpected token `)'\\n/usr/bin/bash: eval: line 5: `for x in; do echo; done)'\", \"exit_code\": 2, \"error\": null}",
+  "C_builtin": "{\"output\": \"/usr/bin/bash: line 5: cd: /nonexistent_dir_xyz: No such file or directory\", \"exit_code\": 1, \"error\": null}",
+  "D_redirect": "{\"output\": \"/usr/bin/bash: line 5: /nonexistent_file_xyz: No such file or directory\", \"exit_code\": 1, \"error\": null}",
+  "D2_redirect_write": "{\"output\": \"/usr/bin/bash: line 5: /nonexistent_dir_xyz/f: No such file or directory\", \"exit_code\": 1, \"error\": null}",
+  "E_success": "{\"output\": \"ok\", \"exit_code\": 0, \"error\": null}",
+  "F_multiline": "{\"output\": \"one\\ntwo\\n/usr/bin/bash: line 10: nosuchcmd_after_two: command not found\\nthree\", \"exit_code\": 0, \"error\": null}",
+  "G_cwd_change": "{\"output\": \"<DIR>/sub\", \"exit_code\": 0, \"error\": null, \"cwd\": \"<DIR>/sub\"}",
+  "H_env": "{\"output\": \"hermes-agent|true|en_US.UTF-8|unset|unset\", \"exit_code\": 0, \"error\": null}"
+ },
+ "terminal_session": {
+  "A_not_found": "{\"output\": \"/usr/bin/bash: line 5: nosuchcmd_xyz: command not found\", \"exit_code\": 127, \"error\": null, \"hint\": \"`nosuchcmd_xyz` is not installed or not on PATH. Verify with `which nosuchcmd_xyz`; install it or use an absolute path instead of retrying the same command.\"}",
+  "B_syntax": "{\"output\": \"/usr/bin/bash: eval: line 5: syntax error near unexpected token `)'\\n/usr/bin/bash: eval: line 5: `for x in; do echo; done)'\", \"exit_code\": 2, \"error\": null}",
+  "C_builtin": "{\"output\": \"/usr/bin/bash: line 5: cd: /nonexistent_dir_xyz: No such file or directory\", \"exit_code\": 1, \"error\": null}",
+  "D_redirect": "{\"output\": \"/usr/bin/bash: line 5: /nonexistent_file_xyz: No such file or directory\", \"exit_code\": 1, \"error\": null}",
+  "D2_redirect_write": "{\"output\": \"/usr/bin/bash: line 5: /nonexistent_dir_xyz/f: No such file or directory\", \"exit_code\": 1, \"error\": null}",
+  "E_success": "{\"output\": \"ok\", \"exit_code\": 0, \"error\": null}",
+  "F_multiline": "{\"output\": \"one\\ntwo\\n/usr/bin/bash: line 10: nosuchcmd_after_two: command not found\\nthree\", \"exit_code\": 0, \"error\": null}",
+  "H_env": "{\"output\": \"hermes-agent|true|en_US.UTF-8|unset|unset\", \"exit_code\": 0, \"error\": null}",
+  "G_cwd_change": "{\"output\": \"<DIR>/sub\", \"exit_code\": 0, \"error\": null, \"cwd\": \"<DIR>/sub\"}",
+  "I_after_cd_error": "{\"output\": \"/usr/bin/bash: line 5: nosuchcmd_in_sub: command not found\", \"exit_code\": 127, \"error\": null, \"hint\": \"`nosuchcmd_in_sub` is not installed or not on PATH. Verify with `which nosuchcmd_in_sub`; install it or use an absolute path instead of retrying the same command.\"}"
+ },
+ "similar": {
+  "bsp_virt64": "{\"content\": \"\", \"total_lines\": 0, \"file_size\": 0, \"truncated\": false, \"is_binary\": false, \"is_image\": false, \"error\": \"File not found: <DIR>/sub/bsp-virt64.inc\", \"similar_files\": [\"<DIR>/sub/bsp_10.inc\", \"<DIR>/sub/bsp_9.inc\", \"<DIR>/sub/bsp_arm_common.inc\", \"<DIR>/sub/bsp_rpi4_64.inc\", \"<DIR>/sub/bsp-rpi4.inc\"]}",
+  "bsp_rpi": "{\"content\": \"\", \"total_lines\": 0, \"file_size\": 0, \"truncated\": false, \"is_binary\": false, \"is_image\": false, \"error\": \"File not found: <DIR>/sub/bsp_rpi.inc\", \"similar_files\": [\"<DIR>/sub/bsp_10.inc\", \"<DIR>/sub/bsp_9.inc\", \"<DIR>/sub/bsp_arm_common.inc\", \"<DIR>/sub/bsp_rpi4_64.inc\", \"<DIR>/sub/bsp-rpi4.inc\"]}",
+  "bsp_inc": "{\"content\": \"\", \"total_lines\": 0, \"file_size\": 0, \"truncated\": false, \"is_binary\": false, \"is_image\": false, \"error\": \"File not found: <DIR>/sub/bsp.inc\", \"similar_files\": [\"<DIR>/sub/bsp_10.inc\", \"<DIR>/sub/bsp_9.inc\", \"<DIR>/sub/bsp_rpi4_64.inc\", \"<DIR>/sub/bsp-rpi4.inc\", \"<DIR>/sub/bsp_rpi4.inc\"]}",
+  "bsp_upper": "{\"content\": \"\", \"total_lines\": 0, \"file_size\": 0, \"truncated\": false, \"is_binary\": false, \"is_image\": false, \"error\": \"File not found: <DIR>/sub/BSP_rpi4.inc\", \"similar_files\": [\"<DIR>/sub/bsp_rpi4.inc\", \"<DIR>/sub/bsp_10.inc\", \"<DIR>/sub/bsp_9.inc\", \"<DIR>/sub/bsp_arm_common.inc\", \"<DIR>/sub/bsp_rpi4_64.inc\"]}"
+ },
+ "patch": {
+  "relative": "{\"success\": true, \"diff\": \"--- a/<DIR>/sub/edit.txt\\n+++ b/<DIR>/sub/edit.txt\\n@@ -1,3 +1,3 @@\\n first line\\n-second line\\n+2nd line\\n third line\\n\", \"files_modified\": [\"<DIR>/sub/edit.txt\"], \"lint\": {\"status\": \"skipped\", \"message\": \"No linter for .txt files\"}, \"resolved_path\": \"<DIR>/sub/edit.txt\"}",
+  "nested_absolute": "{\"success\": true, \"diff\": \"--- a/<DIR>/sub/deep/edit.txt\\n+++ b/<DIR>/sub/deep/edit.txt\\n@@ -1,3 +1,3 @@\\n first line\\n-second line\\n+2nd line\\n third line\\n\", \"files_modified\": [\"<DIR>/sub/deep/edit.txt\"], \"lint\": {\"status\": \"skipped\", \"message\": \"No linter for .txt files\"}, \"resolved_path\": \"<DIR>/sub/deep/edit.txt\"}",
+  "equivalent_form": "{\"success\": true, \"diff\": \"--- a/<DIR>/sub/deep/other.txt\\n+++ b/<DIR>/sub/deep/other.txt\\n@@ -1,3 +1,3 @@\\n first line\\n-second line\\n+2nd line\\n third line\\n\", \"files_modified\": [\"<DIR>/sub/deep/other.txt\"], \"lint\": {\"status\": \"skipped\", \"message\": \"No linter for .txt files\"}, \"resolved_path\": \"<DIR>/sub/deep/other.txt\"}"
+ }
+}

@@ -47,6 +47,10 @@ class ToolRecord:
 class Host(Protocol):
     #: The directory the model's relative paths and commands start from.
     workspace_root: str
+    #: Optional: the locale the host's commands run under (LC_ALL), which
+    #: orders directory listings the way the model's own `ls` would. A host
+    #: without it leaves the core's process environment in charge.
+    collation_locale: str | None
 
     def authorize(self, name: str, arguments: Mapping[str, object]) -> str | None:
         """None to allow the call, or the short refusal the model reads."""

@@ -241,6 +241,25 @@ SHELL_BINARY = "/bin/bash" if os.access("/bin/bash", os.X_OK) else "/bin/sh"
 PIPEFAIL_PRELUDE = "if (set -o pipefail) 2>/dev/null; then set -o pipefail; fi; "
 
 
+def decode_command_output(data) -> str:
+    """A command's output as the model reads it: UTF-8, invalid bytes replaced,
+    and line endings exactly as emitted.
+
+    Read as bytes and decoded here, never through ``text=True``: Python's
+    text mode applies universal-newline translation and turns every ``\r``
+    and ``\r\n`` into ``\n`` -- a progress bar, a CRLF file or a binary
+    dump would reach the model rewritten. (Hermes decodes the raw byte
+    stream the same way: incremental UTF-8, ``errors="replace"``.)
+    """
+    if data is None:
+        return ""
+
+    if isinstance(data, bytes):
+        return data.decode("utf-8", errors="replace")
+
+    return data
+
+
 def shell_argv(command: str, login: bool = True) -> "list[str]":
     """argv for running `command` in a shell, with pipeline failures visible."""
     return [SHELL_BINARY, "-lc" if login else "-c", PIPEFAIL_PRELUDE + command]
@@ -2650,8 +2669,8 @@ class BubblewrapSandbox:
         return None
 
     def _result_from_completed(self, completed: subprocess.CompletedProcess[str]) -> ToolResult:
-        stdout = (completed.stdout or "")[: self.max_output_chars]
-        stderr = (completed.stderr or "")[: self.max_output_chars]
+        stdout = decode_command_output(completed.stdout)[: self.max_output_chars]
+        stderr = decode_command_output(completed.stderr)[: self.max_output_chars]
 
         if completed.returncode == 0:
             return ToolResult("ok", "bubblewrap sandbox command completed", stdout, stderr)
@@ -2757,7 +2776,6 @@ class BubblewrapSandbox:
                 argv,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
-                text=True,
                 shell=False,
                 env=env,
             )
@@ -3014,7 +3032,6 @@ class BubblewrapSandbox:
                     scoped_argv,
                     stdout=subprocess.PIPE,
                     stderr=subprocess.PIPE,
-                    text=True,
                     shell=False,
                     pass_fds=(info_write, block_read, release_write),
                     env=scope_env,
@@ -3029,8 +3046,8 @@ class BubblewrapSandbox:
                     stdout, stderr = bwrap_process.communicate(timeout=1)
                     return ToolResult(
                         "failed", "network sandbox setup failed before slirp4netns",
-                        stdout=(stdout or "")[: self.max_output_chars],
-                        stderr=(stderr or "")[: self.max_output_chars],
+                        stdout=decode_command_output(stdout)[: self.max_output_chars],
+                        stderr=decode_command_output(stderr)[: self.max_output_chars],
                         exit_code=bwrap_process.returncode,
                     )
 
@@ -3369,7 +3386,6 @@ class CommandRunner:
                 list(assessment.argv),
                 cwd=workspace.root,
                 capture_output=True,
-                text=True,
                 timeout=self.timeout_seconds,
                 shell=False,
             )
@@ -3378,8 +3394,8 @@ class CommandRunner:
         except OSError as exc:
             return ToolResult("failed", f"could not run command: {exc}")
 
-        stdout = (completed.stdout or "")[: self.max_output_chars]
-        stderr = (completed.stderr or "")[: self.max_output_chars]
+        stdout = decode_command_output(completed.stdout)[: self.max_output_chars]
+        stderr = decode_command_output(completed.stderr)[: self.max_output_chars]
 
         if completed.returncode == 0:
             return ToolResult("ok", "command completed", stdout=stdout, stderr=stderr)
@@ -3400,7 +3416,6 @@ class CommandRunner:
                 shell_argv(command, login=False),
                 cwd=workspace.root,
                 capture_output=True,
-                text=True,
                 timeout=self.timeout_seconds,
                 shell=False,
             )
@@ -3409,8 +3424,8 @@ class CommandRunner:
         except OSError as exc:
             return ToolResult("failed", f"could not run shell: {exc}")
 
-        stdout = (completed.stdout or "")[: self.max_output_chars]
-        stderr = (completed.stderr or "")[: self.max_output_chars]
+        stdout = decode_command_output(completed.stdout)[: self.max_output_chars]
+        stderr = decode_command_output(completed.stderr)[: self.max_output_chars]
 
         if completed.returncode == 0:
             return ToolResult("ok", "command completed", stdout=stdout, stderr=stderr)

@@ -39,7 +39,8 @@ def read_file(host: Host, state, call_id, args):
         return _refused("read_file", args, call_id, refusal)
 
     text = tools.read_file(state, path, resolved, args.get("offset", 1),
-                           args.get("limit", tools.DEFAULT_READ_LIMIT))
+                           args.get("limit", tools.DEFAULT_READ_LIMIT),
+                           collation=getattr(host, "collation_locale", None))
     ok = not _has_error(text)
 
     return text, ToolRecord(call_id, "read_file", args, text, ok,
@@ -163,6 +164,13 @@ def execute(host: Host, state, call_id: str, name: str,
         text, record = _refused(name, arguments, call_id, refusal)
     else:
         text, record = HANDLERS[name](host, state, call_id, dict(arguments))
+
+    # registry.ToolRegistry._normalize_handler_result: every handler's string
+    # result crosses the error-field cap on its way out of the dispatcher.
+    bounded = tools.bound_json_error_result(text)
+
+    if bounded != text:
+        text = record.result = bounded
 
     host.after_tool(record)
 

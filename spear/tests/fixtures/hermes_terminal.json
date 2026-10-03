@@ -1,0 +1,26 @@
+{
+ "files": {
+  "lf.txt": "610a620a",
+  "crlf.txt": "610d0a620d0a",
+  "cr.txt": "610d620d",
+  "mixed.txt": "780d0a790d7a0a77",
+  "bin.dat": "00010d02fffe656e640d0a"
+ },
+ "commands": {
+  "lf": "cat lf.txt",
+  "crlf": "cat crlf.txt",
+  "cr": "cat cr.txt",
+  "mixed": "cat mixed.txt",
+  "binary": "cat bin.dat",
+  "stderr_exit": "cat lf.txt missing.txt"
+ },
+ "results": {
+  "lf": "{\"output\": \"a\\nb\", \"exit_code\": 0, \"error\": null}",
+  "crlf": "{\"output\": \"a\\r\\nb\", \"exit_code\": 0, \"error\": null}",
+  "cr": "{\"output\": \"a\\rb\", \"exit_code\": 0, \"error\": null}",
+  "mixed": "{\"output\": \"x\\r\\ny\\rz\\nw\", \"exit_code\": 0, \"error\": null}",
+  "binary": "{\"output\": \"\\u0000\\u0001\\r\\u0002��end\", \"exit_code\": 0, \"error\": null}",
+  "stderr_exit": "{\"output\": \"a\\nb\\ncat: missing.txt: No such file or directory\", \"exit_code\": 1, \"error\": null}"
+ },
+ "_source": "Captured from Hermes Agent v0.21.0 (0cbc6e37) itself -- tools.terminal_tool.terminal_tool, local backend -- running each command in a directory holding these files (hex bytes). Each result is the exact string the model reads."
+}

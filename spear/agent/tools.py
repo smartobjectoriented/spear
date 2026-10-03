@@ -36,6 +36,7 @@ import json
 import os
 import re
 import shutil
+import stat
 import subprocess
 
 from .hermes.ansi_strip import strip_ansi
@@ -64,9 +65,48 @@ UNCHANGED_MESSAGE = _READ_DEDUP_STATUS_MESSAGE
 FILE_STATE = object()
 
 
+# tools/registry.py: the cap on an error body that reaches the model (static
+# messages are ~115 chars; this trims runaway interpolated text). Counted in
+# characters (code points), as Python's len() does.
+MAX_TOOL_ERROR_CHARS = 2048
+TOOL_ERROR_TRUNCATION_MARKER = "… [truncated]"
+
+
+def bound_error_text(text: str) -> str:
+    """tools/registry.py _bound_error_text."""
+    if len(text) <= MAX_TOOL_ERROR_CHARS:
+        return text
+
+    return text[:MAX_TOOL_ERROR_CHARS] + TOOL_ERROR_TRUNCATION_MARKER
+
+
+def bound_json_error_result(result: str) -> str:
+    """tools/registry.py _bound_json_error_result: trim an oversized ``error``
+    field of a JSON tool result; anything else passes through unchanged."""
+    if len(result) <= MAX_TOOL_ERROR_CHARS or '"error"' not in result:
+        return result
+
+    try:
+        payload = json.loads(result)
+    except ValueError:
+        return result
+
+    if not isinstance(payload, dict):
+        return result
+
+    error = payload.get("error")
+
+    if not isinstance(error, str) or len(error) <= MAX_TOOL_ERROR_CHARS:
+        return result
+
+    payload["error"] = bound_error_text(error)
+
+    return json.dumps(payload, ensure_ascii=False)
+
+
 def tool_error(message, **extra) -> str:
     """tools/registry.py tool_error."""
-    result = {"error": str(message)}
+    result = {"error": bound_error_text(str(message))}
 
     if extra:
         result.update(extra)
@@ -75,10 +115,56 @@ def tool_error(message, **extra) -> str:
 
 
 def new_state() -> dict:
-    """What Hermes' _read_tracker holds for one task."""
+    """What Hermes' _read_tracker holds for one task, plus this task's
+    file_state read stamps ({resolved: (mtime, partial)})."""
     return {"last_key": None, "consecutive": 0, "read_history": set(),
             "dedup": {}, "dedup_hits": {}, "read_timestamps": {},
-            "patch_failures": {}}
+            "patch_failures": {}, "file_state": {}}
+
+
+def _record_read(state, resolved, *, partial):
+    """file_state.record_read."""
+    try:
+        state.setdefault("file_state", {})[resolved] = (os.path.getmtime(resolved),
+                                                       bool(partial))
+    except OSError:
+        pass
+
+
+def _note_write(state, resolved):
+    """file_state.note_write: a write is a full read of what was written."""
+    try:
+        state.setdefault("file_state", {})[resolved] = (os.path.getmtime(resolved), False)
+    except OSError:
+        pass
+
+
+def _check_stale(state, resolved):
+    """file_state.check_stale for a single agent (no sibling subagents, so
+    the last writer is always this task): an external change since the last
+    read, else a partial last read."""
+    stamp = state.get("file_state", {}).get(resolved)
+
+    if stamp is None:
+        return None
+
+    try:
+        current_mtime = os.path.getmtime(resolved)
+    except OSError:
+        return None
+
+    read_mtime, partial = stamp
+
+    if current_mtime != read_mtime:
+        return (f"{resolved} was modified since you last read it on disk "
+                "(external edit or unrecorded writer). Re-read the file before "
+                "writing.")
+
+    if partial:
+        return (f"{resolved} was last read with offset/limit pagination "
+                "(partial view). Re-read the whole file before overwriting it.")
+
+    return None
 
 
 def reset_dedup(state: dict) -> None:
@@ -104,7 +190,33 @@ def _coerce_int(value, default):
 # ----------------------------------------------------------------- read
 
 
-def _similar_files(display: str, resolved: str) -> list[str]:
+def _listing(host_dir: str, collation: str | None) -> list[str]:
+    """What Hermes' `ls -1 <dir> | head -50` lists: no dotfiles, in the
+    locale's collation order (en_US.UTF-8 puts bsp_rpi4_64.inc before
+    bsp_rpi4.inc, code-point order the other way round). `ls` itself, run
+    without a shell, so the ordering is ls's own, not an imitation of it.
+    `collation` is the coding environment's locale; None keeps this
+    process's own environment."""
+    env = dict(os.environ)
+
+    if collation:
+        env["LC_ALL"] = collation
+
+    try:
+        done = subprocess.run(["ls", "-1", "--", host_dir], capture_output=True,
+                              env=env, timeout=10)
+    except (OSError, subprocess.TimeoutExpired):
+        return []
+
+    if done.returncode != 0:
+        return []
+
+    names = done.stdout.decode("utf-8", errors="replace").strip().split("\n")
+
+    return [name for name in names if name][:50]
+
+
+def _similar_files(display: str, resolved: str, collation: str | None = None) -> list[str]:
     """ShellFileOperations._suggest_similar_files, scoring unchanged."""
     dir_path = os.path.dirname(display) or "."
     host_dir = os.path.dirname(resolved)
@@ -114,10 +226,7 @@ def _similar_files(display: str, resolved: str) -> list[str]:
     lower_name = filename.lower()
     scored = []
 
-    try:
-        entries = sorted(os.listdir(host_dir))[:50]
-    except OSError:
-        entries = []
+    entries = _listing(host_dir, collation)
 
     for f in entries:
         lf = f.lower()
@@ -150,18 +259,30 @@ def _similar_files(display: str, resolved: str) -> list[str]:
     return [path for _, path in scored[:5]]
 
 
-def _read_window(display: str, resolved: str, offset: int, limit: int) -> dict:
+def _read_window(display: str, resolved: str, offset: int, limit: int,
+                 collation: str | None = None) -> dict:
     """ShellFileOperations.read_file -> ReadResult.to_dict()."""
     if not os.path.exists(resolved):
-        return {"total_lines": 0, "file_size": 0, "truncated": False,
-                "is_binary": False, "is_image": False,
-                "error": f"File not found: {display}",
-                "similar_files": _similar_files(display, resolved)}
+        # ShellFileOperations._suggest_similar_files through ReadResult.to_dict:
+        # the empty content is kept, an empty suggestion list is dropped.
+        result = {"content": "", "total_lines": 0, "file_size": 0, "truncated": False,
+                  "is_binary": False, "is_image": False,
+                  "error": f"File not found: {display}"}
+        similar = _similar_files(display, resolved, collation)
+
+        if similar:
+            result["similar_files"] = similar
+
+        return result
 
     if not os.path.isfile(resolved):
-        return {"total_lines": 0, "file_size": 0, "truncated": False,
+        # ShellFileOperations._not_regular_error, through ReadResult.to_dict
+        # (which keeps the empty content).
+        return {"content": "", "total_lines": 0, "file_size": 0, "truncated": False,
                 "is_binary": False, "is_image": False,
-                "error": f"'{display}' is not a regular file"}
+                "error": (f"Cannot read '{display}': not a regular file (directory, "
+                          "FIFO, socket, or device). Reading it could block "
+                          "indefinitely.")}
 
     with open(resolved, "rb") as handle:
         data = handle.read()
@@ -170,7 +291,7 @@ def _read_window(display: str, resolved: str, offset: int, limit: int) -> dict:
     sample = data[:1000]
 
     if has_binary_extension(resolved) or _is_likely_binary_bytes(sample):
-        return {"total_lines": 0, "file_size": file_size, "truncated": False,
+        return {"content": "", "total_lines": 0, "file_size": file_size, "truncated": False,
                 "is_binary": True, "is_image": False,
                 "error": describe_binary_file(sample, file_size)}
 
@@ -201,6 +322,14 @@ def _read_window(display: str, resolved: str, offset: int, limit: int) -> dict:
         window[0], _ = _strip_bom(window[0])
 
     truncated = total_lines > end_line
+
+    # Hermes reads the window with `sed -n 'a,bp' | cut`, whose output always
+    # ends in a newline, and numbers `output.split("\n")`: the empty element
+    # after that newline is numbered too ("N+1|"). It is removed only when the
+    # page reaches the end of a file that has no final newline.
+    if window and (truncated or text.endswith("\n")):
+        window.append("")
+
     numbered = []
 
     for number, line in enumerate(window, start=offset):
@@ -211,27 +340,68 @@ def _read_window(display: str, resolved: str, offset: int, limit: int) -> dict:
 
         numbered.append(f"{number}|{line}")
 
+    # ReadResult.to_dict order: the hint, when there is one, sits between
+    # `truncated` and `is_binary`.
     result = {"content": "\n".join(numbered), "total_lines": total_lines,
-              "file_size": file_size, "truncated": truncated,
-              "is_binary": False, "is_image": False}
+              "file_size": file_size, "truncated": truncated}
 
     if truncated:
         result["hint"] = (f"Use offset={end_line + 1} to continue reading "
                           f"(showing {offset}-{end_line} of {total_lines} lines)")
 
+    result.update(is_binary=False, is_image=False)
+
     return result
 
 
+def _special_file_kind(path: str) -> str | None:
+    """file_tools._special_file_kind: the kind of a non-regular, non-directory
+    file (symlinks followed), or None."""
+    try:
+        mode = os.stat(path).st_mode
+    except OSError:
+        return None
+
+    if stat.S_ISREG(mode) or stat.S_ISDIR(mode):
+        return None
+
+    if stat.S_ISFIFO(mode):
+        return "a FIFO (named pipe)"
+
+    if stat.S_ISSOCK(mode):
+        return "a socket"
+
+    if stat.S_ISCHR(mode):
+        return "a character device"
+
+    if stat.S_ISBLK(mode):
+        return "a block device"
+
+    return "a special (non-regular) file"
+
+
 def read_file(state: dict, display: str, resolved: str, offset=1,
-              limit=DEFAULT_READ_LIMIT) -> str:
-    """file_tools.read_file_tool."""
+              limit=DEFAULT_READ_LIMIT, collation: str | None = None) -> str:
+    """file_tools.read_file_tool. `collation`: the locale the coding
+    environment's commands run under (orders not-found suggestions)."""
     offset = max(1, _coerce_int(offset, 1))
     limit = max(1, min(_coerce_int(limit, DEFAULT_READ_LIMIT), MAX_LINES))
+
+    # file_tools._special_file_kind: a FIFO, socket or device is never opened.
+    kind = _special_file_kind(resolved)
+
+    if kind is not None:
+        return json.dumps({
+            "success": False,
+            "note": (f"'{display}' is {kind}, not a regular file — reading it "
+                     "would block indefinitely, so no read was attempted. Use "
+                     "terminal utilities if you need to interact with it.")})
 
     if os.path.exists(resolved) and has_binary_extension(resolved):
         ext = os.path.splitext(resolved)[1].lower()
         return tool_error(f"Cannot read binary file '{display}' ({ext}). Use "
-                          f"terminal to inspect binary files.")
+                          "vision_analyze for images, or terminal to inspect "
+                          "binary files.")
 
     dedup_key = (resolved, offset, limit)
     cached_mtime = state["dedup"].get(dedup_key)
@@ -259,7 +429,7 @@ def read_file(state: dict, display: str, resolved: str, offset=1,
         except OSError:
             pass
 
-    result = _read_window(display, resolved, offset, limit)
+    result = _read_window(display, resolved, offset, limit, collation)
     content = result.get("content") or ""
 
     if len(content) > MAX_READ_CHARS:
@@ -308,6 +478,10 @@ def read_file(state: dict, display: str, resolved: str, offset=1,
         state["read_timestamps"][resolved] = mtime
     except OSError:
         pass
+
+    # file_state.record_read: a read is partial when it started past line 1
+    # or did not reach the end.
+    _record_read(state, resolved, partial=offset > 1 or bool(result.get("truncated")))
 
     if count >= 4:
         return tool_error(
@@ -575,15 +749,19 @@ def search(state: dict, cwd: str, path_arg: str, resolved: str, pattern: str, *,
                                   truncated=total > offset + limit or bool(reason),
                                   limit_reason=reason, warning=note)
 
-            if total == 0:
-                try:
-                    hint = _zero_match_probe(pattern, path_arg, file_glob, cwd)
-                except Exception:
-                    hint = None
+        # ShellFileOperations.search: zero-match steering runs for every
+        # output mode -- content, files_only and count alike.
+        if (not result.get("error") and result.get("total_count") == 0
+                and not result.get("matches") and not result.get("files")
+                and not result.get("counts")):
+            try:
+                hint = _zero_match_probe(pattern, path_arg, file_glob, cwd)
+            except Exception:
+                hint = None
 
-                if hint:
-                    result["warning"] = (hint if not result.get("warning")
-                                         else f"{result['warning']} {hint}")
+            if hint:
+                result["warning"] = (hint if not result.get("warning")
+                                     else f"{result['warning']} {hint}")
 
     if count >= 3:
         result["_warning"] = (
@@ -659,6 +837,7 @@ def _staleness(state, display, resolved):
 
 def _after_write(state, resolved):
     invalidate_path(state, resolved)
+    _note_write(state, resolved)
 
     try:
         state["read_timestamps"][resolved] = os.path.getmtime(resolved)
@@ -680,6 +859,10 @@ def patch(state: dict, display: str, resolved: str, old_string, new_string,
           replace_all=False, *, write) -> tuple[str, bool]:
     """file_tools.patch_tool (replace mode) + ShellFileOperations.patch_replace.
 
+    patch_tool hands patch_replace the RESOLVED path: the diff labels and its
+    messages name the absolute file, whatever form the model wrote; only
+    patch_tool's own repeated-failure hint quotes the path as given.
+
     `write(new_content)` performs the authorised write and returns an error
     string or None. Returns (the JSON, whether the file changed).
     """
@@ -689,10 +872,10 @@ def patch(state: dict, display: str, resolved: str, old_string, new_string,
     if old_string is None or new_string is None:
         return tool_error("old_string and new_string required"), False
 
-    warning = _staleness(state, display, resolved)
+    warning = _check_stale(state, resolved) or _staleness(state, display, resolved)
 
     if not os.path.isfile(resolved):
-        result = {"success": False, "error": f"Failed to read file: {display}"}
+        result = {"success": False, "error": f"Failed to read file: {resolved}"}
     else:
         with open(resolved, "r", encoding="utf-8", errors="surrogateescape",
                   newline="") as handle:
@@ -707,10 +890,10 @@ def patch(state: dict, display: str, resolved: str, old_string, new_string,
                 result = {"success": True, "no_change": True,
                           "note": (f"File already contains the target text — "
                                    f"the edit appears to be already applied to "
-                                   f"{display}. No write performed; do not "
+                                   f"{resolved}. No write performed; do not "
                                    "re-send this patch.")}
             else:
-                message = error or f"Could not find match for old_string in {display}"
+                message = error or f"Could not find match for old_string in {resolved}"
 
                 try:
                     message += format_no_match_hint(message, match_count,
@@ -732,10 +915,14 @@ def patch(state: dict, display: str, resolved: str, old_string, new_string,
                           "error": f"Failed to write changes: {failure}"}
             else:
                 result = {"success": True,
-                          "diff": unified_diff(content, new_content, display),
+                          "diff": unified_diff(content, new_content, resolved),
                           "files_modified": [resolved],
-                          "lint": lint_delta(resolved, content, new_content),
-                          "resolved_path": resolved}
+                          "lint": lint_delta(resolved, content, new_content)}
+
+                if warning:
+                    result["_warning"] = warning
+
+                result["resolved_path"] = resolved
                 _after_write(state, resolved)
                 state["patch_failures"].pop(resolved, None)
 
@@ -801,7 +988,7 @@ def write_file(state: dict, display: str, resolved: str, content, *,
                 "modified. Fix the content and retry.")},
                 ensure_ascii=False), False
 
-    warning = _staleness(state, display, resolved)
+    warning = _check_stale(state, resolved) or _staleness(state, display, resolved)
     pre = None
 
     if os.path.isfile(resolved):
@@ -815,20 +1002,26 @@ def write_file(state: dict, display: str, resolved: str, content, *,
         if pre is not None and _detect_line_ending(pre) == "\r\n":
             content = _normalize_line_endings(content, "\r\n")
 
-    dirs_created = not os.path.isdir(os.path.dirname(resolved))
+    # ShellFileOperations.write_file: "parent dirs ensured", i.e. true for
+    # any path with a directory part (`mkdir -p` succeeds when they exist).
+    dirs_created = bool(os.path.dirname(resolved))
     failure = write(content)
 
     if failure:
         result = {"bytes_written": 0, "dirs_created": False, "error": failure}
+
+        if warning:
+            result["_warning"] = warning
     else:
         result = {"bytes_written": len(content.encode("utf-8")),
                   "dirs_created": dirs_created, "verified": True,
-                  "lint": lint_delta(resolved, pre, content),
-                  "resolved_path": resolved, "files_modified": [resolved]}
-        _after_write(state, resolved)
+                  "lint": lint_delta(resolved, pre, content)}
 
-    if warning:
-        result["_warning"] = warning
+        if warning:
+            result["_warning"] = warning
+
+        result.update(resolved_path=resolved, files_modified=[resolved])
+        _after_write(state, resolved)
 
     return json.dumps(result, ensure_ascii=False), not failure
 
@@ -921,29 +1114,42 @@ def session_script(command: str, cwd: str | None, exports: str, timeout: int) ->
 
     escaped = command.replace("'", "'\\''")
     tag = "__SPEAR_INNER_" + secrets.token_hex(8)
+    snap_tag = "__SPEAR_SNAP_" + secrets.token_hex(8)
     head = int(MAX_OUTPUT_CHARS * 0.4)
     tail = MAX_OUTPUT_CHARS - head
-    inner = []
 
-    if exports:
-        inner.append(exports)
-
-    inner += ['export GIT_PAGER="${GIT_PAGER:-cat}" PAGER="${PAGER:-cat}"']
-
-    if cwd:
-        inner.append(f"builtin cd -- {shlex.quote(cwd)} || exit 126")
-
-    inner += [f"eval '{escaped}'", "__spear_ec=$?",
-              'pwd -P > "$__SPEAR_D/cwd"', 'export -p > "$__SPEAR_D/env"',
-              "exit $__spear_ec"]
+    # The command runs exactly as Hermes runs it (tools/environments/base.py,
+    # _wrap_command; local.py, _run_bash): `bash -c <wrapper>`, non-login,
+    # with `eval` on the wrapper's line 5 -- so bash's own diagnostics read
+    # "/usr/bin/bash: line 5: ...", "/usr/bin/bash: eval: line 5: ..." as
+    # Hermes' do, and a failure further down an eval'd script lands on the
+    # same line number. Line by line:
+    #   1  the session snapshot (exports carried over), sourced
+    #   2  AI_AGENT / HERMES_AGENT, exported for every command
+    #   3  GIT_PAGER / PAGER
+    #   4  the session cwd
+    #   5  the command
+    inner = [
+        'source "$__SPEAR_D/snap" >/dev/null 2>&1 || true',
+        'export AI_AGENT="${AI_AGENT:-hermes-agent}" HERMES_AGENT="${HERMES_AGENT:-true}"',
+        'export GIT_PAGER="${GIT_PAGER:-cat}" PAGER="${PAGER:-cat}"',
+        f"builtin cd -- {shlex.quote(cwd) if cwd else '.'} || exit 126",
+        f"eval '{escaped}'",
+        "__spear_ec=$?",
+        'pwd -P > "$__SPEAR_D/cwd"', 'export -p > "$__SPEAR_D/env"',
+        "exit $__spear_ec",
+    ]
 
     return "\n".join([
         "__SPEAR_D=$(mktemp -d)",
+        f"cat > \"$__SPEAR_D/snap\" <<'{snap_tag}'",
+        *([exports] if exports else []),
+        snap_tag,
         f"cat > \"$__SPEAR_D/inner\" <<'{tag}'",
         *inner,
         tag,
         "export __SPEAR_D",
-        f"timeout -k 2 {int(timeout)} bash \"$__SPEAR_D/inner\" "
+        f"timeout -k 2 {int(timeout)} \"$(command -v bash)\" -c \"$(cat \"$__SPEAR_D/inner\")\" "
         "> \"$__SPEAR_D/out\" 2>&1 < /dev/null",
         "__spear_ec=$?",
         "__spear_size=$(wc -c < \"$__SPEAR_D/out\")",

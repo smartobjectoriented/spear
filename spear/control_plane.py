@@ -145,8 +145,21 @@ class SpearHost:
     def resolve_workdir(self, path: str):
         return self._resolved(path, "workdir")
 
+    @staticmethod
+    def _failed(exc: Exception) -> str:
+        """An operation SPEAR could not complete, as the model reads it.
+
+        A defect in a port must end the call, not the session: a checkpoint
+        that refused a symbolic link once took the whole CLI down mid-turn.
+        """
+        return f"refused: the operation failed inside SPEAR ({type(exc).__name__}: {exc})"
+
     def write_file(self, path: str, content: str, *, action: str) -> str | None:
-        failure = self._write(path, content, action)
+        try:
+            failure = self._write(path, content, action)
+        except Exception as exc:                    # noqa: BLE001
+            return self._failed(exc)
+
         return self._short(failure) if failure else None
 
     def delete_file(self, path: str, reason: str) -> str | None:
@@ -154,7 +167,12 @@ class SpearHost:
         # When the path asked for names a link, the link is what is deleted,
         # and the delete port judges it as one.
         requested = self._deleting
-        failure = self._delete(requested if self._names_link(requested) else path, reason)
+
+        try:
+            failure = self._delete(requested if self._names_link(requested) else path, reason)
+        except Exception as exc:                    # noqa: BLE001
+            return self._failed(exc)
+
         return self._short(failure) if failure else None
 
     def _names_link(self, path: str) -> bool:
@@ -168,7 +186,10 @@ class SpearHost:
 
     def run_command(self, command: str, script: str, *, timeout: int,
                     output_chars: int) -> CommandOutcome:
-        outcome = self._run(command, script, timeout, output_chars)
+        try:
+            outcome = self._run(command, script, timeout, output_chars)
+        except Exception as exc:                    # noqa: BLE001
+            return CommandOutcome("error", "", -1, self._failed(exc))
 
         if outcome.status == "denied":
             return CommandOutcome("denied", "", -1, self._short(outcome.summary))

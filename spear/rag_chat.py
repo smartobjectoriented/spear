@@ -5472,14 +5472,24 @@ def _registered_delete_file(context, args):
 
     if blocked is None:
         # Capture BEFORE unlinking: the checkpoint holds the only remaining
-        # copy of the bytes, and it is what /undo restores from.
+        # copy of the bytes, and it is what /undo restores from. A link has no
+        # bytes of its own, and the checkpoint refuses links: what it pointed
+        # at goes into the audit record instead, which is all a link is.
 
-        _capture_checkpoint_path(context, fpath)
+        link = os.readlink(fpath) if os.path.islink(fpath) else None
+
+        if link is None:
+            _capture_checkpoint_path(context, fpath)
 
         try:
             os.remove(fpath)
-            result = f"OK: deleted {path}"
-            _record_mutation(context, fpath)
+            result = (f"OK: deleted {path}" if link is None
+                      else f"OK: deleted the link {path} (it pointed to {link})")
+
+            if link is None:
+                _record_mutation(context, fpath)
+            else:
+                _forget_cached_reads(context)
         except OSError as exc:
             result = f"ERROR: could not delete {path}: {exc.strerror}"
 

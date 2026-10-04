@@ -387,6 +387,24 @@ class DeletingALinkDeletesTheLink(Envelope):
         self.assertFalse(os.path.lexists(f"{self.root}/images/initrd.cpio"))
         self.assertTrue(Path(self.root, "board/virt64/initrd.cpio").is_file())
 
+    def test_a_link_goes_under_a_real_checkpoint(self):
+        from checkpoint import CheckpointManager
+
+        os.makedirs(f"{self.root}/images")
+        os.symlink("../board/virt64/initrd.cpio", f"{self.root}/images/initrd.cpio")
+        manager = CheckpointManager(tempfile.mkdtemp(dir=self.root), self.root)
+        checkpoint = manager.begin_checkpoint("task_envelope", "session_envelope")
+        call = self.spear_session("Recreate the images/initrd.cpio link",
+                                  checkpoint_manager=manager, checkpoint=checkpoint)
+        text, record = call("delete_file", path="images/initrd.cpio", reason="recreate")
+
+        self.assertTrue(json.loads(text)["success"], text)
+        self.assertFalse(os.path.lexists(f"{self.root}/images/initrd.cpio"))
+        self.assertTrue(Path(self.root, "board/virt64/initrd.cpio").is_file())
+
+        text, record = call("delete_file", path="a.txt", reason="obsolete")
+        self.assertTrue(json.loads(text)["success"], text)
+
     def test_a_link_into_a_build_tree_can_still_go(self):
         os.makedirs(f"{self.root}/build/tmp/work")
         Path(self.root, "build/tmp/work/initrd.cpio").write_text("x")
@@ -398,6 +416,22 @@ class DeletingALinkDeletesTheLink(Envelope):
         self.assertFalse(record.refused, text)
         self.assertFalse(os.path.lexists(f"{self.root}/images/initrd.cpio"))
         self.assertTrue(Path(self.root, "build/tmp/work/initrd.cpio").exists())
+
+
+class APortDefectEndsTheCallNotTheSession(unittest.TestCase):
+    def test_an_exception_in_a_port_is_a_failed_call(self):
+        from control_plane import SpearHost
+
+        def broken(*args):
+            raise RuntimeError("boom")
+
+        host = SpearHost(workspace_root="/", authorize=lambda *a: None,
+                         resolve=lambda path, purpose: path, write=broken, delete=broken,
+                         run=broken, record=lambda record: None)
+
+        self.assertIn("RuntimeError: boom", host.write_file("/x", "y", action="write_file"))
+        self.assertIn("RuntimeError: boom", host.delete_file("/x", "why"))
+        self.assertEqual(host.run_command("ls", "ls", timeout=5, output_chars=10).status, "error")
 
 
 @unittest.skipUnless(SANDBOX, "needs the bubblewrap sandbox")

@@ -151,7 +151,9 @@ _CLAIM = re.compile(
     r"\b(verified|verifies|confirm(?:ed|s)?|correct(?:ly)?|complete[ds]?|"
     r"works?|working|successful(?:ly)?|succeed(?:ed|s)?|ensures?|guarantees?|"
     r"always (?:be )?(?:present|there|available|recreated|created)|"
-    r"will (?:always|now) )\b|✓|✔", re.IGNORECASE)
+    r"will (?:always|now) |surviv(?:es?|ed|ing)|persist(?:s|ed|ing|ent)?|"
+    r"(?:automatically|always) (?:re)?created|"
+    r"recreated (?:automatically|on every|every|each|after))\b|✓|✔", re.IGNORECASE)
 _HEDGE = re.compile(
     r"\b(not|n't|unverified|untested|should|may|might|could|would|expected|"
     r"if |once |assuming|likely|unless|cannot|could not|unable)\b", re.IGNORECASE)

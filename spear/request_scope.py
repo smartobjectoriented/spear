@@ -373,7 +373,11 @@ def _expand_in(scope: RequestScope, token: str) -> list[str]:
 
 
 def _children_matching(scope: RequestScope, path: str, patterns) -> list[str]:
-    """A directory's entries a find over it could hand to a writer."""
+    """The entries under a directory a find over it could hand to a writer.
+
+    At any depth, as find walks: `find board -name post_image.sh | xargs
+    sed -i` reaches board/<platform>/post_image.sh, two levels down.
+    """
     import fnmatch
 
     full = path if os.path.isabs(path) else os.path.join(scope.root or ".", path)
@@ -381,9 +385,19 @@ def _children_matching(scope: RequestScope, path: str, patterns) -> list[str]:
     if not os.path.isdir(full):
         return []
 
-    return [os.path.join(full, entry.name) for entry in _entries(Path(full))
-            if not patterns or any(fnmatch.fnmatch(entry.name, pattern)
-                                   for pattern in patterns)][:200]
+    found = []
+
+    for directory, subdirectories, files in os.walk(full):
+        subdirectories[:] = [name for name in subdirectories if not name.startswith(".")]
+
+        for name in subdirectories + files:
+            if not patterns or any(fnmatch.fnmatch(name, pattern) for pattern in patterns):
+                found.append(os.path.join(directory, name))
+
+                if len(found) >= 200:
+                    return found
+
+    return found
 
 
 def _writes_fed(argv) -> bool:
@@ -406,7 +420,50 @@ def _writes_fed(argv) -> bool:
 _WORD_PATH = re.compile(r"[\w./-]*/[\w./-]+|[\w-]+\.[A-Za-z]\w{0,6}")
 
 
-def shell_write_refusal(command: str, scope: RequestScope | None) -> str:
+def _stage_directories(stages, start: str) -> list[str]:
+    """The directory each stage runs in: `start`, moved by every `cd`."""
+    directories = []
+    directory = start
+
+    for argv in stages:
+        directories.append(directory)
+
+        if Path(argv[0]).name in ("cd", "pushd") and len(argv) > 1 \
+                and "$" not in argv[1] and argv[1] != "-":
+            directory = os.path.normpath(os.path.join(directory, _expand(argv[1])))
+
+    return directories
+
+
+def _at(directory: str, token: str) -> str:
+    """A path operand as the stage running in `directory` means it.
+
+    A redirection written against its file (`>>x`) and dd's `of=x` keep
+    their prefix. A word that is not a path -- inline code, quoted text --
+    is left as it is.
+    """
+    redirect = _REDIRECT.match(token)
+
+    if redirect:
+        target = redirect.group(1)
+
+        if not target or target.startswith("&"):
+            return token
+
+        return token[:len(token) - len(target)] + _at(directory, target)
+
+    if token.startswith("of="):
+        return "of=" + _at(directory, token[3:])
+
+    if (not token or token.startswith(("/", "$", "~", "-", ">", "<"))
+            or re.search(r"[\s'\"()=;]", token)):
+        return token
+
+    return os.path.join(directory, token)
+
+
+def shell_write_refusal(command: str, scope: RequestScope | None,
+                        cwd: str | None = None) -> str:
     """Why this command writes outside the requested target, or "".
 
     The same judgement as sibling_write_refusal, applied to what a shell
@@ -416,18 +473,28 @@ def shell_write_refusal(command: str, scope: RequestScope | None) -> str:
     so any sibling path its text mentions is treated as one -- otherwise
     `python3 -c "open('beta.cfg','w')..."` would be edit_file's refusal with
     extra steps. Builds and tests name no sibling destination and pass.
+
+    A relative operand is taken from the directory its stage runs in: `cwd`
+    (where the session stands, or the command's workdir), moved by every
+    `cd` before it. Read from the project root instead, `cd board && echo >
+    rpi4/x` wrote to a sibling the same redirect by full path could not.
     """
     if scope is None or scope.broadened or not scope.anchors or not command:
         return ""
 
-    stages = list(_split_stages(command))
+    words = list(_split_stages(command))
+    patterns = [argv[index + 1] for argv in words
+                for index, arg in enumerate(argv[:-1])
+                if arg in ("-name", "-iname")]
+    directories = _stage_directories(words, cwd or scope.root or ".")
+    stages = [[argv[0]] + [token if index and argv[index - 1] in ("-name", "-iname")
+                           else _at(directory, token)
+                           for index, token in enumerate(argv) if index]
+              for argv, directory in zip(words, directories)]
     # What the whole command names, globs expanded in the project: the
     # candidates when a write's destination is only known at run time.
     mentioned = [path for argv in stages for token in argv[1:]
                  for path in _expand_in(scope, token)]
-    patterns = [argv[index + 1] for argv in stages
-                for index, arg in enumerate(argv[:-1])
-                if arg in ("-name", "-iname")]
     mentioned += [path for item in list(mentioned)
                   for path in _children_matching(scope, item, patterns)]
 

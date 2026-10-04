@@ -98,3 +98,42 @@ class _Recording:
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class OneCodingLoop(unittest.TestCase):
+    """An implementation turn reaches nothing of the legacy coding loop.
+
+    Each legacy mechanism -- the conclusion and write demands, the build-gap
+    nudge, the repeated-result forcing, the legacy model turn itself -- is a
+    tripwire here. The turn must still run to its answer on the core.
+    """
+
+    TRIPWIRES = ("conclude_demand", "write_demand", "project_build_gap",
+                 "_repeated_result")
+
+    def test_no_legacy_mechanism_is_reached(self):
+        from unittest.mock import patch
+        import agent_runtime
+
+        def tripped(name):
+            def fail(*args, **kwargs):
+                raise AssertionError(f"legacy mechanism reached: {name}")
+            return fail
+
+        patches = [patch.object(agent_runtime, name, tripped(name))
+                   for name in self.TRIPWIRES if hasattr(agent_runtime, name)]
+        patches += [patch.object(AgentRuntime, name, tripped(name))
+                    for name in ("_complete_with_retry", "complete_model_turn")]
+
+        for item in patches:
+            item.start()
+            self.addCleanup(item.stop)
+
+        result, context = CoreTurn.run_turn(self, [
+            turn("", call("c1", "patch", path="a.sh", old_string="alpha", new_string="beta")),
+            turn("", call("c2", "terminal", command="./a.sh")),
+            turn("Done.")])
+
+        self.assertEqual(result.terminal_reason, RuntimeTerminalReason.COMPLETED)
+        self.assertEqual(context.core_verdict.state, "VERIFIED")
+        self.assertEqual(len(patches), len(self.TRIPWIRES) + 2)

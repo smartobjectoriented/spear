@@ -106,16 +106,14 @@ class ToolExposurePolicy:
     # The coding toolset: what an implementation turn works with, chosen by
     # task type rather than by guessing from words. read_file, search_files,
     # patch and terminal are the file and command vocabulary; write_file is
-    # for creating or wholly replacing a file.
+    # for creating or wholly replacing a file. Nothing else: every tool an
+    # implementation turn sees is one the agent core executes
+    # (agent/dispatch.py) -- no corpus search, web, memory or standards.
     _CODING_READ = ("read_file", "search_files", "terminal")
     # delete_file is SPEAR's: Hermes deletes with `rm` in its terminal, which
     # SPEAR's sandbox refuses so that every deletion is a declared, audited
     # file operation.
     _CODING_WRITE = ("patch", "write_file", "delete_file")
-    # An implementation turn gets the project's own index when it has one,
-    # and nothing else: no web, no memory, no standards. A turn that needs
-    # those is routed elsewhere.
-    _CODING_EXTRAS = frozenset({ToolCategory.RETRIEVAL})
 
     # An explicit prohibition, and only an explicit one. The object has to be
     # general -- "without editing files", "do not change anything",
@@ -211,15 +209,13 @@ class ToolExposurePolicy:
         )
 
         # The task type picks the vocabulary. A coding turn gets the coding
-        # tools and the optional extras; every other view keeps the tools it
-        # always had and never sees the coding ones.
+        # tools only; every other view keeps the tools it always had and never
+        # sees the coding ones.
 
         if toolset == "coding":
             candidates = tuple(
                 tool for tool in candidates
-                if tool.name in self._CODING_READ + self._CODING_WRITE
-                or (tool.category in self._CODING_EXTRAS
-                    and not tool.name.startswith("standard.")))
+                if tool.name in self._CODING_READ + self._CODING_WRITE)
         else:
             candidates = tuple(tool for tool in candidates
                                if tool.name not in CODING_TOOL_NAMES)

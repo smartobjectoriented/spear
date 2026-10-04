@@ -61,6 +61,11 @@ class Host(Protocol):
     def resolve_write(self, path: str) -> tuple[str | None, str | None]:
         """(absolute path, None) inside the write boundary, or (None, refusal)."""
 
+    def resolve_workdir(self, path: str) -> tuple[str | None, str | None]:
+        """(absolute path, None) for a directory a command may start in, or
+        (None, refusal). The directory need not exist: entering it is the
+        command's own first step, and its failure the command's result."""
+
     def write_file(self, path: str, content: str, *, action: str) -> str | None:
         """Write after every policy check; None on success, else the reason."""
 

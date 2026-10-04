@@ -7,8 +7,8 @@ whichever tool the model used:
   authorize      the router's hard-policy gates -- read-only and advisory
                  turns, target and sibling write scope, project and shell
                  scope, the write gate, the session's mode, arguments.
-  resolve_*      the workspace policy: reads and writes resolve inside the
-                 workspace or are refused.
+  resolve_*      the workspace policy: reads, writes and a command's workdir
+                 resolve inside the workspace or are refused.
   write/delete   the generated-file and snapshot-tree guards, the mode's
                  confirmation (--safe, --ask, --auto), the checkpoint that
                  makes /undo possible, the audit trail.
@@ -73,6 +73,9 @@ class SpearHost:
 
     def resolve_write(self, path: str):
         return self._resolved(path, "write")
+
+    def resolve_workdir(self, path: str):
+        return self._resolved(path, "workdir")
 
     def write_file(self, path: str, content: str, *, action: str) -> str | None:
         failure = self._write(path, content, action)

@@ -46,7 +46,7 @@ class BashHost:
     def resolve_read(self, path):
         return os.path.realpath(os.path.join(self.workspace_root, path)), None
 
-    resolve_write = resolve_read
+    resolve_write = resolve_workdir = resolve_read
 
     def write_file(self, path, content, *, action):
         Path(path).write_text(content)

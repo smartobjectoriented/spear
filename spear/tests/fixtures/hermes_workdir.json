@@ -1,0 +1,210 @@
+{
+ "_source": "Captured from Hermes Agent v0.21.0 (0cbc6e37) itself -- tools.terminal_tool.terminal_tool, local backend -- one fresh Hermes process and session per scenario, started in <DIR> (its default cwd), which holds sub/sub2/ and gone/. Each step is [command, workdir or null]; each result is the exact string the model reads.",
+ "scenarios": {
+  "A_remembered": [
+   [
+    "cd sub",
+    null
+   ],
+   [
+    "pwd",
+    null
+   ]
+  ],
+  "B_relative": [
+   [
+    "pwd",
+    "sub"
+   ],
+   [
+    "pwd",
+    null
+   ]
+  ],
+  "C_absolute": [
+   [
+    "pwd",
+    "<DIR>/sub"
+   ],
+   [
+    "pwd",
+    null
+   ]
+  ],
+  "D_deleted_then_workdir": [
+   [
+    "cd gone",
+    null
+   ],
+   [
+    "rmdir ../gone",
+    null
+   ],
+   [
+    "pwd",
+    null
+   ],
+   [
+    "pwd",
+    "<DIR>/sub"
+   ],
+   [
+    "pwd",
+    null
+   ]
+  ],
+  "E_deleted_no_workdir": [
+   [
+    "cd gone",
+    null
+   ],
+   [
+    "rmdir ../gone",
+    null
+   ],
+   [
+    "pwd",
+    null
+   ],
+   [
+    "echo still",
+    null
+   ]
+  ],
+  "F_outside": [
+   [
+    "pwd",
+    "/"
+   ],
+   [
+    "pwd",
+    null
+   ]
+  ],
+  "G_missing": [
+   [
+    "pwd",
+    "<DIR>/nope"
+   ],
+   [
+    "pwd",
+    null
+   ]
+  ],
+  "H_cd_inside_workdir": [
+   [
+    "cd sub2 && pwd",
+    "<DIR>/sub"
+   ],
+   [
+    "pwd",
+    null
+   ]
+  ],
+  "I_disallowed_char": [
+   [
+    "pwd",
+    "sub;ls"
+   ]
+  ],
+  "J_relative_after_workdir": [
+   [
+    "pwd",
+    "<DIR>/sub"
+   ],
+   [
+    "pwd",
+    "sub2"
+   ],
+   [
+    "pwd",
+    null
+   ]
+  ],
+  "K_relative_after_deletion": [
+   [
+    "cd gone",
+    null
+   ],
+   [
+    "rmdir ../gone",
+    null
+   ],
+   [
+    "pwd",
+    "sub"
+   ]
+  ],
+  "L_relative_dotdot": [
+   [
+    "cd sub/sub2",
+    null
+   ],
+   [
+    "pwd",
+    ".."
+   ],
+   [
+    "pwd",
+    null
+   ]
+  ]
+ },
+ "results": {
+  "A_remembered": [
+   "{\"output\": \"\", \"exit_code\": 0, \"error\": null, \"cwd\": \"<DIR>/sub\"}",
+   "{\"output\": \"<DIR>/sub\", \"exit_code\": 0, \"error\": null}"
+  ],
+  "B_relative": [
+   "{\"output\": \"<DIR>/sub\", \"exit_code\": 0, \"error\": null}",
+   "{\"output\": \"<DIR>\", \"exit_code\": 0, \"error\": null}"
+  ],
+  "C_absolute": [
+   "{\"output\": \"<DIR>/sub\", \"exit_code\": 0, \"error\": null}",
+   "{\"output\": \"<DIR>\", \"exit_code\": 0, \"error\": null}"
+  ],
+  "D_deleted_then_workdir": [
+   "{\"output\": \"\", \"exit_code\": 0, \"error\": null, \"cwd\": \"<DIR>/gone\"}",
+   "{\"output\": \"pwd: error retrieving current directory: getcwd: cannot access parent directories: No such file or directory\", \"exit_code\": 0, \"error\": null}",
+   "{\"output\": \"/usr/bin/bash: line 4: cd: <DIR>/gone: No such file or directory\", \"exit_code\": 126, \"error\": null, \"hint\": \"Exit 126: the file was found but is not executable — `chmod +x` it or invoke it via its interpreter (e.g. `bash script.sh`).\"}",
+   "{\"output\": \"<DIR>/sub\", \"exit_code\": 0, \"error\": null}",
+   "{\"output\": \"/usr/bin/bash: line 4: cd: <DIR>/gone: No such file or directory\", \"exit_code\": 126, \"error\": null, \"hint\": \"Exit 126: the file was found but is not executable — `chmod +x` it or invoke it via its interpreter (e.g. `bash script.sh`).\"}"
+  ],
+  "E_deleted_no_workdir": [
+   "{\"output\": \"\", \"exit_code\": 0, \"error\": null, \"cwd\": \"<DIR>/gone\"}",
+   "{\"output\": \"pwd: error retrieving current directory: getcwd: cannot access parent directories: No such file or directory\", \"exit_code\": 0, \"error\": null}",
+   "{\"output\": \"/usr/bin/bash: line 4: cd: <DIR>/gone: No such file or directory\", \"exit_code\": 126, \"error\": null, \"hint\": \"Exit 126: the file was found but is not executable — `chmod +x` it or invoke it via its interpreter (e.g. `bash script.sh`).\"}",
+   "{\"output\": \"/usr/bin/bash: line 4: cd: <DIR>/gone: No such file or directory\", \"exit_code\": 126, \"error\": null, \"hint\": \"Exit 126: the file was found but is not executable — `chmod +x` it or invoke it via its interpreter (e.g. `bash script.sh`).\"}"
+  ],
+  "F_outside": [
+   "{\"output\": \"/\", \"exit_code\": 0, \"error\": null}",
+   "{\"output\": \"<DIR>\", \"exit_code\": 0, \"error\": null}"
+  ],
+  "G_missing": [
+   "{\"output\": \"/usr/bin/bash: line 4: cd: <DIR>/nope: No such file or directory\", \"exit_code\": 126, \"error\": null, \"hint\": \"Exit 126: the file was found but is not executable — `chmod +x` it or invoke it via its interpreter (e.g. `bash script.sh`).\"}",
+   "{\"output\": \"<DIR>\", \"exit_code\": 0, \"error\": null}"
+  ],
+  "H_cd_inside_workdir": [
+   "{\"output\": \"<DIR>/sub/sub2\", \"exit_code\": 0, \"error\": null, \"cwd\": \"<DIR>/sub/sub2\"}",
+   "{\"output\": \"<DIR>\", \"exit_code\": 0, \"error\": null}"
+  ],
+  "I_disallowed_char": [
+   "{\"output\": \"\", \"exit_code\": -1, \"error\": \"Blocked: workdir contains disallowed character ';'. Use a simple filesystem path without shell metacharacters.\", \"status\": \"blocked\"}"
+  ],
+  "J_relative_after_workdir": [
+   "{\"output\": \"<DIR>/sub\", \"exit_code\": 0, \"error\": null}",
+   "{\"output\": \"<DIR>/sub/sub2\", \"exit_code\": 0, \"error\": null, \"cwd\": \"<DIR>/sub/sub2\"}",
+   "{\"output\": \"<DIR>\", \"exit_code\": 0, \"error\": null}"
+  ],
+  "K_relative_after_deletion": [
+   "{\"output\": \"\", \"exit_code\": 0, \"error\": null, \"cwd\": \"<DIR>/gone\"}",
+   "{\"output\": \"pwd: error retrieving current directory: getcwd: cannot access parent directories: No such file or directory\", \"exit_code\": 0, \"error\": null}",
+   "{\"output\": \"<DIR>/sub\", \"exit_code\": 0, \"error\": null}"
+  ],
+  "L_relative_dotdot": [
+   "{\"output\": \"\", \"exit_code\": 0, \"error\": null, \"cwd\": \"<DIR>/sub/sub2\"}",
+   "{\"output\": \"<DIR>/sub\", \"exit_code\": 0, \"error\": null, \"cwd\": \"<DIR>/sub\"}",
+   "{\"output\": \"<DIR>/sub/sub2\", \"exit_code\": 0, \"error\": null}"
+  ]
+ }
+}

@@ -10,6 +10,7 @@ the model as Hermes' tool_error JSON with the host's short reason.
 from __future__ import annotations
 
 import json
+import os
 from typing import Mapping
 
 from . import tools
@@ -121,8 +122,9 @@ def delete_file(host: Host, state, call_id, args):
 
 def terminal(host: Host, state, call_id, args):
     command = str(args.get("command") or "")
-    session = state.setdefault("terminal", {"cwd": None, "env": ""})
+    session = state.setdefault("terminal", {"cwd": None, "env": "", "last": None})
     timeout = tools.terminal_timeout(args.get("timeout"))
+    workdir = str(args.get("workdir") or "") or None
 
     if timeout is None:
         text = tools.tool_error(
@@ -131,11 +133,31 @@ def terminal(host: Host, state, call_id, args):
         return text, ToolRecord(call_id, "terminal", args, text, False,
                                 command=command)
 
+    # terminal_tool.py _resolve_command_cwd: an explicit workdir, else the
+    # session's recorded cwd, else the workspace root. The shell starts where
+    # the last command finished (or above it, once deleted), and a relative
+    # workdir is resolved from there.
+
+    start = tools.usable_dir(session.get("last") or host.workspace_root)
+    cwd = workdir or session["cwd"] or host.workspace_root
+
+    if workdir:
+        refusal = tools.workdir_refusal(workdir)
+
+        if not refusal:
+            target = os.path.join(start, os.path.expanduser(workdir))
+            _, refusal = host.resolve_workdir(os.path.normpath(target))
+
+        if refusal:
+            text = tools.terminal_blocked(refusal)
+            return text, ToolRecord(call_id, "terminal", args, text, False, refused=True,
+                                    command=command)
+
     outcome = host.run_command(
-        command, tools.session_script(command, session["cwd"], session["env"], timeout),
+        command, tools.session_script(command, cwd, session["env"], timeout, start),
         timeout=timeout + 15, output_chars=tools.MAX_OUTPUT_CHARS + 30_000)
     text, exit_code, timed_out = tools.terminal_from_outcome(
-        command, outcome, session, host.workspace_root, timeout)
+        command, outcome, session, host.workspace_root, timeout, workdir)
 
     return text, ToolRecord(call_id, "terminal", args, text,
                             outcome.status == "ok" and exit_code == 0,
@@ -145,6 +167,45 @@ def terminal(host: Host, state, call_id, args):
 
 HANDLERS = {"read_file": read_file, "search_files": search_files, "patch": patch,
             "write_file": write_file, "delete_file": delete_file, "terminal": terminal}
+
+#: Every argument each handler reads. A schema may declare nothing else: an
+#: argument the model is offered must change what the tool does.
+ARGUMENTS = {
+    "read_file": frozenset({"path", "offset", "limit"}),
+    "search_files": frozenset({"pattern", "target", "path", "file_glob", "limit", "offset",
+                               "output_mode", "context"}),
+    "patch": frozenset({"path", "old_string", "new_string", "replace_all"}),
+    "write_file": frozenset({"path", "content"}),
+    "delete_file": frozenset({"path", "reason"}),
+    "terminal": frozenset({"command", "timeout", "workdir"}),
+}
+
+
+class ToolContractError(ValueError):
+    """The model would be offered a tool, or an argument, nothing executes."""
+
+
+def check_contract(tool_definitions) -> None:
+    """Refuse a tool surface that is not wholly executable here."""
+    problems = []
+
+    for item in tool_definitions:
+        function = item.get("function", item)
+        name = function.get("name")
+
+        if name not in HANDLERS:
+            problems.append(f"{name}: no handler")
+            continue
+
+        declared = set((function.get("parameters") or {}).get("properties") or {})
+        unread = sorted(declared - ARGUMENTS[name])
+
+        if unread:
+            problems.append(f"{name}: arguments no handler reads: {', '.join(unread)}")
+
+    if problems:
+        raise ToolContractError("tool surface not executable by the agent core -- "
+                                + "; ".join(problems))
 
 
 def execute(host: Host, state, call_id: str, name: str,

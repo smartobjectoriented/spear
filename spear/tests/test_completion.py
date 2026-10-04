@@ -159,8 +159,13 @@ class TheToolsetFollowsTheTaskType(unittest.TestCase):
 
         self.assertEqual(set(names), {"read_file", "search_files", "terminal"})
 
-    def test_an_index_adds_corpus_search(self):
-        self.assertIn("search_corpus", self.select(self.REQUEST, toolset="coding"))
+    def test_an_index_adds_nothing_the_core_cannot_run(self):
+        from agent import dispatch
+
+        names = self.select(self.REQUEST, toolset="coding")
+
+        self.assertNotIn("search_corpus", names)
+        self.assertTrue(set(names) <= set(dispatch.HANDLERS))
 
     def test_other_views_never_see_the_coding_tools(self):
         names = self.select(self.REQUEST)

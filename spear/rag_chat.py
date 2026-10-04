@@ -2198,10 +2198,12 @@ def run_cmd_result(cmd, need_confirm=True, cancellation=None, execution_mode=Non
     `cmd` is what is classified and authorised. `exec_cmd`, when given, is
     what runs in its place: the same command inside a harness-built script
     (the terminal's carried-over session), never anything the policy did not
-    judge. `timeout` replaces the sandbox's default for this call.
+    judge -- and judged as the script it runs in. `timeout` replaces the
+    sandbox's default for this call.
     """
     mode = execution_mode or EXECUTION_MODE
-    assessment = COMMAND_POLICY.classify(cmd)
+    assessment = (COMMAND_POLICY.classify_script(cmd) if exec_cmd
+                  else COMMAND_POLICY.classify(cmd))
     authorization = COMMAND_POLICY.authorize(assessment, mode,
                                                approve=confirm)
 
@@ -5995,11 +5997,16 @@ def coding_host(agent_context, cache, record):
                                   cancellation=getattr(agent_context, "cancellation", None),
                                   phase_ledger=getattr(agent_context, "work_phase", None))
 
-    def authorize(name, arguments):
+    def authorize(name, arguments, cwd=None):
         print()
         tool_use(_CORE_LABELS.get(name, name), _core_summary(name, arguments),
                  color=C_ACCENT if name in ("patch", "write_file", "delete_file") else C_TOOL)
-        return TOOL_ROUTER.authorize(context(), name, arguments)
+        ctx = context()
+
+        if cwd:
+            ctx.metadata = {**ctx.metadata, "command_cwd": cwd}
+
+        return TOOL_ROUTER.authorize(ctx, name, arguments)
 
     def resolve(path, purpose):
         return str(resolve_path(path))

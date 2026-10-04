@@ -1484,6 +1484,35 @@ class CommandPolicy:
 
         return self._with_host_reads(self._classify_argv(command, argv), host_reads)
 
+    def classify_script(self, command: str) -> CommandAssessment:
+        """A command the coding core's terminal runs: always as a bash script.
+
+        The simple-argv allowlist refused `cd dir`, `mkdir -p dir` or `bitbake
+        x` while `cd dir && ls`, `true && mkdir -p dir` and `. ./env.sh &&
+        bitbake x` ran -- the same words, judged by a stricter rule only
+        because they had no shell syntax. The core runs every command through
+        bash either way, so a refused simple command is judged again as the
+        script it is. What the shell analysis itself refuses (rm, mv,
+        inline interpreters, sed -i, writes outside the workspace) stays
+        refused, with its own reason.
+        """
+        assessment = self.classify(command)
+
+        if (assessment.classification != CommandClassification.DANGEROUS
+                or not command or not command.strip() or "\x00" in command
+                or self._SHELL_SYNTAX.search(self._strip_heredoc_bodies(command))):
+            return assessment
+
+        capabilities, danger, outside, refusal = self._shell_capabilities(
+            self._strip_heredoc_bodies(command))
+
+        if danger or refusal:
+            return assessment
+
+        return self._assessment(command, (), CommandClassification.SHELL_COMPLEX,
+                                "session script", capabilities,
+                                host_read_paths=outside)
+
     def _with_host_reads(self, assessment: CommandAssessment,
                          host_reads: Sequence[str]) -> CommandAssessment:
         """Attach vetted outside paths to an assessment that may run.

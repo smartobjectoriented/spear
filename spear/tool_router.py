@@ -373,10 +373,13 @@ class ToolRouter:
 
             # And what it writes: the shell obeys the target scope edit_file
             # does, or --auto turns `cp`, `sed -i` and `python -c` into the
-            # way round it.
+            # way round it. Relative operands are read from where the command
+            # runs, when the caller knows it (the coding core's session cwd or
+            # workdir).
             if not refusal:
                 refusal = request_scope.shell_write_refusal(
-                    arguments["command"], context.scope)
+                    arguments["command"], context.scope,
+                    cwd=(context.metadata or {}).get("command_cwd"))
                 category = "outside_requested_scope"
 
             if refusal:

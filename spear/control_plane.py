@@ -57,6 +57,11 @@ CORE_VOCABULARY = (
                           "behind.")),
      " — delete a file with delete_file; nothing renames one (write the new "
      "path with write_file, then delete_file the old one)."),
+    (re.compile(r"'(rm|rmdir|unlink|shred|mv|rename)' is not allowlisted, so the "
+                r"pipeline that contains it cannot run\."),
+     r"'\1' is not allowlisted, so the pipeline that contains it cannot run: "
+     r"delete a file with delete_file; nothing renames one (write the new path "
+     r"with write_file, then delete_file the old one)."),
 )
 
 

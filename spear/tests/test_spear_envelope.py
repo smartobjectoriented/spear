@@ -15,6 +15,7 @@ from __future__ import annotations
 import io
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -333,6 +334,20 @@ class AnAdvisoryTurnChangesNothing(Envelope):
 
 
 @unittest.skipUnless(SANDBOX, "needs the bubblewrap sandbox")
+class ARefusalPointsAtTheCoresOwnTools(Envelope):
+    """Item 15: a refused `rm` names delete_file, however it was written."""
+
+    def test_rm_alone_and_in_a_pipeline(self):
+        call = self.spear_session()
+
+        for command in ("rm a.txt", "cd sub && rm b.c"):
+            with self.subTest(command=command):
+                self.assertIn("delete_file", self.assertRefused(call("terminal", command=command)))
+
+        self.assertTrue(Path(self.root, "a.txt").exists())
+
+
+@unittest.skipUnless(SANDBOX, "needs the bubblewrap sandbox")
 class DeletingALinkDeletesTheLink(Envelope):
     """A link is resolved to what it points at; deleting it must not be."""
 
@@ -412,7 +427,7 @@ class TheVocabularyTableMatchesItsSources(unittest.TestCase):
         sources = " ".join(sources.split())
 
         for pattern, _ in control_plane.CORE_VOCABULARY:
-            literal = pattern.pattern.replace("\\", "")
+            literal = re.sub(r"^'\([^)]*\)' ", "", pattern.pattern).replace("\\", "")
             probe = literal.split(".*?")[0].strip()[:40]
 
             with self.subTest(phrase=probe):

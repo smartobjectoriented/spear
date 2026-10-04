@@ -348,6 +348,32 @@ class ARefusalPointsAtTheCoresOwnTools(Envelope):
 
 
 @unittest.skipUnless(SANDBOX, "needs the bubblewrap sandbox")
+class AssignmentsAndBuildCopies(Envelope):
+    """Found by the paired runs: an environment prefix is not a program, and
+    an edit to a build's working copy is sent to its source."""
+
+    def test_an_assignment_prefix_runs_its_command(self):
+        call = self.spear_session()
+        text, record = call("terminal", command="cd sub && GREETING=hi printenv GREETING")
+
+        self.assertFalse(record.refused, text)
+        self.assertEqual(json.loads(text)["output"], "hi")
+        self.assertRefused(call("terminal", command="X=1 rm a.txt"))
+
+    def test_a_build_working_copy_names_its_source(self):
+        os.makedirs(f"{self.root}/build/tmp/work/board")
+        Path(self.root, "build/tmp/work/board/post_image.sh").write_text("#!/bin/sh\n")
+        call = self.spear_session()
+        text, record = call("write_file", path="build/tmp/work/board/post_image.sh",
+                            content="#!/bin/bash\n")
+
+        self.assertFalse(record.ok or record.changed_paths)
+        self.assertIn("generated file — change its source", json.loads(text)["error"])
+        self.assertEqual(Path(self.root, "build/tmp/work/board/post_image.sh").read_text(),
+                         "#!/bin/sh\n")
+
+
+@unittest.skipUnless(SANDBOX, "needs the bubblewrap sandbox")
 class DeletingALinkDeletesTheLink(Envelope):
     """A link is resolved to what it points at; deleting it must not be."""
 

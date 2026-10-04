@@ -333,6 +333,33 @@ class AnAdvisoryTurnChangesNothing(Envelope):
 
 
 @unittest.skipUnless(SANDBOX, "needs the bubblewrap sandbox")
+class DeletingALinkDeletesTheLink(Envelope):
+    """A link is resolved to what it points at; deleting it must not be."""
+
+    def test_the_source_a_link_points_at_survives(self):
+        os.makedirs(f"{self.root}/images")
+        os.symlink("../board/virt64/initrd.cpio", f"{self.root}/images/initrd.cpio")
+        call = self.spear_session("Recreate the images/initrd.cpio link in board/virt64")
+        text, record = call("delete_file", path="images/initrd.cpio", reason="recreate")
+
+        self.assertFalse(record.refused, text)
+        self.assertFalse(os.path.lexists(f"{self.root}/images/initrd.cpio"))
+        self.assertTrue(Path(self.root, "board/virt64/initrd.cpio").is_file())
+
+    def test_a_link_into_a_build_tree_can_still_go(self):
+        os.makedirs(f"{self.root}/build/tmp/work")
+        Path(self.root, "build/tmp/work/initrd.cpio").write_text("x")
+        os.makedirs(f"{self.root}/images")
+        os.symlink("../build/tmp/work/initrd.cpio", f"{self.root}/images/initrd.cpio")
+        call = self.spear_session("Recreate the images/initrd.cpio link")
+        text, record = call("delete_file", path="images/initrd.cpio", reason="recreate")
+
+        self.assertFalse(record.refused, text)
+        self.assertFalse(os.path.lexists(f"{self.root}/images/initrd.cpio"))
+        self.assertTrue(Path(self.root, "build/tmp/work/initrd.cpio").exists())
+
+
+@unittest.skipUnless(SANDBOX, "needs the bubblewrap sandbox")
 class TheRecordIsTheEvidence(Envelope):
     """Items 16-17: refusals are recorded, never counted, and the verdict
     rewrites a claim the record does not support."""

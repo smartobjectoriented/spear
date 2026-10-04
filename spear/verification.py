@@ -146,6 +146,12 @@ _INTEGRATION = re.compile(r"\b(?:integration|e2e|end[-_ ]to[-_ ]end)\b", re.I)
 
 _BUILD_TREE = re.compile(r"(?:^|[/ ])(?:make|ninja|cmake --build|cargo build|go build|mvn|gradle|npm run build|pnpm build|yarn build)(?:\s|$)", re.I)
 
+# bitbake and a project's build.sh are the build in a Yocto/BitBake tree:
+# without them a turn that changed a recipe and rebuilt the BSP had, as far
+# as the verdict could tell, run nothing. Only as the program a stage runs --
+# `grep bitbake` and `cat build.sh` build nothing.
+_BUILD_PROGRAM = re.compile(r"(?:^|&&|\|\||[;|])\s*(?:\S*/)?(?:bitbake|build\.sh)(?:\s|$)", re.I)
+
 # A compiler invoked directly is the most basic build check there is, and it
 # was the only one this list could not see: a turn that edited three C files
 # and compiled each with `gcc -c` had, as far as every gate was concerned,
@@ -224,7 +230,7 @@ class VerificationPolicy:
             return (VerificationCategory.UNIT_TEST,
                     VerificationCoverage.PARTIAL if targeted else VerificationCoverage.FULL)
 
-        if _BUILD_TREE.search(normalized):
+        if _BUILD_TREE.search(normalized) or _BUILD_PROGRAM.search(normalized):
             return VerificationCategory.BUILD, VerificationCoverage.FULL
 
         if _COMPILER.search(normalized):

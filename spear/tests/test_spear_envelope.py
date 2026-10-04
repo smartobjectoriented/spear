@@ -496,3 +496,25 @@ class TheVocabularyTableMatchesItsSources(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ABitbakeBuildIsABuild(unittest.TestCase):
+    """The verdict reads bitbake and build.sh as the build they are, and only
+    when they are the program run."""
+
+    def test_classification(self):
+        from verification import VerificationCategory, VerificationPolicy
+
+        policy = VerificationPolicy()
+        cases = {
+            "cd /w && . ./env.sh && bitbake rootfs-linux -c clean && bitbake rootfs-linux": True,
+            "./scripts/build.sh -c rootfs-linux": True,
+            "source env.sh && build.sh bsp-linux 2>&1 | tail -20": True,
+            "grep -rn bitbake build/conf": False,
+            "cat scripts/build.sh": False,
+        }
+
+        for command, build in cases.items():
+            with self.subTest(command=command):
+                category, _ = policy.classify_command(command, changed_paths=("a.bb",))
+                self.assertEqual(category == VerificationCategory.BUILD, build)

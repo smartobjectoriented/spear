@@ -1361,6 +1361,13 @@ class CommandPolicy:
             except ValueError:
                 continue
 
+            # `VAR=value cmd` runs cmd: the assignments are its environment,
+            # not the program. Read as argv[0], `BASE_DIR=/x/y ./post_image.sh`
+            # was refused as a program named by an outside path.
+
+            while argv and self._ASSIGNMENT.match(argv[0]):
+                argv = argv[1:]
+
             if not argv:
                 continue
 
@@ -1483,6 +1490,8 @@ class CommandPolicy:
                                     refusal + self.boundary_hint())
 
         return self._with_host_reads(self._classify_argv(command, argv), host_reads)
+
+    _ASSIGNMENT = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*=")
 
     def classify_script(self, command: str) -> CommandAssessment:
         """A command the coding core's terminal runs: always as a bash script.

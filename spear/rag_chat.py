@@ -6042,6 +6042,13 @@ def coding_host(agent_context, cache, record):
             audit_denied_mutation(action, "safe mode", paths=(resolved,))
             return "this session does not allow writes"
 
+        # A build's working copy is the more useful name for it: the edit
+        # belongs in the source the build copies from, and saying so is what
+        # sends the model there.
+
+        if re.search(r"/generated/|/build/tmp/", resolved):
+            return f"{label} is a generated file — change its source"
+
         if is_excluded_path(Path(resolved)):
             return f"{label} is a snapshot or third-party copy"
 
@@ -6051,7 +6058,7 @@ def coding_host(agent_context, cache, record):
         except OSError:
             head = ""
 
-        if re.search(r"/generated/|/build/tmp/", resolved) or _GENERATED_RE.search(head):
+        if _GENERATED_RE.search(head):
             return f"{label} is a generated file — change its source"
 
         blocked = authorize_mutation(f"Modify {C_BOLD}{label}{C_RST} ?",

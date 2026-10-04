@@ -3755,13 +3755,23 @@ class AgentRuntime:
                 return backend.complete_messages(messages, tools, max_tokens=max_tokens,
                                                  on_token=tick)
 
+        # The core reserves MAX_TOKENS of output and stops for a summary once a
+        # prompt passes half of what is left. Against a window that small
+        # reservation does not fit -- the 32768-token default when a server
+        # states none -- that threshold is negative, and every turn stopped
+        # after its first reply. Such a window gets a quarter of itself.
+
+        window = context.context_limit
+        max_tokens = (core_loop.MAX_TOKENS if not window or window > 2 * core_loop.MAX_TOKENS
+                      else window // 4)
+
         try:
             core = core_loop.run(
                 model=model, host=host, system=system, history=history,
                 request=request, tool_definitions=definitions,
                 max_iterations=context.max_model_rounds,
                 max_tool_calls=context.max_tool_actions,
-                context_window=context.context_limit,
+                context_window=window, max_tokens=max_tokens,
                 cancelled=lambda: context.cancellation.is_cancelled)
         except (KeyboardInterrupt, OperationCancelled) as exc:
             summary = (exc.reason if isinstance(exc, OperationCancelled)

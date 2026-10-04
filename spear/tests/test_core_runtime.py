@@ -137,3 +137,42 @@ class OneCodingLoop(unittest.TestCase):
         self.assertEqual(result.terminal_reason, RuntimeTerminalReason.COMPLETED)
         self.assertEqual(context.core_verdict.state, "VERIFIED")
         self.assertEqual(len(patches), len(self.TRIPWIRES) + 2)
+
+
+class ASmallWindowStillRuns(unittest.TestCase):
+    """The core's output reservation fits the window SPEAR runs it in."""
+
+    def reservations(self, window):
+        seen = []
+
+        class Recording(Backend):
+            def complete_messages(self, messages, tools, *, max_tokens, on_token=None):
+                seen.append(max_tokens)
+                return super().complete_messages(messages, tools, max_tokens=max_tokens)
+
+        root = tempfile.mkdtemp()
+        Path(root, "a.sh").write_text("#!/bin/sh\necho alpha\n")
+        backend = Recording([turn("", call("c1", "read_file", path="a.sh")), turn("Done.")])
+        context = make_context(backend, rounds=10, actions=10)
+        context.execution_core = "coding"
+        context.tools = TOOLS
+        context.project_root = root
+        context.context_limit = window
+        host = Host(root)
+        context.coding_host = lambda ctx, cache, record: _Recording(host, record)
+        result = AgentRuntime().run(context)
+
+        return seen, result
+
+    def test_the_default_window_gets_a_quarter_of_itself(self):
+        seen, result = self.reservations(32_768)
+
+        self.assertEqual(seen, [8_192, 8_192])
+        self.assertEqual(result.terminal_reason, RuntimeTerminalReason.COMPLETED)
+
+    def test_a_large_window_keeps_the_cores_reservation(self):
+        from agent import loop
+
+        seen, _ = self.reservations(524_288)
+
+        self.assertEqual(seen, [loop.MAX_TOKENS, loop.MAX_TOKENS])

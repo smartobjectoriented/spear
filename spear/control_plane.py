@@ -88,6 +88,8 @@ class SpearHost:
         # starts, and `last`, where the last command finished. A command's
         # relative paths are judged from where it runs, not from the root.
         self._session = {"cwd": None, "last": None}
+        # The path the delete_file call being authorised asked for, as written.
+        self._deleting = ""
 
     @staticmethod
     def _short(message: str) -> str:
@@ -116,6 +118,10 @@ class SpearHost:
         arguments = {key: value for key, value in arguments.items()
                      if key != "scope_reason"}
         cwd = self.command_cwd(arguments) if name == "terminal" else None
+
+        if name == "delete_file":
+            self._deleting = str(arguments.get("path") or "")
+
         refusal = self._authorize(name, arguments, cwd)
         return self._short(refusal) if refusal else None
 
@@ -139,8 +145,21 @@ class SpearHost:
         return self._short(failure) if failure else None
 
     def delete_file(self, path: str, reason: str) -> str | None:
-        failure = self._delete(path, reason)
+        # The core resolved the path, following a link to what it points at.
+        # When the path asked for names a link, the link is what is deleted,
+        # and the delete port judges it as one.
+        requested = self._deleting
+        failure = self._delete(requested if self._names_link(requested) else path, reason)
         return self._short(failure) if failure else None
+
+    def _names_link(self, path: str) -> bool:
+        if not path:
+            return False
+
+        candidate = path if os.path.isabs(path) else os.path.join(self.workspace_root, path)
+        directory, refusal = self._resolved(os.path.dirname(candidate), "write")
+
+        return not refusal and os.path.islink(os.path.join(directory, os.path.basename(candidate)))
 
     def run_command(self, command: str, script: str, *, timeout: int,
                     output_chars: int) -> CommandOutcome:

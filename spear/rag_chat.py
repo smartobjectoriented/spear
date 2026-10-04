@@ -5397,6 +5397,25 @@ def _registered_append_file(context, args):
     return _classified_handler_result(result, mutation=True, affected_paths=affected)
 
 
+def named_link(path):
+    """The symbolic link `path` names, inside the workspace, or None.
+
+    Resolving a path follows its links, so deleting a link removed what it
+    pointed to: a link to a tracked source took the source with it. The
+    directory holding the link is what the workspace policy judges; the link
+    itself is what goes.
+    """
+    path = str(path).strip().strip("'\"")
+
+    if not path:
+        return None
+
+    candidate = Path(path) if os.path.isabs(path) else Path(WORKSPACE.root) / path
+    named = Path(resolve_path(str(candidate.parent))) / candidate.name
+
+    return named if named.is_symlink() else None
+
+
 def _registered_delete_file(context, args):
     """Remove a file, having first captured it so /undo can bring it back.
 
@@ -5420,7 +5439,7 @@ def _registered_delete_file(context, args):
         print(f"  {C_DIM}⎿  {reason[:150]}{C_RST}")
 
     try:
-        fpath = resolve_path(path)
+        fpath = named_link(path) or resolve_path(path)
     except PathPolicyError as exc:
         result = f"ERROR: {exc}"
         audit_rejected_mutation("delete_file", str(exc), paths=(path,))
@@ -5429,7 +5448,7 @@ def _registered_delete_file(context, args):
 
         return _classified_handler_result(result)
 
-    if not os.path.isfile(fpath):
+    if not os.path.isfile(fpath) and not os.path.islink(fpath):
         result = (f"ERROR: {path} is not an existing regular file. Nothing "
                   f"was deleted." if not os.path.isdir(fpath) else
                   f"ERROR: {path} is a directory. delete_file removes one "

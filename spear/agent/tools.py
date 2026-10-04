@@ -1107,8 +1107,77 @@ def terminal_timeout(value):
     return max(1, timeout)
 
 
-def session_script(command: str, cwd: str | None, exports: str, timeout: int) -> str:
-    """The sandboxed script that runs `command` in the carried-over session."""
+# terminal_tool.py _validate_workdir: an allowlist, so no shell metacharacter
+# reaches the `cd` even before it is quoted.
+
+_WORKDIR_SAFE_ASCII = frozenset('/\\:_-.~ +@=,')
+
+
+def workdir_refusal(workdir: str) -> str | None:
+    """Hermes' refusal of a workdir that does not look like a path, or None."""
+    for ch in workdir:
+        if ord(ch) < 32 or ord(ch) == 127 or not (ch.isalnum() or ch in _WORKDIR_SAFE_ASCII):
+            return (f"Blocked: workdir contains disallowed character {ch!r}. "
+                    "Use a simple filesystem path without shell metacharacters.")
+
+    return None
+
+
+def terminal_blocked(error: str) -> str:
+    """terminal_tool's answer to a call refused before it runs."""
+    return json.dumps({"output": "", "exit_code": -1, "error": error, "status": "blocked"},
+                      ensure_ascii=False)
+
+
+def quote_cwd_for_cd(cwd: str) -> str:
+    """base.py _quote_cwd_for_cd: quoted, with `~` and `~/...` still expanded."""
+    import shlex
+
+    if cwd == "~":
+        return cwd
+
+    if cwd == "~/":
+        return "$HOME"
+
+    if cwd.startswith("~/"):
+        return f"$HOME/{shlex.quote(cwd[2:])}"
+
+    return shlex.quote(cwd)
+
+
+def usable_dir(path: str) -> str:
+    """local.py _resolve_safe_cwd: `path`, or its nearest enterable ancestor.
+
+    Where Hermes starts the shell: the directory the last command finished
+    in, or above it once that directory has been deleted. A relative
+    workdir is resolved from here.
+    """
+    import tempfile
+
+    if os.path.isdir(path) and os.access(path, os.X_OK):
+        return path
+
+    parent = os.path.dirname(path)
+
+    while parent:
+        if os.path.isdir(parent) and os.access(parent, os.X_OK):
+            return parent
+
+        if os.path.dirname(parent) == parent:
+            break
+
+        parent = os.path.dirname(parent)
+
+    return tempfile.gettempdir()
+
+
+def session_script(command: str, cwd: str | None, exports: str, timeout: int,
+                   start: str | None = None) -> str:
+    """The sandboxed script that runs `command` in the carried-over session.
+
+    `cwd` is what the command's `cd` enters, as given; `start` is where the
+    shell starts, which a relative `cwd` is resolved from.
+    """
     import secrets
     import shlex
 
@@ -1133,7 +1202,7 @@ def session_script(command: str, cwd: str | None, exports: str, timeout: int) ->
         'source "$__SPEAR_D/snap" >/dev/null 2>&1 || true',
         'export AI_AGENT="${AI_AGENT:-hermes-agent}" HERMES_AGENT="${HERMES_AGENT:-true}"',
         'export GIT_PAGER="${GIT_PAGER:-cat}" PAGER="${PAGER:-cat}"',
-        f"builtin cd -- {shlex.quote(cwd) if cwd else '.'} || exit 126",
+        f"builtin cd -- {quote_cwd_for_cd(cwd) if cwd else '.'} || exit 126",
         f"eval '{escaped}'",
         "__spear_ec=$?",
         'pwd -P > "$__SPEAR_D/cwd"', 'export -p > "$__SPEAR_D/env"',
@@ -1149,6 +1218,7 @@ def session_script(command: str, cwd: str | None, exports: str, timeout: int) ->
         *inner,
         tag,
         "export __SPEAR_D",
+        *([f"builtin cd -- {shlex.quote(start)} 2>/dev/null"] if start else []),
         f"timeout -k 2 {int(timeout)} \"$(command -v bash)\" -c \"$(cat \"$__SPEAR_D/inner\")\" "
         "> \"$__SPEAR_D/out\" 2>&1 < /dev/null",
         "__spear_ec=$?",
@@ -1196,8 +1266,15 @@ def _parse_session(stdout: str):
 
 
 def terminal_from_outcome(command: str, outcome, session: dict, root: str,
-                          timeout: int):
-    """(the JSON the model reads, exit code, timed out) for one command."""
+                          timeout: int, workdir: str | None = None):
+    """(the JSON the model reads, exit code, timed out) for one command.
+
+    The session keeps two directories, as Hermes does: `cwd`, the one later
+    commands enter (terminal_tool's session record), and `last`, the one the
+    last command finished in (the environment's cwd). A command given a
+    workdir moves only `last`: the override is for that command alone
+    (terminal_tool.py, "a per-command workdir override is transient").
+    """
     if outcome.status == "denied":
         return (json.dumps({"output": "", "exit_code": -1,
                             "error": outcome.summary or "refused",
@@ -1227,11 +1304,18 @@ def terminal_from_outcome(command: str, outcome, session: dict, root: str,
         code = 124
         output = (output + f"\n[Command timed out after {timeout}s]").lstrip("\n")
 
-    before = session.get("cwd") or root
+    # The directory the command was sent to, as Hermes compares it: a
+    # relative workdir is taken from Hermes' own process directory, the
+    # workspace root.
+
+    before = os.path.join(root, workdir) if workdir else (session.get("cwd") or root)
     moved = None
 
     if cwd and not timed_out:
-        session["cwd"], session["env"] = cwd, exports
+        session["env"], session["last"] = exports, cwd
+
+        if not workdir:
+            session["cwd"] = cwd
 
         if os.path.realpath(cwd) != os.path.realpath(before):
             moved = cwd

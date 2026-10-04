@@ -52,7 +52,7 @@ class Host:
     def resolve_read(self, path):
         return str(Path(self.workspace_root, path)), None
 
-    resolve_write = resolve_read
+    resolve_write = resolve_workdir = resolve_read
 
     def write_file(self, path, content, *, action):
         Path(path).parent.mkdir(parents=True, exist_ok=True)

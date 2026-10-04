@@ -137,8 +137,11 @@ def run(*, model: Callable, host: Host, system: str, history: list, request: str
     """Run one user turn to its answer.
 
     `model(messages, tools, max_tokens)` returns a model_backend.RawTurn.
-    `history` holds earlier turns as {"role", "content"} dicts.
+    `history` holds earlier turns as {"role", "content"} dicts. Raises
+    dispatch.ToolContractError before the first request when a tool, or one
+    of its arguments, would be offered that nothing here executes.
     """
+    dispatch.check_contract(tool_definitions)
     messages = [{"role": "system", "content": system}, *history,
                 {"role": "user", "content": request}]
     names = tuple(item["function"]["name"] for item in tool_definitions)

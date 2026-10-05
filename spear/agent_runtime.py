@@ -1240,6 +1240,15 @@ _WRITE_REQUEST_RE = re.compile(
     r"\b(?:do|make|apply|carry\s+out|perform)\s+(?:the\s+|these\s+|those\s+|"
     r"all\s+(?:the\s+)?)?(?:\w+\s+){0,2}?(?:modifications?|changes?|edits?|"
     r"task|work|fix(?:es)?)"
+    # "Make timer_init() set up the counter", "make the encoder emit one
+    # packet per request": a causative imperative whose object is something
+    # in the tree -- a function, a file, or the code by an ordinary name --
+    # asks for that thing to behave differently. "make sure" and "make a
+    # list" name nothing in the tree.
+    r"|(?:^|[.!?;:]\s+)(?:please\s+)?make\s+(?:the\s+|this\s+|that\s+|our\s+)?"
+    r"(?:[A-Za-z_]\w*\(\)|[\w/-]{2,}\.(?:c|h|cc|cpp|hpp|py|rs|go|js|ts|java|sh)\b|"
+    r"(?:implementation|code|function|method|class|module|script|program|build|"
+    r"tests?|driver|firmware|encoder|decoder|parser|header)\b)"
     r"|\b(?:implement|write|edit|patch|refactor|rename|add|create|update|fix|"
     r"modify|remove|delete|adapt|adjust|amend|revise|rework|correct|move|"
     r"relocate)\b"

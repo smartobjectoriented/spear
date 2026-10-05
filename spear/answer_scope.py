@@ -47,6 +47,15 @@ _LOCAL_SUBJECT = re.compile(
     r"implémentation|impl[ée]menter|fichiers?|fonctions?|"
     r"our\s+\w+|this\s+project|the\s+project)\b", re.I)
 
+#: A name only a working tree has: a file, by its extension, or a function,
+#: by its call. Syntax rather than vocabulary, so it holds for any codebase. A
+#: one-letter stem is not a file: "M.c" is a revision of a standard.
+CODE_SHAPED = re.compile(
+    r"(?<![\w.])[\w/-]{2,}\.(?:c|h|cc|cpp|cxx|hh|hpp|py|rs|go|js|ts|java|kt|sh|S|s|"
+    r"ld|lds|dts|dtsi|cmake|mk|bb|bbappend|bbclass|conf|ya?ml|json|toml|ini)\b"
+    r"|\b[A-Za-z_]\w*\(\)"
+    r"|\b(?:Makefile|CMakeLists\.txt|Kconfig|Dockerfile)\b")
+
 #: The document, as the thing being asked about.
 _DOCUMENT_SUBJECT = re.compile(
     r"\b(?:standard|specification|spec|clause|rule|rules|provision|"
@@ -54,7 +63,7 @@ _DOCUMENT_SUBJECT = re.compile(
     # Measuring something AGAINST the document names the document as surely
     # as saying its name does: "does that comply" is a question about both
     # sides, and used to be a question about the implementation alone.
-    r"compl(?:y|ies|iant|iance)|conform(?:s|ant|ance|e)?)\b", re.I)
+    r"compl(?:y|ies|iant|iance)|conform(?:s|ant|ance|e)?)\b(?!\.\w)", re.I)
 
 #: A message that cannot be read on its own. Only counted at the START of the
 #: message, where a referent stands in for the thing just discussed: "does that
@@ -89,7 +98,8 @@ def of(message, *, prior=None, standard_bound=False):
     binding and never the phrasing.
     """
     text = (message or "").strip()
-    local = bool(_LOCAL_SUBJECT.search(text)) or bool(_CHANGE.search(text))
+    local = (bool(_LOCAL_SUBJECT.search(text)) or bool(_CHANGE.search(text))
+             or bool(CODE_SHAPED.search(text)))
     document = bool(_DOCUMENT_SUBJECT.search(text))
     refers_back = bool(prior and _REFERENT.match(text))
 

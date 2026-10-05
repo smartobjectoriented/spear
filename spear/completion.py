@@ -12,10 +12,12 @@ did, and it is written into the answer itself:
                     tool log ("OK: <path> updated", "(exit N)", "ERROR: ...").
                     A display: its head is cut to 200 characters, so nothing
                     is decided from it.
-  decide            VERIFIED when files changed and the last verification
-                    run after the change completed and passed; UNVERIFIED
-                    when files changed without that; NO_CHANGE otherwise.
-                    Decided from the structured evidence alone.
+  decide            VERIFIED when source changed and the checks that would
+                    show what the answer claims passed after the last source
+                    change (a build for a build, a clean, a build and a look
+                    for a link surviving both); UNVERIFIED when source changed
+                    without that; NO_CHANGE otherwise. Decided from the
+                    structured evidence alone.
   qualify           an UNVERIFIED answer opens with the verdict, and every
                     sentence that asserts success unconditionally is marked
                     as unverified where it stands, so the answer cannot say
@@ -49,19 +51,259 @@ class Evidence:
     exit_code: int | None = None
     refused: bool = False
     timed_out: bool = False
+    output: str = ""                # a command's output, its tail
 
 
 def evidence(record: ToolRecord, label=lambda path: path) -> Evidence:
     changed = (tuple(label(path) for path in record.changed_paths)
-               if record.name in WRITE_TOOLS and not record.refused else ())
+               if record.name in WRITE_TOOLS + ("delete_file",) and not record.refused else ())
+    output = ""
+
+    if record.name == "terminal":
+        try:
+            output = str(json.loads(record.result).get("output") or "")[-2000:]
+        except (ValueError, AttributeError):
+            output = ""
 
     return Evidence(record.name, changed, record.command, record.exit_code,
-                    record.refused, record.timed_out)
+                    record.refused, record.timed_out, output)
 
 
 def changed_files(log) -> tuple[str, ...]:
     """Every file the turn changed, in the order it first changed."""
     return tuple(dict.fromkeys(path for item in log for path in item.changed))
+
+
+# ---------------------------------------------------------------- freshness
+#
+# A check proves the state the tree was in when it ran, and no later one.
+# Every successful change to delivered source moves the turn to a new source
+# epoch; a check counts for the final answer only when it ran in the final
+# epoch. What a build writes into its own output areas is not a source change:
+# the control plane's generated trees (/build/tmp/, /generated/) and, when the
+# caller knows the project, whatever git ignores.
+
+_GENERATED = re.compile(r"(?:^|/)(?:build/tmp|generated|__pycache__|node_modules|\.git)(?:/|$)")
+
+
+def generated_path(path: str) -> bool:
+    """A path whose change is a build's side effect, not a source change."""
+    return bool(_GENERATED.search(str(path)))
+
+
+@dataclass(frozen=True)
+class Check:
+    """One recognised validation stage, as it ran."""
+    command: str
+    kind: str           # build | clean | clean+build | task | test | syntax | check
+    passed: bool
+    epoch: int          # the source epoch it ran in
+    index: int          # the call it belongs to, in log order
+
+
+_SEPARATOR = re.compile(r"(&&|\|\||[;|\n])")
+_FAILURE = re.compile(r"\bERROR\b|\berror:|\bFAILED\b|\bfailed\b|returned non-zero|"
+                      r"No rule to make target|command not found|Traceback")
+_CHECKERS = frozenset({"ls", "readlink", "test", "[", "stat", "file", "realpath"})
+
+
+def _stages(command: str):
+    """(argv, the separator after it) for each stage, in order."""
+    import request_scope
+    import shlex
+
+    parts = _SEPARATOR.split(command.replace("\\;", "+"))
+
+    for index in range(0, len(parts), 2):
+        try:
+            argv = shlex.split(parts[index], posix=True)
+        except ValueError:
+            argv = parts[index].split()
+
+        while argv and (argv[0] in request_scope._SHELL_KEYWORDS
+                        or re.match(r"^[A-Za-z_][A-Za-z0-9_]*=", argv[0])):
+            argv = argv[1:]
+
+        after = parts[index + 1] if index + 1 < len(parts) else ""
+
+        if argv:
+            yield argv, after
+
+
+def _in_tree(path: str, root: str) -> str | None:
+    """A written path as the tree names it, or None when it is outside it."""
+    if not path.startswith("/"):
+        return path
+
+    if root and (path == root or path.startswith(root.rstrip("/") + "/")):
+        return path[len(root.rstrip("/")) + 1:]
+
+    return None
+
+
+def _kind(argv) -> str | None:
+    """What one stage validates, if anything."""
+    from pathlib import Path
+
+    binary = Path(argv[0]).name
+    args = argv[1:]
+
+    if binary == "bitbake":
+        # -g, -e, -p and friends inspect the build without running it.
+
+        if any(flag in args for flag in ("-g", "-e", "-p", "-n", "-s", "-h", "--help",
+                                          "--version", "--dry-run", "--show-versions")):
+            return None
+
+        task = args[args.index("-c") + 1] if "-c" in args[:-1] else None
+        task = task.removeprefix("do_") if task else None
+
+        if task in ("clean", "cleanall", "cleansstate"):
+            return "clean"
+
+        return "task" if task and task not in ("build", "compile") else "build"
+
+    if binary == "build.sh":
+        recipes = [arg for arg in args if not arg.startswith("-")]
+
+        if not recipes or any(flag in args for flag in ("-h", "-l")):
+            return None
+
+        return "clean+build" if "-c" in args else "build"
+
+    if binary in ("make", "ninja"):
+        targets = [a for a in args if not a.startswith("-") and "=" not in a]
+        if targets and all(t in ("clean", "distclean", "mrproper") for t in targets):
+            return "clean"
+        if any(t in ("test", "check") for t in targets):
+            return "test"
+        return "build"
+
+    if binary in ("pytest", "ctest") or args[:2] == ["-m", "unittest"] or args[:2] == ["-m", "pytest"]:
+        return "test"
+
+    if (binary in ("bash", "sh") and "-n" in args) or "py_compile" in args:
+        return "syntax"
+
+    if binary in _CHECKERS:
+        return "check"
+
+    return None
+
+
+def timeline(log, generated=generated_path, root=""):
+    """(final source epoch, the checks, the source files changed), in order.
+
+    A refused call changes nothing. A command's own writes move the epoch at
+    the stage that makes them, so `sed -i ... && make` validates its edit and
+    `make && sed -i ...` does not.
+    """
+    import request_scope
+    from agent_runtime import _VERIFYING
+    from verification import VerificationPolicy
+
+    policy = VerificationPolicy()
+    epoch, checks, changed = 0, [], []
+
+    for index, item in enumerate(log):
+        if item.refused:
+            continue
+
+        sources = [path for path in item.changed if not generated(path)]
+
+        if sources:
+            epoch += 1
+            changed.extend(sources)
+            continue
+
+        if item.name != "terminal" or not item.command:
+            continue
+
+        stages = list(_stages(item.command))
+        ran = not item.timed_out and item.exit_code == 0
+        masked = False
+
+        for position, (argv, after) in enumerate(stages):
+            writes = [path for path in (_in_tree(item, root) for item in
+                                        request_scope._shell_destinations(argv))
+                      if path and not generated(path)]
+
+            if writes:
+                epoch += 1
+                changed.extend(writes)
+
+            kind = _kind(argv)
+
+            if kind is None:
+                continue
+
+            # Piped into a filter, a stage's exit status is the filter's; what
+            # the output says is then all there is to go on.
+
+            if after == "|" and "pipefail" not in item.command:
+                masked = True
+
+            passed = ran and not (masked and _FAILURE.search(item.output or ""))
+
+            if kind == "check":
+                passed = passed and not re.search(r"No such file|cannot access",
+                                                  item.output or "")
+
+            checks.append(Check(item.command, kind, passed, epoch, index))
+
+        # What the verification policy counts as a check and no stage kind
+        # names -- running the program just changed, a linter -- still counts,
+        # as a run of the tree as it stands after the command.
+
+        if not any(check.index == index and check.kind != "check" for check in checks):
+            category, _ = policy.classify_command(item.command, changed_paths=tuple(changed))
+
+            if category in _VERIFYING:
+                passed = ran and not (masked and _FAILURE.search(item.output or ""))
+                checks.append(Check(item.command, "run", passed, epoch, index))
+
+    return epoch, checks, tuple(dict.fromkeys(changed))
+
+
+# What a final answer claims, sentence by sentence; a hedged sentence claims
+# nothing. Each claim names the checks that would have to have passed, in the
+# final source epoch and in this order.
+
+_CLAIMS = (
+    ("survives a clean and rebuild",
+     re.compile(r"surviv|persist|after (?:a |the |each |every )?clean|"
+                r"clean(?:/| and | \+ |-and-)(?:re)?build|"
+                r"always (?:be )?(?:present|there|available|recreated|created)|"
+                r"recreated (?:automatically|on every|every|each|after)", re.I),
+     (("clean", "clean+build"), ("build", "clean+build"), ("check",))),
+    ("builds", re.compile(r"\bbuild(?:s|ing)? (?:succeed|pass|work|complete|clean)|"
+                          r"\bbuilt successfully|\bcompiles\b", re.I),
+     (("build", "clean+build"),)),
+    ("tests pass", re.compile(r"\btests? (?:now )?pass", re.I), (("test",),)),
+)
+
+
+def _claims(answer: str):
+    sentences = [part for part in _SENTENCE.split(answer or "") if part.strip()]
+
+    for name, pattern, needs in _CLAIMS:
+        if any(pattern.search(sentence) and not _HEDGE.search(sentence)
+               for sentence in sentences):
+            yield name, needs
+
+
+def _shown(checks, needs) -> bool:
+    """Whether passing checks of these kinds ran, in this order."""
+    position = 0
+
+    for check in checks:
+        if position < len(needs) and check.passed and check.kind in needs[position]:
+            # clean+build answers for the clean and the build at once.
+
+            position += 2 if (check.kind == "clean+build" and position + 1 < len(needs)
+                              and "clean+build" in needs[position + 1]) else 1
+
+    return position >= len(needs)
 
 
 def verification_runs(log, policy=None) -> list[tuple[str, bool]]:
@@ -128,21 +370,53 @@ def canonical_entry(record: ToolRecord, label=lambda path: path) -> str:
     return f"{head}\n{record.result[:400]}"
 
 
-def decide(log, *, project_runs=(), project_commands=None) -> Verdict:
-    """`log` is the turn's Evidence, in call order."""
+def decide(log, *, project_runs=(), project_commands=None, answer="",
+           generated=generated_path, root="") -> Verdict:
+    """`log` is the turn's Evidence, in call order; `answer` the core's own.
+
+    VERIFIED only when the checks that would show what the answer claims ran
+    and passed in the final source epoch -- after the last change to the
+    delivered source. A check from before that change proves an earlier tree.
+    """
     from agent_runtime import write_note
 
-    changed = changed_files(log)
+    epoch, checks, changed = timeline(log, generated, root)
 
     if not changed:
         return Verdict("NO_CHANGE", ())
 
-    note = write_note(changed, verification_runs(log), project_runs, project_commands)
+    final = [check for check in checks if check.epoch == epoch]
+    earlier = [check for check in checks if check.epoch < epoch and check.passed]
+    runs = [(check.command, check.passed) for check in final
+            if check.kind not in ("clean", "check")]
+    runs = list(dict.fromkeys(runs))
+    note = write_note(changed, runs, project_runs, project_commands)
 
     if note:
-        return Verdict("UNVERIFIED", changed, note.strip().removeprefix("⚠ UNVERIFIED:").strip())
+        reason = note.strip().removeprefix("⚠ UNVERIFIED:").strip()
+
+        if not runs and earlier:
+            reason = (f"{', '.join(changed)} changed, and the final change was "
+                      f"not revalidated after the last source modification: what "
+                      f"passed ran on an earlier state of the tree.")
+
+        return Verdict("UNVERIFIED", changed, reason)
+
+    unmet = [name for name, needs in _claims(answer) if not _shown(final, needs)]
+
+    if unmet:
+        return Verdict("UNVERIFIED", changed, (
+            f"{', '.join(changed)} changed; what passed after the last change does "
+            f"not show that it {' or that it '.join(unmet)} -- no "
+            f"{' and '.join(_needed(unmet))} ran on the final source state."))
 
     return Verdict("VERIFIED", changed)
+
+
+def _needed(unmet):
+    words = {"survives a clean and rebuild": "clean, build and check",
+             "builds": "build", "tests pass": "test run"}
+    return [words[name] for name in unmet]
 
 
 # A sentence that states the change works, is done or was checked, without

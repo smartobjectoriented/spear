@@ -11,6 +11,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import subprocess
 import traceback
 import re
 import uuid
@@ -1938,6 +1939,30 @@ def _core_history(conversation) -> tuple[list[dict], str]:
     return turns, request
 
 
+def _generated_in(root):
+    """Whether a changed path is a build's output rather than delivered source:
+    the control plane's generated trees, or a path the project's git ignores.
+    Tracked files are source whatever the ignore rules say."""
+    import functools
+
+    import completion
+
+    @functools.lru_cache(maxsize=None)
+    def generated(path):
+        if completion.generated_path(path):
+            return True
+
+        try:
+            done = subprocess.run(["git", "-C", root, "check-ignore", "-q", "--", path],
+                                  capture_output=True, timeout=5)
+        except (OSError, subprocess.SubprocessError):
+            return False
+
+        return done.returncode == 0
+
+    return generated
+
+
 def _relative_to(context):
     root = getattr(context, "project_root", "") or os.getcwd()
 
@@ -3802,9 +3827,11 @@ class AgentRuntime:
             context.apply_state_event(StateEventType.TASK_FAILED,
                                       summary=core.error or core.stop)
 
+        root = getattr(context, "project_root", "") or os.getcwd()
         verdict = completion.decide(
             context.core_evidence, project_runs=project_build_runs(context, tool_log),
-            project_commands=getattr(context, "project_commands", None))
+            project_commands=getattr(context, "project_commands", None),
+            answer=core.final, generated=_generated_in(root), root=root)
         context.core_verdict = verdict
         final = completion.qualify(core.final, verdict)
 

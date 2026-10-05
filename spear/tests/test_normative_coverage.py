@@ -115,6 +115,27 @@ class Closure(Fixture):
         self.assertFalse(coverage.complete)
 
 
+class QuotedCitations(Fixture):
+    def test_a_section_and_its_verbatim_words_name_the_provision(self):
+        found = cov.quoted('Per §5.1: "A receiver shall reject a frame whose version '
+                           'differs." It also says more.', self.universe)
+
+        self.assertEqual([str(item.key) for item in found], ["Rule 5.1-3"])
+
+    def test_a_shortened_quote_counts_by_its_fragments(self):
+        found = cov.quoted('[§5.2] "The trailer shall repeat the version, as stated ... '
+                           'in Rule 5.1-2"', self.universe)
+
+        self.assertEqual([str(item.key) for item in found], ["Rule 5.2-1"])
+
+    def test_a_paraphrase_or_the_wrong_section_names_nothing(self):
+        for answer in ('§5.1: "receivers must drop frames with another version number"',
+                       '§5.2: "A receiver shall reject a frame whose version differs."',
+                       'A receiver shall reject a frame whose version differs.'):
+            with self.subTest(answer=answer):
+                self.assertEqual(cov.quoted(answer, self.universe), [])
+
+
 class Applicability(Fixture):
     def decide(self, label, objective="o", declared=None, bound=None, origin=cov.CITED):
         entry = cov.CoverageEntry(self.record(label), origin)

@@ -95,11 +95,14 @@ class Universe:
 
     def __init__(self, records, units):
         self.units = {str(unit.get("source_id")): unit for unit in units}
-        self.lists, self.tables, self.by_key = {}, {}, {}
+        self.lists, self.tables, self.by_key, self.sections = {}, {}, {}, {}
 
         for record in records:
             key = record.key
             self.by_key.setdefault(str(key), []).append(record)
+
+            if normative(record) and record.declaration_status == pi.DECLARATION:
+                self.sections.setdefault(str(getattr(key, "section", "")), []).append(record)
 
             if record.declaration_status != pi.DECLARATION:
                 continue
@@ -133,6 +136,10 @@ class Universe:
 
         return None, "", []
 
+    def in_section(self, section: str):
+        """The normative declarations the store files under one section."""
+        return self.sections.get(section, [])
+
     def resolve(self, identity: str):
         """The records a stated identity names: an instance id exactly, or a
         printed key that names exactly one instance. Anything else, none."""
@@ -153,6 +160,41 @@ class Universe:
 
         return (getattr(record.key, "ordinal", None) or 0, unit.get("unit_position", 0),
                 record.source_id)
+
+
+_SECTION_CITATION = re.compile(r"§\s*([A-Z]?\d+(?:\.\d+)*)")
+_QUOTE = re.compile(r"[\"\u201c]([^\"\u201c\u201d]{30,})[\"\u201d]")
+
+
+def quoted(answer: str, universe: Universe) -> list:
+    """Provisions an answer cites by section and verbatim quotation.
+
+    A provision without a printed label -- an unlabelled body of a
+    specification -- can only be cited as "§G6.1.2.1: '...'". The quote
+    settles which body is meant when its words, in order, are that body's
+    own: a paraphrase identifies nothing. Each fragment of a quote shortened
+    with an ellipsis counts on its own.
+    """
+    found, citations = {}, list(_SECTION_CITATION.finditer(answer or ""))
+
+    for index, match in enumerate(citations):
+        end = citations[index + 1].start() if index + 1 < len(citations) else len(answer)
+        span, section = answer[match.end():end], match.group(1)
+        bodies = [(record, " ".join((record.text or "").split()))
+                  for record in universe.in_section(section)]
+
+        for quote in _QUOTE.finditer(span):
+            for fragment in re.split(r"\.\.\.|\u2026", quote.group(1)):
+                fragment = " ".join(fragment.split()).strip(" .")
+
+                if len(fragment) < 30:
+                    continue
+
+                for record, text in bodies:
+                    if fragment in text or (len(text) >= 40 and text.rstrip(".") in fragment):
+                        found.setdefault(instance_of(record), record)
+
+    return list(found.values())
 
 
 def close(cited, universe: Universe, *, retrieved=()) -> Coverage:

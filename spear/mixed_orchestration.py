@@ -227,7 +227,11 @@ class MixedOrchestrator:
 
         universe = self._universe(binding, records)
         retrieved = tuple(cov.instance_of(item) for item in records.values())
-        coverage = cov.close(nc.cited(records, answer), universe, retrieved=retrieved)
+        cited = nc.cited(records, answer)
+        known = {cov.instance_of(item) for item in cited}
+        cited += [item for item in cov.quoted(answer, universe)
+                  if cov.instance_of(item) not in known]
+        coverage = cov.close(cited, universe, retrieved=retrieved)
         self._event(context, EventType.CONSTRAINT_COVERAGE_EXPANDED, {
             "retrieved": len(retrieved),
             "cited": [item.instance for item in coverage.cited],

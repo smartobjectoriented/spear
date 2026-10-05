@@ -463,3 +463,22 @@ class ThePacketHoldsWhatTheAnswerCites(unittest.TestCase):
                           standard_id=STANDARD_ID, revision=REVISION, objective="o")
 
         self.assertEqual(packet.constraints, ())
+
+
+class ACitedSourceTheLedgerMissedComesFromTheStore(MixedTurn):
+    def test_the_unit_is_read_from_the_bound_store(self):
+        import mixed_orchestration
+        from types import SimpleNamespace
+
+        unit = next(item for item in self.store.load_units(STANDARD_ID, REVISION)
+                    if item.text.startswith("Rule 4.2.1-2"))
+        orchestrator = mixed_orchestration.MixedOrchestrator(
+            SimpleNamespace(standard_store=self.store))
+        found = orchestrator._cited_sources(
+            SimpleNamespace(standard_id=STANDARD_ID, revision=REVISION),
+            f"Governed by [§4.2, source {unit.source_id}].", {})
+        packet = nc.build(found, f"source {unit.source_id}", standard_id=STANDARD_ID,
+                          revision=REVISION, objective="o")
+
+        self.assertEqual([item.provision for item in packet.constraints], ["Rule 4.2.1-2"])
+        self.assertEqual(packet.constraints[0].source_id, unit.source_id)

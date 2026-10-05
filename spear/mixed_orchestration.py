@@ -132,8 +132,9 @@ class MixedOrchestrator:
         record.tokens["prepass_status"] = prepass.terminal_status
         policy = getattr(normative, "standard_policy", None)
         ledger = getattr(getattr(policy, "claim_evidence", None), "provisions", None)
-        record.packet = nc.build(getattr(ledger, "records", None) or {},
-                                 prepass.final_response or "",
+        records = dict(getattr(ledger, "records", None) or {})
+        records.update(self._cited_sources(binding, prepass.final_response or "", records))
+        record.packet = nc.build(records, prepass.final_response or "",
                                  standard_id=binding.standard_id, revision=binding.revision,
                                  objective=request.objective)
         brief = nc.brief(record.packet)
@@ -204,6 +205,41 @@ class MixedOrchestrator:
         return self.controller._result(
             request, TaskStatus.COMPLETED if not result.completion_deferred
             else TaskStatus.BLOCKED, result, warnings=(f"mixed:{record.verdict}",))
+
+    def _cited_sources(self, binding, answer, records):
+        """Provision records for the sources the answer cites that the pass's
+        ledger never recorded, read from the bound store itself.
+
+        The answer's citations name their sources exactly; the ledger holds
+        only the units it observed in certain shapes. A real pass cited seven
+        sources the ledger had no record of, and the packet came out empty.
+        """
+        import re
+
+        import provision_identity
+
+        store = getattr(self.controller, "standard_store", None)
+        known = {str(getattr(item, "source_id", "") or "") for item in records.values()}
+        found = {}
+
+        if store is None:
+            return found
+
+        for source_id in dict.fromkeys(re.findall(r"std-[0-9a-f]{32}", answer)):
+            if source_id in known:
+                continue
+
+            try:
+                unit = store.resolve_source(binding.standard_id, binding.revision, source_id)
+            except Exception:                       # noqa: BLE001
+                continue
+
+            payload = unit.to_dict() if hasattr(unit, "to_dict") else unit
+
+            for item in provision_identity.records_for_units([payload]):
+                found[str(item.key)] = item
+
+        return found
 
     def _normative_context(self, context, request, question, turn):
         """The normative pass's own context: the same session, its own working

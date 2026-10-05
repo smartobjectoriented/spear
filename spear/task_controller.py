@@ -393,6 +393,16 @@ class TaskController:
                     request.objective),
             )
 
+        # A bound change -- MIXED: the normative runtime, then the frozen
+        # coding core from a constraint packet, then a check of the final
+        # source. Every other turn takes the path it always took.
+
+        if request.role_aware_tools:
+            import mixed_orchestration
+
+            if mixed_orchestration.applies(self, request, context, view):
+                return mixed_orchestration.MixedOrchestrator(self).run(request, context)
+
         context.tools = view.definitions
         context.read_only = view.read_only
         context.advisory = view.advisory

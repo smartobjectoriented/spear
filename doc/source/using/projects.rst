@@ -80,12 +80,51 @@ Entry format
      - attach this corpus to **every** session
    * - ``build_commands``, ``test_commands``, ``lint_commands``, ``acceptance_commands``
      - the commands the agent runs to check its own work
+   * - ``normative_checks``, ``normative_applicability``
+     - checks that are evidence for provisions of a bound standard, and the
+       provisions that do or do not apply to this project (see below)
 
 .. important::
 
    What a corpus *does* is declared, not inferred from its ``kind``. A label
    that silently selected an indexer, a prompt and three other behaviours was
    the source of corpora that behaved differently for no visible reason.
+
+Normative checks
+****************
+
+When a change has to satisfy a bound standard, SPEAR reports a provision as
+satisfied or violated only on evidence it can reproduce: a deterministic
+reading of the final source, or a project check the project itself declares to
+be evidence for that provision. A passing test suite proves nothing normative
+on its own, and neither does the model's opinion.
+
+.. code-block:: json
+
+   {
+     "normative_checks": [{
+       "id": "count-four",
+       "standard": "EXAMPLE-STD", "revision": "1",
+       "provisions": ["Rule 4.2.1-2"],
+       "command": "ctest --test-dir build -R header_count",
+       "evidence": {"kind": "test", "success": "exit_zero",
+                    "semantics": "PASS_AND_FAIL_DECISIVE"}
+     }],
+     "normative_applicability": [{
+       "provision": "Rule 4.2.1-3",
+       "applicability": "NOT_APPLICABLE",
+       "reason": "this device never receives headers"
+     }]
+   }
+
+A provision is named by its instance identity (``Rule 4.2.1-2@<digest>``) or
+by a printed label that names exactly one provision in the bound revision.
+``PASS_ESTABLISHES_SATISFIED`` makes a pass evidence of compliance and a
+failure evidence of nothing; ``PASS_AND_FAIL_DECISIVE`` also makes a failure
+evidence of a violation, and allows one repair. A check runs in the same
+sandbox as the project's own verification, against the final source, and a
+check that changes the source proves nothing about it. Binding a check to a
+provision also declares that the provision applies to the project.
 
 Exclusions have granularity
 ***************************

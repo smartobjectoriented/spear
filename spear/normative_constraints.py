@@ -294,15 +294,48 @@ def verifier_messages(packet: NormativeConstraintSet, files: dict[str, str]) -> 
         if budget <= 0:
             break
 
-    constraints = json.dumps([{key: value for key, value in item.to_dict().items()
-                               if key in ("id", "provision", "modality", "requirement",
-                                          "condition", "cardinality", "values",
-                                          "identifiers", "implication")}
+    constraints = json.dumps([dict({key: value for key, value in item.to_dict().items()
+                                    if key in ("id", "provision", "modality", "requirement",
+                                               "condition", "cardinality", "values",
+                                               "identifiers", "implication")},
+                                   checks=questions(item))
                               for item in packet.constraints], ensure_ascii=False, indent=1)
 
     return [{"role": "system", "content": VERIFIER_SYSTEM},
             {"role": "user", "content": f"Constraints:\n{constraints}\n\nFinal source:\n"
                                         + ("\n\n".join(shown) or "(no files)")}]
+
+
+def questions(item: Constraint) -> list[str]:
+    """What the check must answer for this constraint, from its own fields.
+
+    A model reading "shall be 2 when X is set" alone judged code that sets 2
+    always as satisfying it, and a validator accepting `>= 4` beside a list
+    of four as keeping "exactly four". The questions name each part of what
+    the provision states, so none of it is read past.
+    """
+    asked = []
+
+    if item.modality == "MAY":
+        asked.append("Is this left optional everywhere -- is there no code path "
+                     "that requires it, rejects its absence or always forces it? "
+                     "If something makes it mandatory: VIOLATED.")
+
+    if item.condition:
+        asked.append(f"Does the code apply this only {item.condition}? If it also "
+                     f"applies it when that condition does not hold, it has dropped "
+                     f"the condition: VIOLATED.")
+
+    for phrase in item.cardinality:
+        asked.append(f"Does every place that builds, checks or accepts this keep "
+                     f"'{phrase}' exactly? A different bound anywhere (more, fewer, "
+                     f"'at least', 'at most', '>=', '<='): VIOLATED.")
+
+    for phrase in item.values:
+        asked.append(f"Is the value or position exactly as stated ('{phrase}')? "
+                     f"Any other value: VIOLATED.")
+
+    return asked
 
 
 @dataclass(frozen=True)

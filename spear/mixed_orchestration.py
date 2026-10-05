@@ -33,9 +33,10 @@ from model_backend import ConversationMessage, TextBlock
 from tracing import EventStatus, EventType
 
 PREPASS = (
-    "Do not change anything yet. Before this change is made, identify the "
-    "provisions of the bound standard that govern it, and state exactly what "
-    "each one requires: its force (shall, should or may), any condition it is "
+    "Do not change anything yet, and do not look at any code: answer from the "
+    "bound standard alone. Before this change is made, identify the "
+    "provisions of the standard that govern it, and state exactly what each "
+    "one requires: its force (shall, should or may), any condition it is "
     "stated under, any count, and any identifiers or values it names. Cite "
     "every provision by its printed label.\n\nChange requested: {objective}")
 
@@ -126,10 +127,10 @@ class MixedOrchestrator:
         self._event(context, EventType.NORMATIVE_PREPASS_STARTED,
                     {"standard_id": binding.standard_id, "revision": binding.revision})
         question = PREPASS.format(objective=request.objective)
-        self._view(context, request, question, coding=False)
-        context.conversation = turn[:-1] + [ConversationMessage("user", (TextBlock(question),))]
-        prepass = self.controller.runtime.run(context, defer_completion=True)
-        policy = getattr(context, "standard_policy", None)
+        normative = self._normative_context(context, request, question, turn)
+        prepass = self.controller.runtime.run(normative, defer_completion=True)
+        record.tokens["prepass_status"] = prepass.terminal_status
+        policy = getattr(normative, "standard_policy", None)
         ledger = getattr(getattr(policy, "claim_evidence", None), "provisions", None)
         record.packet = nc.build(getattr(ledger, "records", None) or {},
                                  prepass.final_response or "",
@@ -204,6 +205,40 @@ class MixedOrchestrator:
             request, TaskStatus.COMPLETED if not result.completion_deferred
             else TaskStatus.BLOCKED, result, warnings=(f"mixed:{record.verdict}",))
 
+    def _normative_context(self, context, request, question, turn):
+        """The normative pass's own context: the same session, its own working
+        state, and the standard's tools as the only tools that run.
+
+        Its own working state, because the pass ends as a turn ends -- done or
+        failed -- and the implementation that follows must start from a live
+        one. Its own executor, because the legacy loop runs a call the model
+        writes as text whether or not the view offered it, and this pass reads
+        the standard and nothing else.
+        """
+        import copy
+
+        from working_state import WorkingState
+
+        normative = copy.copy(context)
+        normative.working_state = WorkingState.start(
+            context.task_id, question, max_model_rounds=context.max_model_rounds,
+            max_tool_actions=context.max_tool_actions)
+        normative.conversation = turn[:-1] + [ConversationMessage("user", (TextBlock(question),))]
+        normative.work_phase = None
+        self._view(normative, request, question, coding=False)
+        offered = {item.name for item in normative.tools}
+        execute = context.tool_executor
+
+        def standard_only(agent, call_id, name, arguments, cache):
+            if name not in offered:
+                return _refusal(call_id, name)
+
+            return execute(agent, call_id, name, arguments, cache)
+
+        normative.tool_executor = standard_only
+
+        return normative
+
     def _view(self, context, request, objective, *, coding):
         view = self.controller.tool_exposure_policy.select(
             self.controller.registry, AgentRole.MAIN, objective=objective,
@@ -213,17 +248,10 @@ class MixedOrchestrator:
         definitions = view.definitions
 
         if not coding:
-            # The normative pass reads the standard and nothing else: no
-            # local tool, nothing that writes.
-            import answer_scope
-            from tool_registry import ToolMutability
+            # The normative pass reads the standard and nothing else.
 
-            def normative(item):
-                spec = self.controller.registry.get(item.name)
-                return (spec.category not in answer_scope.LOCAL_CATEGORIES
-                        and spec.mutability != ToolMutability.MUTATING)
-
-            definitions = tuple(item for item in definitions if normative(item))
+            definitions = tuple(item for item in definitions
+                                if item.name.startswith("standard."))
 
         context.tools = definitions
         context.execution_core = "coding" if coding else "legacy"
@@ -319,6 +347,19 @@ class MixedOrchestrator:
         context.trace.emit(event_type, context.task_id, session_id=context.session_id,
                            status=EventStatus.OK, metadata=metadata)
         context.observer.notice(event_type.value, metadata)
+
+
+def _refusal(call_id: str, name: str):
+    """A call the normative pass does not run, as the model reads it."""
+    from tool_router import ToolResultEnvelope, ToolResultStatus
+    from tracing import new_action_id
+
+    text = (f"ERROR: '{name}' is not available here: this pass answers from the "
+            f"bound standard alone, with the standard's own tools.")
+
+    return ToolResultEnvelope(call_id, new_action_id(name), name, False,
+                              ToolResultStatus.DENIED, text, text, "other", 0.0,
+                              len(text), error_category="not_offered", error_summary=text)
 
 
 def final_files(root: str) -> dict[str, str]:

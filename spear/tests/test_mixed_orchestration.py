@@ -382,3 +382,38 @@ class TheNormativePassReadsOnlyTheBoundStandard(MixedTurn):
         self.assertEqual(record.packet.standard_id, STANDARD_ID)
         self.assertTrue(all(item.source_id in bound for item in record.packet.constraints))
         self.assertFalse(any(item.source_id in foreign for item in record.packet.constraints))
+
+
+class TheNormativePassIsIsolated(MixedTurn):
+    def test_a_failed_pass_leaves_the_implementation_a_live_state(self):
+        from agent_runtime import AgentRuntime
+        from unittest.mock import patch
+
+        original = AgentRuntime.run
+
+        def failing_prepass(runtime, context, **kwargs):
+            result = original(runtime, context, **kwargs)
+
+            if context.execution_core == "legacy":
+                from working_state import StateEventType
+                context.apply_state_event(StateEventType.TASK_FAILED, summary="guard")
+
+            return result
+
+        with patch.object(AgentRuntime, "run", failing_prepass):
+            record = self.run_mixed(fix() + [SATISFIED_ALL])
+
+        self.assertEqual(record.normative, nc.SATISFIED)
+        self.assertEqual((self.repo / "record.py").read_text(), FIXED)
+
+    def test_a_tool_written_as_text_does_not_run_in_the_pass(self):
+        from tests.test_agent_runtime import tool_turn
+
+        self.run_mixed(fix() + [SATISFIED_ALL], legacy=[
+            tool_turn("b1", "bash", command="cat record.py"), text_turn(PREPASS_ANSWER)])
+        names = [tool.name for tool in self.backend.calls[0]["tools"]]
+
+        self.assertTrue(all(name.startswith("standard.") for name in names))
+        later = json.dumps([str(call) for call in self.backend.calls[1:]])
+        self.assertIn("is not available here", later)
+        self.assertNotIn("def build_header", later)

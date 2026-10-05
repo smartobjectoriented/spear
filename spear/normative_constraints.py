@@ -340,14 +340,19 @@ def questions(item: Constraint) -> list[str]:
 
 CONFIRM_SYSTEM = (
     "A first check claimed that source code violates a normative constraint "
-    "from a standard. Decide whether that violation is real. Read the "
-    "constraint strictly: it is about the identifiers, values, counts and "
-    "condition it names, and nothing else -- a bit, field or case it does not "
-    "name cannot violate it. Trace the code paths that matter and state, for "
-    "each one, exactly what the code does with what the constraint names. "
-    "CONFIRMED only if the code really contradicts the constraint as written; "
-    "otherwise REFUTED. Answer with JSON only: {\"verdict\": \"CONFIRMED\" or "
-    "\"REFUTED\", \"reason\": \"one or two sentences\"}.")
+    "from a standard. Decide whether that violation is real. The constraint "
+    "is about the identifiers, values, counts and condition it names: a bit, "
+    "field or case it does not name cannot violate it. What it names, it "
+    "names exactly -- and these ARE violations: a MAY made mandatory (the "
+    "code requires it, rejects its absence or always forces it); a "
+    "conditional requirement applied when its condition does not hold; a "
+    "count different from the one stated anywhere it is built, checked or "
+    "accepted (exactly four is not at least four); a value, bit or identifier "
+    "other than the stated one. Answer the constraint's checks, tracing the "
+    "code paths that matter. CONFIRMED if the code contradicts the "
+    "constraint as stated; otherwise REFUTED. Answer with JSON only: "
+    "{\"verdict\": \"CONFIRMED\" or \"REFUTED\", \"reason\": \"one or two "
+    "sentences\"}.")
 
 
 def confirmation_messages(constraint: Constraint, claim: str,
@@ -363,9 +368,10 @@ def confirmation_messages(constraint: Constraint, claim: str,
         if budget <= 0:
             break
 
-    stated = {key: value for key, value in constraint.to_dict().items()
-              if key in ("provision", "modality", "requirement", "condition",
-                         "cardinality", "values", "identifiers")}
+    stated = dict({key: value for key, value in constraint.to_dict().items()
+                   if key in ("provision", "modality", "requirement", "condition",
+                              "cardinality", "values", "identifiers")},
+                  checks=questions(constraint))
 
     return [{"role": "system", "content": CONFIRM_SYSTEM},
             {"role": "user", "content": f"Constraint:\n{json.dumps(stated, ensure_ascii=False, indent=1)}"

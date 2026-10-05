@@ -126,7 +126,7 @@ class EachClaimNeedsItsOwnCheck(unittest.TestCase):
 
     def test_a_single_bitbake_task_is_not_the_build(self):
         verdict = decide(edit("a.bb"), run("bitbake rootfs-linux -c clean"),
-                         run("bitbake rootfs-linux -c attach_infrabase"),
+                         run("bitbake rootfs-linux -c deploy"),
                          run("ls -la linux/rootfs/images"), answer=self.PERSISTS)
 
         self.assertEqual(verdict.state, "UNVERIFIED")

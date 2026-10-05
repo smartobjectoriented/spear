@@ -194,23 +194,29 @@ def _provision_order(record):
 
 def build(records, answer: str, *, standard_id: str, revision: str,
           objective: str, limit: int = _CARRY_LIMIT) -> NormativeConstraintSet:
-    """The packet: the provisions the normative pass cited, or -- when its
-    answer cited none -- the binding ones it retrieved, capped."""
+    """The packet: the provisions the normative pass's answer cites.
+
+    Cited by printed label ("Rule 8.4.1.1-2") or by the source the normative
+    runtime's citations name ("source std-650fe01d..."). Only those: a pass
+    whose answer cites nothing identifiable yields an empty packet -- an
+    unresolved request -- and never the provisions retrieval happened to
+    return. A real pass whose answer named its sources only by section once
+    received trace-unit register rules for a timer change that way.
+    """
     named = citations_in(answer)
+    sources = {match.lower() for match in re.findall(r"std-[0-9a-f]{12,}", answer or "")}
     chosen = []
 
     for key, record in records.items():
         label = str(key).lower()
         bare = label.split()[-1] if label else ""
+        source = str(getattr(record, "source_id", "") or "").lower()
+        cited = (label in named or bare in named
+                 or any(source and (source.startswith(item) or item.startswith(source))
+                        for item in sources))
 
-        if named and not (label in named or bare in named):
-            continue
-
-        chosen.append(record)
-
-    if not named:
-        chosen = [record for record in records.values()
-                  if getattr(record, "effective_force", 0) >= REQUIREMENT_FORCE][:limit]
+        if cited:
+            chosen.append(record)
 
     constraints = []
 

@@ -437,3 +437,29 @@ class TheNormativePassIsIsolated(MixedTurn):
         later = json.dumps([str(call) for call in self.backend.calls[1:]])
         self.assertIn("is not available here", later)
         self.assertNotIn("def build_header", later)
+
+
+class ThePacketHoldsWhatTheAnswerCites(unittest.TestCase):
+    def records(self):
+        import provision_identity
+
+        with tempfile.TemporaryDirectory() as directory:
+            store = build_store(Path(directory))
+            units = store.load_units(STANDARD_ID, REVISION)
+
+        return {str(record.key): record for record in provision_identity.records_for_units(
+            [unit.to_dict() if hasattr(unit, "to_dict") else unit for unit in units])}
+
+    def test_a_source_cited_by_id_is_selected_and_nothing_else(self):
+        records = self.records()
+        rule = records["Rule 4.2.1-2"]
+        packet = nc.build(records, f"The count is governed by [§4.2, source {rule.source_id}].",
+                          standard_id=STANDARD_ID, revision=REVISION, objective="o")
+
+        self.assertEqual([item.provision for item in packet.constraints], ["Rule 4.2.1-2"])
+
+    def test_an_answer_that_cites_nothing_yields_no_constraint(self):
+        packet = nc.build(self.records(), "The standard has rules about headers.",
+                          standard_id=STANDARD_ID, revision=REVISION, objective="o")
+
+        self.assertEqual(packet.constraints, ())

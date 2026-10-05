@@ -111,7 +111,8 @@ _NAMES_A_TERM = re.compile(r"(?<![\w.])(?:[A-Z]{2,8}[0-9]*s?|\w*\d\w*)(?![\w])")
 # module; with a verb of stating or requiring beside it, it is a question
 # about what the document says.
 _SAYS_DOCUMENT = re.compile(
-    r"\b(?:standard|specification|spec|norme)\b[^.?!]{0,60}?"
+    r"\b(?:standard|specification|spec|norme)\b"
+    r"(?!\s+(?:library|libraries|input|output|error|deviation|template))[^.?!]{0,60}?"
     r"\b(?:requires?|required|says?|state[sd]?|defines?|mandates?|"
     r"specif(?:y|ies|ied)|allows?|forbids?|prescribes?)\b"
     r"|\b(?:according\s+to|per|under)\s+the\s+"
@@ -227,6 +228,13 @@ def engages(binding, question, *, engaged_before=False, context=""):
                 return True
 
     if _STRUCTURE_ID.search(text):
+        return True
+
+    # A request that names the document as its authority -- "the way the
+    # specification requires", "as the standard defines" -- whether it asks
+    # to be told something or for something to be done. A change request
+    # worded that way once ran unbound because only a question was looked at.
+    if _SAYS_DOCUMENT.search(question or ""):
         return True
 
     # A question about what the document defines or how one of its structures

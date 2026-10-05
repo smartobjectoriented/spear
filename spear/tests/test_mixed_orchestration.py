@@ -7,9 +7,11 @@ standard (tests/mixed_standard_fixture.py) and a real working tree:
     packet is built from the provision records, not from its prose;
   - the frozen coding core sees the six accepted coding tools and a brief --
     no standard tool, no corpus text beyond the provisions themselves;
-  - a tool-less check of the final source decides each constraint, and only
-    with evidence the final files hold;
-  - one repair for a violation, none for an ambiguity;
+  - a tool-less check of the final source proposes candidate findings; a
+    constraint is decided only by a deterministic predicate over the final
+    source, never by the model's word or a second reading of it;
+  - one repair for an established violation of a requirement, none for a
+    model-only finding or an ambiguity;
   - the verdict keeps implementation evidence and normative status apart,
     and qualifies a compliance claim the check did not establish.
 """
@@ -53,6 +55,15 @@ RECORD = '''def build_header(flag_x, metadata=None):
 FIXED = '''def build_header(flag_x, metadata=None):
     mode = 2 if flag_x else 1
     count = [0, 0, 0, 0]
+    return {"mode": mode, "count": count, "metadata": metadata}
+'''
+
+# Compliant too, in shapes no predicate reads: only a model could judge it.
+OPAQUE = '''def build_header(flag_x, metadata=None):
+    mode = 1
+    if flag_x:
+        mode = 2
+    count = [0] * 4
     return {"mode": mode, "count": count, "metadata": metadata}
 '''
 
@@ -105,9 +116,17 @@ SATISFIED_ALL = verdicts(("C1", "SATISFIED", 2, "mode = 2 if flag_x else 1"),
                          ("C3", "SATISFIED", 4, '"metadata": metadata'))
 
 
-def fix(answer="Done. The header is now compliant with SYNTH-MIXED."):
-    return [turn("", call("p1", "write_file", path="record.py", content=FIXED)),
+def fix(answer="Done. The header is now compliant with SYNTH-MIXED.", content=FIXED):
+    return [turn("", call("p1", "write_file", path="record.py", content=content)),
             turn(answer)]
+
+
+def opaque(*items):
+    """A check's answer about OPAQUE, quoting its lines."""
+    lines = {"C1": (4, "mode = 2"), "C2": (5, "count = [0] * 4"),
+             "C3": (6, '"metadata": metadata')}
+
+    return verdicts(*((cid, status) + lines[cid] for cid, status in items))
 
 
 class MixedTurn(unittest.TestCase):
@@ -279,45 +298,51 @@ class Violations(MixedTurn):
         self.assertEqual(record.verdict, "NOT COMPLIANT")
         self.assertIn("*(compliance not established)*", self.result.final_response)
 
-    def test_an_ambiguity_is_reported_not_repaired(self):
-        record = self.run_mixed(fix() + [
-            verdicts(("C1", "AMBIGUOUS", 2, ""), ("C2", "VIOLATED", 3, "count = [0, 0, 0, 0]"),
-                     ("C3", "SATISFIED", 4, '"metadata": metadata')), CONFIRMED])
+    def test_a_models_ambiguity_is_a_candidate_and_repairs_nothing(self):
+        record = self.run_mixed(fix(content=OPAQUE) + [
+            opaque(("C1", "AMBIGUOUS"), ("C2", "VIOLATED"), ("C3", "SATISFIED")), CONFIRMED])
+        statuses = {item.constraint_id: item for item in record.statuses}
 
         self.assertFalse(record.repaired)
-        self.assertEqual(record.verdict, "NOT COMPLIANT")
+        self.assertEqual(statuses["C1"].status, nc.NOT_DEMONSTRATED)
+        self.assertEqual(statuses["C1"].candidate.candidate, nc.POSSIBLE_AMBIGUITY)
+        self.assertEqual(record.verdict, "COMPLIANCE NOT DEMONSTRATED")
         self.assertEqual(len(record.checks), 1)
 
 
 class EvidenceDiscipline(MixedTurn):
-    def test_an_unconfirmed_violation_drives_no_repair(self):
+    def test_a_refuted_violation_the_source_contradicts_is_satisfied(self):
         record = self.run_mixed(fix() + [
             verdicts(("C1", "SATISFIED", 2, "mode = 2 if flag_x else 1"),
                      ("C2", "VIOLATED", 3, "count = [0, 0, 0, 0]"),
                      ("C3", "SATISFIED", 4, '"metadata": metadata')), REFUTED])
-        statuses = {item.constraint_id: item.status for item in record.statuses}
+        statuses = {item.constraint_id: item for item in record.statuses}
 
         self.assertFalse(record.repaired)
-        self.assertEqual(statuses["C2"], nc.NOT_DEMONSTRATED)
-        self.assertEqual(record.verdict, "COMPLIANCE NOT DEMONSTRATED")
+        self.assertEqual(statuses["C2"].status, nc.SATISFIED)
+        self.assertEqual(statuses["C2"].authority, "predicate:EXACT_COUNT")
+        self.assertEqual(statuses["C2"].candidate.candidate, nc.POSSIBLE_VIOLATION)
+        self.assertEqual(statuses["C2"].candidate.advisory, "REFUTED")
 
     def test_a_ticked_constraint_is_a_compliance_claim(self):
         self.assertIn("*(compliance not established)*",
                       nc.qualify("- C1: ✓ only one subtype is set", nc.NOT_DEMONSTRATED))
 
-    def test_a_status_quoting_a_line_the_file_lacks_is_not_demonstrated(self):
-        record = self.run_mixed(fix() + [verdicts(
-            ("C1", "SATISFIED", 2, "mode = 2 if flag_x else 1"),
-            ("C2", "SATISFIED", 3, "count = [0] * 4"),
-            ("C3", "SATISFIED", 4, '"metadata": metadata'))])
-        statuses = {item.constraint_id: item.status for item in record.statuses}
+    def test_a_quote_the_file_lacks_is_not_a_source_fact(self):
+        record = self.run_mixed(fix(content=OPAQUE) + [verdicts(
+            ("C1", "SATISFIED", 4, "mode = 2"),
+            ("C2", "SATISFIED", 5, "count = [0, 0, 0, 0]"),
+            ("C3", "SATISFIED", 6, '"metadata": metadata'))])
+        statuses = {item.constraint_id: item for item in record.statuses}
 
-        self.assertEqual(statuses["C2"], nc.NOT_DEMONSTRATED)
+        self.assertEqual(statuses["C2"].candidate.facts, ())
+        self.assertEqual(statuses["C2"].candidate.ungrounded, 1)
+        self.assertEqual(statuses["C2"].status, nc.NOT_DEMONSTRATED)
         self.assertEqual(record.verdict, "COMPLIANCE NOT DEMONSTRATED")
 
     def test_an_unsupported_compliance_claim_is_qualified(self):
-        self.run_mixed(fix("Done. The header now fully complies with SYNTH-MIXED.") + [
-            verdicts(("C1", "SATISFIED", 2, "mode = 2 if flag_x else 1"))])
+        self.run_mixed(fix("Done. The header now fully complies with SYNTH-MIXED.",
+                           content=OPAQUE) + [opaque(("C1", "SATISFIED"))])
 
         self.assertIn("COMPLIANCE NOT DEMONSTRATED", self.result.final_response)
         self.assertIn("fully complies with SYNTH-MIXED. *(compliance not established)*",
@@ -332,6 +357,102 @@ class EvidenceDiscipline(MixedTurn):
             record = self.run_mixed(fix() + [SATISFIED_ALL])
 
         self.assertEqual(record.normative, nc.NOT_DEMONSTRATED)
+
+
+class NormativeAuthority(MixedTurn):
+    """The check proposes; only the final source decides."""
+
+    def test_a_confirmed_false_finding_repairs_nothing(self):
+        record = self.run_mixed(fix(content=OPAQUE) + [
+            opaque(("C1", "SATISFIED"), ("C2", "VIOLATED"), ("C3", "SATISFIED")), CONFIRMED])
+        statuses = {item.constraint_id: item for item in record.statuses}
+        audited = {event.metadata["constraint"]: event.metadata
+                   for event in self.events(EventType.NORMATIVE_CONSTRAINT_STATUS)}
+
+        self.assertFalse(record.repaired)
+        self.assertEqual(self.backend.raw, [])
+        self.assertEqual(statuses["C2"].status, nc.NOT_DEMONSTRATED)
+        self.assertEqual(statuses["C2"].candidate.advisory, "CONFIRMED")
+        self.assertEqual(statuses["C1"].status, nc.NOT_DEMONSTRATED)
+        self.assertEqual(record.verdict, "COMPLIANCE NOT DEMONSTRATED")
+        self.assertEqual((audited["C2"]["candidate"], audited["C2"]["authority"],
+                          audited["C2"]["advisory"]), (nc.POSSIBLE_VIOLATION, "none", "CONFIRMED"))
+        self.assertEqual(audited["C2"]["candidate_facts"][0]["excerpt"], "count = [0] * 4")
+        self.assertFalse(self.events(EventType.REPAIR_STARTED))
+
+    def test_a_plausible_violation_of_compliant_source_is_overruled_by_it(self):
+        record = self.run_mixed(fix() + [
+            verdicts(("C1", "VIOLATED", 2, "mode = 2 if flag_x else 1"),
+                     ("C2", "SATISFIED", 3, "count = [0, 0, 0, 0]")), CONFIRMED])
+        statuses = {item.constraint_id: item for item in record.statuses}
+
+        self.assertFalse(record.repaired)
+        self.assertEqual(statuses["C1"].status, nc.SATISFIED)
+        self.assertEqual(statuses["C1"].authority, "predicate:CONDITIONAL_VALUE")
+        self.assertEqual(record.normative, nc.SATISFIED)
+
+    def test_a_may_claimed_violated_repairs_nothing(self):
+        record = self.run_mixed(fix() + [
+            verdicts(("C3", "VIOLATED", 4, '"metadata": metadata')), CONFIRMED])
+
+        self.assertFalse(record.repaired)
+        self.assertEqual(record.normative, nc.SATISFIED)
+
+    def test_a_deterministic_violation_earns_one_repair_with_its_contradiction(self):
+        record = self.run_mixed([
+            turn("", call("p1", "write_file", path="record.py",
+                          content=FIXED.replace("[0, 0, 0, 0]", "[0, 0, 0]"))),
+            turn("Done."),
+            turn('{"constraints": []}'),
+            turn("", call("p2", "write_file", path="record.py", content=FIXED)),
+            turn("Repaired."),
+            turn('{"constraints": []}')])
+        repair = self.backend.raw_calls[3]
+        brief = repair["messages"][-1]["content"]
+        first = [item["statuses"] for item in record.checks]
+
+        self.assertTrue(record.repaired)
+        self.assertIn("C2 [Rule 4.2.1-2, SHALL]", brief)
+        self.assertIn("EXACT_COUNT: the provision states 4, the final source gives 3", brief)
+        self.assertNotIn("C1 [", brief)
+        for word in ("POSSIBLE_", "candidate", "advisory", "predicate:"):
+            self.assertNotIn(word, json.dumps(repair["messages"]))
+        self.assertEqual(sorted(tool["function"]["name"] for tool in repair["tools"]),
+                         sorted(CODING))
+        self.assertEqual({item.constraint_id: item.status for item in first[0]}["C2"],
+                         nc.VIOLATED)
+        self.assertEqual(record.normative, nc.SATISFIED)
+        self.assertEqual(record.implementation, "UNVERIFIED")
+
+    def test_a_failed_project_build_never_leaves_the_implementation_verified(self):
+        from project_build import ProjectCommands
+
+        def build(context):
+            context.project_commands = ProjectCommands(build="make", source="make")
+            context.project_verifier = lambda command: ("failed", "record.py:1: error")
+
+        original = MixedTurn.run_mixed
+
+        def run_mixed(test, raw, **kwargs):
+            from unittest.mock import patch
+            import agent_runtime
+
+            real = agent_runtime.project_build_runs
+
+            def with_harness(context, tool_log):
+                build(context)
+                return real(context, tool_log)
+
+            with patch.object(agent_runtime, "project_build_runs", with_harness):
+                return original(test, raw, **kwargs)
+
+        record = run_mixed(self, [
+            turn("", call("p1", "write_file", path="record.py", content=FIXED)),
+            turn("", call("t1", "terminal", command="make")),
+            turn("Done. It builds."), SATISFIED_ALL])
+
+        self.assertEqual(record.implementation, "UNVERIFIED")
+        self.assertEqual(record.verdict, "COMPLIANT BUT IMPLEMENTATION UNVERIFIED")
 
 
 class TheOtherPathsAreUntouched(MixedTurn):

@@ -15,9 +15,13 @@ judges the final source against the same packet:
                     carried as unresolved, never strengthened.
   brief             the packet as the coding core reads it.
   verifier_messages the final source and the packet, for a tool-less check.
-  read_verdicts     that check's answer, held to the source: a status that
-                    quotes no line the final tree contains is not a status.
-  normative_status  the packet's verdict from its constraints' statuses.
+  read_candidates   that check's answer, as candidate findings: the source
+                    facts it quotes that the final tree holds, and its
+                    reading of them, kept apart.
+  adjudicate        each constraint's authoritative status: SATISFIED or
+                    VIOLATED only where a deterministic predicate decides it
+                    from the final source; otherwise NOT DEMONSTRATED.
+  normative_status  the packet's verdict from its required constraints.
   composite         that verdict beside the implementation evidence.
   qualify           the answer, with every compliance claim the verdict does
                     not support marked where it stands.
@@ -363,7 +367,9 @@ CONFIRM_SYSTEM = (
 
 def confirmation_messages(constraint: Constraint, claim: str,
                           files: dict[str, str]) -> list[dict]:
-    """An independent second reading of one claimed violation."""
+    """A second reading of one possible violation: advisory only. The same
+    model asked twice is not independent, and on real protocol code it
+    confirmed false findings as readily as true ones."""
     shown, budget = [], _SOURCE_CHARS
 
     for path, text in files.items():
@@ -385,12 +391,44 @@ def confirmation_messages(constraint: Constraint, claim: str,
                                         + "\n\n".join(shown)}]
 
 
+#: What the check may say about a constraint. A candidate is a lead, not a
+#: status: it is kept for the audit trail and decides nothing.
+POSSIBLE_SATISFACTION = "POSSIBLE_SATISFACTION"
+POSSIBLE_VIOLATION = "POSSIBLE_VIOLATION"
+POSSIBLE_NOT_APPLICABLE = "POSSIBLE_NOT_APPLICABLE"
+POSSIBLE_AMBIGUITY = "POSSIBLE_AMBIGUITY"
+NO_FINDING = "NO_FINDING"
+_CANDIDATE = {SATISFIED: POSSIBLE_SATISFACTION, VIOLATED: POSSIBLE_VIOLATION,
+              NOT_APPLICABLE: POSSIBLE_NOT_APPLICABLE, AMBIGUOUS: POSSIBLE_AMBIGUITY}
+
+
+@dataclass(frozen=True)
+class CandidateFinding:
+    """What the check said about one constraint: source facts it quoted that
+    the final tree holds, and its reading of them, kept apart."""
+    constraint_id: str
+    candidate: str = NO_FINDING
+    interpretation: str = ""
+    facts: tuple = ()               # normative_predicates.SourceFact, grounded only
+    ungrounded: int = 0             # quotes the final source does not hold
+    advisory: str = ""              # a second reading's word, for the record only
+
+    def to_dict(self) -> dict:
+        return {"candidate": self.candidate, "interpretation": self.interpretation,
+                "facts": [item.to_dict() for item in self.facts],
+                "ungrounded": self.ungrounded, "advisory": self.advisory}
+
+
 @dataclass(frozen=True)
 class ConstraintStatus:
+    """A constraint's authoritative status, and what it rests on."""
     constraint_id: str
     status: str
     reason: str = ""
     evidence: tuple[tuple[str, int, str], ...] = ()
+    authority: str = "none"         # predicate:<TYPE> | packet | none
+    candidate: CandidateFinding | None = None
+    predicate: object = None        # normative_predicates.PredicateResult
 
 
 def _json_of(text: str):
@@ -422,84 +460,130 @@ def _quoted(files: dict[str, str], path: str, line: int, quote: str) -> bool:
     return wanted in " ".join(" ".join(lines).split())
 
 
-def read_verdicts(packet: NormativeConstraintSet, answer: str,
-                  files: dict[str, str]) -> tuple[ConstraintStatus, ...]:
-    """The check's statuses, held to the final source and to the packet.
+def read_candidates(packet: NormativeConstraintSet, answer: str,
+                    files: dict[str, str]) -> dict[str, CandidateFinding]:
+    """The check's answer as candidate findings, its quotes held to the final
+    source: a quote the final tree does not hold is not a fact."""
+    from normative_predicates import fact
 
-    An unresolved constraint is AMBIGUOUS whatever the check said. A SATISFIED
-    or VIOLATED status whose evidence the final files do not contain is not
-    demonstrated. A constraint the check left out is not demonstrated.
-    """
     given = {str(item.get("id")): item for item in (_json_of(answer).get("constraints") or [])
              if isinstance(item, dict)}
-    statuses = []
+    found = {}
 
     for constraint in packet.constraints:
-        item = given.get(constraint.constraint_id) or {}
-        status = str(item.get("status") or NOT_DEMONSTRATED).upper()
-        reason = str(item.get("reason") or "")[:300]
-        evidence = []
+        item = given.get(constraint.constraint_id)
 
-        for found in item.get("evidence") or []:
-            if not isinstance(found, dict):
+        if item is None:
+            found[constraint.constraint_id] = CandidateFinding(constraint.constraint_id)
+            continue
+
+        facts, ungrounded = [], 0
+
+        for quote in item.get("evidence") or []:
+            if not isinstance(quote, dict):
                 continue
 
             try:
-                line = int(found.get("line"))
+                line = int(quote.get("line"))
             except (TypeError, ValueError):
                 line = None
 
-            path = str(found.get("file") or "")
+            path = str(quote.get("file") or "")
 
-            if _quoted(files, path, line, found.get("text")):
-                evidence.append((path, line, " ".join(str(found.get("text")).split())[:160]))
+            if _quoted(files, path, line, quote.get("text")):
+                facts.append(fact(path, line, str(quote.get("text"))))
+            else:
+                ungrounded += 1
 
-        if status not in STATUSES:
-            status = NOT_DEMONSTRATED
+        status = str(item.get("status") or "").upper()
+        found[constraint.constraint_id] = CandidateFinding(
+            constraint.constraint_id, _CANDIDATE.get(status, NO_FINDING),
+            str(item.get("reason") or "")[:300], tuple(facts), ungrounded)
+
+    return found
+
+
+def adjudicate(packet: NormativeConstraintSet, candidates: dict[str, CandidateFinding],
+               files: dict[str, str]) -> tuple[ConstraintStatus, ...]:
+    """Each constraint's authoritative status.
+
+    SATISFIED and VIOLATED come only from a deterministic predicate over the
+    packet's own fields and the final source (normative_predicates). The
+    check's findings, and any second reading of them, are candidates: a
+    finding nothing independent establishes leaves its constraint NOT
+    DEMONSTRATED, in either direction. An unresolved constraint is AMBIGUOUS.
+    """
+    import normative_predicates
+
+    statuses = []
+
+    for constraint in packet.constraints:
+        candidate = candidates.get(constraint.constraint_id) or CandidateFinding(
+            constraint.constraint_id)
 
         if not constraint.resolved:
-            status, reason = AMBIGUOUS, constraint.unresolved_reason
-        elif status in (SATISFIED, VIOLATED) and not evidence:
-            reason = (f"{status.lower()} by the check, but its evidence is not in the "
-                      f"final source")
-            status = NOT_DEMONSTRATED
+            statuses.append(ConstraintStatus(constraint.constraint_id, AMBIGUOUS,
+                                             constraint.unresolved_reason, (), "packet",
+                                             candidate))
+            continue
 
-        statuses.append(ConstraintStatus(constraint.constraint_id, status, reason,
-                                         tuple(evidence)))
+        result = normative_predicates.evaluate(constraint, files)
+
+        if result is not None:
+            where = result.facts[0]
+            reason = (f"{result.predicate}: the provision states {result.expected}, "
+                      f"the final source gives {result.observed} "
+                      f"({where.path}:{where.line} `{where.excerpt[:80]}`)")
+            statuses.append(ConstraintStatus(
+                constraint.constraint_id, SATISFIED if result.holds else VIOLATED, reason,
+                tuple((item.path, item.line, item.excerpt) for item in result.facts),
+                f"predicate:{result.predicate}", candidate, result))
+            continue
+
+        if candidate.candidate == NO_FINDING:
+            reason = "nothing in the final source establishes it either way"
+        else:
+            said = candidate.candidate.removeprefix("POSSIBLE_").replace("_", " ").lower()
+            reason = (f"not independently established (the model check found a possible "
+                      f"{said}" + (f": {candidate.interpretation[:160]}"
+                                   if candidate.interpretation else "") + ")")
+
+        statuses.append(ConstraintStatus(
+            constraint.constraint_id, NOT_DEMONSTRATED, reason,
+            tuple((item.path, item.line, item.excerpt) for item in candidate.facts),
+            "none", candidate))
 
     return tuple(statuses)
 
 
-def normative_status(packet: NormativeConstraintSet, statuses) -> str:
-    """SATISFIED only when every applicable requirement is shown to hold.
+def repairable(packet: NormativeConstraintSet, statuses) -> list[ConstraintStatus]:
+    """The violations a repair may act on: required, and established by a
+    predicate. A model's finding never enters the coding core as a fact."""
+    return [item for item in statuses if item.status == VIOLATED
+            and item.authority.startswith("predicate:")
+            and getattr(packet.get(item.constraint_id), "modality", "") == "SHALL"]
 
-    A MAY or a SHOULD that the source neither shows nor contradicts does not
-    hold the verdict back -- what it forbids is being made mandatory, which is
-    a violation and would say so.
+
+def normative_status(packet: NormativeConstraintSet, statuses) -> str:
+    """SATISFIED only when every requirement is established to hold.
+
+    MAY and SHOULD constraints are not obligations of the implementation and
+    neither hold the verdict back nor make it.
     """
     by_id = {item.constraint_id: item for item in statuses}
-    states = [by_id[item.constraint_id].status for item in packet.constraints
-              if item.constraint_id in by_id]
+    required = [getattr(by_id.get(item.constraint_id), "status", NOT_DEMONSTRATED)
+                for item in packet.constraints if item.modality == "SHALL"]
 
-    if not states:
-        return NOT_DEMONSTRATED
-
-    if VIOLATED in states:
+    if VIOLATED in required:
         return VIOLATED
 
-    if AMBIGUOUS in states:
+    if AMBIGUOUS in required:
         return AMBIGUOUS
 
-    blocking = [by_id[item.constraint_id].status for item in packet.constraints
-                if item.modality == "SHALL" and by_id[item.constraint_id].status != NOT_APPLICABLE]
+    if required and all(state == SATISFIED for state in required):
+        return SATISFIED
 
-    if any(state != SATISFIED for state in blocking):
-        return NOT_DEMONSTRATED
-
-    if not blocking and all(state == NOT_APPLICABLE for state in states):
-        return NOT_DEMONSTRATED
-
-    return SATISFIED
+    return NOT_DEMONSTRATED
 
 
 def composite(implementation: str, normative: str) -> str:

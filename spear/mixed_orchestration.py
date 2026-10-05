@@ -8,9 +8,12 @@
      the packet. It sees the accepted coding tools only -- no standard tools,
      no corpus -- and runs inside the same SpearHost envelope as any
      implementation turn.
-  3. A tool-less check reads the FINAL source against the same packet. Its
-     statuses must quote lines the final tree contains. A violation earns one
-     repair brief to the same core, and one re-check; an ambiguity earns none.
+  3. A tool-less check reads the FINAL source against the same packet. What
+     it says is a candidate finding; a constraint is SATISFIED or VIOLATED only
+     where a deterministic predicate decides it from the final source
+     (normative_constraints.adjudicate). An established violation of a
+     requirement earns one repair brief to the same core, and one re-check;
+     a model's finding alone earns none.
 
 The verdict keeps two dimensions apart: the implementation evidence (the
 Phase-8.5 final-state verdict over every core call) and the normative status
@@ -41,8 +44,8 @@ PREPASS = (
     "every provision by its printed label.\n\nChange requested: {objective}")
 
 REPAIR = (
-    "The normative check of the final source found these constraints "
-    "violated. Change only what is needed to satisfy them, as stated; leave "
+    "The final source contradicts these constraints, as read from the source "
+    "itself. Change only what is needed to satisfy them, as stated; leave "
     "everything else as it is.\n\n{items}\n\nConstraint set {set_id} "
     "({standard} {revision}) is otherwise unchanged.")
 
@@ -157,12 +160,11 @@ class MixedOrchestrator:
         record.statuses, checked = self._check(context, record.packet, root)
         record.checks.append({"statuses": record.statuses, "fingerprint": checked})
 
-        violated = [item for item in record.statuses if item.status == nc.VIOLATED]
-        ambiguous = any(item.status == nc.AMBIGUOUS for item in record.statuses)
+        violated = nc.repairable(record.packet, record.statuses)
 
-        # One repair, for a concrete violation only: an ambiguity is reported,
-        # never guessed at.
-        if violated and not ambiguous:
+        # One repair, for an established violation of a requirement only: a
+        # model's finding, an ambiguity or a MAY is reported, never acted on.
+        if violated:
             record.repaired = True
             self._event(context, EventType.REPAIR_STARTED, {
                 "set_id": record.packet.set_id,
@@ -171,8 +173,8 @@ class MixedOrchestrator:
             items = "\n".join(
                 f"{item.constraint_id} [{record.packet.get(item.constraint_id).provision}, "
                 f"{record.packet.get(item.constraint_id).modality}] "
-                f"{record.packet.get(item.constraint_id).requirement}\n   Found: {item.reason}"
-                for item in violated)
+                f"{record.packet.get(item.constraint_id).requirement}\n   Contradiction: "
+                f"{item.reason}" for item in violated)
             repair = REPAIR.format(items=items, set_id=record.packet.set_id,
                                    standard=binding.standard_id, revision=binding.revision)
             result = self._implement(context, request, turn, repair,
@@ -338,47 +340,54 @@ class MixedOrchestrator:
         except Exception as exc:                    # noqa: BLE001
             answer = json.dumps({"constraints": [], "error": str(exc)[:200]})
 
-        statuses = tuple(self._confirmed(context, packet, item, files)
-                         for item in nc.read_verdicts(packet, answer, files))
+        candidates = nc.read_candidates(packet, answer, files)
+        candidates = {key: self._advised(context, packet, item, files)
+                      for key, item in candidates.items()}
+        statuses = nc.adjudicate(packet, candidates, files)
 
         for item in statuses:
+            candidate = item.candidate or nc.CandidateFinding(item.constraint_id)
+            predicate = item.predicate
             self._event(context, EventType.NORMATIVE_CONSTRAINT_STATUS, {
                 "set_id": packet.set_id, "constraint": item.constraint_id,
                 "provision": packet.get(item.constraint_id).provision,
-                "status": item.status,
-                "evidence": [f"{path}:{line}" for path, line, _ in item.evidence][:5]})
+                "status": item.status, "authority": item.authority,
+                "candidate": candidate.candidate, "advisory": candidate.advisory,
+                "interpretation": candidate.interpretation[:300],
+                "candidate_facts": [fact.to_dict() for fact in candidate.facts][:5],
+                "ungrounded_quotes": candidate.ungrounded,
+                "predicate": None if predicate is None else {
+                    "type": predicate.predicate, "expected": predicate.expected,
+                    "observed": predicate.observed,
+                    "facts": [fact.to_dict() for fact in predicate.facts][:5]}})
 
         return statuses, fingerprint
 
-    def _confirmed(self, context, packet, status, files):
-        """A violation stands only when an independent reading confirms it.
+    def _advised(self, context, packet, candidate, files):
+        """A second reading of a possible violation, kept as advice.
 
-        On real protocol code the check's violations were wrong as often as
-        right -- an error bit counted as an acknowledgement subtype, five
-        samples out of five. A violation drives a repair; one that a second
-        reading does not confirm is not demonstrated, and drives nothing.
+        It decides nothing: on real protocol code the same model confirmed a
+        false finding -- an error bit counted as an acknowledgement subtype --
+        as readily as a true one.
         """
-        if status.status != nc.VIOLATED:
-            return status
+        from dataclasses import replace
 
-        claim = status.reason + "".join(f"\n{path}:{line}: {text}"
-                                        for path, line, text in status.evidence)
-        verdict = ""
+        if candidate.candidate != nc.POSSIBLE_VIOLATION or not candidate.facts:
+            return candidate
+
+        claim = candidate.interpretation + "".join(
+            f"\n{fact.path}:{fact.line}: {fact.excerpt}" for fact in candidate.facts)
 
         try:
             turn = context.backend.complete_messages(
-                nc.confirmation_messages(packet.get(status.constraint_id), claim, files),
+                nc.confirmation_messages(packet.get(candidate.constraint_id), claim, files),
                 [], max_tokens=VERIFIER_MAX_TOKENS)
             verdict = str(nc._json_of(getattr(turn, "text", "")).get("verdict") or "").upper()
         except Exception:                           # noqa: BLE001
             verdict = ""
 
-        if verdict == "CONFIRMED":
-            return status
-
-        return nc.ConstraintStatus(status.constraint_id, nc.NOT_DEMONSTRATED,
-                                   f"a violation was claimed ({status.reason[:160]}) but an "
-                                   f"independent reading did not confirm it", status.evidence)
+        return replace(candidate, advisory=verdict if verdict in ("CONFIRMED", "REFUTED")
+                       else "NO_ANSWER")
 
     # ---------------------------------------------------------------- answer
 

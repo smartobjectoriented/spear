@@ -31,6 +31,7 @@ import subprocess
 from dataclasses import dataclass, field
 
 import normative_constraints as nc
+from normative_evidence import ProjectCheckProvider, SourcePredicateProvider
 from agent_roles import AgentRole
 from model_backend import ConversationMessage, TextBlock
 from tracing import EventStatus, EventType
@@ -64,6 +65,9 @@ class MixedRecord:
     verdict: str = ""
     repaired: bool = False
     tokens: dict = field(default_factory=dict)
+    excluded: int = 0                               # established as not applicable
+    report: dict = field(default_factory=dict)
+    check_runs: list = field(default_factory=list)  # normative_evidence.ConstraintCheckEvidence
 
 
 class _Metered:
@@ -137,9 +141,8 @@ class MixedOrchestrator:
         ledger = getattr(getattr(policy, "claim_evidence", None), "provisions", None)
         records = dict(getattr(ledger, "records", None) or {})
         records.update(self._cited_sources(binding, prepass.final_response or "", records))
-        record.packet = nc.build(records, prepass.final_response or "",
-                                 standard_id=binding.standard_id, revision=binding.revision,
-                                 objective=request.objective)
+        record.packet = self._packet(context, request, binding, records,
+                                     prepass.final_response or "")
         brief = nc.brief(record.packet)
         record.tokens["packet_chars"] = len(brief)
         self._event(context, EventType.NORMATIVE_CONSTRAINT_SET_CREATED, {
@@ -147,7 +150,9 @@ class MixedOrchestrator:
             "provisions": [item.provision for item in record.packet.constraints],
             "instance_ids": [item.instance_id for item in record.packet.constraints],
             "unresolved": [item.constraint_id for item in record.packet.constraints
-                           if not item.resolved]})
+                           if not item.resolved],
+            "coverage_complete": record.packet.coverage_complete,
+            "coverage_reason": record.packet.coverage_reason})
 
         # 2. The frozen coding core, from the brief alone.
         metered.phase = "implementation"
@@ -160,6 +165,8 @@ class MixedOrchestrator:
         record.statuses, checked = self._check(context, record.packet, root)
         record.checks.append({"statuses": record.statuses, "fingerprint": checked})
 
+        # A failing bound check that its binding makes decisive, or a predicate,
+        # is a contradiction the source itself shows; nothing else is.
         violated = nc.repairable(record.packet, record.statuses)
 
         # One repair, for an established violation of a requirement only: a
@@ -194,10 +201,12 @@ class MixedOrchestrator:
             record.normative = nc.NOT_DEMONSTRATED
 
         record.verdict = nc.composite(record.implementation, record.normative)
+        record.report = nc.coverage_report(record.packet, record.statuses, record.excluded)
         self._event(context, EventType.FINAL_MIXED_VERDICT, {
             "set_id": record.packet.set_id, "verdict": record.verdict,
             "implementation": record.implementation, "normative": record.normative,
-            "repaired": record.repaired, "source_changed_by_check": before != checked})
+            "repaired": record.repaired, "source_changed_by_check": before != checked,
+            "report": record.report})
 
         result.final_response = self.render(record, binding,
                                             result.final_response or "")
@@ -207,6 +216,108 @@ class MixedOrchestrator:
         return self.controller._result(
             request, TaskStatus.COMPLETED if not result.completion_deferred
             else TaskStatus.BLOCKED, result, warnings=(f"mixed:{record.verdict}",))
+
+    def _packet(self, context, request, binding, records, answer):
+        """The constraint packet: the cited provisions, closed over the
+        structure the store records, each with its applicability decided from
+        deterministic facts -- the request's words, the project's declarations
+        and the checks it binds."""
+        import normative_coverage as cov
+        import normative_evidence as ne
+
+        universe = self._universe(binding, records)
+        retrieved = tuple(cov.instance_of(item) for item in records.values())
+        coverage = cov.close(nc.cited(records, answer), universe, retrieved=retrieved)
+        self._event(context, EventType.CONSTRAINT_COVERAGE_EXPANDED, {
+            "retrieved": len(retrieved),
+            "cited": [item.instance for item in coverage.cited],
+            "added": [{"instance": item.instance, "reason": item.coverage_reason,
+                       "relation": item.source_relation, "originating": item.originating,
+                       "parent": item.parent} for item in coverage.added],
+            "ungrouped": list(coverage.ungrouped), "complete": coverage.complete,
+            "incomplete_reason": coverage.incomplete_reason})
+
+        spec = getattr(context, "normative_project", None) or {}
+        bindings, declarations, problems = ne.load(
+            spec, standard_id=binding.standard_id, revision=binding.revision,
+            authority=getattr(context, "normative_authority", "") or "projects.json")
+        declared, bound = {}, {}
+
+        for item in declarations:
+            found = universe.resolve(item.provision)
+            problems += ([] if found else [f"normative_applicability: {item.provision} names "
+                                           f"no single provision of the bound revision"])
+
+            for target in found:
+                declared.setdefault(cov.instance_of(target), []).append(
+                    (item.status, item.reason, item.authority))
+
+        self.bindings, self.bound_instances = bindings, {}
+
+        for item in bindings:
+            instances = set()
+
+            for identity in item.provisions:
+                found = universe.resolve(identity)
+                problems += ([] if found else [f"normative_checks {item.binding_id}: {identity} "
+                                               f"names no single provision of the bound revision"])
+                instances |= {cov.instance_of(target) for target in found}
+
+            self.bound_instances[item.binding_id] = instances
+
+            for instance in instances:
+                bound.setdefault(instance, set()).add(item.binding_id)
+
+            self._event(context, EventType.NORMATIVE_CHECK_BINDING_LOADED, {
+                "binding_id": item.binding_id, "provisions": list(item.provisions),
+                "instances": sorted(instances), "command": item.command,
+                "semantics": item.semantics, "authority": item.authority,
+                "enabled": item.enabled})
+
+        if problems:
+            self._event(context, EventType.NORMATIVE_CHECK_BINDING_LOADED,
+                        {"problems": problems[:20]})
+
+        decisions = {}
+
+        for entry in coverage.entries:
+            decision = cov.decide(entry, request.objective, declared, bound)
+            decisions[entry.instance] = decision
+            self._event(context, EventType.CONSTRAINT_APPLICABILITY_DECIDED, {
+                "instance": entry.instance, "provision": str(entry.record.key),
+                "origin": entry.origin, "applicability": decision.status,
+                "basis": decision.basis, "advisory": decision.advisory})
+
+        context.mixed_record.excluded = sum(1 for item in decisions.values()
+                                            if item.status == cov.NOT_APPLICABLE)
+
+        return nc.from_coverage(coverage, decisions, standard_id=binding.standard_id,
+                                revision=binding.revision, objective=request.objective)
+
+    def _universe(self, binding, records):
+        """Every provision record of the bound revision, read once per store.
+        Without a readable store, the records the pass itself observed."""
+        import normative_coverage as cov
+        import provision_identity
+
+        store = getattr(self.controller, "standard_store", None)
+        cache = getattr(self.controller, "_provision_universe", None) or {}
+        key = (binding.standard_id, binding.revision)
+
+        if key not in cache:
+            try:
+                units = [unit.to_dict() if hasattr(unit, "to_dict") else unit
+                         for unit in store.load_units(binding.standard_id, binding.revision)]
+                cache[key] = cov.Universe(provision_identity.records_for_units(units), units)
+            except Exception:                       # noqa: BLE001
+                return cov.Universe(list(records.values()), [])
+
+            try:
+                self.controller._provision_universe = cache
+            except AttributeError:
+                pass
+
+        return cache[key]
 
     def _cited_sources(self, binding, answer, records):
         """Provision records for the sources the answer cites that the pass's
@@ -343,23 +454,47 @@ class MixedOrchestrator:
         candidates = nc.read_candidates(packet, answer, files)
         candidates = {key: self._advised(context, packet, item, files)
                       for key, item in candidates.items()}
-        statuses = nc.adjudicate(packet, candidates, files)
+        evidence = SourcePredicateProvider().evidence(packet, files, fingerprint)
+        checks = ProjectCheckProvider(
+            getattr(self, "bindings", ()),
+            lambda item: [constraint for constraint in packet.constraints
+                          if constraint.instance_id in self.bound_instances.get(
+                              item.binding_id, ())],
+            getattr(context, "normative_check_runner", None),
+            lambda: nc.source_fingerprint(root),
+            lambda name, metadata: self._event(context, EventType(name), metadata))
+        evidence += checks.evidence(packet, files, fingerprint)
+        context.mixed_record.check_runs.extend(checks.runs)
+        statuses = nc.adjudicate(packet, candidates, files, evidence=evidence,
+                                 epoch=fingerprint)
+        by_constraint = {}
+
+        for item in evidence:
+            by_constraint.setdefault(item.constraint_id, []).append(item)
 
         for item in statuses:
             candidate = item.candidate or nc.CandidateFinding(item.constraint_id)
-            predicate = item.predicate
+            constraint = packet.get(item.constraint_id)
+
+            if item.status == nc.EVIDENCE_CONFLICT:
+                self._event(context, EventType.NORMATIVE_EVIDENCE_CONFLICT, {
+                    "set_id": packet.set_id, "constraint": item.constraint_id,
+                    "authority": item.authority, "reason": item.reason[:400]})
+
             self._event(context, EventType.NORMATIVE_CONSTRAINT_STATUS, {
                 "set_id": packet.set_id, "constraint": item.constraint_id,
-                "provision": packet.get(item.constraint_id).provision,
+                "provision": constraint.provision, "instance_id": constraint.instance_id,
+                "applicability": constraint.applicability,
                 "status": item.status, "authority": item.authority,
                 "candidate": candidate.candidate, "advisory": candidate.advisory,
                 "interpretation": candidate.interpretation[:300],
                 "candidate_facts": [fact.to_dict() for fact in candidate.facts][:5],
                 "ungrounded_quotes": candidate.ungrounded,
-                "predicate": None if predicate is None else {
-                    "type": predicate.predicate, "expected": predicate.expected,
-                    "observed": predicate.observed,
-                    "facts": [fact.to_dict() for fact in predicate.facts][:5]}})
+                "evidence": [{"provider": found.provider, "kind": found.kind,
+                              "status": found.status, "decisive": found.decisive,
+                              "fresh": found.source_epoch == fingerprint,
+                              "reason": found.reason[:200]}
+                             for found in by_constraint.get(item.constraint_id, [])]})
 
         return statuses, fingerprint
 
@@ -393,20 +528,32 @@ class MixedOrchestrator:
 
     @staticmethod
     def render(record, binding, answer) -> str:
-        packet = record.packet
+        packet, report = record.packet, record.report or nc.coverage_report(
+            record.packet, record.statuses, record.excluded)
         lines = [f"**MIXED VERDICT: {record.verdict}** — {binding.standard_id} "
                  f"{binding.revision}, constraint set {packet.set_id} "
                  f"({len(packet.constraints)} constraint(s); compliance is judged "
-                 f"against these only)."]
+                 f"against these only).",
+                 f"Coverage: {report['coverage']} — {report['cited']} cited, "
+                 f"{report['closure_added']} added by the document's structure, "
+                 f"{report['not_applicable_excluded']} excluded as not applicable"
+                 + (f" ({packet.coverage_reason})" if packet.coverage_reason else "") + ".",
+                 f"Required: {report['required']} — applicable {report['required_applicable']} "
+                 f"(satisfied {report['satisfied']}, violated {report['violated']}, not "
+                 f"demonstrated {report['not_demonstrated']}), applicability unresolved "
+                 f"{report['unresolved_applicability']}, evidence conflicts "
+                 f"{report['conflicts']}."]
         by_id = {item.constraint_id: item for item in record.statuses}
 
         for item in packet.constraints:
             status = by_id.get(item.constraint_id)
             where = ", ".join(f"{path}:{line}" for path, line, _ in
                               (status.evidence if status else ())[:2])
+            origin = (f"; added: {item.source_relation}" if item.origin == "CLOSURE" else "")
             lines.append(
                 f"- {item.constraint_id} {item.provision} ({item.modality}"
-                + (f", {item.condition}" if item.condition else "") + f"): "
+                + (f", {item.condition}" if item.condition else "")
+                + f"; applicability {item.applicability}{origin}): "
                 + (status.status if status else nc.NOT_DEMONSTRATED)
                 + (f" — {status.reason}" if status and status.reason else "")
                 + (f" [{where}]" if where else ""))
@@ -451,9 +598,11 @@ def final_files(root: str) -> dict[str, str]:
         except (OSError, subprocess.SubprocessError):
             pass
 
+    from completion import generated_path
+
     files = {}
 
-    for name in dict.fromkeys(names):
+    for name in dict.fromkeys(name for name in names if not generated_path(name)):
         path = os.path.join(root, name)
 
         try:

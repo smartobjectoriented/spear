@@ -43,7 +43,8 @@ VIOLATED = "VIOLATED"
 NOT_DEMONSTRATED = "NOT_DEMONSTRATED"
 NOT_APPLICABLE = "NOT_APPLICABLE"
 AMBIGUOUS = "AMBIGUOUS"
-STATUSES = (SATISFIED, VIOLATED, NOT_DEMONSTRATED, NOT_APPLICABLE, AMBIGUOUS)
+EVIDENCE_CONFLICT = "EVIDENCE_CONFLICT"
+STATUSES = (SATISFIED, VIOLATED, NOT_DEMONSTRATED, NOT_APPLICABLE, AMBIGUOUS, EVIDENCE_CONFLICT)
 
 _MODALITY = {REQUIREMENT_FORCE: "SHALL", RECOMMENDATION_FORCE: "SHOULD", PERMISSION_FORCE: "MAY"}
 _CARRY_LIMIT = 12
@@ -87,6 +88,13 @@ class Constraint:
     identifiers: tuple[str, ...] = ()
     resolved: bool = True
     unresolved_reason: str = ""
+    origin: str = "CITED"           # CITED | CLOSURE (normative_coverage)
+    coverage_reason: str = ""
+    source_relation: str = ""
+    originating: str = ""
+    applicability: str = "UNRESOLVED"
+    applicability_basis: str = ""
+    applicability_advisory: str = ""
 
     @property
     def implication(self) -> str:
@@ -119,7 +127,12 @@ class Constraint:
                 "cardinality": list(self.cardinality), "values": list(self.values),
                 "identifiers": list(self.identifiers), "resolved": self.resolved,
                 "unresolved_reason": self.unresolved_reason,
-                "implication": self.implication}
+                "implication": self.implication, "origin": self.origin,
+                "coverage_reason": self.coverage_reason,
+                "source_relation": self.source_relation, "originating": self.originating,
+                "applicability": self.applicability,
+                "applicability_basis": self.applicability_basis,
+                "applicability_advisory": self.applicability_advisory}
 
 
 @dataclass(frozen=True)
@@ -129,6 +142,9 @@ class NormativeConstraintSet:
     revision: str
     objective: str
     constraints: tuple[Constraint, ...] = ()
+    coverage_complete: bool = False
+    coverage_reason: str = ""
+    retrieved: int = 0
 
     def get(self, constraint_id: str) -> Constraint | None:
         return next((item for item in self.constraints
@@ -137,6 +153,8 @@ class NormativeConstraintSet:
     def to_dict(self) -> dict:
         return {"set_id": self.set_id, "standard_id": self.standard_id,
                 "revision": self.revision, "objective": self.objective,
+                "coverage_complete": self.coverage_complete,
+                "coverage_reason": self.coverage_reason, "retrieved": self.retrieved,
                 "constraints": [item.to_dict() for item in self.constraints]}
 
 
@@ -196,16 +214,13 @@ def _provision_order(record):
     return [int(part) for part in re.findall(r"\d+", key)] or [10**9], key
 
 
-def build(records, answer: str, *, standard_id: str, revision: str,
-          objective: str, limit: int = _CARRY_LIMIT) -> NormativeConstraintSet:
-    """The packet: the provisions the normative pass's answer cites.
+def cited(records, answer: str) -> list:
+    """The records the normative pass's answer cites, in document order.
 
     Cited by printed label ("Rule 8.4.1.1-2") or by the source the normative
     runtime's citations name ("source std-650fe01d..."). Only those: a pass
-    whose answer cites nothing identifiable yields an empty packet -- an
-    unresolved request -- and never the provisions retrieval happened to
-    return. A real pass whose answer named its sources only by section once
-    received trace-unit register rules for a timer change that way.
+    whose answer cites nothing identifiable cites nothing, and never the
+    provisions retrieval happened to return.
     """
     named = citations_in(answer)
     sources = {match.lower() for match in re.findall(r"std-[0-9a-f]{12,}", answer or "")}
@@ -215,27 +230,72 @@ def build(records, answer: str, *, standard_id: str, revision: str,
         label = str(key).lower()
         bare = label.split()[-1] if label else ""
         source = str(getattr(record, "source_id", "") or "").lower()
-        cited = (label in named or bare in named
-                 or any(source and (source.startswith(item) or item.startswith(source))
-                        for item in sources))
 
-        if cited:
+        if (label in named or bare in named
+                or any(source and (source.startswith(item) or item.startswith(source))
+                       for item in sources)):
             chosen.append(record)
 
-    constraints = []
+    return sorted(chosen, key=_provision_order)
 
-    for record in sorted(chosen, key=_provision_order)[:limit]:
-        item = constraint_from(record, f"C{len(constraints) + 1}")
+
+def build(records, answer: str, *, standard_id: str, revision: str,
+          objective: str, limit: int = _CARRY_LIMIT) -> NormativeConstraintSet:
+    """The packet of the cited provisions alone, without structural closure:
+    the coverage is what the answer happened to cite, and says so."""
+    import normative_coverage as cov
+
+    coverage = cov.Coverage((), tuple(cov.CoverageEntry(record, cov.CITED,
+                                                        "cited by the normative pass")
+                                      for record in cited(records, answer)), False,
+                            "no structural closure was run")
+
+    return from_coverage(coverage, {}, standard_id=standard_id, revision=revision,
+                         objective=objective, limit=limit)
+
+
+def from_coverage(coverage, decisions, *, standard_id: str, revision: str,
+                  objective: str, limit: int = _CARRY_LIMIT) -> NormativeConstraintSet:
+    """The packet: every normative provision of the coverage set that is not
+    established as inapplicable, with how it came to be there and whether it
+    applies. `decisions` maps an instance id to its Applicability; one not
+    given is UNRESOLVED."""
+    import normative_coverage as cov
+
+    complete, reasons = coverage.complete, [coverage.incomplete_reason] if \
+        coverage.incomplete_reason else []
+    constraints = []
+    active = []
+
+    for entry in coverage.entries:
+        decision = decisions.get(entry.instance) or cov.Applicability(
+            cov.UNRESOLVED, "not assessed")
+
+        if decision.status != cov.NOT_APPLICABLE:
+            active.append((entry, decision))
+
+    if len(active) > limit:
+        complete = False
+        reasons.append(f"{len(active)} provisions apply or may apply; the packet carries "
+                       f"{limit}")
+
+    for entry, decision in active[:limit]:
+        item = constraint_from(entry.record, f"C{len(constraints) + 1}")
 
         if item is not None:
-            constraints.append(item)
+            constraints.append(replace(
+                item, origin=entry.origin, coverage_reason=entry.coverage_reason,
+                source_relation=entry.source_relation, originating=entry.originating,
+                applicability=decision.status, applicability_basis=decision.basis,
+                applicability_advisory=decision.advisory))
 
     digest = hashlib.sha256("\n".join(
         [standard_id, revision] + sorted(item.instance_id or item.provision
                                          for item in constraints)).encode()).hexdigest()
 
     return NormativeConstraintSet(f"ncs-{digest[:16]}", standard_id, revision,
-                                  objective, tuple(constraints))
+                                  objective, tuple(constraints), complete,
+                                  "; ".join(reasons), len(coverage.retrieved))
 
 
 def brief(packet: NormativeConstraintSet) -> str:
@@ -426,9 +486,9 @@ class ConstraintStatus:
     status: str
     reason: str = ""
     evidence: tuple[tuple[str, int, str], ...] = ()
-    authority: str = "none"         # predicate:<TYPE> | packet | none
+    authority: str = "none"         # predicate:<TYPE> | check:<id>, joined by + | packet | none
     candidate: CandidateFinding | None = None
-    predicate: object = None        # normative_predicates.PredicateResult
+    predicate: object = None        # the predicate's normative_evidence.Evidence
 
 
 def _json_of(text: str):
@@ -504,16 +564,27 @@ def read_candidates(packet: NormativeConstraintSet, answer: str,
 
 
 def adjudicate(packet: NormativeConstraintSet, candidates: dict[str, CandidateFinding],
-               files: dict[str, str]) -> tuple[ConstraintStatus, ...]:
+               files: dict[str, str], *, evidence=None, epoch: str = "") -> tuple[ConstraintStatus, ...]:
     """Each constraint's authoritative status.
 
-    SATISFIED and VIOLATED come only from a deterministic predicate over the
-    packet's own fields and the final source (normative_predicates). The
-    check's findings, and any second reading of them, are candidates: a
-    finding nothing independent establishes leaves its constraint NOT
-    DEMONSTRATED, in either direction. An unresolved constraint is AMBIGUOUS.
+    SATISFIED and VIOLATED come only from decisive evidence of an
+    authoritative provider (normative_evidence) on the final source epoch:
+    a deterministic predicate, or a project check bound to the provision.
+    `evidence` is what the providers returned; when it is None the source
+    predicates alone are consulted. Decisive evidence that disagrees is an
+    EVIDENCE_CONFLICT, never whichever ran last. The check's findings, and
+    any second reading of them, are candidates and decide nothing; an
+    unresolved provision is AMBIGUOUS.
     """
-    import normative_predicates
+    from normative_evidence import SourcePredicateProvider
+
+    if evidence is None:
+        evidence = SourcePredicateProvider().evidence(packet, files, epoch)
+
+    by_constraint = {}
+
+    for item in evidence:
+        by_constraint.setdefault(item.constraint_id, []).append(item)
 
     statuses = []
 
@@ -527,69 +598,118 @@ def adjudicate(packet: NormativeConstraintSet, candidates: dict[str, CandidateFi
                                              candidate))
             continue
 
-        result = normative_predicates.evaluate(constraint, files)
+        found = by_constraint.get(constraint.constraint_id, [])
+        fresh = [item for item in found if item.decisive and item.source_epoch == epoch]
+        stale = [item for item in found if item.decisive and item.source_epoch != epoch]
+        said = {item.status for item in fresh}
+        facts = tuple(fact for item in fresh for fact in item.facts)
+        authority = "+".join(sorted({item.authority for item in fresh}))
+        reason = "; ".join(item.reason for item in fresh)
+        predicate = next((item for item in fresh if item.provider == "predicate"), None)
 
-        if result is not None:
-            where = result.facts[0]
-            reason = (f"{result.predicate}: the provision states {result.expected}, "
-                      f"the final source gives {result.observed} "
-                      f"({where.path}:{where.line} `{where.excerpt[:80]}`)")
-            statuses.append(ConstraintStatus(
-                constraint.constraint_id, SATISFIED if result.holds else VIOLATED, reason,
-                tuple((item.path, item.line, item.excerpt) for item in result.facts),
-                f"predicate:{result.predicate}", candidate, result))
+        if said == {SATISFIED} or said == {VIOLATED}:
+            statuses.append(ConstraintStatus(constraint.constraint_id, said.pop(), reason,
+                                             facts, authority, candidate, predicate))
             continue
 
-        if candidate.candidate == NO_FINDING:
-            reason = "nothing in the final source establishes it either way"
-        else:
-            said = candidate.candidate.removeprefix("POSSIBLE_").replace("_", " ").lower()
-            reason = (f"not independently established (the model check found a possible "
-                      f"{said}" + (f": {candidate.interpretation[:160]}"
-                                   if candidate.interpretation else "") + ")")
+        if len(said) > 1:
+            statuses.append(ConstraintStatus(
+                constraint.constraint_id, EVIDENCE_CONFLICT,
+                "authoritative evidence disagrees: " + reason, facts, authority, candidate,
+                predicate))
+            continue
+
+        notes = [item.reason for item in found if not item.decisive]
+        notes += [f"{item.reason} -- on an earlier source state, stale" for item in stale]
+
+        if candidate.candidate != NO_FINDING:
+            what = candidate.candidate.removeprefix("POSSIBLE_").replace("_", " ").lower()
+            notes.append(f"not independently established (the model check found a possible "
+                         f"{what}" + (f": {candidate.interpretation[:160]}"
+                                      if candidate.interpretation else "") + ")")
 
         statuses.append(ConstraintStatus(
-            constraint.constraint_id, NOT_DEMONSTRATED, reason,
+            constraint.constraint_id, NOT_DEMONSTRATED,
+            "; ".join(notes) or "nothing in the final source establishes it either way",
             tuple((item.path, item.line, item.excerpt) for item in candidate.facts),
             "none", candidate))
 
     return tuple(statuses)
 
 
+def _decisive(status) -> bool:
+    return any(part.split(":", 1)[0] in ("predicate", "check")
+               for part in status.authority.split("+"))
+
+
 def repairable(packet: NormativeConstraintSet, statuses) -> list[ConstraintStatus]:
-    """The violations a repair may act on: required, and established by a
-    predicate. A model's finding never enters the coding core as a fact."""
-    return [item for item in statuses if item.status == VIOLATED
-            and item.authority.startswith("predicate:")
-            and getattr(packet.get(item.constraint_id), "modality", "") == "SHALL"]
+    """The violations a repair may act on: an applicable requirement, violated
+    on decisive evidence. A model's finding never enters the coding core as a
+    fact, and neither does a requirement whose applicability is unresolved."""
+    return [item for item in statuses if item.status == VIOLATED and _decisive(item)
+            and getattr(packet.get(item.constraint_id), "modality", "") == "SHALL"
+            and getattr(packet.get(item.constraint_id), "applicability", "") == "APPLICABLE"]
 
 
 def normative_status(packet: NormativeConstraintSet, statuses) -> str:
-    """SATISFIED only when every requirement is established to hold.
+    """SATISFIED only when the coverage is complete and every applicable
+    requirement is established to hold.
 
-    MAY and SHOULD constraints are not obligations of the implementation and
-    neither hold the verdict back nor make it.
+    A requirement whose applicability is unresolved can be neither met nor
+    failed: it holds the verdict at NOT_DEMONSTRATED. MAY and SHOULD
+    constraints are not obligations and neither hold the verdict back nor
+    make it.
     """
     by_id = {item.constraint_id: item for item in statuses}
-    required = [getattr(by_id.get(item.constraint_id), "status", NOT_DEMONSTRATED)
-                for item in packet.constraints if item.modality == "SHALL"]
+    required = [(item, getattr(by_id.get(item.constraint_id), "status", NOT_DEMONSTRATED))
+                for item in packet.constraints
+                if item.modality == "SHALL" and item.applicability != "NOT_APPLICABLE"]
 
-    if VIOLATED in required:
+    if any(item.applicability == "APPLICABLE" and state == VIOLATED for item, state in required):
         return VIOLATED
 
-    if AMBIGUOUS in required:
+    if any(state == EVIDENCE_CONFLICT for _, state in required):
+        return EVIDENCE_CONFLICT
+
+    if any(item.applicability == "APPLICABLE" and state == AMBIGUOUS for item, state in required):
         return AMBIGUOUS
 
-    if required and all(state == SATISFIED for state in required):
+    if packet.coverage_complete and required and all(
+            item.applicability == "APPLICABLE" and state == SATISFIED for item, state in required):
         return SATISFIED
 
     return NOT_DEMONSTRATED
+
+
+def coverage_report(packet: NormativeConstraintSet, statuses, excluded: int = 0) -> dict:
+    """The counts behind the verdict."""
+    by_id = {item.constraint_id: item.status for item in statuses}
+    required = [item for item in packet.constraints if item.modality == "SHALL"]
+    applicable = [item for item in required if item.applicability == "APPLICABLE"]
+
+    def count(state, items=applicable):
+        return sum(1 for item in items if by_id.get(item.constraint_id, NOT_DEMONSTRATED) == state)
+
+    return {"coverage": "COMPLETE" if packet.coverage_complete else "INCOMPLETE",
+            "coverage_reason": packet.coverage_reason,
+            "cited": sum(1 for item in packet.constraints if item.origin == "CITED"),
+            "closure_added": sum(1 for item in packet.constraints if item.origin == "CLOSURE"),
+            "not_applicable_excluded": excluded,
+            "required": len(required), "required_applicable": len(applicable),
+            "satisfied": count(SATISFIED), "violated": count(VIOLATED),
+            "not_demonstrated": count(NOT_DEMONSTRATED), "ambiguous": count(AMBIGUOUS),
+            "conflicts": count(EVIDENCE_CONFLICT, required),
+            "unresolved_applicability": sum(1 for item in required
+                                            if item.applicability == "UNRESOLVED")}
 
 
 def composite(implementation: str, normative: str) -> str:
     """The user-facing status of a MIXED turn: two dimensions, not one boolean."""
     if normative == VIOLATED:
         return "NOT COMPLIANT"
+
+    if normative == EVIDENCE_CONFLICT:
+        return "EVIDENCE CONFLICT"
 
     if normative == AMBIGUOUS:
         return "NORMATIVE AMBIGUITY"
@@ -645,8 +765,15 @@ def _mark(sentence: str) -> str:
 
 
 def source_fingerprint(root: str) -> str:
-    """The delivered source as it stands: tracked changes and untracked files."""
+    """The delivered source as it stands: tracked changes and untracked files.
+
+    What a build or a check writes into its own output areas is not source
+    (completion.generated_path), or every check that imports a module would
+    make its own result stale.
+    """
     import subprocess
+
+    from completion import generated_path
 
     digest = hashlib.sha256()
 
@@ -657,10 +784,14 @@ def source_fingerprint(root: str) -> str:
         except (OSError, subprocess.SubprocessError):
             return ""
 
-        digest.update(done.stdout)
+        if argv[-2:] != ["-o", "--exclude-standard"]:
+            digest.update(done.stdout)
+        else:
+            names = [name for name in done.stdout.decode(errors="replace").splitlines()
+                     if not generated_path(name)]
+            digest.update("\n".join(names).encode())
 
-        if argv[-2:] == ["-o", "--exclude-standard"]:
-            for name in done.stdout.decode(errors="replace").splitlines():
+            for name in names:
                 try:
                     with open(os.path.join(root, name), "rb") as handle:
                         digest.update(handle.read(1 << 20))

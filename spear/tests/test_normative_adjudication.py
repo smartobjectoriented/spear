@@ -22,10 +22,12 @@ import normative_predicates as np
 from normative_constraints import Constraint, NormativeConstraintSet
 
 
-def constraint(text, cid="C1", modality="SHALL", condition="", resolved=True):
+def constraint(text, cid="C1", modality="SHALL", condition="", resolved=True,
+               applicability="APPLICABLE"):
     return Constraint(cid, f"Rule {cid}", f"i-{cid}", f"s-{cid}", 1, modality,
                       f"Rule {cid}: {text}", condition=condition, resolved=resolved,
-                      unresolved_reason="" if resolved else "needs review")
+                      unresolved_reason="" if resolved else "needs review",
+                      applicability=applicability)
 
 
 COUNT = constraint("The count field shall contain exactly four entries.")
@@ -35,8 +37,8 @@ OPTIONAL = constraint("The metadata field may be absent.", "C3", modality="MAY")
 SUBTYPE = constraint("Only one of the AckV, AckX, or AckS bits shall be set to 1.", "C4")
 
 
-def packet(*items):
-    return NormativeConstraintSet("ncs-test", "STD", "1", "o", tuple(items))
+def packet(*items, complete=True):
+    return NormativeConstraintSet("ncs-test", "STD", "1", "o", tuple(items), complete)
 
 
 def answer(*items):

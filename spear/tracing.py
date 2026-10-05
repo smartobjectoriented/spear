@@ -88,6 +88,12 @@ class EventType(StrEnum):
     NORMATIVE_CONSTRAINT_STATUS = "normative_constraint_status"
     REPAIR_STARTED = "repair_started"
     FINAL_MIXED_VERDICT = "final_mixed_verdict"
+    CONSTRAINT_COVERAGE_EXPANDED = "constraint_coverage_expanded"
+    CONSTRAINT_APPLICABILITY_DECIDED = "constraint_applicability_decided"
+    NORMATIVE_CHECK_BINDING_LOADED = "normative_check_binding_loaded"
+    NORMATIVE_CHECK_STARTED = "normative_check_started"
+    NORMATIVE_CHECK_FINISHED = "normative_check_finished"
+    NORMATIVE_EVIDENCE_CONFLICT = "normative_evidence_conflict"
 
 
 class EventStatus(StrEnum):

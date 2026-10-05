@@ -16,8 +16,9 @@ did, and it is written into the answer itself:
                     show what the answer claims passed after the last source
                     change (a build for a build, a clean, a build and a look
                     for a link surviving both); UNVERIFIED when source changed
-                    without that; NO_CHANGE otherwise. Decided from the
-                    structured evidence alone.
+                    without that, or when the project's own validation
+                    failed on the final tree; NO_CHANGE otherwise. Decided
+                    from the structured evidence alone.
   qualify           an UNVERIFIED answer opens with the verdict, and every
                     sentence that asserts success unconditionally is marked
                     as unverified where it stands, so the answer cannot say
@@ -370,43 +371,136 @@ def canonical_entry(record: ToolRecord, label=lambda path: path) -> str:
     return f"{head}\n{record.result[:400]}"
 
 
+# ------------------------------------------------------- project validation
+#
+# The harness's own run of the project's declared build and tests. Its outcome
+# is a fact about the tree it ran on, kept as such: a pass may stand for what
+# it demonstrates, a failure is negative evidence, and a run that did not
+# happen demonstrates nothing.
+
+PASSED, FAILED, NOT_RUN = "PASSED", "FAILED", "NOT_RUN"
+
+
+@dataclass(frozen=True)
+class ProjectValidationEvidence:
+    """One harness run of a project command, against one source epoch."""
+    status: str                 # PASSED | FAILED | NOT_RUN
+    validation_kind: str        # build | test
+    source_epoch: int
+    command: str
+    exit_code: int | None = None
+    evidence: str = ""          # what the run printed, when it said anything
+
+
+def project_evidence(project_runs, project_commands=None, epoch=0):
+    """Harness runs as ProjectValidationEvidence.
+
+    A (command, status, output) run carries no epoch of its own: it is taken
+    to have run on the tree as it stands, `epoch`. Its exit status counts only
+    when nothing filters it -- piped into a filter without pipefail, a pass
+    says nothing and a failure in its output is still a failure.
+    """
+    test = getattr(project_commands, "test", None)
+    found = []
+
+    for run in project_runs or ():
+        if isinstance(run, ProjectValidationEvidence):
+            found.append(run)
+            continue
+
+        command, status, output = run
+        status = {"passed": PASSED, "failed": FAILED}.get(str(status).lower(), NOT_RUN)
+
+        if status == PASSED and _masked(command):
+            status = FAILED if _FAILURE.search(output or "") else NOT_RUN
+
+        kind = "test" if test and command == test else "build"
+        found.append(ProjectValidationEvidence(
+            status, kind, epoch, command, 0 if status == PASSED else None,
+            str(output or "")[-2000:]))
+
+    return found
+
+
+def _masked(command: str) -> bool:
+    """Whether a stage's exit status is hidden behind a pipe."""
+    return "pipefail" not in command and any(
+        after == "|" for _, after in _stages(command))
+
+
 def decide(log, *, project_runs=(), project_commands=None, answer="",
            generated=generated_path, root="") -> Verdict:
     """`log` is the turn's Evidence, in call order; `answer` the core's own.
 
     VERIFIED only when the checks that would show what the answer claims ran
     and passed in the final source epoch -- after the last change to the
-    delivered source. A check from before that change proves an earlier tree.
+    delivered source. A check from before that change proves an earlier tree,
+    and a failed project validation on the final tree is never outweighed.
     """
-    from agent_runtime import write_note
+    from agent_runtime import syntax_only_verification
 
     epoch, checks, changed = timeline(log, generated, root)
 
     if not changed:
         return Verdict("NO_CHANGE", ())
 
-    final = [check for check in checks if check.epoch == epoch]
-    earlier = [check for check in checks if check.epoch < epoch and check.passed]
-    runs = [(check.command, check.passed) for check in final
-            if check.kind not in ("clean", "check")]
-    runs = list(dict.fromkeys(runs))
-    note = write_note(changed, runs, project_runs, project_commands)
+    files = ", ".join(changed)
+    project = project_evidence(project_runs, project_commands, epoch)
+    fresh = [run for run in project if run.source_epoch == epoch]
+    failed = next((run for run in fresh if run.status == FAILED), None)
 
-    if note:
-        reason = note.strip().removeprefix("⚠ UNVERIFIED:").strip()
+    if failed is not None:
+        return Verdict("UNVERIFIED", changed, (
+            f"{files} changed, and the project's own {failed.validation_kind} "
+            f"failed on the final source: `{failed.command[:120]}`. The change "
+            f"above is not shown to work as written."))
 
-        if not runs and earlier:
-            reason = (f"{', '.join(changed)} changed, and the final change was "
-                      f"not revalidated after the last source modification: what "
-                      f"passed ran on an earlier state of the tree.")
+    harness = [Check(run.command, run.validation_kind, True, epoch, len(log))
+               for run in fresh if run.status == PASSED]
+    final = [check for check in checks if check.epoch == epoch] + harness
+    earlier = ([check for check in checks if check.epoch < epoch and check.passed]
+               + [run for run in project if run.source_epoch < epoch
+                  and run.status == PASSED])
+    runs = list(dict.fromkeys((check.command, check.passed) for check in final
+                              if check.kind not in ("clean", "check")
+                              and check not in harness))
 
-        return Verdict("UNVERIFIED", changed, reason)
+    if not runs and not harness:
+        if earlier:
+            return Verdict("UNVERIFIED", changed, (
+                f"{files} changed, and the final change was not revalidated "
+                f"after the last source modification: what passed ran on an "
+                f"earlier state of the tree."))
+
+        return Verdict("UNVERIFIED", changed, (
+            f"{files} changed, and nothing was run afterwards that could show "
+            f"the change works — no build, no test, no lint. Treat the change "
+            f"above as unverified."))
+
+    if not harness:
+        # Order decides: what stands is the last verification to run.
+
+        if not runs[-1][1]:
+            return Verdict("UNVERIFIED", changed, (
+                f"{files} changed, and the last verification to run did not "
+                f"pass: `{runs[-1][0][:120]}`. The change above is not shown "
+                f"to work as written."))
+
+        declared = tuple(getattr(project_commands, "verifies", lambda: ())())
+
+        if declared and syntax_only_verification(runs):
+            return Verdict("UNVERIFIED", changed, (
+                f"{files} changed, and the only thing run afterwards compiled "
+                f"the files in isolation. That is not the project's own "
+                f"verification: `{declared[-1][:120]}` was never run, so the "
+                f"change above is unproven at the level the project tests "
+                f"itself."))
 
     unmet = [name for name, needs in _claims(answer) if not _shown(final, needs)]
 
     if unmet:
         return Verdict("UNVERIFIED", changed, (
-            f"{', '.join(changed)} changed; what passed after the last change does "
+            f"{files} changed; what passed after the last change does "
             f"not show that it {' or that it '.join(unmet)} -- no "
             f"{' and '.join(_needed(unmet))} ran on the final source state."))
 

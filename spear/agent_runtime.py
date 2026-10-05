@@ -3828,9 +3828,12 @@ class AgentRuntime:
                                       summary=core.error or core.stop)
 
         root = getattr(context, "project_root", "") or os.getcwd()
+        commands = getattr(context, "project_commands", None)
+        epoch = completion.timeline(context.core_evidence, _generated_in(root), root)[0]
+        project = completion.project_evidence(
+            project_build_runs(context, tool_log), commands, epoch)
         verdict = completion.decide(
-            context.core_evidence, project_runs=project_build_runs(context, tool_log),
-            project_commands=getattr(context, "project_commands", None),
+            context.core_evidence, project_runs=project, project_commands=commands,
             answer=core.final, generated=_generated_in(root), root=root)
         context.core_verdict = verdict
         final = completion.qualify(core.final, verdict)

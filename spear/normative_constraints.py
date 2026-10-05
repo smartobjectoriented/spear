@@ -338,6 +338,41 @@ def questions(item: Constraint) -> list[str]:
     return asked
 
 
+CONFIRM_SYSTEM = (
+    "A first check claimed that source code violates a normative constraint "
+    "from a standard. Decide whether that violation is real. Read the "
+    "constraint strictly: it is about the identifiers, values, counts and "
+    "condition it names, and nothing else -- a bit, field or case it does not "
+    "name cannot violate it. Trace the code paths that matter and state, for "
+    "each one, exactly what the code does with what the constraint names. "
+    "CONFIRMED only if the code really contradicts the constraint as written; "
+    "otherwise REFUTED. Answer with JSON only: {\"verdict\": \"CONFIRMED\" or "
+    "\"REFUTED\", \"reason\": \"one or two sentences\"}.")
+
+
+def confirmation_messages(constraint: Constraint, claim: str,
+                          files: dict[str, str]) -> list[dict]:
+    """An independent second reading of one claimed violation."""
+    shown, budget = [], _SOURCE_CHARS
+
+    for path, text in files.items():
+        body = numbered(text)[:budget]
+        shown.append(f"=== {path}\n{body}")
+        budget -= len(body)
+
+        if budget <= 0:
+            break
+
+    stated = {key: value for key, value in constraint.to_dict().items()
+              if key in ("provision", "modality", "requirement", "condition",
+                         "cardinality", "values", "identifiers")}
+
+    return [{"role": "system", "content": CONFIRM_SYSTEM},
+            {"role": "user", "content": f"Constraint:\n{json.dumps(stated, ensure_ascii=False, indent=1)}"
+                                        f"\n\nClaimed violation:\n{claim}\n\nSource:\n"
+                                        + "\n\n".join(shown)}]
+
+
 @dataclass(frozen=True)
 class ConstraintStatus:
     constraint_id: str
@@ -357,15 +392,22 @@ def _json_of(text: str):
 
 
 def _quoted(files: dict[str, str], path: str, line: int, quote: str) -> bool:
-    """Whether the final text of `path` holds `quote` at or near `line`."""
+    """Whether the final text of `path` holds `quote` at or near `line`.
+
+    Whitespace is not the claim: a quote may span lines and be re-indented.
+    Its words, in order, must be there, within a few lines of where it says.
+    """
     lines = (files.get(path) or "").splitlines()
     wanted = " ".join(str(quote).split())
 
     if not wanted or not lines:
         return False
 
-    window = lines[max(0, int(line) - 3):int(line) + 2] if isinstance(line, int) else lines
-    return any(wanted in " ".join(item.split()) for item in window)
+    if isinstance(line, int):
+        span = str(quote).count("\n") + 1
+        lines = lines[max(0, line - 6):line + span + 5]
+
+    return wanted in " ".join(" ".join(lines).split())
 
 
 def read_verdicts(packet: NormativeConstraintSet, answer: str,
@@ -473,7 +515,7 @@ _COMPLIANCE = re.compile(
     r"\b(?:complian\w*|compli(?:es|ed)|comply|conform\w*|meets?\s+(?:the\s+|all\s+)?"
     r"(?:standard|spec\w*|requirements?|provisions?|rules?)|satisf(?:ies|ied|y)\s+(?:the\s+|all\s+)?"
     r"(?:standard|spec\w*|requirements?|provisions?|rules?|constraints?)|"
-    r"in\s+accordance\s+with)\b", re.I)
+    r"in\s+accordance\s+with)\b|✓|✔", re.I)
 _HEDGED = re.compile(r"\b(?:not|n't|unverified|should|may|might|could|would|if|unless|once)\b", re.I)
 _SPLIT = re.compile(r"(?<=[.!?])\s+(?=[A-Z0-9`*(\[])|\n")
 
@@ -500,7 +542,8 @@ def _mark(sentence: str) -> str:
 
     if stripped and _COMPLIANCE.search(stripped) and not _HEDGED.search(stripped) \
             and not stripped.startswith(("#", "|", "```")):
-        return sentence.replace(stripped, f"{stripped} *(compliance not established)*")
+        body = stripped.replace("✓", "").replace("✔", "").replace("  ", " ")
+        return sentence.replace(stripped, f"{body} *(compliance not established)*")
 
     return sentence
 

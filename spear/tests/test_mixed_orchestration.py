@@ -97,6 +97,9 @@ def verdicts(*items):
         for cid, status, line, text in items]}))
 
 
+CONFIRMED = turn('{"verdict": "CONFIRMED", "reason": "the code contradicts it"}')
+REFUTED = turn('{"verdict": "REFUTED", "reason": "the constraint does not name that"}')
+
 SATISFIED_ALL = verdicts(("C1", "SATISFIED", 2, "mode = 2 if flag_x else 1"),
                          ("C2", "SATISFIED", 3, "count = [0, 0, 0, 0]"),
                          ("C3", "SATISFIED", 4, '"metadata": metadata'))
@@ -234,6 +237,7 @@ class Violations(MixedTurn):
             verdicts(("C1", "SATISFIED", 2, "mode = 2 if flag_x else 1"),
                      ("C2", "VIOLATED", 3, "count = [0, 0, 0, 0, 0]"),
                      ("C3", "SATISFIED", 4, '"metadata": metadata')),
+            CONFIRMED,
             turn("", call("p2", "write_file", path="record.py", content=FIXED)),
             turn("Repaired."),
             SATISFIED_ALL])
@@ -241,7 +245,7 @@ class Violations(MixedTurn):
         self.assertTrue(record.repaired)
         self.assertEqual(len(record.checks), 2)
         self.assertEqual(record.normative, nc.SATISFIED)
-        repair = self.backend.raw_calls[3]["messages"][-1]["content"]
+        repair = self.backend.raw_calls[4]["messages"][-1]["content"]
         self.assertIn("C2 [Rule 4.2.1-2, SHALL]", repair)
         self.assertNotIn("C1 [", repair)
         self.assertTrue(self.events(EventType.REPAIR_STARTED))
@@ -253,7 +257,8 @@ class Violations(MixedTurn):
         record = self.run_mixed([
             turn("", call("p1", "write_file", path="record.py",
                           content=FIXED.replace("[0, 0, 0, 0]", "[0, 0, 0]"))),
-            turn("Done."), violated, turn("I could not change it."), violated])
+            turn("Done."), violated, CONFIRMED, turn("I could not change it."), violated,
+            CONFIRMED])
 
         self.assertEqual(record.verdict, "NOT COMPLIANT")
         self.assertEqual(len(record.checks), 2)
@@ -265,9 +270,9 @@ class Violations(MixedTurn):
                           content=FIXED.replace("[0, 0, 0, 0]", "[0, 0, 0]"))),
             turn("", call("t1", "terminal", command="make")),
             turn("Done. It builds and complies."),
-            verdicts(("C2", "VIOLATED", 3, "count = [0, 0, 0]")),
+            verdicts(("C2", "VIOLATED", 3, "count = [0, 0, 0]")), CONFIRMED,
             turn("Checked again: the header complies with the standard."),
-            verdicts(("C2", "VIOLATED", 3, "count = [0, 0, 0]"))])
+            verdicts(("C2", "VIOLATED", 3, "count = [0, 0, 0]")), CONFIRMED])
 
         self.assertEqual(record.implementation, "VERIFIED")
         self.assertEqual(record.normative, nc.VIOLATED)
@@ -277,7 +282,7 @@ class Violations(MixedTurn):
     def test_an_ambiguity_is_reported_not_repaired(self):
         record = self.run_mixed(fix() + [
             verdicts(("C1", "AMBIGUOUS", 2, ""), ("C2", "VIOLATED", 3, "count = [0, 0, 0, 0]"),
-                     ("C3", "SATISFIED", 4, '"metadata": metadata'))])
+                     ("C3", "SATISFIED", 4, '"metadata": metadata')), CONFIRMED])
 
         self.assertFalse(record.repaired)
         self.assertEqual(record.verdict, "NOT COMPLIANT")
@@ -285,6 +290,21 @@ class Violations(MixedTurn):
 
 
 class EvidenceDiscipline(MixedTurn):
+    def test_an_unconfirmed_violation_drives_no_repair(self):
+        record = self.run_mixed(fix() + [
+            verdicts(("C1", "SATISFIED", 2, "mode = 2 if flag_x else 1"),
+                     ("C2", "VIOLATED", 3, "count = [0, 0, 0, 0]"),
+                     ("C3", "SATISFIED", 4, '"metadata": metadata')), REFUTED])
+        statuses = {item.constraint_id: item.status for item in record.statuses}
+
+        self.assertFalse(record.repaired)
+        self.assertEqual(statuses["C2"], nc.NOT_DEMONSTRATED)
+        self.assertEqual(record.verdict, "COMPLIANCE NOT DEMONSTRATED")
+
+    def test_a_ticked_constraint_is_a_compliance_claim(self):
+        self.assertIn("*(compliance not established)*",
+                      nc.qualify("- C1: ✓ only one subtype is set", nc.NOT_DEMONSTRATED))
+
     def test_a_status_quoting_a_line_the_file_lacks_is_not_demonstrated(self):
         record = self.run_mixed(fix() + [verdicts(
             ("C1", "SATISFIED", 2, "mode = 2 if flag_x else 1"),

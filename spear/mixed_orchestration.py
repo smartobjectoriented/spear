@@ -302,7 +302,8 @@ class MixedOrchestrator:
         except Exception as exc:                    # noqa: BLE001
             answer = json.dumps({"constraints": [], "error": str(exc)[:200]})
 
-        statuses = nc.read_verdicts(packet, answer, files)
+        statuses = tuple(self._confirmed(context, packet, item, files)
+                         for item in nc.read_verdicts(packet, answer, files))
 
         for item in statuses:
             self._event(context, EventType.NORMATIVE_CONSTRAINT_STATUS, {
@@ -312,6 +313,36 @@ class MixedOrchestrator:
                 "evidence": [f"{path}:{line}" for path, line, _ in item.evidence][:5]})
 
         return statuses, fingerprint
+
+    def _confirmed(self, context, packet, status, files):
+        """A violation stands only when an independent reading confirms it.
+
+        On real protocol code the check's violations were wrong as often as
+        right -- an error bit counted as an acknowledgement subtype, five
+        samples out of five. A violation drives a repair; one that a second
+        reading does not confirm is not demonstrated, and drives nothing.
+        """
+        if status.status != nc.VIOLATED:
+            return status
+
+        claim = status.reason + "".join(f"\n{path}:{line}: {text}"
+                                        for path, line, text in status.evidence)
+        verdict = ""
+
+        try:
+            turn = context.backend.complete_messages(
+                nc.confirmation_messages(packet.get(status.constraint_id), claim, files),
+                [], max_tokens=VERIFIER_MAX_TOKENS)
+            verdict = str(nc._json_of(getattr(turn, "text", "")).get("verdict") or "").upper()
+        except Exception:                           # noqa: BLE001
+            verdict = ""
+
+        if verdict == "CONFIRMED":
+            return status
+
+        return nc.ConstraintStatus(status.constraint_id, nc.NOT_DEMONSTRATED,
+                                   f"a violation was claimed ({status.reason[:160]}) but an "
+                                   f"independent reading did not confirm it", status.evidence)
 
     # ---------------------------------------------------------------- answer
 

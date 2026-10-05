@@ -145,7 +145,7 @@ class MixedTurn(unittest.TestCase):
     def tearDown(self):
         shutil.rmtree(self.directory, ignore_errors=True)
 
-    def run_mixed(self, raw, *, objective=OBJECTIVE, legacy=None):
+    def run_mixed(self, raw, *, objective=OBJECTIVE, legacy=None, project=None, runner=None):
         registry = ToolRegistry()
         StandardToolService(self.store).register(registry)
 
@@ -171,6 +171,9 @@ class MixedTurn(unittest.TestCase):
         context.conversation = [ConversationMessage("user", (TextBlock(objective),))]
         context.standard_binding = self.store.binding(STANDARD_ID, REVISION).to_dict()
         context.project_root = str(self.repo)
+        context.normative_project = project
+        context.normative_authority = "projects.json:test"
+        context.normative_check_runner = runner
         host = Host(str(self.repo))
         context.coding_host = lambda ctx, cache, record: _Recording(host, record)
         self.context = context
@@ -453,6 +456,36 @@ class NormativeAuthority(MixedTurn):
 
         self.assertEqual(record.implementation, "UNVERIFIED")
         self.assertEqual(record.verdict, "COMPLIANT BUT IMPLEMENTATION UNVERIFIED")
+
+
+class CoverageInTheTurn(MixedTurn):
+    def test_a_rule_the_pass_did_not_cite_is_closed_in_from_its_list(self):
+        record = self.run_mixed(fix() + [SATISFIED_ALL], legacy=[text_turn(
+            "Rule 4.2.1-2 requires the count field to contain exactly four entries.")])
+        packet = {item.provision: item for item in record.packet.constraints}
+        expanded = self.events(EventType.CONSTRAINT_COVERAGE_EXPANDED)[0].metadata
+        decided = self.events(EventType.CONSTRAINT_APPLICABILITY_DECIDED)
+
+        self.assertEqual(sorted(packet), ["Rule 4.2.1-1", "Rule 4.2.1-2"])
+        self.assertEqual(packet["Rule 4.2.1-1"].origin, "CLOSURE")
+        self.assertEqual(packet["Rule 4.2.1-1"].source_relation, "SAME_NORMATIVE_LIST")
+        self.assertEqual(packet["Rule 4.2.1-1"].originating, packet["Rule 4.2.1-2"].instance_id)
+        self.assertEqual(expanded["added"][0]["relation"], "SAME_NORMATIVE_LIST")
+        self.assertEqual({event.metadata["applicability"] for event in decided}, {"APPLICABLE"})
+        self.assertIn("Rule 4.2.1-1: The mode field", self.backend.raw_calls[0]["messages"][-1]["content"])
+        self.assertEqual(record.report["closure_added"], 1)
+        self.assertEqual(record.verdict, "COMPLIANT BUT IMPLEMENTATION UNVERIFIED")
+
+    def test_an_objective_that_names_no_provision_leaves_applicability_unresolved(self):
+        record = self.run_mixed(fix() + [SATISFIED_ALL], objective=(
+            "Update the header implementation in record.py so it complies with the "
+            "header field provisions of the standard."))
+
+        self.assertEqual({item.applicability for item in record.packet.constraints},
+                         {"UNRESOLVED"})
+        self.assertEqual(record.normative, nc.NOT_DEMONSTRATED)
+        self.assertEqual(record.report["unresolved_applicability"], 2)
+        self.assertIn("applicability unresolved 2", self.result.final_response)
 
 
 class TheOtherPathsAreUntouched(MixedTurn):

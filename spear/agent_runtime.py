@@ -136,6 +136,13 @@ class AgentContext:
     #: The agent core path's structured evidence (completion.Evidence), one
     #: per call. What changed is read from here, not from the tool log text.
     core_evidence: Any = None
+    #: A MIXED turn's project-side normative configuration: the project spec
+    #: holding `normative_checks` / `normative_applicability`, where it was
+    #: declared, and the confined runner a bound check runs through,
+    #: command -> (status, exit code, output).
+    normative_project: Any = None
+    normative_authority: str = ""
+    normative_check_runner: Any = None
     provider: str | None = None
     model: str | None = None
     output_reserve: int | None = None

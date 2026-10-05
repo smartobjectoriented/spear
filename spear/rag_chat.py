@@ -3301,6 +3301,60 @@ def verify_project_command(command):
         (result.stdout or "") + (result.stderr or "") or result.summary)
 
 
+def run_normative_check(command):
+    """Run a project check bound to a normative provision, confined.
+
+    The same boundary as the project's own verification, with the outcome
+    kept apart from the infrastructure: (status, exit code, output), status
+    PASSED, FAILED, NOT_RUN or ERROR. A command that could not be found or
+    started, or that timed out, is an ERROR -- it says nothing about the
+    provision.
+    """
+
+    if PROJECT_VERIFY_ON_HOST:
+        try:
+            done = subprocess.run(["bash", "-lc", command], cwd=PROJECT_ROOT,
+                                  timeout=PROJECT_VERIFY_TIMEOUT, capture_output=True,
+                                  text=True)
+        except subprocess.TimeoutExpired:
+            return "ERROR", None, f"timed out after {PROJECT_VERIFY_TIMEOUT}s"
+        except (OSError, subprocess.SubprocessError) as exc:
+            return "ERROR", None, f"{type(exc).__name__}: {exc}"
+
+        output = (done.stdout or "") + (done.stderr or "")
+
+        if done.returncode == 0:
+            return "PASSED", 0, output
+
+        return ("ERROR" if done.returncode in (126, 127) else "FAILED"), done.returncode, output
+
+    if WORKSPACE is None:
+        return "NOT_RUN", None, "no workspace boundary for project checks"
+
+    profile = ExecutionProfile.from_capabilities(
+        {Capability.FILESYSTEM_READ, Capability.WORKSPACE_WRITE,
+         Capability.SHELL_COMPLEX})
+    availability = PROJECT_VERIFY_RUNNER.ensure_sandbox(WORKSPACE, profile)
+
+    if not availability.ok:
+        return "NOT_RUN", None, availability.summary
+
+    result = PROJECT_VERIFY_RUNNER.run_sandboxed(
+        WORKSPACE, shell_argv(command), profile, availability=availability)
+    output = (result.stdout or "") + (result.stderr or "")
+
+    if result.status == "cancelled":
+        return "NOT_RUN", None, result.summary
+
+    if result.status == "ok" and result.exit_code in (None, 0):
+        return "PASSED", 0, output
+
+    if result.status == "failed" and result.exit_code not in (None, 126, 127):
+        return "FAILED", result.exit_code, output
+
+    return "ERROR", result.exit_code, output or result.summary
+
+
 def run_project_bench(agent_context=None):
     """Run the project's acceptance command. True only on a clean exit.
 
@@ -8392,6 +8446,11 @@ def main():
             project_commands=project_commands,
             project_root=PROJECT_ROOT,
             project_verifier=verify_project_command,
+            normative_project={key: project_spec.get(key) for key in
+                               ("normative_checks", "normative_applicability")
+                               if project_spec.get(key)},
+            normative_authority=f"projects.json:{PROJECT}",
+            normative_check_runner=run_normative_check,
             prior_clauses=STANDARD_PRIOR_CLAUSES,
             prior_answer=STANDARD_PRIOR_ANSWER,
             # A fresh lifecycle per turn. It engages itself inside the

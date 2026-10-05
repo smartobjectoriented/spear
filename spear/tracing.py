@@ -78,6 +78,16 @@ class EventType(StrEnum):
     DELEGATION_FINISHED = "delegation_finished"
     BUDGET_ALLOCATED = "budget_allocated"
     TOOL_VIEW_SELECTED = "tool_view_selected"
+    # A MIXED turn's orchestration: the normative pass, the coding core, the
+    # check of the final source, and the verdict that joins them.
+    NORMATIVE_PREPASS_STARTED = "normative_prepass_started"
+    NORMATIVE_CONSTRAINT_SET_CREATED = "normative_constraint_set_created"
+    IMPLEMENTATION_STARTED = "implementation_started"
+    IMPLEMENTATION_FINISHED = "implementation_finished"
+    NORMATIVE_POSTCHECK_STARTED = "normative_postcheck_started"
+    NORMATIVE_CONSTRAINT_STATUS = "normative_constraint_status"
+    REPAIR_STARTED = "repair_started"
+    FINAL_MIXED_VERDICT = "final_mixed_verdict"
 
 
 class EventStatus(StrEnum):

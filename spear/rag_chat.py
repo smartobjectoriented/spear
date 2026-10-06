@@ -1809,16 +1809,15 @@ PERMISSIONS  (what the assistant may do to your files)
   --safe                 read-only, and the default when no mode is given.
                          Mutations are refused, not proposed, and the network
                          is unreachable.
-  --ask                  confirm each edit and each command before it runs.
-                         Aliases: --confirm, --no-bypass. The ONLY mode with
-                         network access.
-  --auto                 run edits and commands without asking. Aliases: -y,
-                         --yolo, --bypass-permissions. Deliberately NO network.
-  --no-network           drop network even in --ask.
+  --ask                  confirm each edit and each command before it runs,
+                         network use included. Aliases: --confirm, --no-bypass.
+  --auto                 run edits and commands without asking; network is
+                         available. Aliases: -y, --yolo, --bypass-permissions.
+  --no-network           no network in any mode, the web tools included.
   --single-root          restrict writes to the launch directory. By default
                          the registered corpora are writable too, each mounted
-                         at /workspaces/<name> — a path that works in bash and
-                         in edit_file/write_file alike. Relative paths always
+                         at /workspaces/<name> — a path that works in the
+                         terminal and the file tools alike. Relative paths always
                          resolve in the launch directory and never reach them.
   --allow-absolute-paths accept host absolute paths into the launch directory.
                          Off by default; /workspace/... always works.

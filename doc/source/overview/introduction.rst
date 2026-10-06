@@ -171,7 +171,7 @@ independent on purpose: each one assumes the others may fail.
      - Mechanism
      - What it bounds
    * - Authorization
-     - :class:`CommandPolicy` + :class:`CapabilityPolicy`
+     - ``CommandPolicy`` + ``CapabilityPolicy``
      - *whether* a command may run at all, and with which capabilities
    * - Filesystem / namespaces
      - Bubblewrap

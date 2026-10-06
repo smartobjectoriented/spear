@@ -460,6 +460,12 @@ SPEAR grounds a name read out of a repository for exactly one purpose:
 and was not invented. It carries no modality, no authority and no clause, and
 it cannot raise the level a claim is entitled to.
 
+A name in your own request is grounded the same way and for the same purpose:
+"fix ``encodeReply()`` so it follows Rule 4.2-1" says which function is meant,
+and an answer may apply the rule to it. What the request says the rule
+requires is not evidence, and an answer that credits the name to the standard
+itself is still reported.
+
 .. warning::
 
    This is the failure the separation exists for: a self-contained question

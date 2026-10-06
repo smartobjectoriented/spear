@@ -202,6 +202,22 @@ def states_a_requirement(sentence, binding=None):
     return bool(_subject(binding).search(sentence) or _clause_voiced(sentence))
 
 
+def stated_content(sentence, binding=None):
+    """What a sentence says the standard requires, defines or permits: the
+    words after the statement, or "" when the sentence states nothing.
+
+    "fooHandler shall set one bit, as Rule 4-1 requires" applies the rule to
+    fooHandler; "Rule 4-1 requires fooHandler to set one bit" says the rule
+    names it. Only the second credits the name to the document.
+    """
+    if not states_a_requirement(sentence, binding):
+        return ""
+
+    spoken = _subject(binding).search(sentence) or re.search(rf"\b{_STATES}\b", sentence, re.I)
+
+    return sentence[spoken.end():] if spoken else ""
+
+
 def sentences(text):
     """The answer, split the way the guards read it."""
     return _sentences(text)

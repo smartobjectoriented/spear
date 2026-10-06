@@ -46,7 +46,9 @@ What the guards check
      - Typical action
    * - Ungrounded identifier
      - the answer names a field or symbol that is in neither the retrieved
-       document nor anything a tool returned
+       document, nor anything a tool returned, nor the request itself; only
+       the statements using it are withheld when the rest still cites what
+       was retrieved
      - ask again naming the area, so the turn retrieves it; or check whether
        the name is real
    * - Strengthened modality

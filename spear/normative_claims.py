@@ -42,6 +42,7 @@ import normative_force
 import normative_precedence
 import provision_identity
 import standard_profiles  # noqa: F401  (registers declared role taxonomies)
+from context_selection import SourceType
 
 UNGROUNDED_IDENTIFIER = "UNGROUNDED_IDENTIFIER"
 STRENGTHENED_MODALITY = "STRENGTHENED_MODALITY"
@@ -50,6 +51,12 @@ UNSUPPORTED_CARDINALITY = "UNSUPPORTED_CARDINALITY"
 AMBIGUOUS_CITATION = "AMBIGUOUS_CITATION"
 #: A named provision credited with a force its role cannot carry.
 MISATTRIBUTED_FORCE = "MISATTRIBUTED_FORCE"
+
+#: Where a name that is not the document's own came from: the operator's
+#: request or the repository the turn read. Either may say which
+#: implementation entity is meant; neither is evidence.
+REFERENT_FROM_REQUEST = SourceType.USER_REQUEST.value
+REFERENT_FROM_CODE = "CODE_READ"
 
 #: informative < permission < recommendation < requirement. A conclusion may
 #: sit at or below the level of its evidence, never above it.
@@ -440,30 +447,33 @@ def claim_level(sentence, question=""):
 
 # ── 1. identifiers ───────────────────────────────────────────────────
 
-def identifier_findings(answer, evidence, *, permitted=(), binding=None):
+def identifier_findings(answer, evidence, *, permitted=(), binding=None, requested=()):
     """Technical identifiers the answer introduces and nothing behind it has.
 
-    Two things can be behind a name, and they are not interchangeable. The
+    Three things can be behind a name, and they are not interchangeable. The
     retrieved clauses are what the DOCUMENT defines; `permitted` is what the
-    turn read out of a repository, and an answer comparing an implementation
-    against a standard uses both -- a function it read is not a field it
-    invented, and reporting it as one withheld a whole analysis over nineteen
-    names that were plainly in front of the model.
+    turn read out of a repository; `requested` is what the operator's own
+    request names -- the function to change, the file it lives in. An answer
+    relating a change to a standard uses all three: a function the operator
+    named is not a field the model invented, and reporting it as one withheld
+    a whole pre-pass, and emptied the constraint packet built from it.
 
-    So code grounds a name for the purpose it can: saying that the name
-    EXISTS, in a sentence describing the implementation. It grounds nothing in
-    a sentence that says what the standard requires. A name credited to the
-    document must be in the document, and a comment in a source file is not
-    the document -- which is the same precedence every other guard here keeps,
-    applied to the answer's vocabulary.
+    So code and the request ground a name for the purpose they can: saying
+    which implementation entity is meant. Neither grounds anything in a
+    sentence that says what the standard requires. A name credited to the
+    document must be in the document; a comment in a source file, or the
+    operator's wording, is not the document.
     """
     if not evidence.knows_anything():
         return []
 
     documented = evidence.identifiers()
     from_code = {normalise(item) for item in permitted} - documented
-    attributed = (_attributed_identifiers(answer, from_code, binding)
-                  if from_code else set())
+    from_request = {normalise(item) for item in requested} - documented
+    outside = from_code | from_request
+    attributed = ((_attributed_identifiers(answer, from_code, binding) if from_code else set())
+                  | (_credited_identifiers(answer, from_request, binding)
+                     if from_request else set()))
     found = []
 
     for token in identifiers_in(answer):
@@ -472,11 +482,14 @@ def identifier_findings(answer, evidence, *, permitted=(), binding=None):
         if key in documented:
             continue
 
-        if key in from_code and key not in attributed:
+        if key in outside and key not in attributed:
             continue
 
         found.append({"kind": UNGROUNDED_IDENTIFIER, "identifier": token,
-                      "read_from_code": key in from_code})
+                      "read_from_code": key in from_code,
+                      "provenance": (REFERENT_FROM_REQUEST if key in from_request
+                                     else REFERENT_FROM_CODE if key in from_code
+                                     else "")})
 
     return found
 
@@ -492,6 +505,22 @@ def _attributed_identifiers(answer, from_code, binding):
         found |= {normalise(token) for token in identifiers_in(sentence)}
 
     return found & from_code
+
+
+def _credited_identifiers(answer, from_request, binding):
+    """Request-named names the answer puts inside what the standard states.
+
+    Narrower than the code-read test on purpose: the request names the thing
+    a change is about, so a sentence applying a clause to it is the expected
+    shape, and only a name inside the clause's own content is credited.
+    """
+    found = set()
+
+    for sentence in normative_precedence.sentences(answer):
+        content = normative_precedence.stated_content(sentence, binding)
+        found |= {normalise(token) for token in identifiers_in(content)}
+
+    return found & from_request
 
 
 # ── 2. modality ──────────────────────────────────────────────────────
@@ -714,10 +743,10 @@ def ambiguity_findings(answer, evidence):
             for problem in ambiguous]
 
 
-def findings(answer, evidence, *, question="", permitted=(), binding=None):
+def findings(answer, evidence, *, question="", permitted=(), binding=None, requested=()):
     return (ambiguity_findings(answer, evidence)
             + identifier_findings(answer, evidence, permitted=permitted,
-                                  binding=binding)
+                                  binding=binding, requested=requested)
             + modality_findings(answer, evidence, question=question)
             + coherence_findings(answer, evidence, question=question)
             + cardinality_findings(answer, evidence, question=question)
@@ -733,12 +762,7 @@ def _note(problems, evidence):
         kind = problem["kind"]
 
         if kind == UNGROUNDED_IDENTIFIER:
-            lines.append(
-                f"  - {problem['identifier']}: named in the answer, "
-                + ("read from source code but credited to the standard, "
-                   "which no retrieved unit supports."
-                   if problem.get("read_from_code")
-                   else "present in no retrieved unit."))
+            lines.append(_identifier_line(problem))
         elif kind == STRENGTHENED_MODALITY:
             lines.append(f"  - the conclusion states a {problem['claimed']}; "
                          f"the evidence establishes a {problem['supported']}.")
@@ -769,12 +793,60 @@ def _note(problems, evidence):
     return "\n".join(lines)
 
 
-def guard(answer, evidence, *, question="", permitted=(), binding=None):
-    """The answer, or a note saying why it is withheld."""
+def _identifier_line(problem):
+    source = {REFERENT_FROM_REQUEST: "named in the request but credited to the standard",
+              REFERENT_FROM_CODE: "read from source code but credited to the standard"}
+    where = source.get(problem.get("provenance"))
+
+    return (f"  - {problem['identifier']}: named in the answer, "
+            + (f"{where}, which no retrieved unit supports." if where
+               else "present in no retrieved unit."))
+
+
+def _without_statements_naming(answer, names):
+    """The answer less every statement that uses one of these names."""
+    parts = re.split(r"((?<=[.!?])\s+|\n+)", answer or "")
+    kept = []
+
+    for index in range(0, len(parts), 2):
+        statement = parts[index]
+        separator = parts[index + 1] if index + 1 < len(parts) else ""
+
+        if {normalise(token) for token in identifiers_in(statement)} & names:
+            continue
+
+        kept.append(statement + separator)
+
+    return "".join(kept).strip()
+
+
+def guard(answer, evidence, *, question="", permitted=(), binding=None, requested=()):
+    """The answer, the part of it the evidence supports, or a note saying why
+    it is withheld.
+
+    A name nothing grounds condemns the statements that use it, not every
+    claim beside them. When names are the only problem, those statements are
+    withheld and the rest stands -- but only if the rest still cites a
+    provision this turn retrieved and passes every check on its own: its
+    opening is judged again as the opening. Anything else is withheld whole.
+    """
     problems = findings(answer, evidence, question=question,
-                        permitted=permitted, binding=binding)
+                        permitted=permitted, binding=binding, requested=requested)
 
     if not problems:
         return answer, [], False
+
+    if all(problem["kind"] == UNGROUNDED_IDENTIFIER for problem in problems):
+        names = {normalise(problem["identifier"]) for problem in problems}
+        rest = _without_statements_naming(answer, names)
+
+        if (rest and evidence.cited_units(rest)
+                and not findings(rest, evidence, question=question, permitted=permitted,
+                                 binding=binding, requested=requested)):
+            withheld = ["Withheld from this answer: the statements naming what "
+                        "the retrieved normative evidence does not support."]
+            withheld += [_identifier_line(problem) for problem in problems]
+
+            return rest + "\n\n" + "\n".join(withheld), problems, True
 
     return _note(problems, evidence), problems, True

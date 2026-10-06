@@ -97,6 +97,10 @@ Entry format
    * - ``normative_applicability``
      - provisions of a bound standard declared applicable or not applicable to
        this project (:ref:`normative_checks`)
+   * - ``standards``
+     - the standards this project works against, as
+       ``[{"id": …, "revision": …}]``; with several, a request picks one by
+       naming it (:ref:`context_selection`)
 
 The standard binding itself is **not** a project key: it is machine-wide, set
 with ``/standard use`` (:ref:`standards`).
@@ -206,6 +210,59 @@ applies to the project.
 
 A provision declared ``NOT_APPLICABLE`` leaves the constraint packet. A
 provision declared both ways is left unresolved.
+
+.. _context_selection:
+
+What a turn is shown
+********************
+
+A registered project is not context everywhere. Each turn starts from its
+**workspace** — the registered project, or, for a tree nobody registered, that
+tree alone, which inherits nothing from the project next to it or the one used
+before — and is given only:
+
+* what its request class calls for: the coding rules, memories, procedures and
+  build commands for a change; the standard and its tools, and no
+  implementation material, for a question about the standard; little more than
+  the request for a general question. A MIXED change is selected once per pass;
+* material of this workspace, or material explicitly declared generic;
+* a rule scoped to paths only when the request names such a path.
+
+The decision is deterministic — no model, no embedder — and recorded in the
+audit trail with the reason for every item kept or left out
+(``context_selected``, ``context_rejected``, ``toolset_selected``). It is never
+shown to the model. When the context window is tight, optional material is left
+out by priority; the request, the runtime's own constraints and the constraint
+packet never are.
+
+The tool family follows the same decision, at the family level only: a change
+gets the coding core's six tools, a normative question the standard's tools,
+and the MIXED post-check none.
+
+Rules declare where they apply
+==============================
+
+A rule file in ``rules.d/`` opens with a header saying where it applies. **A
+rule without one applies nowhere**: a rule is generic because it says so, not
+because nobody scoped it.
+
+.. code-block:: text
+
+   ---
+   scope: global                     every workspace: the only generic scope
+   scope: corpus acme-firmware       this registered project, or one of its parts
+   scope: path /srv/src/acme         workspaces whose tree lies under this directory
+   tasks: implementation, mixed      the request classes it serves (the default);
+                                     also normative, general
+   paths: doc/**                     only when the request names such a path
+   priority: 80                      kept longer when the window is tight
+   ---
+   Build the documentation with `make -C doc html` and treat warnings as errors.
+
+A skill is held to the same rule: its ``scope:`` must name the project, or say
+``[any]`` to be generic. ``/recall`` rules are generic by what that command
+means. A project's own map (an in-tree ``.edgem-rules.md``, or
+``rules.d/corpora/<name>.md``) belongs to that project only.
 
 Exclusions have granularity
 ***************************

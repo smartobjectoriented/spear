@@ -157,10 +157,10 @@ Session commands:
    Add a long-term memory for *this* corpus.  With no argument, list them.
 
 ``/recall <rule>``
-   Add a rule for *every* corpus, injected into every request.  With no
-   argument, list them.  Use it for what holds everywhere — "an existing
-   copyright header is never rewritten" — and ``/remember`` for what is true of
-   one tree only.
+   Add a rule for *every* corpus, injected into every request that changes or
+   asks about a tree.  With no argument, list them.  Use it for what holds
+   everywhere — "an existing copyright header is never rewritten" — and
+   ``/remember`` for what is true of one tree only.
 
 ``/forget <regex>``
    Prune the history-search index.  The archive file itself is kept.

@@ -383,17 +383,24 @@ class StandardAnswerPolicy:
         # them on that. Before the provenance guard, because what this writes
         # is built from the ledger and must not then be stripped of sources.
 
-        # Both kinds of name the answer may legitimately use: the ones the
+        # The kinds of name the answer may legitimately use: the ones the
         # clauses define and the ones the repository calls its own. Fixed
         # here, before the first check, so the repair below is judged against
         # the same set -- a rewrite runs no tools and may not enlarge it.
 
         permitted = self.code_evidence.identifiers()
 
+        # The operator's request is the third: it may name the function or
+        # file a change concerns, and saying which one is meant is all it
+        # grounds. What the request asserts about the standard grounds
+        # nothing -- only the clauses do.
+
+        requested = normative_claims.identifiers_in(self.question)
+
         before_repair = guarded
         guarded, claim_problems, claims_fired = normative_claims.guard(
             guarded, self.claim_evidence, question=self.question,
-            permitted=permitted, binding=self.binding)
+            permitted=permitted, binding=self.binding, requested=requested)
 
         # One constrained rewrite, when the evidence in hand can settle what
         # was wrong with the prose. No new retrieval, no loop, and the same
@@ -418,7 +425,7 @@ class StandardAnswerPolicy:
             if repaired and self.repair_outcome == answer_repair.REPAIR_ANSWERED:
                 checked, retry_problems, retry_fired = normative_claims.guard(
                     repaired, self.claim_evidence, question=self.question,
-                    permitted=permitted, binding=self.binding)
+                    permitted=permitted, binding=self.binding, requested=requested)
 
                 if not retry_fired:
                     guarded, claim_problems, claims_fired = checked, [], False

@@ -52,7 +52,7 @@ index left intact — the staged collection is only swapped in at the very end.
 
 The reason is that a partial index is not a sample.  It is whichever
 directories ``os.walk`` reached first, and it answers confidently from that
-fraction.  An ``infrabase`` index built this way came out 99.8 % vendored QEMU
+fraction.  A build-system index built this way came out 99.8 % vendored QEMU
 and U-Boot source, with **none** of the build system it existed for, and
 nothing failed.  The refusal names the directories that consumed the budget, so
 the fix — usually ``--exclude`` on a vendored tree that belongs in its own
@@ -63,15 +63,6 @@ Cross-cutting notes are registered as a separate ``"shared": true`` corpus.
 They are indexed once and attached at retrieval time, so changing a note does
 not require rebuilding every project collection.
 
-For the tracked ``claude/`` store, exclude its archived snapshots and preserve
-the registry's portable collection name:
-
-.. code-block:: console
-
-   $ cd spear
-   $ bin/python index_dir.py ../claude --collection claude_memories \
-       --exclude _originals_backup
-
 Projects
 ========
 
@@ -80,30 +71,25 @@ Projects
 .. code-block:: json
 
    {
-     "so3":       { "path": "/home/operator/soo/so3/so3",  "kind": "generic" },
-     "verdin":    { "path": ".../verdin", "kind": "buildsystem",
-                    "collection": "bsp_verdin", "indexer": "buildsystem",
-                    "autoindex": true, "prompt_file": "system-prompt.md" },
-     "virt64":    { "path": ".../virt64", "kind": "buildsystem",
-                    "collection": "bsp_virt64", "indexer": "buildsystem",
-                    "autoindex": true, "prompt_file": "system-prompt.md" },
-     "lvgl":      { "path": "/home/operator/work/lvgl", "kind": "generic" },
-     "spear":{ "path": "/opt/llm/spear/spear",         "kind": "generic" }
+     "so3":      { "path": "/srv/src/so3/so3", "kind": "generic" },
+     "bsp-a":    { "path": "/srv/src/bsp-a", "kind": "buildsystem",
+                   "collection": "bsp_a", "indexer": "buildsystem",
+                   "autoindex": true, "prompt_file": "bsp-prompt.md" },
+     "lvgl":     { "path": "/srv/src/lvgl", "kind": "generic" },
+     "spear":    { "path": "spear", "kind": "generic" }
    }
 
-The ``kind`` selects which rule fragments are injected into the prompt.
-``kind`` is a label: it scopes skills and prints in the listing. What a corpus
-DOES is declared key by key -- ``indexer`` (``buildsystem`` for the curated
-BitBake/Yocto walk, else generic), ``autoindex``, ``prompt_file`` and
-``collection``. A ``generic``
-ones do not.
+``kind`` is a label: it scopes skills and prints in the listing, and selects
+no behaviour. What a corpus *does* is declared key by key — ``indexer``
+(``buildsystem`` for the curated BitBake/Yocto walk, else ``generic``),
+``autoindex``, ``prompt_file`` and ``collection``. The ``spear`` entry is
+relative, so it resolves inside the checkout wherever that is.
 
 A ``path`` is either **absolute** — a tree of yours, genuinely machine-specific
 — or **relative**, in which case it resolves against ``SPEAR_CORPUS_ROOT``.
-That root defaults to the **repository root**, so the six corpora that live
-inside the repository (``llama.cpp-next``, ``qwen3-finetune``, ``src``,
-``spear`` and the two under ``corpora/``) are found wherever the
-repository is cloned, and a container overrides the root with its mount point
+That root defaults to the **repository root**, so the corpora that live
+inside the repository (``spear``, ``qwen3-finetune`` and those under
+``corpora/``) are found wherever the repository is cloned, and a container overrides the root with its mount point
 (:doc:`/start/container`).
 
 Federated and shared corpora
@@ -118,7 +104,7 @@ A session retrieves from more than its own corpus when either applies:
 ``"shared": true`` on a corpus
    Attached to **every** session.  Cross-cutting knowledge belongs to no single
    tree: the build system is not the property of one product checkout, and
-   without this it would have to be redeclared in all 22 projects.
+   without this it would have to be redeclared in every project.
 
 ``--with NAME`` adds one for a single session and ``--without NAME`` removes
 any of them, so a shared corpus is never a sentence.
@@ -132,7 +118,7 @@ compete 7-to-1 for the same twelve slots.
 Attached corpora *add to* the session's own index rather than replacing it.
 The prefix rewrites each chunk's ``# File:`` header so the path is usable from
 where the tools actually run — relative while the corpus sits under the launch
-directory, **absolute** otherwise, because ``../../../opt/llm/...`` is both
+directory, **absolute** otherwise, because ``../../../srv/src/...`` is both
 unusable and refused by the command policy.  Absolute paths outside the
 workspace are readable (:doc:`/harness/security_model`), so what the model is shown is
 what it can open.
@@ -142,7 +128,7 @@ what it can open.
 Measured effect
 ---------------
 
-On 37 questions about the Infrabase build system, scored on whether the answer
+On 37 questions about a BitBake-based build system, scored on whether the answer
 names the real identifiers:
 
 .. list-table::
@@ -197,9 +183,9 @@ so once and does nothing:
 .. code-block:: text
 
    > generate a simple ping.c to run in so3
-     ⎿  'so3' is a registered corpus (/home/operator/soo/so3/so3), but your
-        tools run in /opt/llm/spear/spear. To work there:
-        cd /home/operator/soo/so3/so3 && spear-chat
+     ⎿  'so3' is a registered corpus (/srv/src/so3/so3), but your
+        tools run in /home/me/spear/spear. To work there:
+        cd /srv/src/so3/so3 && spear-chat
 
 Matching is on whole words, longest registered name first (so ``micropython-so3``
 wins over ``so3``), once per name per session.  Names that are ordinary
@@ -216,7 +202,10 @@ edit.
 Prompt assembly
 ===============
 
-A turn's context is composed by ``ContextEngine`` from explicit layers:
+On the normative runtime, a turn's context is composed by ``ContextEngine``
+from explicit layers (an implementation turn on the coding core builds its own
+request from the project's rules, memories and skills, and reads the tree
+through its tools instead of from retrieved chunks):
 
 #. system and tool-use guidance;
 #. matching project rules;
@@ -239,6 +228,10 @@ for scope and supersession, excludes inactive records, and selects a bounded
 lexically relevant set for the current request.  It does not introduce another
 vector database or treat memory as grounded task evidence.
 
+Rules (``rules.d/*.md``) and skills (``skills/*.md``) are a deployment's
+content, not code: the repository ships the two directories with a README, and
+each deployment fills them. Typical fragments look like this:
+
 .. list-table::
    :header-rows: 1
    :widths: 34 66
@@ -254,7 +247,7 @@ vector database or treat memory as grounded task evidence.
    * - ``skills/debug-build-failures.md``
      - Procedure for a failing build.
    * - ``skills/debug-buildsystem-build.md``
-     - The Infrabase/bitbake specific variant.
+     - The BitBake-specific variant.
    * - ``skills/improve-c-code-quality.md``
      - Refactoring guidance for C.
 
@@ -340,7 +333,7 @@ Three levels exist, and choosing between them is the whole question:
 
 ``/recall`` exists because ``/remember`` was the wrong home for something like
 *never rewrite an existing copyright header, only extend its year range*: that
-is true in SO3, in the build-system trees and in ``pos_sol`` alike, and written per
+is true in SO3, in the build-system trees and in every product tree alike, and written per
 corpus it would be invisible in all the others.  A recalled line is dated and
 appended to ``rules-learned.md``, which ``load_rules()`` injects after
 ``rules.d/*.md`` on **every** request.
@@ -444,12 +437,13 @@ size changes the vectors**, on fp16 well above float32 noise, though at cosine
 Retrieval budget
 ================
 
-Retrieval competes with the conversation for the 32 768-token context.  Two
-mechanisms keep it bounded:
+Retrieval competes with the conversation for the context window (asked of the
+server at startup, 32 768 tokens when it cannot say).  Two mechanisms keep it
+bounded:
 
 * the number and size of retrieved chunks are capped at assembly time;
-* tool output is truncated to ``max_output_chars`` (10 000) before it ever
-  reaches the model.
+* tool output is truncated before it reaches the model — 10 000 characters on
+  the normative runtime, 50 000 on the coding core.
 
 The second one matters more than it looks.  A single ``make`` on a failing
 build can emit hundreds of kilobytes; without truncation one tool call would

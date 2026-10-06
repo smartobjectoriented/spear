@@ -142,11 +142,11 @@ Permissions and execution
    * - ``--safe``
      - read-only; the default when no mode is given. No network
    * - ``--ask`` (``--confirm``, ``--no-bypass``)
-     - confirm each edit and command. The only mode with network access
+     - confirm each edit and command, network use included
    * - ``--auto`` (``-y``, ``--yolo``, ``--bypass-permissions``)
-     - run without asking. Deliberately no network
+     - run without asking; network available
    * - ``--no-network``
-     - drop network even in ``--ask``
+     - no network in any mode
    * - ``--single-root``
      - restrict writes to the launch directory
    * - ``--allow-absolute-paths``

@@ -34,19 +34,23 @@ Every turn is classified from its own words:
      - about the specification — what it defines, requires or means
      - the authoritative tools; the working-tree tools are withheld
    * - ``IMPLEMENTATION``
-     - about this project's code
-     - the ordinary tool set; no normative retrieval is forced
+     - about this project's code — read it, change it, build it
+     - with no standard engaged, the coding core's six tools
+       (:doc:`/reasoning/implementation`)
    * - ``MIXED``
-     - about both — a comparison, a compliance question
-     - both
+     - about both — a comparison, a compliance question, or a change that must
+       satisfy the standard
+     - both for a question; a change runs the three-pass MIXED pipeline
+       (:doc:`/reasoning/mixed`)
    * - ``GENERAL``
      - neither, with no document bound
-     - the ordinary tool set
+     - the coding core's six tools
 
 "How does our parser handle this?" is an implementation question and is
 answered from the code. "What does the specification require here?" is a
 normative one and is answered from the document. "Does our parser comply?" asks
-about both and gets both.
+about both and gets both. "Make our parser comply with Rule 7.4.1-2" asks for a
+change the standard governs, and runs as a MIXED change.
 
 Self-contained and referring turns
 **********************************
@@ -104,5 +108,5 @@ Practical consequences
 
 .. seealso::
 
-   :ref:`Authoritative standards <standards>` · :ref:`Evidence and guards
+   :ref:`Authoritative standards <standards>` · :ref:`Normative answer guards
    <guards>`

@@ -171,21 +171,23 @@ Known environment quirks
    * - Symptom
      - Explanation
    * - ``Read-only file system`` writing under ``/etc``
-     - Expected.  ``/etc`` is a sealed tmpfs holding only ``alternatives``;
-       only ``/workspace`` is writable (:doc:`/harness/sandbox`).
+     - Expected.  ``/etc`` is a sealed tmpfs holding only ``alternatives``,
+       ``passwd`` and ``group``; only the workspace is writable
+       (:doc:`/harness/sandbox`).
    * - A tool needs a file from the host ``/etc``
-     - It will not find it.  Only ``/etc/alternatives`` is bound, plus the
-       generated resolver files on the network profile.
-   * - ``drawio`` CLI export fails on every file
-     - snap 30.4.1 raises ``ReferenceError: next is not defined`` from its own
-       ``electron.js``.  The documentation renders its SVGs directly instead
-       (:doc:`/operations/directory_layout`).
+     - It will not find it.  Only ``/etc/alternatives``, ``/etc/passwd`` and
+       ``/etc/group`` are bound, plus the generated resolver files on the
+       network profile.
+   * - ``drawio`` CLI export renders boxes without their text
+     - a non-snap build exporting headless can drop the labels.  Export with
+       the drawio snap, staged under ``$HOME`` as
+       :ref:`the documentation convention <doc-diagrams>` describes.
    * - Network tests flaky under heavy load
      - the slirp readiness wait is a wall-clock timeout; the attachment itself
        is timing-independent (:doc:`/harness/network`).
    * - Suspend breaks a running CUDA job
-     - unrelated to the harness, but a recurring loss on this workstation:
-       do not suspend during a fine-tuning run.
+     - unrelated to the harness: do not let the machine suspend during a
+       fine-tuning run.
 
 Training-data capture
 ---------------------

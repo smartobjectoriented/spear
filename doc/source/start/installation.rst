@@ -25,7 +25,7 @@ Prerequisites
    * - ``bubblewrap``
      - the sandbox layer for untrusted commands
    * - Docker *(container path only)*
-     - with the two ``--security-opt`` flags the harness requires
+     - with the three ``--security-opt`` flags the harness requires
 
 A GPU is a property of the *backend*, not of the client. The client itself is
 undemanding; a machine that cannot serve a model can still run SPEAR against

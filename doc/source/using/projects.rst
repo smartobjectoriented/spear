@@ -78,11 +78,28 @@ Entry format
      - federate these registered corpora into a session on this project
    * - ``shared``
      - attach this corpus to **every** session
-   * - ``build_commands``, ``test_commands``, ``lint_commands``, ``acceptance_commands``
-     - the commands the agent runs to check its own work
-   * - ``normative_checks``, ``normative_applicability``
-     - checks that are evidence for provisions of a bound standard, and the
-       provisions that do or do not apply to this project (see below)
+   * - ``build_commands``, ``test_commands``
+     - how this tree is built and tested. They win over every probe, and they
+       are the **project's own verification**: SPEAR runs them on the final
+       tree of a change-making turn, and a failure there makes the turn
+       ``UNVERIFIED`` (:ref:`evidence_verdicts`)
+   * - ``lint_commands``, ``acceptance_commands``
+     - further commands recognised as verification when the agent runs them
+   * - ``bench``
+     - an acceptance script the harness runs to rate a turn — a bare name is
+       looked up in the benches directory
+   * - ``public``
+     - mark the corpus as allowed in a public container image
+       (:ref:`image-profiles`)
+   * - ``normative_checks``
+     - project checks bound to provisions of a bound standard
+       (:ref:`normative_checks`)
+   * - ``normative_applicability``
+     - provisions of a bound standard declared applicable or not applicable to
+       this project (:ref:`normative_checks`)
+
+The standard binding itself is **not** a project key: it is machine-wide, set
+with ``/standard use`` (:ref:`standards`).
 
 .. important::
 
@@ -90,41 +107,105 @@ Entry format
    that silently selected an indexer, a prompt and three other behaviours was
    the source of corpora that behaved differently for no visible reason.
 
-Normative checks
-****************
+.. _normative_checks:
 
-When a change has to satisfy a bound standard, SPEAR reports a provision as
-satisfied or violated only on evidence it can reproduce: a deterministic
-reading of the final source, or a project check the project itself declares to
-be evidence for that provision. A passing test suite proves nothing normative
-on its own, and neither does the model's opinion.
+Normative checks and applicability
+**********************************
+
+When a change has to satisfy a bound standard (:ref:`mixed_mode`), SPEAR
+reports a provision as satisfied or violated only on evidence it can
+reproduce: a deterministic reading of the final source, or a check the project
+itself declares to be evidence for that provision. Two keys carry those
+declarations. They are the project's statements — written by whoever owns the
+project, never by the model.
 
 .. code-block:: json
 
    {
-     "normative_checks": [{
-       "id": "count-four",
-       "standard": "EXAMPLE-STD", "revision": "1",
-       "provisions": ["Rule 4.2.1-2"],
-       "command": "ctest --test-dir build -R header_count",
-       "evidence": {"kind": "test", "success": "exit_zero",
-                    "semantics": "PASS_AND_FAIL_DECISIVE"}
-     }],
-     "normative_applicability": [{
-       "provision": "Rule 4.2.1-3",
-       "applicability": "NOT_APPLICABLE",
-       "reason": "this device never receives headers"
-     }]
+     "acme-firmware": {
+       "path": "/srv/src/acme-firmware",
+       "test_commands": ["make test"],
+       "normative_checks": [{
+         "id": "header-count",
+         "standard": "SYNTH-STD", "revision": "1",
+         "provisions": ["Rule 4.2.1-2"],
+         "command": "make check-header-count",
+         "evidence": {"kind": "test", "success": "exit_zero",
+                      "semantics": "PASS_AND_FAIL_DECISIVE"},
+         "enabled": true
+       }],
+       "normative_applicability": [{
+         "provision": "Rule 4.2.1-3",
+         "applicability": "NOT_APPLICABLE",
+         "reason": "this device never receives headers"
+       }]
+     }
    }
 
-A provision is named by its instance identity (``Rule 4.2.1-2@<digest>``) or
-by a printed label that names exactly one provision in the bound revision.
-``PASS_ESTABLISHES_SATISFIED`` makes a pass evidence of compliance and a
-failure evidence of nothing; ``PASS_AND_FAIL_DECISIVE`` also makes a failure
-evidence of a violation, and allows one repair. A check runs in the same
-sandbox as the project's own verification, against the final source, and a
-check that changes the source proves nothing about it. Binding a check to a
-provision also declares that the provision applies to the project.
+``make test`` passing on this project says its tests pass, and nothing more.
+``make check-header-count`` passing says Rule 4.2.1-2 holds — because the
+binding says that is what this check checks. The binding, not the test, is
+what carries normative meaning.
+
+``normative_checks`` — one ``ConstraintCheckBinding`` per entry:
+
+.. list-table::
+   :header-rows: 1
+   :widths: 24 76
+
+   * - Field
+     - Meaning
+   * - ``id``
+     - the binding's name, as the verdict and the audit trail report it
+   * - ``standard``, ``revision``
+     - the standard this binding is for. A binding for another standard or
+       revision is reported and ignored; ``revision`` defaults to the bound one
+   * - ``provisions``
+     - the provisions this check is evidence for, by stable identity: an
+       instance id (``Rule 4.2.1-2@<digest>``) or a printed label that names
+       exactly one provision in the bound revision. A label that names none,
+       or several, binds nothing and is reported
+   * - ``command``
+     - what to run, in the project's sandbox, from the workspace root
+   * - ``evidence.kind``
+     - ``test`` or ``check``
+   * - ``evidence.success``
+     - ``exit_zero`` — the only success criterion
+   * - ``evidence.semantics``
+     - ``PASS_ESTABLISHES_SATISFIED`` (default): a pass establishes the
+       provisions, a failure establishes nothing. ``PASS_AND_FAIL_DECISIVE``:
+       a failure also establishes a violation, and may trigger the one repair
+   * - ``scope``
+     - ``workspace`` (default)
+   * - ``enabled``
+     - ``false`` keeps the binding declared but unused
+
+A bound check runs on the final source, in the same sandbox as the project's
+own verification, and its result — ``PASSED``, ``FAILED``, ``NOT_RUN`` or
+``ERROR`` — counts only for the source epoch it ran on. A check that could not
+start, timed out, or modified the source it was run against establishes
+nothing. Binding a check to a provision also declares that the provision
+applies to the project.
+
+``normative_applicability`` — one declaration per entry:
+
+.. list-table::
+   :header-rows: 1
+   :widths: 24 76
+
+   * - Field
+     - Meaning
+   * - ``provision``
+     - the provision, by the same stable identity as above
+   * - ``applicability``
+     - ``APPLICABLE`` or ``NOT_APPLICABLE``
+   * - ``reason``
+     - required: why, in one line — the verdict quotes it
+   * - ``standard``, ``revision``
+     - optional; default to the bound standard
+
+A provision declared ``NOT_APPLICABLE`` leaves the constraint packet. A
+provision declared both ways is left unresolved.
 
 Exclusions have granularity
 ***************************

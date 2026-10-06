@@ -190,9 +190,6 @@ class TheOrganisationIsNamedOnlyWhereItMustBe(unittest.TestCase):
             "quotes the measured incident it was written for",
         "spear/tests/test_public_boundary.py":
             "this file: the needles and the reasons",
-        "doc/source/using/retrieval.rst":
-            "reports measurements made against a real build system, including "
-            "the 37-question recall figure",
     }
 
     def scan_ignoring_persistent(self):

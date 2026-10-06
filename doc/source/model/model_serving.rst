@@ -94,10 +94,12 @@ than inherited from whichever launcher happened to run.
 Sampling
 ========
 
-Sampling is a client-side decision and lives in ``rag_chat.py``: temperature
-0.7, ``top_p`` 0.8, ``top_k`` 20, ``repeat_penalty`` 1.05.  Lower temperatures
-are not safer here — they drive this model into repetition death-loops.  A
-stream circuit-breaker truncates them when they happen anyway.
+Sampling is a client-side decision. The normative and general runtime sends a
+temperature (``--temp``, ``SPEAR_TEMP``, default 0.25) and leaves every other
+parameter to the server; a model that falls into repetition at a low
+temperature wants it raised, and a stream circuit-breaker truncates a loop when
+it happens anyway. The coding core sends no sampling parameters of its own:
+the server's defaults apply.
 
 Changing the model or the adapter
 =================================
@@ -183,15 +185,19 @@ quirks), the remote port (``SPEAR_SERVER_PORT`` on that host; the profile uses
    Optional, selected with ``--provider anthropic``.  Thinking is explicitly
    disabled.  See `Authenticating against Anthropic`_ below.
 
-Both produce a ``ModelTurn``:
+For the normative and general runtime, both produce a ``ModelTurn`` (the
+coding core reads the OpenAI-compatible reply directly, with its
+``finish_reason``, through ``complete_raw_messages``):
 
 .. code-block:: python
 
    @dataclass(frozen=True)
    class ModelTurn:
-       stop_reason: StopReason        # TOOL_USE | END_TURN | MAX_TOKENS | REFUSAL | ERROR | OTHER
-       text: str | None
+       text: str
        tool_calls: tuple[ModelToolCall, ...]
+       stop_reason: StopReason        # TOOL_USE | END_TURN | MAX_TOKENS | REFUSAL | ERROR | OTHER
+       usage: Mapping[str, int] | None = None
+       error: str | None = None
 
 Prompt caching on the Anthropic path
 ====================================
@@ -282,8 +288,8 @@ first when a profile appears to be ignored, since a stale exported
 The ``stop_reason`` contract
 ============================
 
-This contract is enforced twice — once in the backend, once in the agent loop
-— and it is deliberately unforgiving, because a tool call that survives an
+On the normative and general runtime this contract is enforced twice — once in
+the backend, once in the agent loop — and it is deliberately unforgiving, because a tool call that survives an
 ambiguous stop reason is a tool call nobody authorized.
 
 .. list-table::
@@ -311,6 +317,10 @@ On the loop side, only ``TOOL_USE`` carrying at least one call can reach tool
 execution.  ``END_TURN`` and ``REFUSAL`` require zero tool calls;
 ``MAX_TOKENS``, ``ERROR`` and ``OTHER`` execute nothing at all.  Even the
 forced final synthesis turn refuses a fresh tool request.
+
+The coding core applies the equivalent rule to ``finish_reason``: a tool call
+cut by the output limit is dropped and asked for again, never executed, and an
+invalid tool-call payload is never guessed at.
 
 Smoke test
 ==========

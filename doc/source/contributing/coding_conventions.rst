@@ -13,9 +13,9 @@ has to understand.
 Line length
 ***********
 
-Seventy-nine columns. Of the 62 000 lines across the 110 modules, 95.1 % are
-within it; the exceptions are almost all long string literals and table rows
-where breaking would cost more than it buys.
+Seventy-nine columns. The great majority of lines are within it; the
+exceptions are almost all long string literals and table rows where breaking
+would cost more than it buys.
 
 Rationale: two files side by side on a laptop, and a diff in a terminal, both
 fit without wrapping. Wrapped diffs are where review stops being careful.
@@ -28,12 +28,11 @@ introduces.
 
 .. code-block:: python
 
-    # The floor guarantees a way to work; it does not grant one the request
-    # refused. A turn told not to edit keeps reading, searching and bash --
-    # and bash itself runs without workspace write.
+    # A command's relative paths are judged from where it runs, not from the
+    # root: `cd board && echo > x` must be refused exactly where the same
+    # write by full path would be.
 
-    if role == AgentRole.MAIN and not read_only:
-        return cls._READ_FLOOR + cls._WRITE_FLOOR
+    directories = _stage_directories(words, cwd or scope.root or ".")
 
 The blank line is what makes the block read as a paragraph about the code
 rather than as a label glued to one line.
@@ -47,16 +46,14 @@ survives being moved.
 Docstrings
 **********
 
-Triple double quotes, always: ``"""`` appears 2342 times in the tree,
-``'''`` twenty. A module docstring says what the module is for in one
+Triple double quotes, always. A module docstring says what the module is for in one
 sentence; a function docstring says what it guarantees, not how.
 
 Typing
 ******
 
-``from __future__ import annotations`` at the top of every module — 105 of
-the 110 have it — and return annotations wherever the return type is not
-obvious from the name (1217 of them). The point is not type checking, which
+``from __future__ import annotations`` at the top of every module, and return
+annotations wherever the return type is not obvious from the name. The point is not type checking, which
 nothing in CI runs; it is that a signature should answer "what comes back"
 without the reader opening the body.
 

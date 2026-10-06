@@ -240,7 +240,7 @@ Confirmed from inside the sandbox:
 
 .. code-block:: text
 
-   DNS       : 172.66.147.243
+   DNS       : resolved (a public address)
    TLS       : 200
    HOST-LOOP : blocked (OSError)
 

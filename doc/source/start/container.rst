@@ -36,7 +36,7 @@ publish it are in ``scripts/docker/``, and ``scripts/spear-image`` drives them
    * - ``scripts/docker/build.sh``
      - Builds, wrapping both contexts.
    * - ``scripts/docker/spear-docker.sh``
-     - Runs, deriving the mounts and carrying the two ``--security-opt`` flags.
+     - Runs, deriving the mounts and carrying the three ``--security-opt`` flags.
    * - ``scripts/docker/push.sh``
      - Publishes, refusing a ``private`` image without ``--allow-push``.
    * - ``scripts/docker/stage-*.py``, ``gen-registry.py``
@@ -49,7 +49,7 @@ Put the tree's commands on ``PATH`` once per shell, from the repository root:
 
 .. code-block:: console
 
-   $ cd /opt/llm/spear && . ./env.sh
+   $ cd ~/spear && . ./env.sh
 
 Only ``scripts/`` goes on ``PATH``.  ``scripts/docker/`` holds a ``build.sh``,
 and a shell that has also sourced another tree's ``env.sh`` with a
@@ -315,8 +315,8 @@ all, which is the whole reason the tool exists.
 
 .. code-block:: console
 
-   $ spear-corpus add acme-firmware "$SPEAR_PILOT_TREE"
-   $ spear-index "$SPEAR_PILOT_TREE"
+   $ spear-corpus add acme-firmware ~/src/acme-firmware
+   $ spear-index ~/src/acme-firmware
    $ scripts/docker/build.sh --profile private --bake so3,acme-firmware
 
 When ``--bake`` is used the image's registry is restricted to what the image
@@ -373,8 +373,8 @@ Start to finish, on the machine that has the content:
 
 .. code-block:: console
 
-   $ spear-corpus add acme-firmware "$SPEAR_PILOT_TREE"   # register…
-   $ spear-index "$SPEAR_PILOT_TREE"                      # …and index
+   $ spear-corpus add acme-firmware ~/src/acme-firmware   # register…
+   $ spear-index ~/src/acme-firmware                      # …and index
    $ scripts/docker/build.sh --profile private --bake so3,acme-firmware
 
 What the build reports is what the image carries:
@@ -443,8 +443,8 @@ their own trees.  The one registry the repository carries by hand is
 ``spear/projects.example.json``, and it is a template.
 
 It registers every corpus **relative** to ``SPEAR_CORPUS_ROOT`` (``/corpora``
-in the image), where the workstation registry uses absolute paths under
-``/home/operator``.  That is what makes one
+in the image), where a workstation registry uses absolute paths under the
+operator's home.  That is what makes one
 image work for someone whose checkouts live elsewhere;
 ``resolve_corpus_path()`` leaves absolute paths untouched, so the workstation
 keeps behaving exactly as before (:doc:`/using/retrieval`).
@@ -459,27 +459,30 @@ Mounts are derived, not listed
 Without ``--corpora DIR``, ``spear-docker.sh`` computes one bind per registered
 corpus from the registry itself, dropping any path already inside another.
 
-This is not tidiness.  Binding the whole of ``/opt/llm/spear`` — the obvious
+This is not tidiness.  Binding the whole SPEAR checkout — the obvious
 single mount — would put ``models/`` (75 G) and the served GGUFs (47 G) inside
 the container **read-write**, in the one tree the sandbox grants write access
 to, for no retrieval value.  Weights are not corpus.  Deriving the list also
 means a corpus added to the registry is mounted without touching this script.
 
-The two flags that are not optional
-===================================
+The three flags that are not optional
+=====================================
 
 .. code-block:: text
 
    --security-opt seccomp=unconfined --security-opt apparmor=unconfined
+   --security-opt systempaths=unconfined
 
 The harness runs **every** command inside bubblewrap and refuses to run any
 without it (:doc:`/harness/sandbox`).  Docker's default seccomp profile blocks
 ``clone(CLONE_NEWUSER)``, so ``bwrap`` cannot start, and the failure surfaces
 as ``sandbox unavailable`` — which reads like a broken harness rather than a
-missing run flag.  ``spear-docker.sh`` passes both, and ``entrypoint.sh``
-tests ``bwrap`` first and prints exactly this if it cannot.
+missing run flag.  ``bwrap`` also mounts a fresh ``/proc`` for each command,
+which Docker's masked system paths prevent unless ``systempaths=unconfined``
+is given.  ``spear-docker.sh`` passes all three, and ``entrypoint.sh`` tests
+``bwrap`` first and prints exactly this if it cannot.
 
-Neither flag grants the container new privileges on the host: both are about
+None of the flags grants the container new privileges on the host: all three are about
 letting an *unprivileged* namespace be created inside it.  The sandbox is
 still what confines the model's commands, and it is still doing its job.
 
@@ -499,11 +502,11 @@ Why retrieval is not served from the GPU host
 =============================================
 
 The obvious economy is to move the embedder and the index onto the machine
-that already serves the model, and keep a thin client here.  It was costed on
-2026-08-25 and declined; the numbers are worth keeping, because the idea comes
-back every time someone looks at the image size.
+that already serves the model, and keep a thin client here.  It was costed and
+declined; the numbers are worth keeping, because the idea comes back every
+time someone looks at the image size.
 
-What it would save, measured on this workstation:
+What it would save, measured on a development workstation:
 
 .. list-table::
    :header-rows: 1
@@ -532,17 +535,16 @@ turn.  It would need a persistent service behind the tunnel.)
 It was declined for three reasons, in increasing order of weight:
 
 * **It ends offline operation.**  Retrieval is what turns 18 % into 90 % on the
-  build-system audit.  Making it require a VPN and a reachable GPU host means a
+  build-system questions.  Making it require a VPN and a reachable GPU host means a
   session on a train is not a degraded session, it is a different assistant.
 * **It empties the container of its purpose.**  The image exists so that
   retrieval works the moment it starts, on a machine that may have no Hugging
   Face access at all.  A 5 GB image that needs a tunnel to answer anything is a
   different product, not a smaller one.
-* **The GPU host is a shared login.**  Collections are named from the corpus's
-  absolute path, so two people indexing ``~/soo/so3`` under that account would
-  write into the same collection.  Fixing that means per-user prefixes and a
-  shared ChromaDB on a filesystem that already had 104 GB free against a 97 GB
-  Hugging Face cache belonging to someone else.
+* **A GPU host is often a shared login.**  Collections are named from the
+  corpus's absolute path, so two people indexing the same path under one
+  account would write into the same collection.  Fixing that means per-user
+  prefixes and a shared ChromaDB on a filesystem other users already fill.
 
 The work itself is small -- about a day: a retrieve endpoint doing embedding
 and query in one round trip, a second port forward in ``spear-chat.sh``, ten

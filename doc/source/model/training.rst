@@ -16,12 +16,6 @@ writes.  And freezing a bundle executes no training.  ``freeze`` writes files
 and stops; the command that would train is printed in the bundle's runbook for
 a human to run.
 
-.. figure:: /img/SPEAR-Components.drawio.png
-   :width: 100%
-   :alt: Component map, including the training band
-
-   The training modules are the band the rest of the harness feeds.
-
 The five stages
 ===============
 
@@ -130,7 +124,7 @@ The frozen bundle
 
 .. code-block:: console
 
-   $ cd /opt/llm/spear/spear
+   $ cd ~/spear/spear
    $ ./bin/python -m training readiness --source audit/training-data
    $ ./bin/python -m training freeze --source audit/training-data --output /tmp/out
    $ ./bin/python -m training validate-bundle /tmp/out/bundles/<id>
@@ -283,8 +277,9 @@ The training host is the inference host (:ref:`inference_host`), whose reserved 
 RTX PRO 6000 Blackwell with 96 GiB.  The objective is that this card is
 sufficient and no GPU is rented.
 
-The binding constraint there is **disk, not VRAM**.  Measured 2026-08-25:
-``/home`` holds 97 GB free of 1399, and the bf16 shards are 159 GB.  4-bit does
+The binding constraint there is **disk, not VRAM**: the bf16 shards of the
+current base model are about 159 GB, more than the free space such a host
+typically has.  4-bit does
 not reduce that — bitsandbytes quantizes at load, from shards that must land on
 disk first.  Growing that filesystem is the cheap fix, and it is why the
 preflight's first check is a disk check that prints the deficit rather than a

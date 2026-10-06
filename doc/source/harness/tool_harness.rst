@@ -9,6 +9,27 @@ provider-neutral lifecycle above it is split between ``ToolRegistry``,
 ``ToolRouter``, ``AgentRuntime`` and ``TaskController``; none imports
 ``rag_chat``.  The substrate remains independently testable.
 
+Two tool surfaces
+=================
+
+The registry serves two vocabularies, and a turn sees exactly one of them:
+
+**The coding core's six tools** — ``read_file``, ``search_files``, ``patch``,
+``write_file``, ``delete_file``, ``terminal`` — on every request with no
+standard engaged, and in the implementation pass of a MIXED request. The core
+reaches the harness through SpearHost (:doc:`/reasoning/implementation`), which
+calls the same router authorization, workspace resolution, command policy and
+sandbox described below.
+
+**The normative runtime's tools** — the ``standard.*`` tools, the file and
+command tools of that runtime, ``search_corpus``, and the web pair — in a
+session where a standard is engaged, filtered further by what the turn asks
+about: a purely normative question is offered no tool that reaches a working
+tree.
+
+Neither surface sees the other's tools, and the coding core never sees a
+normative one.
+
 .. _the-web-pair:
 
 The web pair
@@ -143,9 +164,9 @@ Once the sandbox is known to be down
 
 The checks above decide one command at a time.  One conclusion outlives the
 command that reached it: when a command's output reports the sandbox missing,
-``_registered_command`` records it on the turn's cache, and every later
-``edit_file``, ``write_file`` or ``append_file`` in that turn returns
-``DENIED`` with an explicit refusal instead of writing.
+``_registered_command`` records it on the turn's cache, and every later file
+write or deletion in that turn — through either tool surface — is refused
+explicitly instead of performed.
 
 The reason is not sandbox purity but verifiability.  Without the sandbox
 nothing the model writes can be read back, compiled or run, so an edit made

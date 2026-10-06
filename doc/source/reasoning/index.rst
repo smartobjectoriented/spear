@@ -1,16 +1,22 @@
 .. _part_reasoning:
 
-===========================
-Evidence-grounded reasoning
-===========================
+==========================
+Request modes and evidence
+==========================
 
-What makes SPEAR more than a coding assistant: answers bound to an
-authoritative standard, an engineering workflow that keeps specification and
-implementation apart, and the guards that hold that line.
+SPEAR does not treat every request the same way. It reads the class of each
+request — GENERAL, IMPLEMENTATION, NORMATIVE or MIXED — and runs it on the path
+where its evidence can be kept: changes on the coding core behind its control
+plane, questions about a standard on the normative runtime, and changes that
+must satisfy a standard through both, judged on evidence the model cannot
+supply.
 
 .. toctree::
    :maxdepth: 2
 
+   implementation
    standards
-   workflow
+   mixed
+   evidence
    guards
+   workflow

@@ -5,6 +5,78 @@ Glossary
 
 .. glossary::
 
+   Request class
+      What a request is, read from its own words and from whether a standard
+      is engaged: ``GENERAL``, ``IMPLEMENTATION``, ``NORMATIVE`` or ``MIXED``.
+      The class decides which path runs it.
+
+   MIXED
+      A request for a change that must satisfy the bound standard. It runs as
+      a normative pre-pass, a constraint packet, the coding core, and a final
+      adjudication on authoritative evidence.
+
+   Coding core
+      The standalone tool-calling loop that runs implementation requests, with
+      exactly six tools: ``read_file``, ``search_files``, ``patch``,
+      ``write_file``, ``delete_file`` and ``terminal``. It decides what to try
+      next; it neither authorizes its own calls nor judges its own result.
+
+   SpearHost
+      The control plane the coding core runs against: every read, write and
+      command it asks for is authorized, resolved inside the workspace,
+      confined, checkpointed and audited here.
+
+   Control plane
+      Everything that decides what a call may do and records what it did:
+      SpearHost in front of the coding core, the command and capability
+      policies, the workspace, and the audit trail.
+
+   Normative runtime
+      The ``AgentRuntime`` loop with the standard's tools, provision records
+      and answer guards, which answers questions about a bound standard.
+
+   Implementation evidence
+      The structured record of what a turn's tools did and what its checks
+      showed, and the verdict computed from it: ``VERIFIED``,
+      ``UNVERIFIED`` or ``NO_CHANGE``.
+
+   Final source state
+      The tree as it stands after a turn's last change. Only a check that ran
+      on it — in the final source epoch — counts for the verdict.
+
+   Source epoch
+      The stretch of a turn between two changes to delivered source. A check
+      proves the epoch it ran in, and no later one.
+
+   Normative evidence
+      Evidence that a constraint taken from the bound standard holds in the
+      final source: a source predicate, or a conformance check bound to the
+      provision. A model's reading is never normative evidence.
+
+   Constraint packet
+      The ``NormativeConstraintSet`` a MIXED request is implemented and judged
+      against: one constraint per applicable provision, each with its force,
+      condition, counts, values, identifiers and provision identity.
+
+   Structural coverage
+      The closure of the cited provisions over the groups the document itself
+      records — the same numbered list, the same table, a provision named
+      outright — bounded, and incomplete when a bound is reached.
+
+   Applicability
+      Whether a covered provision applies to this change: ``APPLICABLE``,
+      ``NOT_APPLICABLE`` or ``UNRESOLVED``, decided only from the request's
+      words or the project's own declarations.
+
+   Conformance check
+      A project check bound to a provision in ``normative_checks``. Only a
+      bound check carries normative weight; an ordinary passing test does not.
+
+   Source predicate
+      A deterministic reading of a constraint off the final source —
+      ``EXACT_COUNT``, ``VALUE_EQUALS``, ``CONDITIONAL_VALUE`` — that decides
+      only when nothing has to be interpreted.
+
    Corpus
       A source tree registered for retrieval, declared in ``projects.json``
       and managed with ``spear-corpus add/list/rm``. A corpus is a *scope*,
@@ -35,7 +107,7 @@ Glossary
 
    Harness
       Everything between the model's request to act and the act itself: tool
-      selection, authorization, and the three confinement layers. The model
+      selection, authorization, and the confinement layers. The model
       is a component of SPEAR; the harness is what makes running it on a real
       machine defensible.
 

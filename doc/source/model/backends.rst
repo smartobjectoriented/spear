@@ -36,12 +36,13 @@ last choice is reused silently.
 
    $ spear-chat --local                      # the locally served model
    $ spear-chat --remote                     # a remote endpoint over an SSH tunnel
-   $ spear-chat --reds                       # the configured institute server
+   $ spear-chat --reds                       # a configured shared GPU server
    $ spear-chat --provider anthropic --model claude-sonnet-5
 
 The remote flags open an SSH tunnel and point the client at the local end of
-it. They do **not** start anything on the far side: the server there is yours
-to start.
+it. ``--reds`` does not start anything on the far side: the server there is
+yours to start. ``--remote`` (a rented pod) pushes the pod's serve script if it
+is missing and starts it.
 
 Pointing at an endpoint directly
 ********************************
@@ -99,6 +100,11 @@ Two settings interact with it:
        instead of being truncated mid-call
    * - ``SPEAR_CONTEXT_FRACTION``
      - the fraction of the window the prompt may occupy before compaction
+
+These two, and the sampling temperature below, govern the normative and
+general runtime. The coding core (:doc:`/reasoning/implementation`) reserves
+its own output budget, sends no sampling parameters of its own, and does not
+compact: it stops at half the window and asks for a summary.
 
 Sampling
 ********

@@ -29,54 +29,101 @@ refusal to answer when the evidence is insufficient.
    The SPEAR infrastructure.  The two sources of truth — specification and
    implementation — are kept separate and reconciled only in the runtime.
 
+.. _request_classes:
+
+Request classes and execution paths
+===================================
+
+Every request is classified before anything runs, from the request's own words
+and from whether a standard is engaged for the session:
+
+.. list-table::
+   :header-rows: 1
+   :widths: 20 80
+
+   * - Class
+     - What it is
+   * - ``GENERAL``
+     - names no subject of its own, and no standard is engaged
+   * - ``IMPLEMENTATION``
+     - about the working tree: read it, change it, build it, test it
+   * - ``NORMATIVE``
+     - about what a bound standard requires
+   * - ``MIXED``
+     - a change to the tree that must satisfy the bound standard
+
+.. figure:: /img/SPEAR-Requests.drawio.png
+   :width: 100%
+   :alt: Request routing: the task controller sends unbound requests to the
+         coding core behind SpearHost, normative requests to the normative
+         runtime, and MIXED requests through the three-pass orchestration
+
+   One request, one class, one path.
+
+The class decides the path:
+
+**The coding core, behind SpearHost** — every request with no standard engaged.
+A standalone tool-calling loop with six tools (``read_file``,
+``search_files``, ``patch``, ``write_file``, ``delete_file``, ``terminal``)
+whose every call crosses SpearHost, the control plane. The turn ends with
+implementation evidence computed from the record of what the calls did.
+See :doc:`/reasoning/implementation`.
+
+**The normative runtime** — requests in a session where a standard is engaged.
+The provider-neutral ``AgentRuntime`` loop with the standard's tools, provision
+records and the answer guards. It answers normative questions, and holds a
+change asked for in such a session that is not MIXED to a five-stage workflow.
+See :doc:`/reasoning/standards` and :doc:`/reasoning/workflow`.
+
+**The MIXED orchestration** — a change that must satisfy the bound standard.
+The normative runtime runs first, read-only; its cited provisions become a
+constraint packet; the coding core makes the change; the final source is judged
+against the packet by deterministic evidence providers. See
+:doc:`/reasoning/mixed`.
+
+The three paths share the harness underneath — workspace, command policy,
+sandbox, audit — and none of them lets a model's statement stand as evidence.
+
 Runtime components
 ==================
-
-SPEAR separates the interactive application from the provider-neutral task
-runtime and from the security substrate.  The same ``AgentRuntime`` executes
-the Main, Explorer and Reviewer roles; role configuration supplies isolated
-contexts and structurally filtered tools.
-
-.. figure:: /img/SPEAR-Agent.drawio.png
-   :width: 100%
-   :alt: Agent harness components and their interactions
-
-   The components and how one turn moves through them.  The spine runs down
-   the left; everything below the application row is provider-neutral.
 
 .. code-block:: text
 
    CLI / application (rag_chat.py)
               |
               v
-       TaskController
-          |   |   |
-          |   |   +---- PlanningPolicy
-          |   +-------- DelegationManager
-          |               +-- Explorer (isolated, read-only)
-          |               +-- Reviewer (isolated, read-only)
-          v
-       AgentRuntime <---------------- ModelBackend
-          |                            +-- local/OpenAI-compatible adapter
-          |                            +-- Anthropic adapter
-          +-- WorkingState
-          +-- ContextEngine -- CompactionService
-          +-- BudgetManager
-          |
-          +-- VerificationPolicy
-          +-- CheckpointManager
-          +-- SessionStore
-          |
-          v
+       TaskController --- request class, standard binding
+          |                  |                      |
+          v                  v                      v
+     coding core       AgentRuntime           MixedOrchestrator
+     (agent/)          (normative runtime)      normative pre-pass
+          |              ModelBackend           NormativeConstraintSet
+          v              WorkingState           coding core
+     SpearHost           ContextEngine          evidence providers
+     (control_plane)     VerificationPolicy     composite verdict
+          |              CheckpointManager
+          |              SessionStore
+          v                  |
        ToolRouter -- ToolRegistry -- ResultStore
           |
           v
        CommandRunner -- Bubblewrap
 
+The coding core (``spear/agent/``) imports nothing of SPEAR: it calls a
+``Host`` interface for every read, write and command, and ``SpearHost``
+implements that interface with SPEAR's policy. Its evidence is turned into the
+implementation verdict by ``completion.py``. The MIXED orchestration
+(``mixed_orchestration.py``) composes the two runtimes and the normative
+evidence modules (``normative_constraints``, ``normative_coverage``,
+``normative_predicates``, ``normative_evidence``); it changes neither.
+
+The ``AgentRuntime`` can also run Explorer and Reviewer roles with isolated
+contexts and read-only tools; they are experimental and off by default.
+
 Task ownership
 ==============
 
-``WorkingState`` is authoritative task truth.  It changes only through typed,
+On the normative runtime, ``WorkingState`` is authoritative task truth.  It changes only through typed,
 grounded events.  Conversation, retrieved context, durable memory and compacted
 summaries are context sources, not alternative task-state stores.
 
@@ -92,7 +139,10 @@ filesystem persistence implementation.
 Context and memory
 ==================
 
-``ContextEngine`` is the only production context composer.  It accounts for
+On the normative runtime, ``ContextEngine`` composes the context. The coding
+core builds its own request from the project's rules, memories and skills and
+reads the tree through its tools; it does not compact, it stops at half the
+window and asks for a summary.  It accounts for
 system rules, project rules, active durable memories, WorkingState projection,
 conversation summaries, recent conversation, retrieval and tool evidence.
 
@@ -129,17 +179,6 @@ archived or deleted manually as a unit after their checkpoint and result
 references are no longer needed.  Deleting a trace or trajectory never repairs
 or invalidates a session; deleting referenced results/checkpoints makes the
 associated evidence unavailable.
-
-Every component
-===============
-
-.. figure:: /img/SPEAR-Components.drawio.png
-   :width: 100%
-   :alt: Every component of the harness, by layer
-
-   The exhaustive map: the forty-nine harness modules grouped by what they
-   own, with their line counts at the time the diagram was drawn.  Read the
-   bands as ownership rather than as call order.
 
 Training data as a by-product
 =============================
@@ -182,8 +221,22 @@ canonical turn contract.
 Default profile
 ===============
 
-Normal CLI tasks use the Main runtime only. Planning remains deterministic and
-conservative; Explorer, Reviewer and reviewer repair are disabled unless the
-caller explicitly enables them. This avoids paying for child contexts whose
-structured contracts were not reliable in the measured local-model runs while
-retaining their isolated role architecture for experiments and future models.
+Requests with no standard engaged run on the coding core. Requests in a
+standard-bound session run on the normative runtime, or through the MIXED
+orchestration when they ask for a change in the standard's terms. On the
+normative runtime, planning remains deterministic and conservative; Explorer,
+Reviewer and reviewer repair are disabled unless the caller explicitly enables
+them.
+
+.. _provenance:
+
+Provenance
+==========
+
+The coding core is SPEAR's own module, built by porting the coding loop and the
+coding tools of Hermes Agent (Nous Research, MIT license) function by function,
+and verifying the port against results captured from Hermes itself. What sits
+around it — SpearHost, the command policy and sandbox, the evidence plane, the
+normative runtime and the MIXED orchestration — is SPEAR's. Every file copied
+or adapted, with its upstream revision, its license and its destination, is
+listed in ``THIRD_PARTY_NOTICES.md`` at the repository root.

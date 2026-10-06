@@ -544,11 +544,13 @@ class ReviewerFunctionalTests(unittest.TestCase):
         self.assertTrue(result.blocking_findings)
 
     def test_repeated_inspection_stalls_and_never_accepts(self):
+        # The last two arrive with no tool offered: neither runs, and the
+        # second ends the review.
         turns = [ModelTurn(
             "", (ModelToolCall(f"read{index}", "bash", {
                 "command": "cat src.py",
             }),), StopReason.TOOL_USE,
-        ) for index in range(5)]
+        ) for index in range(6)]
         parent = parent_context(ScriptedBackend(turns))
         add_verification(parent.working_state)
         result = ReviewService(AgentRuntime()).review(

@@ -48,6 +48,11 @@ provisions that govern the change and to state each one exactly — its force,
 its condition, its counts, the identifiers and values it names — citing every
 one. It writes nothing and reads no code.
 
+It investigates with those tools, then finalizes with none: when the tool window
+closes the model is told that no tool remains, and a tool call it then writes
+out as text is never run and never taken as the answer. It is asked once more;
+a pass that still gives no answer ends as not completed, and says so.
+
 2. The constraint packet
 ========================
 
@@ -98,7 +103,9 @@ than its limit, or a closure that would add too many provisions, is not
 absorbed — the coverage is marked **INCOMPLETE**, and an incomplete coverage
 can never yield ``COMPLIANT``. A pre-pass that cites nothing identifiable also
 leaves coverage incomplete; the packet is never filled from whatever retrieval
-happened to return.
+happened to return. The coverage reason says which of three things happened:
+the pass answered and cited no provision, its answer was withheld because the
+evidence did not support it, or it did not complete.
 
 Applicability
 -------------

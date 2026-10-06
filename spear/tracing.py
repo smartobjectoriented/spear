@@ -81,6 +81,10 @@ class EventType(StrEnum):
     # A MIXED turn's orchestration: the normative pass, the coding core, the
     # check of the final source, and the verdict that joins them.
     NORMATIVE_PREPASS_STARTED = "normative_prepass_started"
+    NORMATIVE_PREPASS_FAILED = "normative_prepass_failed"
+    NORMATIVE_INVESTIGATION_STARTED = "normative_investigation_started"
+    NORMATIVE_FINALIZATION_STARTED = "normative_finalization_started"
+    NORMATIVE_FINALIZATION_RETRY = "normative_finalization_retry"
     NORMATIVE_CONSTRAINT_SET_CREATED = "normative_constraint_set_created"
     IMPLEMENTATION_STARTED = "implementation_started"
     IMPLEMENTATION_FINISHED = "implementation_finished"

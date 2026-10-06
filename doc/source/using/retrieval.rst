@@ -253,7 +253,9 @@ each deployment fills them. Typical fragments look like this:
 
 Keeping these as files rather than as strings in ``rag_chat.py`` means the
 behaviour of the assistant can be adjusted without touching code, and the
-diff of a behavioural change is readable.
+diff of a behavioural change is readable.  Each one says where it
+applies -- a rule in its header, a skill in its ``scope`` -- and one that says
+nothing is not used (:ref:`context_selection`).
 
 The skill library
 -----------------
@@ -275,7 +277,7 @@ never sees, because it is stripped before injection:
    ---
    name: debug-buildsystem-build
    description: Read the failing bitbake task log.
-   scope: [buildsystem]
+   scope: [bsp-a, bsp-b]
    requires: [bitbake]
    version: 3
    created: 2026-06-23T13:26:00
@@ -289,9 +291,11 @@ never sees, because it is stripped before injection:
    already on disk keeps matching without a re-embed.
 
 ``scope``
-   ``any`` by default, and then nothing narrows.  Named otherwise, the skill
-   is injected only in a corpus whose name or kind it lists -- a bitbake
-   procedure has no business in an LVGL session.
+   The registered projects the procedure belongs to -- a bitbake procedure has
+   no business in an LVGL session.  ``[any]`` makes it generic, and must be
+   written: a skill that states no scope is used nowhere
+   (:ref:`context_selection`).  A file saved by ``save_skill`` always states
+   one.
 
 ``requires``
    Commands that must exist for the procedure to be runnable.  A skill whose
@@ -335,8 +339,9 @@ Three levels exist, and choosing between them is the whole question:
 *never rewrite an existing copyright header, only extend its year range*: that
 is true in SO3, in the build-system trees and in every product tree alike, and written per
 corpus it would be invisible in all the others.  A recalled line is dated and
-appended to ``rules-learned.md``, which ``load_rules()`` injects after
-``rules.d/*.md`` on **every** request.
+appended to ``rules-learned.md``, which is injected after the ``rules.d``
+rules on every request that changes or asks about a tree -- not on a question
+about a bound standard, which no working rule bears on.
 
 That reach is also the cost, so it is budgeted rather than unbounded: the whole
 injected rule set is checked against ``RULES_BUDGET`` (8 000 characters) and

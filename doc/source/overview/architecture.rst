@@ -84,6 +84,12 @@ against the packet by deterministic evidence providers. See
 The three paths share the harness underneath — workspace, command policy,
 sandbox, audit — and none of them lets a model's statement stand as evidence.
 
+Each path is also given only its own context. A turn starts from its workspace
+— the registered project, or an unregistered tree on its own — and a
+deterministic selector keeps the context its class and pass call for, of this
+workspace or explicitly generic, and names the tool family; every decision is
+audited and none is shown to the model (:ref:`context_selection`).
+
 Runtime components
 ==================
 

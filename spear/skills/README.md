@@ -7,7 +7,7 @@ like one they cover. A skill is a Markdown file with optional front matter:
 ---
 name: short-kebab-case-name
 description: one line, used to decide relevance
-scope: [corpus-name]        # optional: restrict to one corpus
+scope: [project-name]       # required: the projects it serves, or [any]
 version: 1
 ---
 
@@ -16,8 +16,8 @@ version: 1
 1. ...
 ```
 
-`scope` limits a skill to the corpora that list it; a skill without one is
-offered everywhere. `skill_library` re-embeds a file whose digest changes, so
+`scope` names the registered projects a skill serves; `[any]` makes it generic
+and must be written. A skill without one is offered nowhere. `skill_library` re-embeds a file whose digest changes, so
 editing one here is enough — there is no separate registration step.
 
 This directory ships empty. A skill describes a particular codebase, build

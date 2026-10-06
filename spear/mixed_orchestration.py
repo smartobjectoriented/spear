@@ -31,6 +31,7 @@ import subprocess
 from dataclasses import dataclass, field
 
 import normative_constraints as nc
+from context_selection import MIXED_IMPLEMENTATION, MIXED_POSTCHECK, MIXED_PREPASS
 from normative_evidence import ProjectCheckProvider, SourcePredicateProvider
 from agent_roles import AgentRole
 from model_backend import ConversationMessage, TextBlock
@@ -379,6 +380,16 @@ class MixedOrchestrator:
         normative.conversation = turn[:-1] + [ConversationMessage("user", (TextBlock(question),))]
         normative.work_phase = None
         self._view(normative, request, question, coding=False)
+        prepass = (getattr(context, "phase_contexts", None) or {}).get(MIXED_PREPASS)
+
+        if prepass and prepass.get("context_items"):
+            # The pre-pass reads the standard: it is given the normative
+            # selection, with no coding rule, memory, procedure or code corpus.
+
+            normative.context_items = prepass["context_items"]
+            normative.system_prompt = "".join(item.content for item in prepass["context_items"])
+
+        self._toolset(normative, MIXED_PREPASS, normative.tools, coding=False)
         offered = {item.name for item in normative.tools}
         execute = context.tool_executor
 
@@ -417,6 +428,21 @@ class MixedOrchestrator:
         self._event(context, EventType.IMPLEMENTATION_STARTED,
                     {"brief_chars": len(text), "repair": bool(history)})
         self._view(context, request, request.objective, coding=True)
+        implementation = (getattr(context, "phase_contexts", None) or {}).get(
+            MIXED_IMPLEMENTATION)
+
+        if implementation is not None:
+            context.coding_context = implementation["coding_context"]
+
+        self._toolset(context, MIXED_IMPLEMENTATION, context.tools, coding=True)
+        self._event(context, EventType.CONTEXT_SELECTED, {
+            "phase": MIXED_IMPLEMENTATION, "id": "normative:constraint-set",
+            "type": "NORMATIVE_CONSTRAINT_SET",
+            "source": getattr(getattr(context, "mixed_record", None), "packet", None)
+            and context.mixed_record.packet.set_id,
+            "reason": "the compact constraint packet, as the brief carries it",
+            "chars": len(text), "workspace": getattr(getattr(context, "workspace_context",
+                                                             None), "workspace_id", "")})
 
         # The coding core never runs under the legacy write gate: SpearHost's
         # envelope is its boundary, as for any implementation turn.
@@ -433,11 +459,22 @@ class MixedOrchestrator:
 
         return result
 
+    def _toolset(self, context, phase, definitions, *, coding):
+        """Name the family this pass is offered, hold it to the tool contract,
+        and record it -- for the audit trail, never for the model."""
+        import tool_selection
+
+        selection = tool_selection.DeterministicToolSelector().select(
+            phase, [item.name for item in definitions], coding=coding)
+        tool_selection.check_contract(definitions, self.controller.registry, coding=coding)
+        self._event(context, EventType.TOOLSET_SELECTED, selection.to_dict())
+
     # --------------------------------------------------------------- checking
 
     def _check(self, context, packet, root):
         """Every constraint's status against the final files, and the source
         fingerprint they were read at."""
+        self._toolset(context, MIXED_POSTCHECK, (), coding=False)
         self._event(context, EventType.NORMATIVE_POSTCHECK_STARTED,
                     {"set_id": packet.set_id, "constraints": len(packet.constraints)})
         fingerprint = nc.source_fingerprint(root)

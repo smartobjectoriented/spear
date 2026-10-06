@@ -25,6 +25,8 @@ import subprocess
 from contextlib import contextmanager
 from pathlib import Path
 import answer_scope
+import context_selection
+import context_sources
 from agent import tools as coding_tools
 import embedding
 import evidence_handles
@@ -81,6 +83,7 @@ from tool_router import (
 from verification import VerificationHints, VerificationPolicy
 from training_store import TrainingStore
 import project_build
+import workspace_context
 from standard_commands import (
     StandardCommandError, StandardOperator, handle_standard_command,
     complete_standard, retrieval_summary, standard_help_lines,
@@ -3606,6 +3609,41 @@ def skills_sync():
         # the collection still holds whatever it held before.
 
         return {}
+
+
+def skill_hits(query, max_dist=0.55, wanted=8):
+    """The skills close to this turn, ``(name, document, stated scope)``, with
+    no scope judged here: which of them belong to the workspace is the
+    context selector's decision. A skill whose required commands are missing
+    is left out, as it always was."""
+
+    skills_sync()
+
+    try:
+        coll = _db().get_collection(SKILLS_COLLECTION)
+    except Exception:
+        return []
+
+    count = coll.count()
+
+    if count == 0:
+        return []
+
+    r = coll.query(query_texts=[query], n_results=min(wanted, count),
+                   include=["documents", "distances"])
+    library = {skill.name: skill for skill in skill_library.load_library(SKILLS_DIR)}
+    hits = []
+
+    for name, document, distance in zip(r["ids"][0], r["documents"][0],
+                                        r["distances"][0]):
+        skill = library.get(name)
+
+        if distance > max_dist or skill is None or skill_library.missing_requirements(skill):
+            continue
+
+        hits.append((name, document, skill.scope if skill.scope_declared else ()))
+
+    return hits
 
 
 def skills_lookup(query, max_skills=2, max_dist=0.55):
@@ -7284,6 +7322,199 @@ def load_corpus_rules():
     return "\n\n" + "\n\n".join(parts)
 
 
+# ── which context each runtime is shown ──────────────────────────────
+
+CONTEXT_SELECTOR = context_selection.DeterministicContextSelector()
+
+#: Procedures a turn is given at most, as before the selector existed.
+MAX_SKILLS = 2
+
+
+def _corpus_rule_parts(workspace):
+    """The project's own maps, as load_corpus_rules finds them, each with
+    whose it is: the workspace's own in-tree file, its corpus root's, or the
+    shipped map named after the project."""
+    seen, parts = set(), []
+
+    for root in (PROJECT_ROOT, CORPUS_ROOT):
+        path = os.path.realpath(os.path.join(root, CORPUS_RULES_FILE))
+
+        if path in seen or not os.path.isfile(path):
+            continue
+
+        seen.add(path)
+
+        with open(path, "r") as handle:
+            content = handle.read().strip()
+
+        if not content:
+            continue
+
+        own = os.path.realpath(root) == workspace.root or not workspace.registered
+        scope = ((context_selection.WORKSPACE,) if own
+                 else (context_selection.PROJECTS, workspace.workspace_id))
+        parts.append((os.path.basename(root), _to_sandbox_paths(content, root), scope))
+
+    if parts:
+        return parts
+
+    names = [PROJECT] + ([PROJECT.split(":", 1)[1]] if PROJECT.startswith("workspace:") else [])
+
+    for name in names:
+        path = os.path.join(SHIPPED_CORPUS_RULES, f"{name}.md")
+
+        if os.path.isfile(path):
+            with open(path, "r") as handle:
+                content = handle.read().strip()
+
+            if content:
+                return [(f"{PROJECT}, shipped", _to_sandbox_paths(content, CORPUS_ROOT),
+                         (context_selection.PROJECTS, name))]
+
+    return []
+
+
+def select_turn_context(*, user_input, turn_scope, binding, write, project_spec,
+                        project_commands, history_text, memories, skills, retrieval,
+                        system_instructions, system_source, tool_guide, working_directory,
+                        task_id="", session_id=None, trace=None):
+    """(workspace, {phase: selection}, {phase: rendered strings}) for one turn.
+
+    Every phase the turn may run is selected: its own, and for a MIXED change
+    the pre-pass and the implementation. Deterministic -- no model, no
+    embedder -- and every decision is traced, never shown to the model.
+    """
+    import time
+    from types import SimpleNamespace
+
+    from agent import loop as core_loop
+    from agent import prompt as core_prompt
+
+    sel = context_selection
+    started = time.perf_counter()
+    bound = bool(binding)
+    workspace = workspace_context.from_session(
+        project=PROJECT, spec=project_spec, registered=PROJECT in load_projects(),
+        project_root=PROJECT_ROOT, corpus_root=CORPUS_ROOT,
+        project_commands=project_commands,
+        binding=(SimpleNamespace(standard_id=binding.get("standard_id"),
+                                 revision=binding.get("revision")) if bound else None))
+    shared = (context_sources.rule_candidates(RULES_DIR)
+              + context_sources.learned_candidate(LEARNED_RULES_FILE)
+              + context_sources.corpus_rule_candidates(_corpus_rule_parts(workspace))
+              + context_sources.metadata_candidates(workspace)
+              + context_sources.skill_candidates(skills)
+              + context_sources.runtime_candidates((
+                  ("memory:project", sel.SourceType.PROJECT_MEMORY, MEMORIES_FILE,
+                   memories, False, "memories"),
+                  ("retrieval:corpus", sel.SourceType.RETRIEVED_CORPUS, "project_corpus",
+                   retrieval, False, "retrieval"))))
+    shared.append(sel.Candidate("request", sel.SourceType.USER_REQUEST, "user", user_input,
+                                mandatory=True, rendered_by_runtime=True))
+
+    if history_text:
+        shared.append(sel.Candidate("session:history", sel.SourceType.SESSION_CONTEXT,
+                                    "conversation", history_text, mandatory=True,
+                                    rendered_by_runtime=True))
+
+    if bound:
+        identity = f"{binding.get('standard_id')} {binding.get('revision')}"
+        choice = sel.select_standard(workspace, user_input,
+                                     phase=sel.primary_phase(turn_scope, bound=True))
+        scope = ((context_selection.WORKSPACE,)
+                 if choice.standard and choice.standard[0] == binding.get("standard_id")
+                 else (context_selection.NOWHERE,
+                       f"wrong standard: {choice.reason}; the binding stays the operator's"))
+        shared += [sel.Candidate("standard:binding", sel.SourceType.STANDARD_BINDING, identity,
+                                 "", scope=scope, mandatory=True, rendered_by_runtime=True),
+                   sel.Candidate("standard:retrieval", sel.SourceType.RETRIEVED_STANDARD,
+                                 identity, "", rendered_by_runtime=True)]
+
+    core_base = core_prompt.build(cwd=str(PROJECT_ROOT), tool_names=(), model="",
+                                  project_rules="")
+    legacy = context_sources.runtime_candidates((
+        ("system:instructions", sel.SourceType.SYSTEM_RUNTIME, system_source,
+         system_instructions, True, "system"),
+        ("system:tool-guide", sel.SourceType.SYSTEM_RUNTIME, "tool_guide", tool_guide,
+         True, "system"),
+        ("project:working-directory", sel.SourceType.SYSTEM_RUNTIME, "workspace_runtime",
+         working_directory, True, "system")))
+    coding = [sel.Candidate("system:coding-core", sel.SourceType.SYSTEM_RUNTIME,
+                            "agent/prompt.py", core_base, mandatory=True,
+                            rendered_by_runtime=True)]
+    selections, rendered = {}, {}
+
+    for phase in sel.phases(turn_scope, bound=bound, write=write):
+        on_core = sel.runs_on_coding_core(phase, bound=bound)
+        candidates = shared + (coding if on_core else legacy)
+        mandatory = sum(sel.estimate_tokens(item.text) for item in candidates if item.mandatory)
+
+        if on_core:
+            reserve = (core_loop.MAX_TOKENS
+                       if not CTX_LIMIT or CTX_LIMIT > 2 * core_loop.MAX_TOKENS
+                       else CTX_LIMIT // 4)
+        else:
+            reserve = int(os.environ.get("SPEAR_MAX_TOKENS", "8192"))
+
+        budget = sel.Budget(int(CTX_LIMIT or DEFAULT_CTX), reserve, mandatory)
+
+        if trace is not None:
+            trace.emit(EventType.CONTEXT_SELECTION_STARTED, task_id, session_id=session_id,
+                       status=EventStatus.OK, metadata={
+                           "phase": phase, "workspace": workspace.to_dict(),
+                           "candidates": len(candidates)})
+
+        clock = time.perf_counter()
+        selection = CONTEXT_SELECTOR.select(workspace, phase, candidates, request=user_input,
+                                            budget=budget)
+        selection.elapsed_ms = (time.perf_counter() - clock) * 1000
+        procedures = [item for item in selection.selected if item.bucket == "skills"]
+
+        for item in procedures[MAX_SKILLS:]:
+            selection.selected.remove(item)
+            selection.decisions.append(context_selection.Decision(
+                item.item_id, str(item.source_type), item.source_id, workspace.workspace_id,
+                f"skill limit: {MAX_SKILLS} per turn", item.rank, len(item.text),
+                sel.estimate_tokens(item.text), False))
+
+        texts = [item.text for item in selection.selected if item.bucket == "skills"]
+        skills_text = ("\n\n## Relevant skills (procedures learned from past tasks)\n\n"
+                       + "\n\n---\n\n".join(texts)) if texts else ""
+        out = {"global_rules": selection.text("global_rules"),
+               "project_rules": selection.text("project_rules") + selection.text("metadata"),
+               "memories": selection.text("memories"), "skills": skills_text,
+               "retrieval": selection.text("retrieval")}
+        out["coding_context"] = "".join(out[key] for key in ("global_rules", "project_rules",
+                                                             "memories", "skills"))
+        selections[phase], rendered[phase] = selection, out
+
+        if trace is not None:
+            for decision in selection.decisions:
+                trace.emit(EventType.CONTEXT_SELECTED if decision.selected
+                           else EventType.CONTEXT_REJECTED, task_id, session_id=session_id,
+                           status=EventStatus.OK, metadata={"phase": phase,
+                                                            **decision.to_dict()})
+
+            trace.emit(EventType.CONTEXT_BUDGET_APPLIED, task_id, session_id=session_id,
+                       status=EventStatus.OK, metadata={
+                           "phase": phase, "window": budget.window,
+                           "output_reservation": budget.output_reservation,
+                           "mandatory_tokens": budget.mandatory_tokens,
+                           "available": budget.available,
+                           "dropped": list(selection.dropped_for_budget),
+                           "selector_ms": round(selection.elapsed_ms, 3),
+                           "selected_tokens": sum(item.tokens for item in selection.decisions
+                                                  if item.selected)})
+
+    if trace is not None:
+        trace.emit(EventType.CONTEXT_BUDGET_APPLIED, task_id, session_id=session_id,
+                   status=EventStatus.OK, metadata={
+                       "phase": "all", "phases": list(selections),
+                       "total_ms": round((time.perf_counter() - started) * 1000, 3)})
+
+    return workspace, selections, rendered
+
+
 # ── main ─────────────────────────────────────────────────────────────
 
 def banner_art():
@@ -8126,9 +8357,10 @@ def main():
 
         # ── RAG retrieval (skipped in ad-hoc mode) ──
 
-        skills_ctx = skills_lookup(user_input)
+        skill_matches = skill_hits(user_input)
+        skills_ctx = ""
 
-        if skills_ctx:
+        if skill_matches:
             print(f"{C_DIM}  ⎿  skill match{C_RST}")
 
         # tools always run in the cwd (PROJECT_ROOT); relative paths in your
@@ -8374,6 +8606,44 @@ def main():
         # reused across turns would leave every later turn pre-cancelled.
         turn_cancellation = CancellationSource()
 
+        # Which context each runtime is shown: only this workspace's, only what
+        # the request's class and the pass it is in call for, and whatever is
+        # explicitly generic. Decided without a model, and traced.
+
+        workspace, context_selections, phase_contexts = select_turn_context(
+            user_input=user_input, turn_scope=turn_scope, binding=turn_binding,
+            write=is_write_request_text(user_input), project_spec=project_spec,
+            project_commands=project_commands,
+            history_text="".join(str(message.get("content") or "") for message in hist),
+            memories=memories_ctx, skills=skill_matches, retrieval=retrieval_ctx,
+            system_instructions=system_instructions, system_source=system_source,
+            tool_guide=TOOL_GUIDE, working_directory=cwd_note,
+            task_id=working_state.task_id, session_id=session_handle.session_id,
+            trace=TRACE)
+        turn_phase = context_selection.primary_phase(turn_scope, bound=bool(turn_binding))
+        chosen = phase_contexts[turn_phase]
+
+        if skill_matches and not chosen["skills"]:
+            print(f"{C_DIM}  ⎿  skill match outside this workspace's scope, not used{C_RST}")
+
+        def context_items_for(rendered):
+            return build_task_context_items(
+                system_instructions=system_instructions, system_source=system_source,
+                global_rules=rendered["global_rules"], project_rules=rendered["project_rules"],
+                tool_guide=TOOL_GUIDE,
+                tool_guide_source=(TOOL_GUIDE_FILE if os.path.isfile(TOOL_GUIDE_FILE)
+                                   else "built_in_tool_guide"),
+                memories=rendered["memories"], skills=rendered["skills"],
+                working_directory=cwd_note, working_state=working_state,
+                retrieval=rendered["retrieval"], retrieval_source=retrieval_source)
+
+        task_context_items = context_items_for(chosen)
+        system_prompt = "".join(item.content for item in task_context_items)
+
+        if context_selection.MIXED_PREPASS in phase_contexts:
+            phase_contexts[context_selection.MIXED_PREPASS]["context_items"] = \
+                context_items_for(phase_contexts[context_selection.MIXED_PREPASS])
+
         agent_context = AgentContext(
             cancellation=turn_cancellation.token,
             # The operator writes in ordinary language; a verb list only
@@ -8391,8 +8661,10 @@ def main():
             # What the agent core needs from this client: its host (the
             # control plane), and the project context its prompt carries.
             coding_host=lambda ctx, cache, record: coding_host(ctx, cache, record),
-            coding_context="".join(part for part in (global_rules, project_rules,
-                                                     memories_ctx, skills_ctx) if part),
+            coding_context=chosen["coding_context"],
+            workspace_context=workspace,
+            context_selections=context_selections,
+            phase_contexts=phase_contexts,
             tool_executor=lambda ctx, call_id, name, args, cache: route_tool_envelope(
                 name, dict(args), cache, task_id=ctx.task_id,
                 trace=ctx.trace, tool_call_id=call_id,

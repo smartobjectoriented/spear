@@ -53,6 +53,9 @@ class Skill:
     updated: str = ""
     extra: tuple[tuple[str, str], ...] = field(default_factory=tuple)
     declared: bool = False
+    #: Whether the frontmatter states a scope. ``scope`` falls back to ``any``
+    #: when it does not, and only a stated ``any`` makes a skill generic.
+    scope_declared: bool = False
 
     @property
     def summary(self) -> str:
@@ -167,6 +170,7 @@ def parse_skill(name: str, text: str) -> Skill:
         extra=tuple((key, value) for key, value in fields.items()
                     if key not in known),
         declared=bool(fields),
+        scope_declared=bool(_split_values(fields.get("scope", ""))),
     )
 
 
@@ -321,6 +325,9 @@ def save(directory: str, name: str, content: str, *, description: str = "",
         updated=stamp,
         extra=previous.extra if previous else (),
         declared=True,
+        # The file written below always states its scope, so what reloads
+        # from it has declared one.
+        scope_declared=True,
     )
 
     os.makedirs(directory, exist_ok=True)

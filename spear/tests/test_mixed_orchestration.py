@@ -145,7 +145,8 @@ class MixedTurn(unittest.TestCase):
     def tearDown(self):
         shutil.rmtree(self.directory, ignore_errors=True)
 
-    def run_mixed(self, raw, *, objective=OBJECTIVE, legacy=None, project=None, runner=None):
+    def run_mixed(self, raw, *, objective=OBJECTIVE, legacy=None, project=None, runner=None,
+                  phase_contexts=None):
         registry = ToolRegistry()
         StandardToolService(self.store).register(registry)
 
@@ -174,6 +175,7 @@ class MixedTurn(unittest.TestCase):
         context.normative_project = project
         context.normative_authority = "projects.json:test"
         context.normative_check_runner = runner
+        context.phase_contexts = phase_contexts
         host = Host(str(self.repo))
         context.coding_host = lambda ctx, cache, record: _Recording(host, record)
         self.context = context

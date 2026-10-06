@@ -17,17 +17,17 @@ Everything uses the application's own virtualenv:
 
 .. code-block:: console
 
-   $ cd /opt/llm/spear/spear
+   $ cd ~/spear/spear
 
-   $ ./bin/python -m py_compile model_backend.py agent_runtime.py task_controller.py rag_chat.py tool_runtime.py
+   $ ./bin/python -m py_compile model_backend.py agent_runtime.py task_controller.py rag_chat.py tool_runtime.py control_plane.py agent/*.py
    $ PYTHONPATH=. ./bin/python -m unittest discover -s tests -p "test_*.py"
-   Ran 851 tests — OK (skipped=13)
+   Ran … tests — OK (skipped=…)
 
-The discovery command is authoritative.  Forty-four modules, 851 tests, under
-forty seconds.  It covers the runtime, context,
-memory, sessions, planning/delegation, Explorer, Reviewer, verification,
-checkpoints, tool architecture and security substrate with scripted backends;
-it does not require a real model API.
+The discovery command is authoritative, and takes a few minutes.  It covers the
+coding core and its control plane, the evidence plane and its verdicts, the
+normative runtime and the MIXED orchestration, the runtime, context, memory,
+sessions, verification, checkpoints, the tool architecture and the security
+substrate — with scripted backends; it does not require a real model API.
 
 The skips are the opt-in suites below.  A checkout with no Internet, no
 systemd user bus and no patience still runs the full always-on set.

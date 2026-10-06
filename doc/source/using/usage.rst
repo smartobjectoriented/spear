@@ -43,27 +43,25 @@ none is given.
      - none
    * - ``--ask``
      - each edit and each command is confirmed before it runs
-     - **available**
+     - available, each use confirmed
    * - ``--auto``
      - run without asking
-     - none
+     - available
 
 ``--ask`` has the aliases ``--confirm`` and ``--no-bypass``; ``--auto`` has
 ``-y``, ``--yolo`` and ``--bypass-permissions``.
 
 .. important::
 
-   ``--ask`` is the only mode with network access, and ``--no-network``
-   removes it there too. An unattended run *with* network is the combination
-   deliberately not offered: confirmation is what makes reaching the network
-   reviewable.
+   ``--no-network`` removes network access from every mode, the web tools
+   included. Use it for an unattended ``--auto`` run that must stay offline.
 
 Two further flags bound where writes may land:
 
 ``--single-root``
    Restrict writes to the launch directory. By default the registered corpora
    are writable too, each mounted at ``/workspaces/<name>`` — a path that
-   works in ``bash`` and in the file tools alike. Relative paths always
+   works in the terminal and in the file tools alike. Relative paths always
    resolve in the launch directory and never reach them.
 
 ``--allow-absolute-paths``
@@ -93,10 +91,13 @@ Command line
    * - ``spear-chat --ask`` / ``--auto`` / ``--safe``
      - the permission mode, as above
    * - ``spear-chat --no-network``
-     - drop network even in ``--ask``
+     - no network in any mode
    * - ``spear-chat --local`` / ``--remote`` / ``--reds``
      - which backend to talk to; without one, an interactive launch shows a
-       picker and preselects the last choice
+       picker and preselects the last choice. ``--pod`` is an alias of
+       ``--remote``
+   * - ``spear-chat --remote --pod-host H --pod-port P``
+     - point at a remote pod without editing ``pod.conf``
    * - ``spear-chat --provider anthropic --model <id>``
      - use the Anthropic API instead of an OpenAI-compatible endpoint
    * - ``spear-chat --ctx 65536 --temp 0.1 …``
@@ -254,23 +255,28 @@ harness by them:
   self-description.  If a bad answer lands in history, ``/undo`` it — the model
   imitates its own past answers.
 
-Safety guards
-=============
+What a turn is allowed to do
+============================
 
-Each of these was added after the failure it prevents:
+Which request class a turn falls into decides which path runs it
+(:doc:`/reasoning/index`): an implementation request runs on the coding core
+behind SpearHost, a question about a bound standard on the normative runtime,
+and a change that must satisfy the standard through the MIXED orchestration.
+On every path:
 
-* read-only commands are auto-approved; anything else asks, with ``Enter``
-  meaning yes;
-* ``write_file`` refuses to overwrite a file much larger than the proposed
-  content, because a model's "full rewrite" of a big file is a hallucination
-  magnet;
-* a per-turn command budget (15), a round cap, and a result cache so nothing is
-  run twice;
-* anti-fabrication: invented ``[tool]`` output is stripped and the turn is
-  retried;
-* grounded edit errors: a failed exact-match edit returns the file's real tail
-  and points the model at ``append_file``.
+* the permission mode decides whether anything is written or run at all, and
+  ``--ask`` confirms each mutation and each command, with ``Enter`` meaning
+  yes;
+* every path a tool touches must resolve inside the workspace, and a shell
+  command is held to the same write scope as the file tools;
+* generated files and snapshot or third-party copies are never written;
+* every mutation is checkpointed, so ``/undo`` can restore it, and recorded in
+  the audit trail;
+* the round and tool budgets (``--max-tool-rounds``, ``--max-commands``) bound
+  a turn;
+* the verdict at the end is computed from what the tools did, not from what
+  the model says it did (:doc:`/reasoning/evidence`).
 
-The authorization rules behind the first bullet are :doc:`/harness/security_model`; the
-confinement behind all of them is :doc:`/harness/sandbox`, :doc:`/harness/network` and
+The authorization rules are :doc:`/harness/security_model`; the confinement
+behind them is :doc:`/harness/sandbox`, :doc:`/harness/network` and
 :doc:`/harness/resource_control`.

@@ -1,12 +1,13 @@
 .. _workflow:
 
-The engineering workflow
-########################
+The bound-session change workflow
+#################################
 
-An answer to a question is one thing. A change to a codebase is another, and
-SPEAR does not treat them the same way.
-
-When a turn is going to modify a project, it runs through five stages. Each one
+Most changes run on the coding core (:ref:`implementation_mode`), and a change
+that has to satisfy the bound standard runs as a MIXED request
+(:ref:`mixed_mode`). One case remains: a change asked for in a session where a
+standard is engaged, in words that do not make it MIXED. It runs on the
+normative runtime, which holds every write to a five-stage workflow. Each stage
 opens on a condition the runtime can check, and a stage that cannot open says
 so rather than proceeding on an assumption.
 
@@ -45,20 +46,10 @@ requirement ledger, not from the model's own summary of its work.
 INVESTIGATE
 ***********
 
-The turn reads. Where an authoritative source is bound, that means the document
-as well as the tree.
-
-Two things make investigation converge rather than wander:
-
-* a window of source already in evidence is answered *from* evidence instead of
-  being read again — the common waste is not calling the same command twice, it
-  is reading the same lines through different windows;
-* a short barren sequence — tool calls that add no new file and no new
-  provision — prompts the turn to synthesise what it has rather than keep
-  looking.
-
-A write puts every region back in play, because after an edit the file is no
-longer the file that was read.
+The turn reads — the bound document as well as the tree — until it holds both
+sides of each requirement: what is required, and what the implementation does
+today. A write puts everything back in play, because after an edit the file is
+no longer the file that was read.
 
 PLAN
 ****
@@ -148,5 +139,4 @@ with why. Narrowing the work is a visible decision, not a silence.
 
 .. seealso::
 
-   :ref:`Evidence and guards <guards>` · :ref:`Authoritative standards
-   <standards>`
+   :ref:`guards` · :ref:`standards` · :ref:`mixed_mode`

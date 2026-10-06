@@ -39,6 +39,12 @@ Specification-driven Platform for Embedded Agentic Reasoning
 Overview
 ********
 
+SPEAR is an engineering agent for specified systems. It keeps apart the agent
+that changes code, the control plane that confines it, the evidence of what it
+did, the normative reasoning about a bound standard, and the compliance
+evidence that judges a change — and computes its verdicts from that evidence on
+the final source state.
+
 - :ref:`Overview <part_overview>`: :ref:`Introduction <introduction>`, :ref:`Architecture <architecture>`, :ref:`Glossary <glossary>`
 
 .. rst-class:: left
@@ -57,10 +63,10 @@ Using SPEAR
 
 .. rst-class:: left
 
-Evidence-grounded reasoning
-***************************
+Request modes and evidence
+**************************
 
-- :ref:`Evidence-grounded reasoning <part_reasoning>`: :ref:`Authoritative standards <standards>`, :ref:`The engineering workflow <workflow>`, :ref:`Evidence and guards <guards>`
+- :ref:`Request modes and evidence <part_reasoning>`: :ref:`Implementation mode <implementation_mode>`, :ref:`Normative mode <standards>`, :ref:`Mixed mode <mixed_mode>`, :ref:`Evidence and verdicts <evidence_verdicts>`, :ref:`Normative answer guards <guards>`, :ref:`The bound-session change workflow <workflow>`
 
 .. rst-class:: left
 

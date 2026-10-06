@@ -13,6 +13,8 @@ description of the current implementation, not a promise of model quality.
 
    The whole harness on one sheet — the layers, what is on by default, what is
    optional, what is experimental, and where the security boundary runs.
+   :doc:`/overview/architecture` shows how the request classes route through
+   it.
 
 Every box in the picture can be checked against the tree.  It replaced a hand-drawn
 version of the same figure that had ``TaskController`` in two bands and drew
@@ -26,7 +28,13 @@ Production maturity
 
 CORE / DEFAULT ON
 
-* ``AgentRuntime`` and ``TaskController``
+* request classification and routing (``TaskController``, ``answer_scope``)
+* the coding core and ``SpearHost``, its control plane
+* the evidence plane: canonical evidence, source epochs, the implementation
+  verdict and project validation
+* the MIXED orchestration: constraint packet, structural coverage,
+  applicability, source predicates and bound conformance checks
+* ``AgentRuntime`` (the normative and general runtime)
 * ``WorkingState`` and ``ContextEngine``
 * transactional semantic compaction
 * selected ``MemoryStore`` memories

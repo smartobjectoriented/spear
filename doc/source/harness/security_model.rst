@@ -35,6 +35,47 @@ The flags pass straight through ``spear-chat`` to ``rag_chat.py``, and the
 startup banner names the active mode plus the flags that reach the other two —
 that line is the only place most users will ever read them.
 
+.. _control_plane:
+
+The control plane in front of the coding core
+=============================================
+
+The coding core (:doc:`/reasoning/implementation`) never touches the host
+itself: every read, write, deletion and command it asks for is a call on
+SpearHost, and SpearHost applies the same rules this page describes to all of
+them, whichever tool asked.
+
+**Workspace containment.** Every path — and every command's working directory
+— is resolved, symbolic links included, and must land inside the workspace.
+A link cannot carry a write outside it, and ``delete_file`` removes a link, not
+what it points at.
+
+**Source and write scope.** A request that names its target confines writes to
+that target and what belongs to it. The same judgement is applied to what a
+shell command writes — a redirection, the destination of ``cp``, ``mv`` or
+``install``, the operands of ``rm``, ``touch``, ``mkdir``, ``tee`` or
+``sed -i``, and any path an inline interpreter program names. **A terminal
+command cannot make a change the file tools would refuse.**
+
+**Generated and protected trees.** Build outputs (``/generated/``,
+``/build/tmp/``, files marked *DO NOT MODIFY* or *auto-generated*) and
+snapshot or third-party copies (``.back``, ``.pristine``, ``.0`` trees,
+vendored ``u-boot``, ``atf``, ``qemu``) are never written; the refusal points
+at the source to change instead.
+
+**Read-only and advisory turns.** A turn that only asks to be told something,
+or is told not to change anything, keeps its reading tools and runs its
+commands without workspace write — so the prohibition cannot be routed around
+through the terminal.
+
+**Network.** A command reaches the network only if the session's mode grants
+it (below), through the sandbox's own network stack.
+
+**Audit and evidence.** Every call is audited, every mutation checkpointed for
+``/undo``, and every call recorded as canonical evidence — what it changed,
+what it ran, how that ended — from which the turn's verdict is computed
+(:doc:`/reasoning/evidence`).
+
 Capabilities
 ============
 
@@ -88,7 +129,7 @@ Why reading outside the workspace is a grant, not a hole
 
 ``host:read`` lets a read-only command name an absolute path that no declared
 root contains.  Refusing them made whole questions unanswerable — "read the
-notes in ``/opt/llm/claude``" died on ``path argument may escape the
+notes in ``/srv/notes``" died on ``path argument may escape the
 workspace``, a refusal the model could not act on — while buying no
 containment, because looking at a file is not changing it.
 

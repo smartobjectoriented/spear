@@ -87,7 +87,7 @@ The answer was withheld
 it, and a list of the clauses that were read.
 
 This is a result, not a fault. The named condition tells you what to supply;
-:ref:`Evidence and guards <guards>` lists each one and the usual next step. The
+:ref:`Normative answer guards <guards>` lists each one and the usual next step. The
 most common are an ambiguous citation — name the provision kind as well as the
 ordinal — and an unsupported count, where the document may simply not state a
 bound.
@@ -95,11 +95,11 @@ bound.
 Stale or missing evidence
 *************************
 
-*Symptom* — the agent says a file region is already in evidence, or that a
-retrieval returned something it has already seen.
+*Symptom* — the agent is told a file is unchanged since it last read it, or that
+a retrieval returned something it has already seen.
 
-Both are deliberate. A window of source already read is answered from evidence
-rather than read again, and a write puts every region back in play. If the
+Both are deliberate: re-reading what has not changed spends the context window
+for nothing, and a write puts the file back in play. If the
 agent is looping over the same area without progress, it is usually short of a
 *different* file rather than short of that one: say which.
 
@@ -111,9 +111,7 @@ Build or test failure during agent work
 
 *Symptom* — the agent's own validation fails repeatedly.
 
-A validation that fails the same way twice reopens planning rather than being
-patched a third time; two identical failures are evidence about the design. If
-the loop persists, the usual causes are a test command in ``projects.json``
+If the loop persists, the usual causes are a test command in ``projects.json``
 that does not run in this environment, or a requirement that cannot be reached
 by an automated test at all — which is an acceptable thing to state.
 
@@ -139,11 +137,11 @@ Network access is a property of the permission mode, and this is intentional:
      - **available**
    * - ``--auto``
      - unattended
-     - none
+     - available
 
-``--ask`` is the only mode with network access, and ``--no-network`` removes it
-there too. An unattended run with network is the combination deliberately not
-offered.
+``--no-network`` removes network access from every mode. A command refused for
+the network in ``--safe`` needs ``--ask`` or ``--auto``; one refused in another
+mode was launched with ``--no-network``.
 
 Wrong writable root
 *******************
@@ -171,5 +169,5 @@ that?" questions without guesswork.
 
 .. seealso::
 
-   :ref:`Evidence and guards <guards>` · :ref:`Authoritative standards
+   :ref:`Normative answer guards <guards>` · :ref:`Authoritative standards
    <standards>` · :ref:`Configuration reference <configuration>`

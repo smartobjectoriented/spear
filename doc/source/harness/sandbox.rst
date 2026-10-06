@@ -86,45 +86,64 @@ Filesystem
    * - ``/dev``
      - minimal device set
    * - ``/tmp``
-     - private tmpfs
+     - a private per-session directory, outside the workspace, removed when
+       the session ends (``SPEAR_SANDBOX_EPHEMERAL_TMP=1``: a fresh tmpfs per
+       command)
    * - ``/home``, ``/home/sandbox``
      - empty directories
    * - ``/etc``
-     - private tmpfs, **sealed read-only**, containing only
-       ``alternatives`` (plus the resolver files on the network profile)
-   * - ``/workspace``
-     - **the only host-writable mount**
+     - private tmpfs, **sealed read-only**, containing only ``alternatives``,
+       ``passwd`` and ``group`` (plus the resolver files on the network
+       profile)
+   * - ``/opt/toolchains``
+     - read-only, when the host has it — cross-toolchains linked from
+       ``/usr/local/bin``
+   * - the workspace
+     - **the only host-writable mount**, at its own host path by default (see
+       below); the registered corpora beside it unless ``--single-root``
 
 Environment:
 
 .. code-block:: text
 
-   PATH=/usr/bin:/bin   HOME=/home/sandbox   TMPDIR=/tmp   cwd=/workspace
+   PATH=/usr/local/bin:/usr/bin:/bin   LANG=LC_ALL=en_US.UTF-8
+   HOME=/home/sandbox   TMPDIR=/tmp    cwd=<the workspace mount>
 
 Workspace binding follows the profile
 -------------------------------------
 
 .. code-block:: text
 
-   profile.workspace_write  →  --bind     <host workspace>  /workspace
-   profile.workspace_read   →  --ro-bind  <host workspace>  /workspace
+   profile.workspace_write  →  --bind     <host workspace>  <mount>
+   profile.workspace_read   →  --ro-bind  <host workspace>  <mount>
    neither                  →  --dir      /workspace
 
 A read-only profile therefore cannot write even by accident: the restriction
 is a mount option, not a check in Python.
 
+``<mount>`` is the workspace's own host path, so a build tree configured
+outside the sandbox keeps working inside it — CMake caches, generated
+Makefiles and ``compile_commands.json`` all embed absolute paths.
+``/workspace`` is used instead when the host path would be unsafe to mirror,
+or when ``SPEAR_SANDBOX_IDENTITY_MOUNT=0``.
+
 ``/etc`` and the alternatives system
 ------------------------------------
 
 The host ``/etc`` is never exposed.  The sandbox gets its own tmpfs, into
-which exactly one host directory is bound read-only:
+which one host directory and two world-readable identity files are bound
+read-only:
 
 .. code-block:: text
 
    --tmpfs /etc
    --ro-bind /etc/alternatives /etc/alternatives
+   --ro-bind /etc/passwd /etc/passwd   --ro-bind /etc/group /etc/group
    …                                              (resolver files, if network)
    --remount-ro /etc
+
+``passwd`` and ``group`` are there because build tools resolve uids and gids
+through them — BitBake refuses to start without them.
 
 ``/etc/alternatives`` is there because ``cc``, ``awk``, ``editor`` and a
 number of other commands are symlinks through it.  Without it they dangle, and
@@ -136,7 +155,7 @@ read-only.
 The ``--remount-ro`` is what keeps the strong property intact.  A ``--dir`` or
 a plain tmpfs would be *writable*, so a command could create files under
 ``/etc`` inside its sandbox.  Nothing would reach the host, but "nothing
-outside ``/workspace`` is writable" would no longer be literally true.  A
+outside the workspace is writable" would no longer be literally true.  A
 tmpfs is a real mount point and can therefore be sealed once every bind is in
 place — which is why the seal is emitted last, after the network profile's
 resolver files.
@@ -146,7 +165,7 @@ Verified from inside:
 .. code-block:: console
 
    $ ls -A /etc
-   alternatives
+   alternatives  group  passwd
    $ cc --version | head -1
    cc (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0
    $ touch /etc/x
@@ -206,8 +225,10 @@ Preflight
 
 .. code-block:: sh
 
-   test "$PWD" = /workspace && test -w /workspace \
+   test "$PWD" = <mount> && test -w <mount> \
      && test "$HOME" = /home/sandbox && test "$TMPDIR" = /tmp
+
+where ``<mount>`` is the path the workspace answers to inside the sandbox.
 
 If that fails, availability becomes ``REFUSED`` and stays there.  A version
 number cannot tell you whether unprivileged user namespaces are permitted on

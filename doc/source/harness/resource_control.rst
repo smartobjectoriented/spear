@@ -356,7 +356,8 @@ Ownership: the contract belongs to ``CommandRunner``, not to the sandbox.
 applies **none** — it is a mechanism, and keeping it that way is what lets
 preflight and the test suite run without a systemd user bus.  The production
 path is ``rag_chat`` → ``CommandRunner.run_sandboxed()`` → ``sandbox.run(…,
-cgroup_limits=self.cgroup_limits)``.
+cgroup_limits=self.cgroup_limits)`` — for the coding core's ``terminal`` calls
+too, which reach it through SpearHost.
 
 Observed on the live cgroup of a scoped production command:
 

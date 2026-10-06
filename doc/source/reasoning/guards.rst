@@ -1,11 +1,12 @@
 .. _guards:
 
-Evidence and guards
-###################
+Normative answer guards
+#######################
 
-SPEAR records what a turn was actually shown, and checks the answer against it
-before the answer reaches you. This page explains what is recorded, what is
-checked, and what to do when a check fires.
+On a normative turn, SPEAR records what the turn was actually shown and checks
+the answer against it before the answer reaches you. This page explains what
+is recorded, what is checked, and what to do when a check fires. The verdicts
+of change-making turns are a separate matter: see :ref:`evidence_verdicts`.
 
 Three kinds of evidence
 ***********************
@@ -95,8 +96,8 @@ what to supply.
 Why "incomplete" is a result
 ****************************
 
-On a turn that changes code, the closing report is generated from the
-requirement ledger. A requirement the turn could not establish is reported as
+On a change made under the bound-session workflow (:ref:`workflow`), the
+closing report is generated from the requirement ledger. A requirement the turn could not establish is reported as
 undetermined; one deliberately excluded is reported as out of scope, with the
 reason; one whose code changed but whose validation has not run is reported as
 awaiting validation.
@@ -128,5 +129,5 @@ set for the turn. That is the record to read when an answer surprises you.
 
 .. seealso::
 
-   :ref:`Authoritative standards <standards>` · :ref:`The engineering workflow
-   <workflow>` · :ref:`Troubleshooting <troubleshooting>`
+   :ref:`standards` · :ref:`evidence_verdicts` · :ref:`workflow` ·
+   :ref:`Troubleshooting <troubleshooting>`

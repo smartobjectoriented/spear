@@ -28,7 +28,7 @@ from __future__ import annotations
 import json
 import os
 import subprocess
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 
 import normative_constraints as nc
 from context_selection import MIXED_IMPLEMENTATION, MIXED_POSTCHECK, MIXED_PREPASS
@@ -59,6 +59,7 @@ MAX_FILE_BYTES = 200_000
 class MixedRecord:
     """What the orchestration did, for the audit trail and the report."""
     packet: nc.NormativeConstraintSet | None = None
+    prepass: str = ""                               # ANSWERED, WITHHELD or FAILED
     statuses: tuple = ()
     checks: list = field(default_factory=list)     # every post-check, in order
     implementation: str = "NO_CHANGE"
@@ -69,6 +70,41 @@ class MixedRecord:
     excluded: int = 0                               # established as not applicable
     report: dict = field(default_factory=dict)
     check_runs: list = field(default_factory=list)  # normative_evidence.ConstraintCheckEvidence
+
+
+# How the normative pass ended, which an empty packet does not say by itself.
+# ANSWERED with nothing cited is a valid empty packet; WITHHELD is an answer
+# the evidence guards would not let through; FAILED is a pass that produced
+# no answer at all. All three give the core no constraint, and none of them
+# may be reported as the others.
+PREPASS_ANSWERED, PREPASS_WITHHELD, PREPASS_FAILED = "ANSWERED", "WITHHELD", "FAILED"
+
+_GUARDS = ("guard_fired", "claims_fired", "precedence_fired", "conformance_fired")
+
+
+def prepass_outcome(normative, prepass, packet):
+    """(outcome, reason) of the normative pass; the reason is "" when the
+    packet's own coverage reason already says it."""
+    from agent_runtime import FAILED, RuntimeTerminalReason
+
+    window = getattr(normative, "finalization", None)
+    broken = (RuntimeTerminalReason.MODEL_FAILURE, RuntimeTerminalReason.RUNTIME_FAILURE,
+              RuntimeTerminalReason.INVALID_TURN, RuntimeTerminalReason.INTERRUPTED)
+
+    if window is not None and window.state == FAILED:
+        return PREPASS_FAILED, f"the normative pass did not complete: {window.reason}"
+
+    if not (prepass.final_response or "").strip() or prepass.terminal_reason in broken:
+        return PREPASS_FAILED, ("the normative pass did not complete: it ended "
+                                f"{getattr(prepass.terminal_reason, 'value', prepass.terminal_reason)}")
+
+    policy = getattr(normative, "standard_policy", None)
+
+    if not packet.constraints and any(getattr(policy, flag, False) for flag in _GUARDS):
+        return PREPASS_WITHHELD, ("the normative pass's answer was withheld: the "
+                                  "retrieved evidence does not support it")
+
+    return PREPASS_ANSWERED, ""
 
 
 class _Metered:
@@ -144,10 +180,23 @@ class MixedOrchestrator:
         records.update(self._cited_sources(binding, prepass.final_response or "", records))
         record.packet = self._packet(context, request, binding, records,
                                      prepass.final_response or "")
+        record.prepass, why = prepass_outcome(normative, prepass, record.packet)
+
+        if why and not record.packet.constraints:
+            record.packet = replace(record.packet, coverage_reason=why)
+
+        if record.prepass == PREPASS_FAILED:
+            self._event(context, EventType.NORMATIVE_PREPASS_FAILED, {
+                "reason": why, "terminal_reason": str(getattr(
+                    prepass.terminal_reason, "value", prepass.terminal_reason)),
+                "finalization_retries": getattr(
+                    getattr(normative, "finalization", None), "retries", 0)})
+
         brief = nc.brief(record.packet)
         record.tokens["packet_chars"] = len(brief)
         self._event(context, EventType.NORMATIVE_CONSTRAINT_SET_CREATED, {
             "set_id": record.packet.set_id, "constraints": len(record.packet.constraints),
+            "prepass": record.prepass,
             "provisions": [item.provision for item in record.packet.constraints],
             "instance_ids": [item.instance_id for item in record.packet.constraints],
             "unresolved": [item.constraint_id for item in record.packet.constraints

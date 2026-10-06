@@ -137,25 +137,23 @@ def canonical_tools_from_openai(tools: Sequence[Mapping[str, object]]) -> tuple[
     return tuple(result)
 
 
+# A tool call the model WROTE instead of making: Qwen's XML form, with or
+# without its <tool_call> wrapper, or a bare {"name": ..., "arguments": ...}.
+# It is text and stays text. Only a call the API returns as a structured
+# tool call can run; recovering these into calls executed searches on a turn
+# that had been offered no tools at all, round after round.
+
+_WRITTEN_CALL_RE = re.compile(
+    r"<tool_call>|<function=[\w.]+>|\{\s*\"name\"\s*:\s*\"[\w.]+\"\s*,\s*\"arguments\"\s*:")
+
+
+def textual_tool_call(text: str) -> bool:
+    """Does this model text imitate a tool call?"""
+    return bool(_WRITTEN_CALL_RE.search(text or ""))
+
+
 class OpenAICompatibleBackend:
     """Current llama.cpp/vLLM/Qwen contract behind a provider-neutral API."""
-
-    # A dot is part of a tool name: standard.search, standard.fetch,
-    # standard.get_structure, standard.cite -- and they are the ONLY tools
-    # whose names carry one. \w+ therefore recovered every leaked call except
-    # the normative ones, which is the worst possible place to miss.
-    #
-    # A bound turn spent twelve rounds reading C, planned the change, and
-    # ended on a leaked <function=standard.fetch>. Unrecovered, it read as
-    # prose, so the runtime took a plan for a conclusion and the turn wrote
-    # nothing. The task had asked for an implementation.
-
-    _LEAKED_CALL_RE = re.compile(
-        r"(?:<tool_call>\s*)?<function=([\w.]+)>(.*?)</function>(?:\s*</tool_call>)?",
-        re.DOTALL,
-    )
-    _LEAKED_PARAM_RE = re.compile(r"<parameter=(\w+)>\n?(.*?)\n?</parameter>", re.DOTALL)
-    _JSON_CALL_RE = re.compile(r'\{\s*"name"\s*:\s*"([\w.]+)"\s*,\s*"arguments"\s*:')
 
     def __init__(
         self,
@@ -270,78 +268,6 @@ class OpenAICompatibleBackend:
 
         return messages
 
-    @classmethod
-    def _recover_leaked_calls(cls, text: str) -> tuple[str, list[ModelToolCall]]:
-        calls: list[ModelToolCall] = []
-        counter = 0
-
-        for match in cls._LEAKED_CALL_RE.finditer(text):
-            calls.append(ModelToolCall(
-                id=f"leaked_{counter}", name=match.group(1),
-                arguments={key: value for key, value in cls._LEAKED_PARAM_RE.findall(match.group(2))},
-            ))
-            counter += 1
-
-        if calls:
-            text = cls._LEAKED_CALL_RE.sub("", text).strip()
-
-        out, index = [], 0
-
-        while True:
-            match = cls._JSON_CALL_RE.search(text, index)
-
-            if match is None:
-                out.append(text[index:])
-                break
-
-            out.append(text[index:match.start()])
-            depth, in_string, escaped, end = 0, False, False, None
-
-            for pos in range(match.start(), len(text)):
-                char = text[pos]
-
-                if in_string:
-                    if escaped:
-                        escaped = False
-                    elif char == "\\":
-                        escaped = True
-                    elif char == '"':
-                        in_string = False
-                elif char == '"':
-                    in_string = True
-                elif char == "{":
-                    depth += 1
-                elif char == "}":
-                    depth -= 1
-
-                    if depth == 0:
-                        end = pos + 1
-                        break
-
-            if end is None:
-                out.append(text[match.start():])
-                break
-
-            blob = text[match.start():end]
-
-            try:
-                value = json.loads(blob)
-                arguments = value.get("arguments")
-
-                if isinstance(arguments, dict):
-                    calls.append(ModelToolCall(
-                        id=f"leaked_{counter}", name=str(value["name"]), arguments=arguments
-                    ))
-                    counter += 1
-                else:
-                    out.append(blob)
-            except (TypeError, ValueError, json.JSONDecodeError):
-                out.append(blob)
-
-            index = end
-
-        return "".join(out).strip(), calls
-
     def complete(
         self,
         *,
@@ -447,11 +373,8 @@ class OpenAICompatibleBackend:
                 id=call["id"] or f"call_{index}", name=call["name"], arguments=arguments
             ))
 
-        clean_text, leaked = self._recover_leaked_calls("".join(text))
-        canonical_calls.extend(leaked)
-
         return ModelTurn(
-            clean_text,
+            "".join(text),
             tuple(canonical_calls),
             self._stop_reason(finish_reason, bool(canonical_calls)),
         )

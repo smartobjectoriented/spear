@@ -492,10 +492,25 @@ class AskingMoreThanOnce(unittest.TestCase):
         return [kind for kind, _ in observer.notices
                 if kind == "write_request_unanswered"]
 
-    def test_a_turn_that_keeps_not_writing_is_asked_again(self):
-        """Measured: asked once, read for twenty more rounds, ended empty."""
+    def test_a_turn_that_keeps_reading_after_the_window_shuts_is_not_run(self):
+        """Measured: asked once, read for twenty more rounds, ended empty --
+        every one of those reads made on a round that offered no tool. Asked
+        once more for the answer, it ends saying it has none."""
+        backend = ScriptedBackend(
+            [tool_turn(str(i), "bash", command="grep -n x a.c")
+             for i in range(40)] + [text_turn("stopping")] * 4)
+        conversation = [ConversationMessage("user", (TextBlock(
+            "can you validate and make changes in the code accordingly"),))]
+        result = AgentRuntime().run(make_context(
+            backend, executor=GroundedToolExecutor(), conversation=conversation,
+            rounds=30, actions=60))
+        offered = [call["use_tools"] for call in backend.calls]
+        closed = offered.index(False)
 
-        self.assertGreater(len(self.turn()), 1)
+        self.assertGreaterEqual(len(self.turn()), 1)
+        self.assertEqual(len(result.tool_log), closed)
+        self.assertEqual(len(offered) - closed, 2, "the closing round and one retry")
+        self.assertTrue(result.final_response.startswith("ANSWER NOT COMPLETED"))
 
     def test_preambles_do_not_burn_every_redirect_in_three_rounds(self):
         """Measured: two exploratory calls, then all three asks, then a stall.
@@ -1568,12 +1583,11 @@ class AgentRuntimeCoreTests(unittest.TestCase):
         self.assertFalse(result.budget_exhausted,
                          "concluding is not an exhausted budget")
         self.assertEqual(result.terminal_reason, RuntimeTerminalReason.COMPLETED)
-        # A model that emits a tool call anyway, with none offered, is still
-        # executed once: this asserts the boundary rather than pretending the
-        # runtime refuses it. The scripted backend does exactly that, which is
-        # why the count is five and not four.
+        # A model that emits a tool call anyway, with none offered, is not
+        # executed: it is asked once more for the answer, which is what the
+        # scripted backend then gives.
         commands = [item for item in result.tool_log if item.startswith("bash")]
-        self.assertEqual(len(commands), 5)
+        self.assertEqual(len(commands), 4)
 
     def test_a_message_less_exception_still_names_itself(self):
         """"runtime failure" and nothing else is not a diagnosis.

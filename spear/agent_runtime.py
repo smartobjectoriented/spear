@@ -41,7 +41,7 @@ from context_engine import (
 )
 from model_backend import (
     ConversationMessage, ModelBackend, ModelTurn, StopReason, TextBlock,
-    ToolDefinition, ToolResultBlock, ToolUseBlock,
+    ToolDefinition, ToolResultBlock, ToolUseBlock, textual_tool_call,
 )
 from tracing import EventStatus, EventType, TraceEmitter, new_action_id
 from tool_router import ToolResultEnvelope, ToolResultStatus
@@ -149,6 +149,8 @@ class AgentContext:
     workspace_context: Any = None
     context_selections: Any = None
     phase_contexts: Any = None
+    #: The turn's tool window (Finalization), set when the turn starts.
+    finalization: Any = None
     provider: str | None = None
     model: str | None = None
     output_reserve: int | None = None
@@ -672,6 +674,48 @@ def no_conclusion_note(tool_log) -> str:
         + "\n\n".join(tool_log[-3:])[:1500]
         + "\n\nTell me which part to dig into, or narrow the request."
     )
+
+
+# Where a turn is with its tools. INVESTIGATING: the tools offered may run.
+# FINALIZING: none is offered, and the model is told so -- a closed window
+# nobody announced was answered with tool calls written out as text. DONE or
+# FAILED: the turn has its answer, or has said plainly that it has none.
+INVESTIGATING, FINALIZING, DONE, FAILED = "INVESTIGATING", "FINALIZING", "DONE", "FAILED"
+
+#: A FINALIZING turn that writes a tool call instead of answering is asked
+#: once more. A second one ends the turn: a third request would not differ.
+FINALIZATION_RETRY_LIMIT = 1
+
+FINALIZATION_DEMAND = (
+    "No further tools are available for this turn. Give your final answer now, "
+    "from the evidence already collected. Do not request or write tool calls: "
+    "none can run. Cite only what you have already read; if it is not enough to "
+    "answer, say so plainly instead of searching again.")
+
+FINALIZATION_RETRY = (
+    "That reply was a tool call, and no tool is available for this turn: it was "
+    "not run, and none will be. Answer now from the evidence already collected, "
+    "with no tool-call markup of any kind. If that evidence is not enough to "
+    "answer, say so -- do not attempt another search.")
+
+
+@dataclass
+class Finalization:
+    """One turn's tool window, as a state the runtime and its callers can read."""
+
+    state: str = INVESTIGATING
+    reason: str = ""
+    retries: int = 0
+
+
+def finalization_failed_note(context) -> str:
+    """What a turn hands back when it never produced an answer."""
+    subject = "NORMATIVE ANSWER" if getattr(context, "standard_binding", None) else "ANSWER"
+
+    return (f"{subject} NOT COMPLETED: with no tool available, the model kept "
+            "writing tool calls instead of an answer, after being told once more "
+            "that none could run. Nothing it wrote was executed, and nothing it "
+            "wrote is presented as an answer.")
 
 
 # Reading rounds a turn gets before it is asked to conclude. Scaled to the
@@ -2046,6 +2090,9 @@ class AgentRuntime:
 
         investigate_rounds = preamble_reprompts = repeats = make_reprompts = 0
         scope_final = False
+        context.finalization = Finalization()
+        self._normative_event(context, EventType.NORMATIVE_INVESTIGATION_STARTED,
+                              {"tools": len(context.tools or ())})
         order_reprompts = 0
         order_remaining = None
         build_reprompts = 0
@@ -2211,6 +2258,13 @@ class AgentRuntime:
 
                 force_final = budget_final or concluding or scope_final
 
+                if force_final:
+                    self._enter_finalizing(
+                        context, "budget" if budget_final else
+                        "read-only scope" if scope_final else "concluding")
+                elif context.finalization.state == FINALIZING:
+                    context.finalization.state = INVESTIGATING
+
                 if budget_final and not budget_event_emitted:
                     budget_event_emitted = True
 
@@ -2279,6 +2333,27 @@ class AgentRuntime:
                     response = text or "The model declined this request."
 
                     break
+
+                # A call is executable only when the API returned it as one
+                # AND a tool was offered. Written out as text it is neither:
+                # it never runs and is never the answer. Either kind, met
+                # where no tool was offered or written at all, closes the
+                # window and asks for the answer -- once.
+
+                if (force_final and calls) or (not calls and textual_tool_call(turn.text)):
+                    self._enter_finalizing(context, "tool call written as text",
+                                           announce=False)
+                    turn = self._finalized(context, turn)
+
+                    if turn is None:
+                        reason = RuntimeTerminalReason.STALLED
+                        response = finalization_failed_note(context)
+
+                        break
+
+                    text = strip_fabrications(turn.text).strip()
+                    calls = []
+                    force_final = True
 
                 if not calls:
                     # A turn that only narrates what it is about to do has not
@@ -3472,20 +3547,26 @@ class AgentRuntime:
                 context.conversation.append(ConversationMessage(
                     "user", (TextBlock(
                         "Now summarize your findings and give the final answer / fix. "
-                        "Do not call any tool." + turn_evidence(tool_log)
+                        "No tool is available for this turn: do not call or write one."
+                        + turn_evidence(tool_log)
                     ),), authored_by="harness"))
+                self._enter_finalizing(context, "rounds exhausted", announce=False)
 
                 failure_stage = "model"
 
                 with context.observer.model_activity("Concluding…") as on_token:
-                    final_turn = self._complete_with_retry(
+                    final_turn = self._finalized(context, self._complete_with_retry(
                         context, use_tools=False, on_token=on_token,
-                    )
+                    ))
 
                 failure_stage = "turn_validation"
 
-                validate_agent_turn(final_turn)
-                response = strip_fabrications(final_turn.text).strip()
+                if final_turn is None:
+                    reason = RuntimeTerminalReason.STALLED
+                    response = finalization_failed_note(context)
+                else:
+                    validate_agent_turn(final_turn)
+                    response = strip_fabrications(final_turn.text).strip()
 
                 # Even the conclusion can come back empty; the tool log is then
                 # the only honest thing left to hand the user.
@@ -3576,12 +3657,17 @@ class AgentRuntime:
                         "happened." + turn_evidence(tool_log)),),
                     authored_by="harness"))
 
+                self._enter_finalizing(context, "budget exhausted", announce=False)
+
                 try:
                     with context.observer.model_activity("Wrapping up…") as tick:
                         summary = self.complete_model_turn(
                             context, use_tools=False, on_token=tick, grace=True)
 
-                    response = strip_fabrications(summary.text).strip() or response
+                    # The grace call is outside the budget; a written tool
+                    # call in it is a missing summary, not one to retry.
+                    if not (summary.tool_calls or textual_tool_call(summary.text)):
+                        response = strip_fabrications(summary.text).strip() or response
                 except Exception:
                     # The grace call is a courtesy; its failure must not
                     # replace the budget's own account of the turn.
@@ -4275,6 +4361,71 @@ class AgentRuntime:
 
         return result
 
+    def _normative_event(self, context: AgentContext, event_type, metadata) -> None:
+        if getattr(context, "standard_binding", None):
+            context.trace.emit(event_type, context.task_id, status=EventStatus.DETECTED,
+                               metadata=dict(metadata))
+
+    def _enter_finalizing(self, context: AgentContext, reason: str, *,
+                          announce: bool = True) -> None:
+        """Close the tool window, and say so when it closes."""
+        window = context.finalization
+
+        if window.state == FINALIZING:
+            return
+
+        window.state, window.reason = FINALIZING, reason
+
+        if announce:
+            context.conversation.append(ConversationMessage(
+                "user", (TextBlock(FINALIZATION_DEMAND),), authored_by="harness"))
+
+        self._normative_event(context, EventType.NORMATIVE_FINALIZATION_STARTED,
+                              {"reason": reason})
+
+    def _retry_finalization(self, context: AgentContext, turn: ModelTurn) -> ModelTurn | None:
+        """The one more answer FINALIZING may ask for, or None once it is spent.
+
+        The reply that wrote a tool call stays in the conversation as text --
+        it was never a call, so it gets no result -- and the next request
+        offers no tool either.
+        """
+        window = context.finalization
+
+        if window.retries >= FINALIZATION_RETRY_LIMIT:
+            return None
+
+        window.retries += 1
+
+        if (turn.text or "").strip():
+            context.conversation.append(ConversationMessage(
+                "assistant", (TextBlock(turn.text),)))
+
+        context.conversation.append(ConversationMessage(
+            "user", (TextBlock(FINALIZATION_RETRY),), authored_by="harness"))
+        context.trace.emit(EventType.RETRY, context.task_id, status=EventStatus.DETECTED,
+                           metadata={"reason": "tool_call_while_finalizing",
+                                     "retry": window.retries})
+        self._normative_event(context, EventType.NORMATIVE_FINALIZATION_RETRY,
+                              {"retry": window.retries,
+                               "structured_calls": len(turn.tool_calls),
+                               "written_call": textual_tool_call(turn.text)})
+
+        with context.observer.model_activity("Concluding…") as on_token:
+            return self._complete_with_retry(context, use_tools=False, on_token=on_token)
+
+    def _finalized(self, context: AgentContext, turn: ModelTurn) -> ModelTurn | None:
+        """The turn's answer when FINALIZING got one: `turn` itself, a retry,
+        or None when the model wrote a tool call twice."""
+        while turn is not None and (turn.tool_calls or textual_tool_call(turn.text)):
+            turn = self._retry_finalization(context, turn)
+
+        if turn is None:
+            context.finalization.state = FAILED
+            context.finalization.reason = "a tool call written instead of an answer, twice"
+
+        return turn
+
     def _repair_ask(self, context: AgentContext, text: str) -> str:
         """One tool-less question, for the normative repair path.
 
@@ -4833,8 +4984,14 @@ class AgentRuntime:
                                         # under --record.
                                         "normative_precedence_triggered",
                                         "conformance_guard_triggered",
+                                        "claims_guard_triggered",
                                         "model_tool_calls", "stopped_by")}},
             )
+
+        window = getattr(context, "finalization", None)
+
+        if window is not None and window.state != FAILED:
+            window.state = DONE
 
         # Checked here rather than at the rendering layer: the evidence lives
         # here, and a claim contradicted by it must not reach history either.

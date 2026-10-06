@@ -13,6 +13,7 @@ from model_backend import (
     ModelToolCall,
     ModelTurn,
     OpenAICompatibleBackend,
+    textual_tool_call,
     StopReason,
     TextBlock,
     ToolDefinition,
@@ -148,51 +149,36 @@ class OpenAICompatibleBackendTests(unittest.TestCase):
         self.assertEqual(turn.tool_calls, ())
         self.assertIn("invalid JSON", turn.error)
 
-    def test_qwen_leaked_xml_and_json_recovery_stays_in_openai_backend(self):
-        client = FakeClient([[chunk(content=(
+    def test_a_written_tool_call_stays_text(self):
+        """Only a call the API returns as one is a call. Recovered from the
+        text, these ran searches on a turn that had been offered no tool."""
+        written = (
             '<tool_call><function=read_file><parameter=path>README.md</parameter>'
-            '</function></tool_call>{"name":"write_file","arguments":{"path":"result.txt"}}'
-        ), finish_reason="stop")]])
+            '</function></tool_call>{"name":"write_file","arguments":{"path":"result.txt"}}')
+        client = FakeClient([[chunk(content=written, finish_reason="stop")]])
         turn = OpenAICompatibleBackend(client).complete(
             system="s", conversation=self.conversation, tools=[self.tool], use_tools=True
         )
-        self.assertEqual(turn.text, "")
-        self.assertEqual([call.name for call in turn.tool_calls], ["read_file", "write_file"])
-        self.assertEqual(turn.tool_calls[0].arguments, {"path": "README.md"})
+        self.assertEqual(turn.tool_calls, ())
+        self.assertEqual(turn.text, written)
+        self.assertEqual(turn.stop_reason, StopReason.END_TURN)
+        self.assertTrue(textual_tool_call(turn.text))
 
-    def test_a_leaked_normative_call_is_recovered_like_any_other(self):
-        """The dotted names were the only ones \\w+ could not recover.
+    def test_every_written_form_is_recognised_and_none_runs(self):
+        for written in ("<function=standard.fetch>\n<parameter=source_id>\nstd-1\n"
+                        "</parameter>\n</function>\n</tool_call>",
+                        '{"name":"standard.search","arguments":{"query":"ACK"}}',
+                        "<tool_call>\n<function=standard.search>"):
+            with self.subTest(written=written):
+                client = FakeClient([[chunk(content=written, finish_reason="stop")]])
+                turn = OpenAICompatibleBackend(client).complete(
+                    system="s", conversation=self.conversation, tools=[], use_tools=False)
+                self.assertEqual(turn.tool_calls, ())
+                self.assertTrue(textual_tool_call(turn.text))
 
-        Verbatim from the turn that ended on one: twelve rounds of reading,
-        a plan, and a leaked standard.fetch that read as prose. The runtime
-        took the plan for a conclusion and the turn wrote nothing.
-        """
-        client = FakeClient([[chunk(content=(
-            "I'll implement the change by adding the CmdAckKind enum.\n\n"
-            "<function=standard.fetch>\n"
-            "<parameter=source_id>\nstd-37d3d6aafd5ea8a36f0b072c6d02830e\n</parameter>\n"
-            "<parameter=include_parent>\ntrue\n</parameter>\n"
-            "</function>\n</tool_call>"
-        ), finish_reason="stop")]])
-        turn = OpenAICompatibleBackend(client).complete(
-            system="s", conversation=self.conversation, tools=[self.tool], use_tools=True
-        )
-        self.assertEqual([call.name for call in turn.tool_calls],
-                         ["standard.fetch"])
-        self.assertEqual(turn.tool_calls[0].arguments,
-                         {"source_id": "std-37d3d6aafd5ea8a36f0b072c6d02830e",
-                          "include_parent": "true"})
-        self.assertNotIn("<function=", turn.text)
-
-    def test_a_leaked_json_call_with_a_dotted_name_is_recovered(self):
-        client = FakeClient([[chunk(content=(
-            '{"name":"standard.search","arguments":{"query":"ACK"}}'
-        ), finish_reason="stop")]])
-        turn = OpenAICompatibleBackend(client).complete(
-            system="s", conversation=self.conversation, tools=[self.tool], use_tools=True
-        )
-        self.assertEqual([call.name for call in turn.tool_calls],
-                         ["standard.search"])
+    def test_prose_about_tools_is_not_a_written_call(self):
+        self.assertFalse(textual_tool_call(
+            "Rule 8.4.1.1-2 requires one bit; the search found the clause."))
 
     def test_canonical_tool_result_maps_to_openai_tool_message(self):
         client = FakeClient([[chunk(content="final", finish_reason="stop")]])

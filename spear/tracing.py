@@ -94,6 +94,13 @@ class EventType(StrEnum):
     NORMATIVE_CHECK_STARTED = "normative_check_started"
     NORMATIVE_CHECK_FINISHED = "normative_check_finished"
     NORMATIVE_EVIDENCE_CONFLICT = "normative_evidence_conflict"
+    # Which context and which tool family a turn is given (context_selection,
+    # tool_selection). Audit only: none of it reaches the model.
+    CONTEXT_SELECTION_STARTED = "context_selection_started"
+    CONTEXT_SELECTED = "context_selected"
+    CONTEXT_REJECTED = "context_rejected"
+    CONTEXT_BUDGET_APPLIED = "context_budget_applied"
+    TOOLSET_SELECTED = "toolset_selected"
 
 
 class EventStatus(StrEnum):

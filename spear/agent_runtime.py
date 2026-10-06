@@ -143,6 +143,12 @@ class AgentContext:
     normative_project: Any = None
     normative_authority: str = ""
     normative_check_runner: Any = None
+    #: Which context each pass of the turn was given (context_selection): the
+    #: workspace, the selection per phase, and what each phase renders to. A
+    #: MIXED pass that finds its phase here runs on that selection.
+    workspace_context: Any = None
+    context_selections: Any = None
+    phase_contexts: Any = None
     provider: str | None = None
     model: str | None = None
     output_reserve: int | None = None

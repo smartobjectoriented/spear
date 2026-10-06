@@ -407,6 +407,9 @@ class TaskController:
         context.read_only = view.read_only
         context.advisory = view.advisory
 
+        if request.role_aware_tools:
+            self._record_toolset(request, context, view)
+
         # The boundary is enforced, and the model still has to understand its
         # mission. Told to name the file that defines `add`, a run reached for
         # `sed -i` at step four to fix a bug nobody had asked about, then
@@ -567,6 +570,27 @@ class TaskController:
             request, status, agent_result, verification=verification,
             review=review, exploration=exploration, warnings=tuple(warnings),
         )
+
+    def _record_toolset(self, request, context, view):
+        """Name the tool family this turn is offered, hold the view to the tool
+        contract, and record it. The members are the exposure policy's; the
+        family is named from the request's phase (tool_selection)."""
+        import answer_scope
+        import context_selection
+        import tool_selection
+
+        bound = context.standard_binding is not None
+        coding = context.execution_core == "coding"
+        scope = answer_scope.of(request.objective, standard_bound=bound,
+                                prior=answer_scope.prior_scope(context.conversation,
+                                                               standard_bound=bound))
+        phase = context_selection.primary_phase(scope, bound=bound)
+        selection = tool_selection.DeterministicToolSelector().select(
+            phase, [item.name for item in view.definitions], coding=coding)
+        tool_selection.check_contract(view.definitions, self.registry, coding=coding)
+        context.trace.emit(EventType.TOOLSET_SELECTED, context.task_id,
+                           session_id=context.session_id, status=EventStatus.OK,
+                           metadata=selection.to_dict())
 
     def _explore(self, request: TaskRequest) -> ExplorationReport | None:
         context = request.context

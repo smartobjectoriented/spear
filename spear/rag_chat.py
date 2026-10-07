@@ -162,6 +162,9 @@ ENV_OPTIONS = {
 # Flags that carry no value: presence is the setting.
 ENV_SWITCHES = {
     "--trace": ("SPEAR_TRACE", "1", "record a runtime JSONL trace"),
+    "--fresh": ("SPEAR_FRESH", "1", "start without this corpus's stored conversation, and "
+                                    "leave it as it is; knowledge, rules and configuration "
+                                    "still apply"),
 }
 
 
@@ -1915,6 +1918,10 @@ def _env_option_lines():
             rows.append(f"  {label:<25}{description}")
             rows.append(f"  {'':<25}{variable}")
 
+    for flag, (variable, _, description) in sorted(ENV_SWITCHES.items()):
+        rows.append(f"  {flag:<25}{description}")
+        rows.append(f"  {'':<25}{variable}=1")
+
     return "\n".join(rows)
 
 
@@ -3156,7 +3163,15 @@ def retrieve_context(corpora, query, top_k=TOP_K):
 
 # ── history persistence ──────────────────────────────────────────────
 
+def fresh_session() -> bool:
+    """A session that neither reads nor replaces the corpus's stored conversation."""
+    return os.environ.get("SPEAR_FRESH", "") not in ("", "0")
+
+
 def load_history():
+    if fresh_session():
+        return []
+
     if os.path.isfile(HISTORY_FILE):
         try:
             with open(HISTORY_FILE, "r") as f:
@@ -3168,6 +3183,9 @@ def load_history():
 
 
 def save_history(history):
+    if fresh_session():
+        return
+
     with open(HISTORY_FILE, "w") as f:
         json.dump(history[-MAX_HISTORY:], f, ensure_ascii=False, indent=2)
 
@@ -7840,7 +7858,9 @@ def banner(collection, history, n_rules, model_name, n_mem=0):
         f"{C_DIM}corpus:{C_RST}   {PROJECT}  {C_DIM}·{C_RST}  "
         + (_corpus_summary(collection) if collection else "no RAG")
         + f"  {C_DIM}·{C_RST}  {n_rules} rules",
-        f"{C_DIM}history:{C_RST}  {len(history)} messages"
+        f"{C_DIM}history:{C_RST}  "
+        + ("fresh (stored conversation not loaded)" if fresh_session()
+           else f"{len(history)} messages")
         + (f"   {C_DIM}knowledge:{C_RST} {n_mem}" if n_mem else ""),
         f"{C_DIM}tools in:{C_RST} {cwd}  {C_DIM}(current directory){C_RST}",
     ]

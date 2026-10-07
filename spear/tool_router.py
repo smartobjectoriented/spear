@@ -382,6 +382,23 @@ class ToolRouter:
                     cwd=(context.metadata or {}).get("command_cwd"))
                 category = "outside_requested_scope"
 
+            # And the files no tool may change -- generated output, snapshot
+            # and third-party copies -- are as protected from a redirection,
+            # cp, tee or ln as from edit_file. The policy is the target's.
+            if not refusal:
+                import target_policy
+
+                for target in request_scope.shell_write_targets(
+                        arguments["command"], context.scope,
+                        cwd=(context.metadata or {}).get("command_cwd")):
+                    refusal = target_policy.refusal(target)
+
+                    if refusal:
+                        refusal += (". A shell command is not a way around this: "
+                                    "the same file is refused to every tool.")
+                        category = "protected_target"
+                        break
+
             if refusal:
                 return self._early_failure(
                     context, tool_call_id, action_id, name, started,

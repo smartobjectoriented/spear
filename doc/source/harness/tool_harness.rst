@@ -159,6 +159,15 @@ Every one of the step-6 checks returns a ``failed`` ``ToolResult`` rather than
 proceeding in a degraded mode.  There is no code path from "mechanism
 unavailable" to "run it anyway".
 
+A refusal attaches to the file, not to the tool.  Generated output (a
+``generated/`` or ``build/tmp/`` path, or a header saying the file is
+generated) and snapshot or third-party copies are refused to ``write_file``
+and ``patch``, to ``delete_file`` -- a deleted file could be written afresh --
+and to every write a terminal command makes: a redirection, ``tee``, ``cp``,
+``install``, ``truncate``, ``ln``, and any path an inline program mentions.
+The decision is taken on the path as written and on the file it reaches, so a
+link or a ``..`` does not change it.
+
 A refusal is deterministic, so asking again cannot change it.  When a turn
 asks for the same refused operation five times -- the same tool, target and
 refusal once spacing, quoting and trailing slashes are set aside -- it is

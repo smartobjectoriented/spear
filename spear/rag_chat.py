@@ -4619,8 +4619,9 @@ READ_CMD_RE = re.compile(
 
 def is_excluded_path(p):
     """Third-party / snapshot trees we must NEVER auto-write into."""
-    return bool(re.search(r"/(?:u-boot|atf|qemu)(?:\.back)?/|\.back/|"
-                          r"\.pristine/|\.0/|/build/tmp/", str(p)))
+    import target_policy
+
+    return target_policy.is_snapshot(str(p))
 
 
 
@@ -6015,24 +6016,7 @@ def _registered_fetch_url(context, args):
 # path, write, deletion and command it asks for crosses the same checks as
 # any other tool call here.
 
-_GENERATED_RE = re.compile(
-    r"DO NOT (?:MODIFY|EDIT)|auto(?:matically)?[ -]?generated|@generated",
-    re.IGNORECASE)
-
-
-def says_generated(head: str) -> bool:
-    """Whether a file's opening says the file is generated.
-
-    A unified diff carries the lines of the file it patches: a marker among
-    them belongs to that file, not to the patch. A Buildroot defconfig patch
-    adds "Automatically generated file; DO NOT EDIT" and is edited by hand.
-    """
-    if re.search(r"^\+\+\+ ", head, re.M) and re.search(r"^@@ ", head, re.M):
-        head = "\n".join(line for line in head.splitlines()
-                         if line.startswith(("--- ", "+++ "))
-                         or not line.startswith(("+", "-", " ")))
-
-    return bool(_GENERATED_RE.search(head))
+from target_policy import says_generated  # noqa: E402,F401  (kept for callers)
 
 _CORE_LABELS = {"read_file": "Read", "search_files": "Search", "patch": "Update",
                 "write_file": "Write", "delete_file": "Delete", "terminal": "Terminal"}
@@ -6087,20 +6071,12 @@ def coding_host(agent_context, cache, record):
         # belongs in the source the build copies from, and saying so is what
         # sends the model there.
 
-        if re.search(r"/generated/|/build/tmp/", resolved):
-            return f"{label} is a generated file — change its source"
+        import target_policy
 
-        if is_excluded_path(Path(resolved)):
-            return f"{label} is a snapshot or third-party copy"
+        protected = target_policy.refusal(resolved, label)
 
-        try:
-            with open(resolved, "r", encoding="utf-8", errors="replace") as handle:
-                head = handle.read(600)
-        except OSError:
-            head = ""
-
-        if says_generated(head):
-            return f"{label} is a generated file — change its source"
+        if protected:
+            return protected
 
         blocked = authorize_mutation(f"Modify {C_BOLD}{label}{C_RST} ?",
                                      action=action, paths=(Path(resolved),))
@@ -6125,6 +6101,15 @@ def coding_host(agent_context, cache, record):
         return None
 
     def delete(resolved, reason):
+        import target_policy
+
+        # A file no write may change may not be deleted either: deleted, it
+        # could be written afresh, with nothing left to say it was protected.
+        protected = target_policy.refusal(resolved, _workspace_label(Path(resolved)))
+
+        if protected:
+            return protected
+
         result = _registered_delete_file(context(), {"path": resolved, "reason": reason})
         return None if result.status == ToolResultStatus.OK else result.text
 

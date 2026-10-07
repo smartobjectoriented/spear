@@ -469,25 +469,21 @@ def _at(directory: str, token: str) -> str:
     return os.path.join(directory, token)
 
 
-def shell_write_refusal(command: str, scope: RequestScope | None,
-                        cwd: str | None = None) -> str:
-    """Why this command writes outside the requested target, or "".
-
-    The same judgement as sibling_write_refusal, applied to what a shell
-    command writes: a redirection, the destination of cp/mv/install, the
-    operands of rm/touch/mkdir/tee/sed -i. An interpreter given its program
-    inline (python -c, perl -i, sh -c, awk) cannot be parsed for its writes,
-    so any sibling path its text mentions is treated as one -- otherwise
-    `python3 -c "open('beta.cfg','w')..."` would be edit_file's refusal with
-    extra steps. Builds and tests name no sibling destination and pass.
+def shell_write_targets(command: str, scope: RequestScope, cwd: str | None = None) -> list[str]:
+    """Every path a shell command may write: a redirection, the destination
+    of cp/mv/install/ln, the operands of rm/touch/mkdir/tee/truncate/sed -i.
+    An interpreter given its program inline (python -c, perl -i, sh -c, awk)
+    cannot be parsed for its writes, so every path its text mentions counts
+    as one -- and so does every path a command names when its destination is
+    only decided at run time (`$f` in a loop, `find -exec ... {}`, xargs).
 
     A relative operand is taken from the directory its stage runs in: `cwd`
     (where the session stands, or the command's workdir), moved by every
     `cd` before it. Read from the project root instead, `cd board && echo >
     rpi4/x` wrote to a sibling the same redirect by full path could not.
     """
-    if scope is None or scope.broadened or not scope.anchors or not command:
-        return ""
+    if not command:
+        return []
 
     words = list(_split_stages(command))
     patterns = [argv[index + 1] for argv in words
@@ -504,29 +500,40 @@ def shell_write_refusal(command: str, scope: RequestScope | None,
                  for path in _expand_in(scope, token)]
     mentioned += [path for item in list(mentioned)
                   for path in _children_matching(scope, item, patterns)]
+    targets = []
 
     for argv in stages:
         destinations = _shell_destinations(argv)
-        candidates = [path for item in destinations
-                      for path in _expand_in(scope, item)]
+        targets += [path for item in destinations for path in _expand_in(scope, item)]
 
-        # `sed -i ... $f` in a loop, `xargs sed -i`, `find -exec sed -i {}`:
-        # the file is decided by the shell, so every path the command names
-        # is a file it may write.
         if _opaque(argv) or any("$" in item or "{}" in item
                                 for item in destinations) or (
                 _writes_fed(argv) and not destinations):
-            candidates += mentioned
-            candidates += _WORD_PATH.findall(" ".join(argv[1:]))
+            targets += mentioned
+            targets += _WORD_PATH.findall(" ".join(argv[1:]))
 
-        for target in candidates:
-            refusal = sibling_write_refusal(scope, target)
+    return list(dict.fromkeys(targets))
 
-            if refusal:
-                return (refusal.split(" If this file genuinely")[0]
-                        + " A shell command is not a way "
-                        "around this: make the change with edit_file, on "
-                        "the requested target, or give scope_reason there.")
+
+def shell_write_refusal(command: str, scope: RequestScope | None,
+                        cwd: str | None = None) -> str:
+    """Why this command writes outside the requested target, or "".
+
+    The same judgement as sibling_write_refusal, applied to every path the
+    command writes (shell_write_targets). Builds and tests name no sibling
+    destination and pass.
+    """
+    if scope is None or scope.broadened or not scope.anchors or not command:
+        return ""
+
+    for target in shell_write_targets(command, scope, cwd):
+        refusal = sibling_write_refusal(scope, target)
+
+        if refusal:
+            return (refusal.split(" If this file genuinely")[0]
+                    + " A shell command is not a way "
+                    "around this: make the change with edit_file, on "
+                    "the requested target, or give scope_reason there.")
 
     return ""
 

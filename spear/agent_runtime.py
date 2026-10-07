@@ -630,6 +630,14 @@ ORDER_REDIRECT_LIMIT = int(os.environ.get("SPEAR_ORDER_REDIRECTS", "4"))
 # fix it in three will not fix it in ten.
 BUILD_REPROMPT_LIMIT = int(os.environ.get("SPEAR_BUILD_RETRIES", "3"))
 
+# The most one model response may generate. The core reserves far more for
+# its context arithmetic, and a response that degenerates -- one tool call
+# whose arguments repeat until the limit -- ran to that reservation: 65536
+# tokens and eleven minutes for one call. The longest legitimate response
+# measured, a whole-file write, was under 11000. A response cut here ends as
+# truncated, which the core already retries and then reports.
+RESPONSE_MAX_TOKENS = int(os.environ.get("SPEAR_RESPONSE_MAX_TOKENS", "16384"))
+
 # How many times a turn may be sent back to a change it was asked for and has
 # not made. One was the old cap, and one is measurably not enough: a turn was
 # told "nothing was changed — make the edit", read for another twenty rounds,
@@ -3891,8 +3899,9 @@ class AgentRuntime:
             label = "Thinking…" if len(messages) <= 2 + len(history) else "Analyzing results…"
 
             with context.observer.model_activity(label) as tick:
-                return backend.complete_messages(messages, tools, max_tokens=max_tokens,
-                                                 on_token=tick)
+                return backend.complete_messages(
+                    messages, tools, max_tokens=min(max_tokens, RESPONSE_MAX_TOKENS),
+                    on_token=tick)
 
         # The core reserves MAX_TOKENS of output and stops for a summary once a
         # prompt passes half of what is left. Against a window that small

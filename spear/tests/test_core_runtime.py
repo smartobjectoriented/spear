@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import dataclasses
 import json
 import sys
 import tempfile
@@ -11,6 +12,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
+import agent_runtime
 from agent_runtime import AgentRuntime, RuntimeTerminalReason
 from model_backend import ToolDefinition
 from tests.test_agent_loop import Host, call, turn
@@ -175,4 +177,23 @@ class ASmallWindowStillRuns(unittest.TestCase):
 
         seen, _ = self.reservations(524_288)
 
-        self.assertEqual(seen, [loop.MAX_TOKENS, loop.MAX_TOKENS])
+        self.assertEqual(seen, [agent_runtime.RESPONSE_MAX_TOKENS] * 2)
+        self.assertLess(agent_runtime.RESPONSE_MAX_TOKENS, loop.MAX_TOKENS)
+
+    def test_a_response_cut_at_the_cap_is_reported_truncated(self):
+        root = tempfile.mkdtemp()
+        runaway = turn("", call("c1", "patch", path="a.sh", old_string="x" * 50,
+                                new_string="y" * 50))
+        runaway = dataclasses.replace(runaway, finish_reason="length")
+        backend = Backend([runaway] * 5)
+        context = make_context(backend, rounds=10, actions=10)
+        context.execution_core = "coding"
+        context.tools = TOOLS
+        context.project_root = root
+        context.context_limit = 524_288
+        host = Host(root)
+        context.coding_host = lambda ctx, cache, record: _Recording(host, record)
+        result = AgentRuntime().run(context)
+
+        self.assertNotEqual(result.terminal_reason, RuntimeTerminalReason.COMPLETED)
+        self.assertFalse(result.did_modify)

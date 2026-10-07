@@ -6001,6 +6001,21 @@ _GENERATED_RE = re.compile(
     r"DO NOT (?:MODIFY|EDIT)|auto(?:matically)?[ -]?generated|@generated",
     re.IGNORECASE)
 
+
+def says_generated(head: str) -> bool:
+    """Whether a file's opening says the file is generated.
+
+    A unified diff carries the lines of the file it patches: a marker among
+    them belongs to that file, not to the patch. A Buildroot defconfig patch
+    adds "Automatically generated file; DO NOT EDIT" and is edited by hand.
+    """
+    if re.search(r"^\+\+\+ ", head, re.M) and re.search(r"^@@ ", head, re.M):
+        head = "\n".join(line for line in head.splitlines()
+                         if line.startswith(("--- ", "+++ "))
+                         or not line.startswith(("+", "-", " ")))
+
+    return bool(_GENERATED_RE.search(head))
+
 _CORE_LABELS = {"read_file": "Read", "search_files": "Search", "patch": "Update",
                 "write_file": "Write", "delete_file": "Delete", "terminal": "Terminal"}
 
@@ -6066,7 +6081,7 @@ def coding_host(agent_context, cache, record):
         except OSError:
             head = ""
 
-        if _GENERATED_RE.search(head):
+        if says_generated(head):
             return f"{label} is a generated file — change its source"
 
         blocked = authorize_mutation(f"Modify {C_BOLD}{label}{C_RST} ?",

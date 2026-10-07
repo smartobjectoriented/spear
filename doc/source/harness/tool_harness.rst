@@ -159,6 +159,15 @@ Every one of the step-6 checks returns a ``failed`` ``ToolResult`` rather than
 proceeding in a degraded mode.  There is no code path from "mechanism
 unavailable" to "run it anyway".
 
+A refusal is deterministic, so asking again cannot change it.  When a turn
+asks for the same refused operation five times -- the same tool, target and
+refusal once spacing, quoting and trailing slashes are set aside -- it is
+stopped with an answer that names the refusal, and the stop is audited
+(``repeated_refusal_stopped``).  ``SPEAR_REFUSAL_REPEATS`` sets the limit.  One
+model response is bounded too: ``SPEAR_RESPONSE_MAX_TOKENS`` (16384) caps what
+a single response may generate, and a response cut there is reported as
+truncated.
+
 Once the sandbox is known to be down
 ====================================
 

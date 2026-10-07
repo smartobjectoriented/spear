@@ -221,6 +221,29 @@ class WritesStayOnTheNamedTarget(unittest.TestCase):
         self.assertEqual(
             request_scope.sibling_write_refusal(scope, "cfg/beta.cfg"), "")
 
+    def test_layers_that_share_only_their_skeleton_are_not_a_family(self):
+        """meta-<x> layers each hold classes/, conf/ and their own recipes-<x>/.
+        A request that says "root filesystem" names no layer: the rootfs
+        layer is where the change belongs, not a sibling of meta-filesystem."""
+        build = self.root / "build"
+
+        for name in ("filesystem", "rootfs", "bsp"):
+            for child in ("classes", "conf", f"recipes-{name}"):
+                (build / f"meta-{name}" / child).mkdir(parents=True)
+
+        target = "build/meta-rootfs/recipes-rootfs/0003-virt64_defconfig.patch"
+        scope = self.scope("Add the strace package to the virt64 root filesystem.")
+
+        self.assertEqual(request_scope.sibling_write_refusal(scope, target), "")
+
+    def test_target_directories_laid_out_alike_stay_a_family(self):
+        for name in ("alpha", "beta", "gamma"):
+            (self.root / "out" / name / f"{name}.dtb").write_text("x")
+
+        scope = self.scope("Please move the image of alpha to images/.")
+
+        self.assertIn("alpha", request_scope.sibling_write_refusal(scope, "out/beta/post.sh"))
+
     def test_the_router_refuses_and_a_stated_reason_passes(self):
         router = ToolRouter(registry())
         scope = self.scope("Please move the image of alpha to images/.")

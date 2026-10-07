@@ -187,14 +187,21 @@ def _alike(first: str, second: str) -> bool:
     Two members of one family are laid out alike -- each target directory
     carries the same handful of files. A directory that merely sits next to
     one is not its analogue: a project's build/ is not a sibling of its
-    linux/ because both are top-level names.
+    linux/ because both are top-level names. Nor are two directories that
+    share only sub-directories: BitBake layers all hold classes/ and conf/,
+    and what makes each one is its own recipes-<name>/. Targets share files.
     """
     a, b = _children(first), _children(second)
 
     if not a or not b:
         return False
 
-    return len(a & b) * 2 >= len(a | b)
+    shared = a & b
+
+    if not any(os.path.isfile(os.path.join(first, name)) for name in shared):
+        return False
+
+    return len(shared) * 2 >= len(a | b)
 
 
 def _sibling_of(directory: Path, component: str, scope: RequestScope):

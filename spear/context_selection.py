@@ -44,6 +44,7 @@ class SourceType(StrEnum):
     RETRIEVED_CORPUS = "RETRIEVED_CORPUS"
     SESSION_CONTEXT = "SESSION_CONTEXT"
     EXTERNAL_CAPABILITY = "EXTERNAL_CAPABILITY"
+    WORKSPACE_KNOWLEDGE = "WORKSPACE_KNOWLEDGE"
 
 
 #: The phases context is selected for. A MIXED request is selected three
@@ -67,17 +68,21 @@ _NORMATIVE_TYPES = frozenset({
     SourceType.RETRIEVED_STANDARD, SourceType.SESSION_CONTEXT, SourceType.PROJECT_RULE})
 
 #: What each phase may be shown, by kind of source. External capabilities
-#: reach the passes that run on the coding core and nothing normative.
+#: and workspace knowledge reach the passes that run on the coding core and
+#: nothing normative: knowledge describes, and a standard is not described
+#: by what someone once noted about a project.
 POLICY = {
-    IMPLEMENTATION: _CODING_TYPES | {SourceType.EXTERNAL_CAPABILITY},
+    IMPLEMENTATION: _CODING_TYPES | {SourceType.EXTERNAL_CAPABILITY,
+                                     SourceType.WORKSPACE_KNOWLEDGE},
     GENERAL: frozenset({SourceType.USER_REQUEST, SourceType.SYSTEM_RUNTIME,
                         SourceType.SESSION_CONTEXT, SourceType.PROJECT_RULE,
-                        SourceType.EXTERNAL_CAPABILITY}),
+                        SourceType.EXTERNAL_CAPABILITY, SourceType.WORKSPACE_KNOWLEDGE}),
     NORMATIVE: _NORMATIVE_TYPES,
     MIXED_QUESTION: _CODING_TYPES | _NORMATIVE_TYPES,
     MIXED_PREPASS: _NORMATIVE_TYPES,
     MIXED_IMPLEMENTATION: (_CODING_TYPES - {SourceType.STANDARD_BINDING})
-    | {SourceType.NORMATIVE_CONSTRAINT_SET, SourceType.EXTERNAL_CAPABILITY},
+    | {SourceType.NORMATIVE_CONSTRAINT_SET, SourceType.EXTERNAL_CAPABILITY,
+       SourceType.WORKSPACE_KNOWLEDGE},
     MIXED_POSTCHECK: frozenset({SourceType.NORMATIVE_CONSTRAINT_SET}),
 }
 
@@ -107,6 +112,7 @@ PRIORITY = {
     SourceType.PROJECT_RULE: 80,
     SourceType.NORMATIVE_CONSTRAINT_SET: 75,
     SourceType.PROJECT_MEMORY: 60,
+    SourceType.WORKSPACE_KNOWLEDGE: 58,
     SourceType.PROJECT_SKILL: 55,
     SourceType.EXTERNAL_CAPABILITY: 52,
     SourceType.RETRIEVED_STANDARD: 50,

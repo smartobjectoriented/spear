@@ -111,6 +111,12 @@ class EventType(StrEnum):
     CAPABILITY_DESCRIBED = "capability_described"
     EXTERNAL_CAPABILITY_INVOKED = "external_capability_invoked"
     EXTERNAL_CAPABILITY_FAILED = "external_capability_failed"
+    KNOWLEDGE_PROPOSED = "knowledge_proposed"
+    KNOWLEDGE_ACTIVATED = "knowledge_activated"
+    KNOWLEDGE_SELECTED = "knowledge_selected"
+    KNOWLEDGE_STALE = "knowledge_stale"
+    KNOWLEDGE_CONFLICT = "knowledge_conflict"
+    KNOWLEDGE_REVOKED = "knowledge_revoked"
 
 
 class EventStatus(StrEnum):

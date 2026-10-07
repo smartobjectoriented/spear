@@ -154,6 +154,9 @@ class AgentContext:
     #: The control plane's door to the external capabilities this turn's
     #: workspace admits (capability_gateway.Gateway), or None.
     capability_gateway: Any = None
+    #: The read-only door to this turn's workspace knowledge
+    #: (workspace_knowledge.Door), or None.
+    knowledge_door: Any = None
     provider: str | None = None
     model: str | None = None
     output_reserve: int | None = None

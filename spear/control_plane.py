@@ -30,7 +30,7 @@ from typing import Callable, Mapping
 
 from agent.host import CommandOutcome, ToolRecord
 from agent.tools import usable_dir
-from capability_gateway import is_capability_command
+import host_commands
 
 #: How a refusal reads to the model: what was refused and why, in a line.
 REFUSED = "refused: {}"
@@ -78,12 +78,15 @@ class SpearHost:
     def __init__(self, *, workspace_root: str, authorize: Callable,
                  resolve: Callable, write: Callable, delete: Callable,
                  run: Callable, record: Callable, collation_locale: str | None = None,
-                 capabilities=None):
+                 capabilities=None, knowledge=None):
         self.workspace_root = workspace_root
-        # The turn's external capabilities (capability_gateway.Gateway). A
-        # terminal command addressed to the gateway is answered by it, here,
-        # and never reaches a shell.
+        # What this turn may reach beyond its tools, by the command that
+        # addresses it (host_commands): its external capabilities
+        # (capability_gateway.Gateway) and its workspace knowledge
+        # (workspace_knowledge.Door). Such a command is answered here and
+        # never reaches a shell.
         self.capabilities = capabilities
+        self.knowledge = knowledge
         # The locale the sandboxed commands run under (LANG/LC_ALL), so a
         # listing the core makes itself is ordered the way the model's own
         # `ls` in that sandbox would order it.
@@ -130,8 +133,8 @@ class SpearHost:
                      if key != "scope_reason"}
         cwd = self.command_cwd(arguments) if name == "terminal" else None
 
-        if name == "terminal" and is_capability_command(arguments.get("command")):
-            return None                     # the gateway judges every such call
+        if name == "terminal" and host_commands.recognised(arguments.get("command")):
+            return None                     # answered by SPEAR, never run
 
         if name == "delete_file":
             self._deleting = str(arguments.get("path") or "")
@@ -195,8 +198,8 @@ class SpearHost:
 
     def run_command(self, command: str, script: str, *, timeout: int,
                     output_chars: int) -> CommandOutcome:
-        if is_capability_command(command):
-            return self._capability(command)
+        if host_commands.recognised(command):
+            return self._answer(command)
 
         try:
             outcome = self._run(command, script, timeout, output_chars)
@@ -208,21 +211,22 @@ class SpearHost:
 
         return outcome
 
-    def _capability(self, command: str) -> CommandOutcome:
-        """A gateway command's answer, in the session format the core reads:
-        an exit code, its output, and no change of directory."""
-        from agent.tools import _MARK
+    def _answer(self, command: str) -> CommandOutcome:
+        """A host command's answer, whatever is wrong with it."""
+        name = host_commands.recognised(command)
+        door = {"spear-capability": self.capabilities, "spear-knowledge": self.knowledge}[name]
 
-        if self.capabilities is None:
-            code, text = 1, "No external capability is available in this workspace."
+        if door is None:
+            code, text = 1, ("No external capability is available in this workspace."
+                             if name == "spear-capability"
+                             else "No workspace knowledge is available to this turn.")
         else:
             try:
-                code, text = self.capabilities.run(command)
+                code, text = door.run(command)
             except Exception as exc:                # noqa: BLE001
                 code, text = 1, self._failed(exc)
 
-        return CommandOutcome("ok", f"{_MARK}\nexit {code}\nsize {len(text)}\ncwd \n{_MARK}\n"
-                                    f"{text}", code, "")
+        return host_commands.session_outcome(code, text)
 
     def after_tool(self, record: ToolRecord) -> None:
         if record.name == "terminal" and not record.refused and not record.timed_out:

@@ -9,6 +9,7 @@ data: split into words and parsed as JSON, never expanded.
 from __future__ import annotations
 
 import json
+import os
 import sys
 import tempfile
 import unittest
@@ -292,6 +293,10 @@ class LegacyRuntime(unittest.TestCase):
             {"id": "tracker", "command": [sys.executable, SERVER], "scope": "global"}]}))
         trace = Recorder()
         rag_chat._CAPABILITY_REGISTRY.clear()
+        knowledge = mock.patch.dict(os.environ, {"SPEAR_KNOWLEDGE_DB": os.path.join(
+            tempfile.mkdtemp(), "knowledge.sqlite3")})
+        knowledge.start()
+        self.addCleanup(knowledge.stop)
         self.addCleanup(rag_chat._CAPABILITY_REGISTRY.clear)
 
         with mock.patch.multiple(

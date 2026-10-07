@@ -19,8 +19,6 @@ deployment allows it and the session's permission mode agrees.
 from __future__ import annotations
 
 import json
-import re
-import shlex
 import time
 from dataclasses import dataclass, field
 from typing import Callable
@@ -34,18 +32,9 @@ _JSON_TYPES = {"string": str, "integer": int, "number": (int, float), "boolean":
                "object": dict, "array": list, "null": type(None)}
 
 
-#: Longest gateway command answered; the arguments are one JSON object.
-MAX_COMMAND_CHARS = 65_536
+import host_commands
 
-# Recognised lexically, without parsing the shell: the gateway's name where a
-# shell would run it -- the command's first word, or the first word after a
-# control operator, a newline, an opening parenthesis, a backquote or "$(".
-# Anywhere else (an argument to grep, a path such as ./spear-capability) it
-# is ordinary text and the command an ordinary command, judged by the
-# command policy like any other.
-
-_NAMED = re.compile(r"(?:^|[;&|\n\r(`]|\$\()[ \t]*" + re.escape(COMMAND)
-                    + r"(?![\w./-])")
+MAX_COMMAND_CHARS = host_commands.MAX_COMMAND_CHARS
 
 #: How each refusal or failure is recorded (external_capability_failed's
 #: "outcome"); a successful call is external_capability_invoked.
@@ -56,8 +45,9 @@ UNAVAILABLE, TIMEOUT, PROVIDER_ERROR = "unavailable", "timeout", "provider_error
 
 def is_capability_command(command) -> bool:
     """Is this terminal command addressed to the gateway? Once it is, the
-    gateway answers it -- with a result or a refusal -- and no shell sees it."""
-    return bool(_NAMED.search(str(command or "")))
+    gateway answers it -- with a result or a refusal -- and no shell sees it.
+    Recognised as host_commands recognises every command SPEAR answers."""
+    return host_commands.recognised(command) == COMMAND
 
 
 def _outcome(exc: Exception) -> str:
@@ -171,7 +161,7 @@ class Gateway:
         JSON. Anything that is not one plain gateway command is refused.
         """
         command = str(command or "")
-        words, problem = _words(command)
+        words, problem = host_commands.words(command, COMMAND)
 
         if problem:
             return self._refuse(SYNTAX, problem, 2)
@@ -310,30 +300,6 @@ class Gateway:
                             status=EventStatus.OK,
                             metadata={"workspace": self.workspace, "phase": self.phase,
                                       **metadata})
-
-
-def _words(command: str):
-    """(the words of one plain gateway command, "") or ((), why it is not one)."""
-    if len(command) > MAX_COMMAND_CHARS:
-        return (), f"{COMMAND}: the command is longer than {MAX_COMMAND_CHARS} characters."
-
-    if any(char in command for char in "\n\r\x00"):
-        return (), f"{COMMAND} takes one line; run it on its own."
-
-    lexer = shlex.shlex(command, posix=True, punctuation_chars=";&|()<>")
-    lexer.whitespace_split = True
-
-    try:
-        words = list(lexer)
-    except ValueError as exc:
-        return (), f"{COMMAND}: {exc}."
-
-    if (not words or words[0] != COMMAND
-            or any(word and set(word) <= set(";&|()<>") for word in words)):
-        return (), (f"{COMMAND} must be run on its own -- not in a pipeline, a list, a "
-                    f"redirection or a substitution.")
-
-    return words, ""
 
 
 def contract(item: cap.Capability, arguments) -> str:

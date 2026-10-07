@@ -221,7 +221,8 @@ A registered project is not context everywhere. Each turn starts from its
 tree alone, which inherits nothing from the project next to it or the one used
 before — and is given only:
 
-* what its request class calls for: the coding rules, memories, procedures and
+* what its request class calls for: the coding rules, workspace knowledge
+  (:ref:`knowledge`), procedures and
   build commands for a change; the standard and its tools, and no
   implementation material, for a question about the standard; little more than
   the request for a general question. A MIXED change is selected once per pass;

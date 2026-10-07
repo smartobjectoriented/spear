@@ -98,19 +98,34 @@ class MemoryStoreTests(unittest.TestCase):
             self.assertFalse(role.can_write_memory)
             self.assertNotIn("remember", role.allowed_tool_names)
 
-    def test_confirmed_legacy_write_boundary_uses_store_and_selected_context(self):
+    def test_the_remember_tool_only_proposes_workspace_knowledge(self):
+        """The model's note is a proposal in the knowledge store: never written
+        to the legacy file, never shown to a turn, until the operator accepts it."""
+        import os
+        import tempfile
+
         import rag_chat
-        with patch.object(rag_chat, "MEMORIES_FILE", str(self.path)), \
+        import workspace_knowledge as wk
+
+        database = os.path.join(tempfile.mkdtemp(), "knowledge.sqlite3")
+        rag_chat._KNOWLEDGE_STORE.clear()
+        self.addCleanup(rag_chat._KNOWLEDGE_STORE.clear)
+
+        with patch.dict(os.environ, {"SPEAR_KNOWLEDGE_DB": database}), \
+                patch.object(rag_chat, "MEMORIES_FILE", str(self.path)), \
                 patch.object(rag_chat, "authorize_mutation", return_value=None) as authorize, \
                 patch.object(rag_chat, "tool_use"), patch.object(rag_chat, "tool_result"):
             result = rag_chat._registered_remember(None, {"note": "Kernel uses ninja"})
-            authorize.assert_called_once()
-            self.assertTrue(result.text.startswith("OK:"))
-            rag_chat.save_memory("Frontend uses prettier")
-            selected = rag_chat.load_memories("kernel build")
-            self.assertIn("Kernel uses ninja", selected)
-            self.assertNotIn("Frontend uses prettier", selected)
+            store = rag_chat.knowledge_store()
+            records = store.list(rag_chat.current_workspace().workspace_id)
 
+        authorize.assert_called_once()
+        self.assertTrue(result.text.startswith("OK: proposed"))
+        self.assertFalse(self.path.exists())
+        self.assertEqual([(record.lifecycle, record.provenance) for record in records],
+                         [(wk.Lifecycle.PROPOSED, wk.Provenance.MODEL_DERIVED)])
+        self.assertEqual(wk.select(records, "kernel").text, "")
+        store.close()
 
 if __name__ == "__main__":
     unittest.main()

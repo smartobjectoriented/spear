@@ -473,7 +473,11 @@ class RagChatCompatibilityTests(unittest.TestCase):
         app_dir = os.path.dirname(os.path.realpath(self.rag_chat.__file__))
         self.assertEqual(self.rag_chat.APP_DIR, app_dir)
         self.assertEqual(self.rag_chat.ROOT_DIR, os.path.dirname(app_dir))
-        self.assertEqual(self.rag_chat.DB_PATH, os.path.join(app_dir, "chromadb"))
+        # The production default is the checkout's own index; a test run that
+        # names none is given a temporary one instead, never the real index.
+        self.assertIn('f"{APP_DIR}/chromadb"', Path(self.rag_chat.__file__).read_text())
+        if not os.environ.get("SPEAR_DB_PATH"):
+            self.assertFalse(self.rag_chat.DB_PATH.startswith(app_dir))
         self.assertNotIn("/opt/llm/spear/spear",
                          Path(self.rag_chat.__file__).read_text())
         self.assertEqual(self.rag_chat.TOP_K, 12)

@@ -43,7 +43,7 @@ from model_backend import (AnthropicBackend, ConversationMessage,
                            ModelBackendConfigurationError,
                            anthropic_credentials_available,
                            OpenAICompatibleBackend, TextBlock, ToolResultBlock)
-from memory_store import MarkdownMemoryStore, MemoryScope, MemorySource, MemoryStoreError
+from memory_store import MemoryStoreError
 from cancellation import CancellationSource, NEVER_CANCELLED
 from checkpoint import CheckpointManager
 from tool_runtime import (AuditLogger, CommandClassification, CommandPolicy,
@@ -209,7 +209,13 @@ APP_DIR = os.path.dirname(os.path.realpath(__file__))
 ROOT_DIR = os.path.dirname(APP_DIR)
 
 LLAMA_SERVER_URL = os.environ.get("SPEAR_API_BASE", "http://127.0.0.1:8080/v1")
-DB_PATH = os.environ.get("SPEAR_DB_PATH") or f"{APP_DIR}/chromadb"
+# A test run that names no index or state gets a temporary one: the defaults
+# are this checkout's own index and state, which no test may write.
+import state_paths
+
+_TEST_STATE = state_paths.test_state_root()
+DB_PATH = (os.environ.get("SPEAR_DB_PATH")
+           or (f"{_TEST_STATE}/chromadb" if _TEST_STATE else f"{APP_DIR}/chromadb"))
 
 
 def resource_dir(env_var, name):
@@ -237,7 +243,7 @@ RULES_DIR = resource_dir("SPEAR_RULES_DIR", "rules.d")
 # read-only-ish image and `docker run --rm` throws the accumulation away.
 # Defaults to APP_DIR, so nothing moves unless asked.
 
-STATE_DIR = os.environ.get("SPEAR_STATE_DIR", APP_DIR)
+STATE_DIR = os.environ.get("SPEAR_STATE_DIR") or _TEST_STATE or APP_DIR
 os.makedirs(STATE_DIR, exist_ok=True)
 
 # All of these accumulate, so all of them live under STATE_DIR: the audit
@@ -5660,9 +5666,8 @@ def _registered_remember(context, args):
     if not note:
         result = "ERROR: empty note"
     elif (blocked := authorize_mutation(
-            "Save this to long-term memory?", action="remember")) is None:
-        count = save_memory(note, source=MemorySource.AUTHORIZED_TOOL)
-        result = f"OK: saved to memory ({count} memories total)"
+            "Propose this as workspace knowledge?", action="remember")) is None:
+        result = propose_knowledge(note)
         audit_mutation_result("remember", result)
     else:
         result = blocked.to_legacy_text()
@@ -6559,41 +6564,68 @@ def handle_bang_command(cmd_line):
     return None
 
 
-def memory_store():
-    """Current corpus' Markdown-authoritative structured memory view."""
-    return MarkdownMemoryStore(MEMORIES_FILE, default_scope=MemoryScope.PROJECT)
+def remember_fact(note):
+    """/remember: the operator's statement, as workspace knowledge."""
+    import workspace_knowledge as wk
 
+    store, here = knowledge_store(TRACE), current_workspace().workspace_id
+    statement = " ".join((note or "").split())
+    same = store.duplicate(here, wk.Kind.PROJECT_FACT, statement[:60], statement)
 
-def load_memories(query=""):
-    """Memories noted by the model (remember tool) or the user (/remember).
-    Re-read every turn so a note taken mid-session is active immediately.
-    Injected into the system prompt — keep an eye on the size budget."""
+    if same is not None:
+        return f"already recorded as {same.record_id} [{same.lifecycle}] for {here}"
 
     try:
-        selection = memory_store().select(query, limit=12)
-    except MemoryStoreError as exc:
-        print(f"{C_WARN}memory metadata ignored: {exc}{C_RST}")
+        record = store.add(here, kind=wk.Kind.PROJECT_FACT, subject="", statement=statement,
+                           provenance=wk.Provenance.USER_CONFIRMED)
+    except wk.KnowledgeError as exc:
+        return f"not recorded: {exc}"
 
-        # A malformed optional sidecar must not make the human-readable source
-        # unusable.  Read through a sidecar-free view for this request.
+    configured = re.search(r"\b(?:build|test|validation)\s+command\b", statement, re.I)
 
-        selection = MarkdownMemoryStore(
-            MEMORIES_FILE, default_scope=MemoryScope.PROJECT,
-            read_metadata=False,
-        ).select(query, limit=12)
+    return (f"{record.record_id} stored as workspace knowledge for {here} "
+            f"[{record.lifecycle}, {record.verification}]" + (
+                "\nA description, not configuration: projects.json's build and test "
+                "entries are what SPEAR runs." if configured else ""))
 
-    if not selection.records:
+
+def propose_knowledge(note):
+    """The model's remember tool: a proposal, inert until the operator accepts it."""
+    import workspace_knowledge as wk
+
+    store, here = knowledge_store(TRACE), current_workspace().workspace_id
+
+    try:
+        record = store.add(here, kind=wk.Kind.PROJECT_FACT, subject="",
+                           statement=" ".join((note or "").split()),
+                           provenance=wk.Provenance.MODEL_DERIVED)
+    except wk.KnowledgeError as exc:
+        return f"ERROR: not proposed: {exc}"
+
+    if record.lifecycle != wk.Lifecycle.PROPOSED:
+        return f"OK: already recorded as {record.record_id}"
+
+    return (f"OK: proposed {record.record_id} as workspace knowledge. It is not used until "
+            f"the operator accepts it (/knowledge accept {record.record_id}).")
+
+
+def legacy_notes_notice():
+    """One line when this corpus has legacy remembered notes not yet migrated."""
+    import knowledge_migration
+
+    if not os.path.isfile(MEMORIES_FILE) or os.path.isfile(
+            knowledge_migration.marker(MEMORIES_FILE)):
         return ""
 
-    return selection.render()
+    try:
+        count = sum(1 for note in knowledge_migration.legacy_notes(MEMORIES_FILE)
+                    if note.active)
+    except (OSError, MemoryStoreError):
+        return ""
 
-
-def save_memory(note, *, source=MemorySource.USER):
-    """Persist one explicitly authorized memory and return the record count."""
-    store = memory_store()
-    store.add(note, source=source, provenance="confirmed durable-memory write")
-
-    return store.count()
+    return (f"{count} legacy remembered note{'s are' if count != 1 else ' is'} no longer "
+            f"shown to turns: /knowledge migrate-remember shows what migrating "
+            f"{'them' if count != 1 else 'it'} would do." if count else "")
 
 
 def save_learned_rule(note):
@@ -7336,7 +7368,7 @@ KNOWLEDGE_USAGE = (
     "                      [--subject S] [--tags a,b] [--path P]\n"
     "                      [--source FILE[:LINE] [--quote TEXT]] <statement>\n"
     "       /knowledge show|accept|revoke <id> [reason]   /knowledge amend <id> <statement>\n"
-    "       /knowledge check | export [FILE] | purge")
+    "       /knowledge check | export [FILE] | purge | migrate-remember [--apply]")
 
 
 def knowledge_command(arguments: str, *, approve=None) -> str:
@@ -7455,6 +7487,27 @@ def knowledge_command(arguments: str, *, approve=None) -> str:
                 return f"exported {here} to {rest[0]}"
 
             return text
+
+        if verb == "migrate-remember":
+            import knowledge_migration
+
+            if set(rest) - {"--apply"}:
+                return "usage: /knowledge migrate-remember [--apply]  (without --apply: a dry run)"
+
+            report = knowledge_migration.migrate(store, here, MEMORIES_FILE,
+                                                 apply="--apply" in rest)
+
+            if report["applied"]:
+                store.audit("knowledge_migrated", {
+                    "workspace": here, "counts": report["counts"],
+                    "records": report["created"], "reason": "legacy remembered notes"})
+
+            counts = ", ".join(f"{key.replace('_', ' ')} {value}"
+                               for key, value in report["counts"].items())
+            return (f"{'migrated' if report['applied'] else 'dry run, nothing changed'}: "
+                    f"{report['found']} legacy notes in {os.path.basename(MEMORIES_FILE)}\n"
+                    f"{counts}" + ("" if report["applied"] or not report["found"] else
+                                   "\n/knowledge migrate-remember --apply to migrate"))
 
         if verb == "purge" and not rest:
             if not (approve or confirm)(f"Delete every knowledge record of {here}, "
@@ -7773,7 +7826,7 @@ def banner(collection, history, n_rules, model_name, n_mem=0):
         + (_corpus_summary(collection) if collection else "no RAG")
         + f"  {C_DIM}·{C_RST}  {n_rules} rules",
         f"{C_DIM}history:{C_RST}  {len(history)} messages"
-        + (f"   {C_DIM}memories:{C_RST} {n_mem}" if n_mem else ""),
+        + (f"   {C_DIM}knowledge:{C_RST} {n_mem}" if n_mem else ""),
         f"{C_DIM}tools in:{C_RST} {cwd}  {C_DIM}(current directory){C_RST}",
     ]
 
@@ -8066,15 +8119,19 @@ def main():
     model_name = f"{raw}  [{quant}]" if quant else raw
     model_name += f"  {C_DIM}({backend_label(provider, LLAMA_SERVER_URL)}){C_RST}"
 
+    import workspace_knowledge
+
     try:
-        n_mem = memory_store().count()
-    except MemoryStoreError:
-        n_mem = MarkdownMemoryStore(
-            MEMORIES_FILE, default_scope=MemoryScope.PROJECT,
-            read_metadata=False,
-        ).count()
+        n_mem = len(knowledge_store(TRACE).list(current_workspace().workspace_id,
+                                                (workspace_knowledge.Lifecycle.ACTIVE,)))
+    except Exception:                                # noqa: BLE001
+        n_mem = 0
 
     banner(collection, history, n_rules, model_name, n_mem)
+    legacy = legacy_notes_notice()
+
+    if legacy:
+        print(f"{C_DIM}  {legacy}{C_RST}")
 
     def read_user_input():
         """input() + RELIABLE multi-line paste capture. A big paste arrives as
@@ -8374,13 +8431,10 @@ def main():
             note = user_input[len("/remember"):].strip()
 
             if note:
-                n = save_memory(note)
-                print(f"Saved ({n} memories in {os.path.basename(MEMORIES_FILE)})\n")
+                print(remember_fact(note) + "\n")
             else:
-                if os.path.isfile(MEMORIES_FILE):
-                    print(open(MEMORIES_FILE).read())
-                else:
-                    print("(no memories yet — usage: /remember <note>)\n")
+                print(knowledge_command("list") + "\n(usage: /remember <a fact about "
+                      "this workspace>; /knowledge for the rest)\n")
 
             continue
 
@@ -8609,7 +8663,10 @@ def main():
                     f" The Retrieved Context may use paths relative to the "
                     f"corpus root — adapt them, or inspect with bash if "
                     f"unsure.")
-        memories_ctx = load_memories(user_input)
+        # Legacy remembered notes are no longer shown to a turn: what a
+        # workspace keeps is its knowledge (workspace_knowledge), which
+        # select_turn_context adds itself.
+        memories_ctx = ""
 
         if collection is not None:
             # The embedder is loaded lazily, on the first query of the session:

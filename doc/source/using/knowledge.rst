@@ -47,8 +47,14 @@ is refused with a pointer to ``rules.d``, while "the validation command is
 ``make test``" is a fact. Knowledge never reaches a question about the bound
 standard, the normative pre-pass or the compliance check, so a record can never
 establish a provision, its applicability or a verdict. It grants no permission
-and no external capability. The ``/remember`` notes predate it and are a
-separate, simpler list.
+and no external capability.
+
+``/remember <fact>`` is a shorthand for recording one: the same record, in the
+same store, with the same checks -- an instruction, or something true only for
+the moment ("the last command failed once", "I think the parser is wrong"), is
+refused. Recording the same fact twice keeps one record. When the model offers
+a fact through its ``remember`` tool it only proposes it, and a proposal is
+never shown to a turn until it is accepted.
 
 Recording knowledge
 *******************
@@ -120,4 +126,29 @@ accepts it.
 Every change to a record, every record a turn is shown, every stale source and
 every conflict is in the audit trail (``knowledge_proposed``,
 ``knowledge_activated``, ``knowledge_selected``, ``knowledge_stale``,
-``knowledge_conflict``, ``knowledge_revoked``).
+``knowledge_conflict``, ``knowledge_revoked``, ``knowledge_duplicate``,
+``knowledge_migrated``).
+
+Legacy remembered notes
+***********************
+
+Before workspace knowledge, ``/remember`` and the ``remember`` tool appended
+notes to a ``memories-*.md`` file per corpus. Those notes are no longer shown to
+a turn, and SPEAR says so at start-up while a file is unmigrated. Nothing moves
+them automatically:
+
+.. code-block:: text
+
+   /knowledge migrate-remember          a dry run: what would happen, by count
+   /knowledge migrate-remember --apply  migrate
+
+Each note gets only the authority its origin earns: one written with
+``/remember`` becomes active and user-confirmed; one written by the model's
+tool, or one whose origin the file does not record, becomes a *proposal* to
+review with ``/knowledge list --proposed`` and ``/knowledge accept``. A note
+that reads as an instruction is skipped -- move it to a rule yourself if it
+still holds -- and so is one that describes a moment, or repeats a fact already
+recorded. The report gives counts, never the notes' text. Running it again adds
+nothing. The Markdown file is left as it was, with a marker beside it, so
+nothing is lost if a migration has to be redone. Review the dry run before
+applying it: a migrated note is a fact SPEAR will show to future turns.

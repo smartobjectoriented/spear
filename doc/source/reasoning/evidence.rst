@@ -79,6 +79,9 @@ Consequences that follow directly:
   validates that task; it is not the ``bitbake x`` a build claim needs.
 * **A failure behind a filter is still a failure.** ``make | tail`` returns the
   exit status of ``tail``; without ``pipefail``, what the output says decides.
+* **A command sent to the background shows nothing.** ``make &`` returns at
+  once with the shell's 0, before ``make`` has done anything, so it is not a
+  check -- nor is any command of a list that ends with ``&``.
 * **Compiling loose files is not the project's verification.** When the
   project declares how it is verified, a turn whose only check was compiling
   the files it touched is ``UNVERIFIED``.

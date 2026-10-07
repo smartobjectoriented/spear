@@ -18,6 +18,10 @@ from working_state import VerificationOutcome, WorkingState
 from tool_registry import COMMAND_TOOLS
 
 
+# A lone & (not &&, nor the & of 2>&1, &> or |&) runs a list in the background.
+_BACKGROUND = re.compile(r"(?<![&>|])&(?![&>])")
+
+
 class VerificationCategory(StrEnum):
     BUILD = "build"
     UNIT_TEST = "unit_test"
@@ -200,6 +204,12 @@ class VerificationPolicy:
         """
 
         normalized = self._normalize(command)
+
+        # A command sent to the background returns at once with the shell's
+        # 0: whatever it would have shown, it has not shown it yet.
+
+        if _BACKGROUND.search(command or ""):
+            return VerificationCategory.UNKNOWN, VerificationCoverage.UNKNOWN
 
         if project_bench or self._matches_hint(normalized, self.hints.acceptance_commands):
             return VerificationCategory.INTEGRATION_TEST, VerificationCoverage.FULL

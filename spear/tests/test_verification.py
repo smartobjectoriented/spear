@@ -64,6 +64,17 @@ class VerificationPolicyTests(unittest.TestCase):
         self.assertEqual(self.policy.evaluate_completion(self.state).status,
                          CompletionVerificationStatus.UNVERIFIED)
 
+    def test_a_backgrounded_build_verifies_nothing(self):
+        for command in ("make &", "make fs/vfs.o 2>&1 &", "make && ./run_tests &"):
+            with self.subTest(command=command):
+                self.assertEqual(self.policy.classify_command(command),
+                                 (VerificationCategory.UNKNOWN, VerificationCoverage.UNKNOWN))
+
+        for command in ("make 2>&1", "make &>build.log", "make && make check"):
+            with self.subTest(command=command):
+                self.assertEqual(self.policy.classify_command(command)[0],
+                                 VerificationCategory.BUILD)
+
     def test_build_and_failure_classification(self):
         category, coverage = self.policy.classify_command("cmake --build build")
         self.assertEqual((category, coverage),

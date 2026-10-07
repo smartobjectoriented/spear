@@ -359,6 +359,11 @@ def operator_training_controller():
 
 PROJECTS_FILE = f"{APP_DIR}/projects.json"
 
+# The external capability providers this deployment registers. Like the
+# project registry it is the deployment's own file, never the repository's:
+# commands, endpoints and server names are not public material.
+CAPABILITIES_FILE = os.environ.get("SPEAR_CAPABILITIES_FILE") or f"{APP_DIR}/capabilities.json"
+
 # No corpus is built in. Two used to be -- a pair of product checkouts under
 # one organisation's home directory, registered automatically wherever the
 # directory happened to exist -- and a platform that ships somebody's tree as
@@ -6100,9 +6105,20 @@ def coding_host(agent_context, cache, record):
 
     from tool_runtime import SandboxSpec
 
+    gateway = getattr(agent_context, "capability_gateway", None)
+
+    if gateway is not None:
+        def may_mutate():
+            ctx = context()
+            return not (ctx.read_only or _write_gate_closed(ctx)
+                        or ctx.role in {"explorer", "reviewer", "planning"})
+
+        gateway.may_mutate = may_mutate
+
     return SpearHost(workspace_root=str(WORKSPACE.root), authorize=authorize,
                      resolve=resolve, write=write, delete=delete, run=run,
-                     record=recorded, collation_locale=SandboxSpec().locale)
+                     record=recorded, collation_locale=SandboxSpec().locale,
+                     capabilities=gateway)
 
 
 def _core_only(context, args):
@@ -7265,6 +7281,45 @@ def _corpus_rule_parts(workspace):
     return []
 
 
+_CAPABILITY_REGISTRY = []
+
+
+def capability_registry(trace=None, task_id="", session_id=None):
+    """The session's registered providers, read once; None when there are none."""
+    if not _CAPABILITY_REGISTRY:
+        import atexit
+
+        import capabilities
+        import capability_gateway
+        import mcp_provider
+
+        configs, problems = capabilities.load_configs(CAPABILITIES_FILE)
+        registry = (capability_gateway.Registry(configs, factory=mcp_provider.provider_for,
+                                                cwd=str(PROJECT_ROOT))
+                    if configs else None)
+        _CAPABILITY_REGISTRY.append(registry)
+
+        if registry is not None:
+            atexit.register(registry.close)
+
+        if trace is not None:
+            for config in configs:
+                trace.emit(EventType.CAPABILITY_PROVIDER_REGISTERED, task_id,
+                           session_id=session_id, status=EventStatus.OK,
+                           metadata={"provider": config.id, "protocol": config.protocol,
+                                     "transport": config.transport,
+                                     "scope": list(config.scope),
+                                     "tasks": sorted(config.tasks or ()),
+                                     "write": config.write, "read": sorted(config.read)})
+
+            for problem in problems:
+                trace.emit(EventType.EXTERNAL_CAPABILITY_FAILED, task_id,
+                           session_id=session_id, status=EventStatus.OK,
+                           metadata={"stage": "registration", "reason": problem})
+
+    return _CAPABILITY_REGISTRY[0]
+
+
 def select_turn_context(*, user_input, turn_scope, binding, write, project_spec,
                         project_commands, history_text, memories, skills, retrieval,
                         system_instructions, system_source, tool_guide, working_directory,
@@ -7302,6 +7357,17 @@ def select_turn_context(*, user_input, turn_scope, binding, write, project_spec,
                    retrieval, False, "retrieval"))))
     shared.append(sel.Candidate("request", sel.SourceType.USER_REQUEST, "user", user_input,
                                 mandatory=True, rendered_by_runtime=True))
+
+    # Each registered provider is a candidate like a rule: its scope and task
+    # classes decide where it applies. Its capabilities are listed only for
+    # the phases that admit it.
+    registry = capability_registry(trace, task_id, session_id)
+
+    if registry is not None:
+        shared += [sel.Candidate(f"capability:{config.id}", sel.SourceType.EXTERNAL_CAPABILITY,
+                                 f"capabilities.json:{config.id}", "", scope=config.scope,
+                                 tasks=config.tasks, bucket="capabilities")
+                   for config in registry.configs.values()]
 
     if history_text:
         shared.append(sel.Candidate("session:history", sel.SourceType.SESSION_CONTEXT,
@@ -7378,6 +7444,20 @@ def select_turn_context(*, user_input, turn_scope, binding, write, project_spec,
                "retrieval": selection.text("retrieval")}
         out["coding_context"] = "".join(out[key] for key in ("global_rules", "project_rules",
                                                              "memories", "skills"))
+        admitted = tuple(item.item_id.split(":", 1)[1] for item in selection.selected
+                         if item.bucket == "capabilities")
+        out["gateway"], out["capabilities"] = None, ""
+
+        if admitted and on_core:
+            import capability_gateway
+
+            out["gateway"] = capability_gateway.Gateway(
+                registry, admitted, workspace=workspace.workspace_id, phase=phase,
+                trace=trace, task_id=task_id, session_id=session_id, confirm=confirm,
+                read_only=phase == sel.GENERAL)
+            out["capabilities"] = out["gateway"].prepare()
+            out["coding_context"] += out["capabilities"]
+
         selections[phase], rendered[phase] = selection, out
 
         if trace is not None:
@@ -8552,6 +8632,7 @@ def main():
             # control plane), and the project context its prompt carries.
             coding_host=lambda ctx, cache, record: coding_host(ctx, cache, record),
             coding_context=chosen["coding_context"],
+            capability_gateway=chosen.get("gateway"),
             workspace_context=workspace,
             context_selections=context_selections,
             phase_contexts=phase_contexts,

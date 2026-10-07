@@ -105,6 +105,12 @@ class EventType(StrEnum):
     CONTEXT_REJECTED = "context_rejected"
     CONTEXT_BUDGET_APPLIED = "context_budget_applied"
     TOOLSET_SELECTED = "toolset_selected"
+    CAPABILITY_PROVIDER_REGISTERED = "capability_provider_registered"
+    CAPABILITY_FAMILY_SELECTED = "capability_family_selected"
+    CAPABILITY_INDEX_EXPOSED = "capability_index_exposed"
+    CAPABILITY_DESCRIBED = "capability_described"
+    EXTERNAL_CAPABILITY_INVOKED = "external_capability_invoked"
+    EXTERNAL_CAPABILITY_FAILED = "external_capability_failed"
 
 
 class EventStatus(StrEnum):

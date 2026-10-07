@@ -237,7 +237,8 @@ packet never are.
 
 The tool family follows the same decision, at the family level only: a change
 gets the coding core's six tools, a normative question the standard's tools,
-and the MIXED post-check none.
+and the MIXED post-check none. A turn on the coding core may also be offered
+the external capabilities its workspace admits (:ref:`capabilities`).
 
 Rules declare where they apply
 ==============================

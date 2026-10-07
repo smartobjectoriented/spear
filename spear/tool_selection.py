@@ -23,6 +23,11 @@ from context_selection import (GENERAL, IMPLEMENTATION, MIXED_IMPLEMENTATION,
                                MIXED_POSTCHECK, MIXED_PREPASS, MIXED_QUESTION, NORMATIVE)
 
 CODING_FAMILY, NORMATIVE_FAMILY, GENERAL_FAMILY = "CODING", "NORMATIVE", "GENERAL"
+EXTERNAL_FAMILY = "EXTERNAL"
+
+#: The phases an external family may join: those that run on the coding core.
+#: Nothing normative, and never the orchestrator's check.
+EXTERNAL_PHASES = frozenset({IMPLEMENTATION, GENERAL, MIXED_IMPLEMENTATION})
 EVIDENCE_PROVIDERS = "ORCHESTRATOR_EVIDENCE_PROVIDERS"
 
 CODING_TOOLS = ("read_file", "search_files", "patch", "write_file", "delete_file", "terminal")
@@ -38,21 +43,36 @@ class ToolSelection:
     family: str
     tools: tuple[str, ...]
     reason: str
+    #: Every family the turn is offered: its own, and EXTERNAL when the
+    #: workspace admits external capabilities for this phase. Those are
+    #: reached through the control plane's gateway, never as extra tools.
+    families: tuple[str, ...] = ()
+    external: tuple[str, ...] = ()
 
     def to_dict(self) -> dict:
         return {"phase": self.phase, "family": self.family, "tools": list(self.tools),
-                "reason": self.reason}
+                "reason": self.reason, "families": list(self.families or (self.family,)),
+                "external_providers": list(self.external)}
 
 
 class ToolSelector(Protocol):
-    def select(self, phase: str, view_names, *, coding: bool) -> ToolSelection: ...
+    def select(self, phase: str, view_names, *, coding: bool,
+               external=()) -> ToolSelection: ...
 
 
 class DeterministicToolSelector:
     """The family follows the phase; the members follow the exposure policy."""
 
-    def select(self, phase: str, view_names, *, coding: bool) -> ToolSelection:
-        names = tuple(view_names)
+    def select(self, phase: str, view_names, *, coding: bool, external=()) -> ToolSelection:
+        selection = self._own(phase, tuple(view_names), coding=coding)
+        external = tuple(external) if phase in EXTERNAL_PHASES and coding else ()
+
+        return ToolSelection(selection.phase, selection.family, selection.tools,
+                             selection.reason,
+                             (selection.family,) + ((EXTERNAL_FAMILY,) if external else ()),
+                             external)
+
+    def _own(self, phase: str, names, *, coding: bool) -> ToolSelection:
 
         if phase == MIXED_POSTCHECK:
             return ToolSelection(phase, EVIDENCE_PROVIDERS, (),
@@ -132,6 +152,7 @@ def phase_of(task_class: str, *, mixed_phase: str = "") -> str:
             "NORMATIVE": NORMATIVE, "MIXED": MIXED_QUESTION}.get(task_class, GENERAL)
 
 
-__all__ = ["CODING_FAMILY", "NORMATIVE_FAMILY", "GENERAL_FAMILY", "EVIDENCE_PROVIDERS",
+__all__ = ["CODING_FAMILY", "NORMATIVE_FAMILY", "GENERAL_FAMILY", "EXTERNAL_FAMILY",
+           "EXTERNAL_PHASES", "EVIDENCE_PROVIDERS",
            "CODING_TOOLS", "ToolSelection", "ToolSelector", "DeterministicToolSelector",
            "ToolContractError", "check_contract", "phase_of", "MIXED_IMPLEMENTATION"]

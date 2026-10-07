@@ -151,6 +151,9 @@ class AgentContext:
     phase_contexts: Any = None
     #: The turn's tool window (Finalization), set when the turn starts.
     finalization: Any = None
+    #: The control plane's door to the external capabilities this turn's
+    #: workspace admits (capability_gateway.Gateway), or None.
+    capability_gateway: Any = None
     provider: str | None = None
     model: str | None = None
     output_reserve: int | None = None

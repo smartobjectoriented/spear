@@ -15,4 +15,5 @@ that changes them.
    projects
    retrieval
    context
+   capabilities
    configuration

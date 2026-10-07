@@ -82,6 +82,7 @@ __pycache__/
 # all 15 corpora at /home/operator paths that do not exist there, and at a
 # model file on the wrong host. See projects.example.json for the schema.
 /spear/projects.json
+/spear/capabilities.json
 /spear/active-model.conf
 
 # GPU offload target for indexing — per machine, holds an ssh destination

@@ -43,6 +43,7 @@ class SourceType(StrEnum):
     RETRIEVED_STANDARD = "RETRIEVED_STANDARD"
     RETRIEVED_CORPUS = "RETRIEVED_CORPUS"
     SESSION_CONTEXT = "SESSION_CONTEXT"
+    EXTERNAL_CAPABILITY = "EXTERNAL_CAPABILITY"
 
 
 #: The phases context is selected for. A MIXED request is selected three
@@ -65,16 +66,18 @@ _NORMATIVE_TYPES = frozenset({
     SourceType.USER_REQUEST, SourceType.SYSTEM_RUNTIME, SourceType.STANDARD_BINDING,
     SourceType.RETRIEVED_STANDARD, SourceType.SESSION_CONTEXT, SourceType.PROJECT_RULE})
 
-#: What each phase may be shown, by kind of source.
+#: What each phase may be shown, by kind of source. External capabilities
+#: reach the passes that run on the coding core and nothing normative.
 POLICY = {
-    IMPLEMENTATION: _CODING_TYPES,
+    IMPLEMENTATION: _CODING_TYPES | {SourceType.EXTERNAL_CAPABILITY},
     GENERAL: frozenset({SourceType.USER_REQUEST, SourceType.SYSTEM_RUNTIME,
-                        SourceType.SESSION_CONTEXT, SourceType.PROJECT_RULE}),
+                        SourceType.SESSION_CONTEXT, SourceType.PROJECT_RULE,
+                        SourceType.EXTERNAL_CAPABILITY}),
     NORMATIVE: _NORMATIVE_TYPES,
     MIXED_QUESTION: _CODING_TYPES | _NORMATIVE_TYPES,
     MIXED_PREPASS: _NORMATIVE_TYPES,
     MIXED_IMPLEMENTATION: (_CODING_TYPES - {SourceType.STANDARD_BINDING})
-    | {SourceType.NORMATIVE_CONSTRAINT_SET},
+    | {SourceType.NORMATIVE_CONSTRAINT_SET, SourceType.EXTERNAL_CAPABILITY},
     MIXED_POSTCHECK: frozenset({SourceType.NORMATIVE_CONSTRAINT_SET}),
 }
 
@@ -105,6 +108,7 @@ PRIORITY = {
     SourceType.NORMATIVE_CONSTRAINT_SET: 75,
     SourceType.PROJECT_MEMORY: 60,
     SourceType.PROJECT_SKILL: 55,
+    SourceType.EXTERNAL_CAPABILITY: 52,
     SourceType.RETRIEVED_STANDARD: 50,
     SourceType.RETRIEVED_CORPUS: 45,
     SourceType.SESSION_CONTEXT: 30,
@@ -363,7 +367,7 @@ class DeterministicContextSelector:
         if kind == HOST_PATHS and not any(workspace.under(path) for path in item.scope[1:]):
             return f"wrong workspace: scoped to trees under {', '.join(item.scope[1:])}"
 
-        if item.source_type == SourceType.PROJECT_RULE:
+        if item.source_type in (SourceType.PROJECT_RULE, SourceType.EXTERNAL_CAPABILITY):
             tasks = item.tasks if item.tasks is not None else DEFAULT_RULE_TASKS
 
             if not tasks & RULE_TASKS[phase]:

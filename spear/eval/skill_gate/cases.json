@@ -1,0 +1,215 @@
+{
+ "workspaces": {
+  "app-x": {
+   "registered": true,
+   "spec": {
+    "kind": "generic"
+   }
+  },
+  "firmware-a": {
+   "registered": true,
+   "spec": {
+    "kind": "buildsystem"
+   }
+  },
+  "firmware-b": {
+   "registered": true,
+   "spec": {
+    "kind": "buildsystem"
+   }
+  },
+  "adhoc": {
+   "registered": false,
+   "spec": {}
+  }
+ },
+ "cases": [
+  {
+   "id": "c-cleanup",
+   "workspace": "app-x",
+   "phases": [
+    "IMPLEMENTATION"
+   ],
+   "request": "Clean up parse_header() in src/parser.c and make it more readable.",
+   "relevant": [
+    "skill:c-readability"
+   ],
+   "irrelevant": [
+    "skill:buildlog-triage",
+    "skill:compile-failure"
+   ]
+  },
+  {
+   "id": "c-bug",
+   "workspace": "app-x",
+   "phases": [
+    "IMPLEMENTATION"
+   ],
+   "request": "Fix the null pointer dereference in src/net/socket.c when the peer closes early.",
+   "relevant": [],
+   "irrelevant": [
+    "skill:buildlog-triage"
+   ]
+  },
+  {
+   "id": "recipe-failure",
+   "workspace": "firmware-a",
+   "phases": [
+    "IMPLEMENTATION"
+   ],
+   "request": "The rootfs recipe fails in do_compile; the task log shows a patch that does not apply.",
+   "relevant": [
+    "skill:buildlog-triage",
+    "skill:layered-build"
+   ],
+   "irrelevant": [
+    "skill:c-readability"
+   ]
+  },
+  {
+   "id": "link-failure",
+   "workspace": "app-x",
+   "phases": [
+    "IMPLEMENTATION"
+   ],
+   "request": "make fails with an undefined reference to init_display when linking.",
+   "relevant": [
+    "skill:compile-failure"
+   ],
+   "irrelevant": [
+    "skill:c-readability"
+   ]
+  },
+  {
+   "id": "layered-build-failure",
+   "workspace": "firmware-b",
+   "phases": [
+    "IMPLEMENTATION"
+   ],
+   "request": "bitbake of the board image fails: the bootloader recipe cannot find its board patch.",
+   "relevant": [
+    "skill:layered-build",
+    "skill:buildlog-triage"
+   ],
+   "irrelevant": [
+    "skill:c-readability"
+   ]
+  },
+  {
+   "id": "doc-edit",
+   "workspace": "app-x",
+   "phases": [
+    "IMPLEMENTATION"
+   ],
+   "request": "Add a section about the command-line options to doc/source/usage.rst.",
+   "relevant": [],
+   "irrelevant": [
+    "skill:buildlog-triage",
+    "skill:compile-failure",
+    "skill:c-readability"
+   ]
+  },
+  {
+   "id": "doc-build-failure",
+   "workspace": "app-x",
+   "phases": [
+    "IMPLEMENTATION"
+   ],
+   "request": "make html in doc/ fails with a toctree warning for doc/source/api.rst.",
+   "relevant": [],
+   "irrelevant": [
+    "skill:c-readability"
+   ]
+  },
+  {
+   "id": "normative-only",
+   "workspace": "app-x",
+   "phases": [
+    "NORMATIVE"
+   ],
+   "request": "What does Rule 4.2-1 of the standard require, and under which condition?",
+   "relevant": [],
+   "irrelevant": [
+    "skill:c-readability",
+    "skill:buildlog-triage"
+   ]
+  },
+  {
+   "id": "mixed-change",
+   "workspace": "app-x",
+   "phases": [
+    "MIXED_PREPASS",
+    "MIXED_IMPLEMENTATION"
+   ],
+   "request": "Fix encode_ack in src/wire.c so it sets the acknowledgement bit the way the standard requires.",
+   "relevant": [],
+   "irrelevant": [
+    "skill:buildlog-triage",
+    "skill:compile-failure"
+   ]
+  },
+  {
+   "id": "general",
+   "workspace": "app-x",
+   "phases": [
+    "GENERAL"
+   ],
+   "request": "What is the difference between a hard link and a symbolic link?",
+   "relevant": [],
+   "irrelevant": [
+    "skill:c-readability"
+   ]
+  },
+  {
+   "id": "unknown-workspace",
+   "workspace": "adhoc",
+   "phases": [
+    "IMPLEMENTATION"
+   ],
+   "request": "Fix the off-by-one error in main.c when parsing the arguments.",
+   "relevant": [],
+   "irrelevant": [
+    "skill:buildlog-triage"
+   ]
+  },
+  {
+   "id": "persistent-symlink",
+   "workspace": "adhoc",
+   "phases": [
+    "IMPLEMENTATION"
+   ],
+   "request": "Create a symlink under linux/rootfs/images that survives a clean and a rebuild.",
+   "relevant": [],
+   "irrelevant": [
+    "skill:c-readability"
+   ]
+  },
+  {
+   "id": "firmware-source-edit",
+   "workspace": "firmware-a",
+   "phases": [
+    "IMPLEMENTATION"
+   ],
+   "request": "Rename the variable cnt to count in drivers/led.c.",
+   "relevant": [],
+   "irrelevant": [
+    "skill:layered-build",
+    "skill:buildlog-triage"
+   ]
+  },
+  {
+   "id": "recipe-failure-other-project",
+   "workspace": "app-x",
+   "phases": [
+    "IMPLEMENTATION"
+   ],
+   "request": "The bitbake build of the image fails in do_install.",
+   "relevant": [
+    "skill:buildlog-triage"
+   ],
+   "irrelevant": [
+    "skill:c-readability"
+   ]
+  }
+ ]
+}

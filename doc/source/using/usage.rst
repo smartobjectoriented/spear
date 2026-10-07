@@ -229,7 +229,7 @@ Knowledge layers, on different clocks
      - next launch, every corpus
      - ``rules-learned.md`` under the state directory
    * - skills (``save_skill``, learned procedures)
-     - next turn, similarity-injected, scope and prerequisite gated
+     - next turn, scope and prerequisite gated
      - ``skills/*.md``
    * - rules (project conventions)
      - next launch

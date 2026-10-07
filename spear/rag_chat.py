@@ -3538,13 +3538,7 @@ def archive_entry(entry):
 # the most similar skills are injected into the prompt on each turn.
 
 SKILLS_DIR = resource_dir("SPEAR_SKILLS_DIR", "skills")
-SKILLS_COLLECTION = "edgem_skills"
 ARCHIVE_COLLECTION = "edgem_archive"
-
-# Reconciling the directory with the index is a per-session job, not a
-# per-turn one: the files only change when this process writes one.
-
-_SKILLS_SYNCED = False
 
 
 def _db():
@@ -3560,13 +3554,8 @@ def _db():
     return chromadb.PersistentClient(path=DB_PATH)
 
 
-def _skills_collection():
-    return _db().get_or_create_collection(
-        name=SKILLS_COLLECTION, metadata={"hnsw:space": "cosine"})
-
-
 def skill_save(name, content, description="", scope=(), requires=()):
-    """Write a skill file and embed it. Returns a result message."""
+    """Write a skill file. Returns a result message."""
 
     try:
         skill = skill_library.save(SKILLS_DIR, name, content,
@@ -3575,126 +3564,25 @@ def skill_save(name, content, description="", scope=(), requires=()):
     except skill_library.SkillError as exc:
         return f"ERROR: {exc}"
 
-    coll = _skills_collection()
-    skill_library.reconcile([skill], coll, project=PROJECT)
     revised = f", revision {skill.version}" if skill.version > 1 else ""
 
     return (f"OK: skill '{skill.name}' saved{revised} "
-            f"({coll.count()} skills in library)")
+            f"({len(skill_library.load_library(SKILLS_DIR))} skills in library)")
 
 
-def skills_sync():
-    """Reconcile the skill files with their index, once per session.
+def library_skills():
+    """Every runnable skill, ``(name, document, stated scope)``.
 
-    The directory is the source of truth and the collection is derived from
-    it, but only ``save_skill`` ever wrote to the collection: a skill added or
-    edited by hand was listed by ``/skills`` and never injected, and a deleted
-    one kept being injected. Reconciling on the first lookup costs a metadata
-    read when nothing changed.
+    Which of them a turn is offered is the context selector's decision, on
+    scope and task class alone. A similarity gate stood in front of it and
+    missed the procedure a request needed more often than it found one: a
+    skill is short, and a request names its problem in words the skill's
+    body rarely uses. A skill whose required commands are missing is left
+    out, as it always was.
     """
-
-    global _SKILLS_SYNCED
-
-    if _SKILLS_SYNCED:
-        return {}
-
-    _SKILLS_SYNCED = True
-
-    try:
-        return skill_library.reconcile(
-            skill_library.load_library(SKILLS_DIR), _skills_collection(),
-            project=PROJECT)
-    except Exception:
-        # A library that will not reconcile must not take the turn with it:
-        # the collection still holds whatever it held before.
-
-        return {}
-
-
-def skill_hits(query, max_dist=0.55, wanted=8):
-    """The skills close to this turn, ``(name, document, stated scope)``, with
-    no scope judged here: which of them belong to the workspace is the
-    context selector's decision. A skill whose required commands are missing
-    is left out, as it always was."""
-
-    skills_sync()
-
-    try:
-        coll = _db().get_collection(SKILLS_COLLECTION)
-    except Exception:
-        return []
-
-    count = coll.count()
-
-    if count == 0:
-        return []
-
-    r = coll.query(query_texts=[query], n_results=min(wanted, count),
-                   include=["documents", "distances"])
-    library = {skill.name: skill for skill in skill_library.load_library(SKILLS_DIR)}
-    hits = []
-
-    for name, document, distance in zip(r["ids"][0], r["documents"][0],
-                                        r["distances"][0]):
-        skill = library.get(name)
-
-        if distance > max_dist or skill is None or skill_library.missing_requirements(skill):
-            continue
-
-        hits.append((name, document, skill.scope if skill.scope_declared else ()))
-
-    return hits
-
-
-def skills_lookup(query, max_skills=2, max_dist=0.55):
-    """Return the most relevant skills for this turn (empty if none close)."""
-
-    skills_sync()
-
-    try:
-        coll = _db().get_collection(SKILLS_COLLECTION)
-    except Exception:
-        return ""
-
-    count = coll.count()
-
-    if count == 0:
-        return ""
-
-    # Asked wider than needed because what comes back is then filtered: a
-    # skill whose scope or prerequisites rule it out must not consume one of
-    # the two slots a turn has for a procedure.
-
-    r = coll.query(query_texts=[query], n_results=min(max_skills * 4, count),
-                   include=["documents", "distances"])
-
-    # The record id is the skill name, and the file behind it is the source of
-    # truth: a hit with no file left is a record reconciliation has not caught
-    # up with, not a procedure to hand the model.
-
-    library = {skill.name: skill for skill in skill_library.load_library(SKILLS_DIR)}
-    docs = []
-
-    for name, document, distance in zip(r["ids"][0], r["documents"][0],
-                                        r["distances"][0]):
-        skill = library.get(name)
-
-        if distance > max_dist or skill is None:
-            continue
-
-        if not skill_library.applies_to(skill, project=PROJECT, kind=PROJECT_KIND):
-            continue
-
-        docs.append(document)
-
-        if len(docs) == max_skills:
-            break
-
-    if not docs:
-        return ""
-
-    return ("\n\n## Relevant skills (procedures learned from past tasks)\n\n"
-            + "\n\n---\n\n".join(docs))
+    return [(skill.name, skill.document, skill.scope if skill.scope_declared else ())
+            for skill in skill_library.load_library(SKILLS_DIR)
+            if not skill_library.missing_requirements(skill)]
 
 
 def archive_index(rec):
@@ -7326,8 +7214,11 @@ def load_corpus_rules():
 
 CONTEXT_SELECTOR = context_selection.DeterministicContextSelector()
 
-#: Procedures a turn is given at most, as before the selector existed.
-MAX_SKILLS = 2
+#: A bound on the skills one turn is shown, not a relevance cut: every skill
+#: the workspace's scope admits is offered, in library order, and this only
+#: stops a library grown past what a prompt should carry. Past it, skills need
+#: discovering on demand rather than listing.
+MAX_SKILLS = 8
 
 
 def _corpus_rule_parts(workspace):
@@ -7478,7 +7369,8 @@ def select_turn_context(*, user_input, turn_scope, binding, write, project_spec,
                 sel.estimate_tokens(item.text), False))
 
         texts = [item.text for item in selection.selected if item.bucket == "skills"]
-        skills_text = ("\n\n## Relevant skills (procedures learned from past tasks)\n\n"
+        skills_text = ("\n\n## Skills available in this workspace\n\nProcedures learned "
+                       "from past tasks. Follow one only when it fits the task at hand.\n\n"
                        + "\n\n---\n\n".join(texts)) if texts else ""
         out = {"global_rules": selection.text("global_rules"),
                "project_rules": selection.text("project_rules") + selection.text("metadata"),
@@ -8357,11 +8249,8 @@ def main():
 
         # ── RAG retrieval (skipped in ad-hoc mode) ──
 
-        skill_matches = skill_hits(user_input)
+        skill_matches = library_skills()
         skills_ctx = ""
-
-        if skill_matches:
-            print(f"{C_DIM}  ⎿  skill match{C_RST}")
 
         # tools always run in the cwd (PROJECT_ROOT); relative paths in your
         # bash/edit/write calls resolve from there — tell the model.
@@ -8623,8 +8512,9 @@ def main():
         turn_phase = context_selection.primary_phase(turn_scope, bound=bool(turn_binding))
         chosen = phase_contexts[turn_phase]
 
-        if skill_matches and not chosen["skills"]:
-            print(f"{C_DIM}  ⎿  skill match outside this workspace's scope, not used{C_RST}")
+        if chosen["skills"]:
+            offered = chosen["skills"].count("# Skill: ")
+            print(f"{C_DIM}  ⎿  {offered} skill{'s' if offered != 1 else ''} available{C_RST}")
 
         def context_items_for(rendered):
             return build_task_context_items(

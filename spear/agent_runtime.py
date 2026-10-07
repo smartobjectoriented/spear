@@ -47,6 +47,7 @@ from tracing import EventStatus, EventType, TraceEmitter, new_action_id
 from tool_router import ToolResultEnvelope, ToolResultStatus
 import conformance_mode
 import project_build
+import refusal_breaker
 import request_intent
 import work_order
 from verification import (
@@ -3858,8 +3859,12 @@ class AgentRuntime:
         if context.core_evidence is None:
             context.core_evidence = []
 
+        breaker = refusal_breaker.RefusalBreaker()
+
         def record(item):
             nonlocal did_modify
+            breaker.observe(item.name, dict(item.arguments), item.result,
+                            item.refused or (not item.ok and "refused" in item.result[:300]))
             envelope = _core_envelope(item)
             self._record_tool_result(context, envelope)
             evidence = context.verification_policy.evidence_for_tool(
@@ -3920,7 +3925,8 @@ class AgentRuntime:
                 max_iterations=context.max_model_rounds,
                 max_tool_calls=context.max_tool_actions,
                 context_window=window, max_tokens=max_tokens,
-                cancelled=lambda: context.cancellation.is_cancelled)
+                cancelled=lambda: (context.cancellation.is_cancelled
+                                   or breaker.tripped is not None))
         except (KeyboardInterrupt, OperationCancelled) as exc:
             summary = (exc.reason if isinstance(exc, OperationCancelled)
                        else "interrupted by user")
@@ -3932,6 +3938,17 @@ class AgentRuntime:
                                 transcript, tool_log, trajectory, did_modify, False,
                                 None, cache, error_category=FailureKind.INTERRUPTED.value,
                                 error_summary=summary)
+
+        if breaker.tripped is not None and core.stop == "cancelled" \
+                and not context.cancellation.is_cancelled:
+            core.stop, core.final = "halted", breaker.conclusion()
+            name, target, refusal = breaker.tripped
+            context.trace.emit(EventType.REPEATED_REFUSAL_STOPPED, context.task_id,
+                               status=EventStatus.OK,
+                               metadata={"tool": name, "target": target[:200],
+                                         "refusal": refusal,
+                                         "count": breaker.counts[breaker.tripped],
+                                         "limit": breaker.limit})
 
         reason = {
             "completed": RuntimeTerminalReason.COMPLETED,

@@ -52,6 +52,7 @@ class EventType(StrEnum):
     RETRY = "retry"
     BUDGET_EXHAUSTED = "budget_exhausted"
     REPEATED_ACTION_DETECTED = "repeated_action_detected"
+    REPEATED_REFUSAL_STOPPED = "repeated_refusal_stopped"
     READ_ONLY_VIOLATION = "read_only_violation"
     WORKING_STATE_UPDATED = "working_state_updated"
     SESSION_STARTED = "session_started"

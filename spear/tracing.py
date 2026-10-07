@@ -117,6 +117,8 @@ class EventType(StrEnum):
     KNOWLEDGE_STALE = "knowledge_stale"
     KNOWLEDGE_CONFLICT = "knowledge_conflict"
     KNOWLEDGE_REVOKED = "knowledge_revoked"
+    KNOWLEDGE_DUPLICATE = "knowledge_duplicate"
+    KNOWLEDGE_MIGRATED = "knowledge_migrated"
 
 
 class EventStatus(StrEnum):

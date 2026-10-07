@@ -219,14 +219,14 @@ Every item retains provenance, priority and a token estimate.  Stable rules do
 not contain current plan, failure or verification state.  Those dynamic facts
 come from the WorkingState layer.
 
-Memory selection
-================
+Workspace knowledge
+===================
 
-Project memory remains in human-readable ``memories-*.md`` files.  The
-``MarkdownMemoryStore`` imports those lines, applies optional sidecar metadata
-for scope and supersession, excludes inactive records, and selects a bounded
-lexically relevant set for the current request.  It does not introduce another
-vector database or treat memory as grounded task evidence.
+What a workspace keeps across sessions is its workspace knowledge
+(:ref:`knowledge`): typed records with their provenance, selected by exact
+workspace and by lifecycle, never by resemblance. The ``memories-*.md`` files
+of earlier versions are no longer read into a turn; ``/knowledge
+migrate-remember`` moves their contents into workspace knowledge on request.
 
 Rules (``rules.d/*.md``) and skills (``skills/*.md``) are a deployment's
 content, not code: the repository ships the two directories with a README, and

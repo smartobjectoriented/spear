@@ -155,6 +155,26 @@ def instruction(statement: str) -> bool:
     return bool(_INSTRUCTION.match(statement or ""))
 
 
+# What holds for a moment, not for the workspace: a guess, the state of this
+# session, how someone feels. Structural and narrow -- a durable fact that
+# happens to contain "currently" in another sense is still accepted.
+_TRANSIENT = re.compile(
+    r"^\s*(?:i\s+(?:think|believe|guess|suspect)|maybe|perhaps|it\s+seems)\b"
+    r"|\b(?:this|the\s+current)\s+(?:session|conversation|chat)\b"
+    r"|\bturn\s+\d+\b|\bright\s+now\b|\bjust\s+(?:now|failed|happened)\b"
+    r"|\b(?:last|previous)\s+(?:command|run|attempt)\b|\bfailed\s+once\b"
+    r"|\bthe\s+user\s+(?:is|was|seems|feels)\b", re.I)
+
+
+def transient(statement: str) -> bool:
+    """Does this describe a moment rather than the workspace?"""
+    return bool(_TRANSIENT.search(statement or ""))
+
+
+def _words(text: str) -> str:
+    return " ".join(re.findall(r"\w+", (text or "").lower()))
+
+
 def normalise(text: str) -> str:
     return " ".join(re.sub(r"[^\w./-]+", " ", (text or "").lower()).split())
 
@@ -296,9 +316,22 @@ class KnowledgeStore:
         if instruction(statement):
             raise KnowledgeError(
                 "this reads as an instruction, not a fact about the workspace: an "
-                "instruction belongs in a rule (rules.d), where it has a rule's authority")
+                "instruction belongs in a rule (rules.d, or /recall for one that holds "
+                "everywhere), where it has a rule's authority")
+
+        if transient(statement):
+            raise KnowledgeError("this describes a moment, not the workspace: knowledge "
+                                 "keeps what stays true across sessions")
 
         sources = tuple(sources)
+        same = self.duplicate(workspace_id, kind, subject or statement[:60], statement, sources)
+
+        if same is not None:
+            self.audit("knowledge_duplicate", {
+                "workspace": workspace_id, "record": same.record_id, "kind": same.kind,
+                "provenance": provenance, "status": same.lifecycle,
+                "reason": "the same fact is already recorded"})
+            return same
 
         if provenance == Provenance.USER_CONFIRMED:
             verification, lifecycle = Verification.USER_CONFIRMED, Lifecycle.ACTIVE
@@ -324,6 +357,29 @@ class KnowledgeStore:
                     else "knowledge_activated", record, "created")
 
         return record
+
+    def duplicate(self, workspace_id, kind, subject, statement, sources=()):
+        """An active or proposed record saying the same thing, or None: same
+        kind, same subject, the same statement word for word, the same sources."""
+        wanted = (Kind(kind), _words(subject), _words(statement),
+                  sorted((source.kind, source.locator) for source in sources))
+
+        for record in self.list(workspace_id, (Lifecycle.ACTIVE, Lifecycle.PROPOSED)):
+            if (record.kind, _words(record.subject), _words(record.statement),
+                    sorted((source.kind, source.locator) for source in record.sources)) \
+                    == wanted:
+                return record
+
+        return None
+
+    def find_source(self, workspace_id: str, kind: str, locator: str) -> Record | None:
+        """The record, in any state, that rests on this source."""
+        for record in self.list(workspace_id):
+            if any(source.kind == kind and source.locator == locator
+                   for source in record.sources):
+                return record
+
+        return None
 
     def accept(self, workspace_id: str, record_id: str) -> Record:
         """The operator confirms a proposed record; it becomes theirs."""
@@ -491,8 +547,7 @@ def conflicts(records) -> list[list[Record]]:
             groups.setdefault((record.kind, normalise(record.subject)), []).append(record)
 
     return [group for group in groups.values()
-            if len({" ".join(re.findall(r"\w+", record.statement.lower()))
-                    for record in group}) > 1]
+            if len({_words(record.statement) for record in group}) > 1]
 
 
 # ── what a turn is shown ─────────────────────────────────────────────
@@ -678,7 +733,21 @@ class Door:
                    f"{COMMAND} propose '<{{\"kind\", \"subject\", \"statement\"}} as JSON>'")
 
 
+class RealStateInTest(RuntimeError):
+    """A test reached for the operator's own knowledge store."""
+
+
 def default_path() -> str:
+    """SPEAR_KNOWLEDGE_DB, else knowledge.sqlite3 under the state root. A test
+    run that names neither it nor SPEAR_STATE_DIR is refused: the default is a
+    person's own knowledge, and no test may open it."""
     import state_paths
 
-    return os.environ.get("SPEAR_KNOWLEDGE_DB") or str(state_paths.state_dir() / "knowledge.sqlite3")
+    if os.environ.get("SPEAR_KNOWLEDGE_DB"):
+        return os.environ["SPEAR_KNOWLEDGE_DB"]
+
+    if state_paths.under_test() and not os.environ.get("SPEAR_STATE_DIR"):
+        raise RealStateInTest("a test must give the knowledge store its own path "
+                              "(SPEAR_KNOWLEDGE_DB or SPEAR_STATE_DIR)")
+
+    return str(state_paths.state_dir() / "knowledge.sqlite3")

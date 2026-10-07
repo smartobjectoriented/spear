@@ -144,8 +144,8 @@ Session commands:
    Change backend or model without leaving the session.
 
 ``/clear`` (or ``/new``)
-   Start a fresh conversation. The corpus, its memories and its index are
-   unaffected; only the conversation is dropped.
+   Start a fresh conversation. The corpus, its workspace knowledge and its index
+   are unaffected; only the conversation is dropped.
 
 ``/corpus [list|add|rm|scan]``
    The registry, without leaving the session.  Registering does not switch
@@ -153,8 +153,11 @@ Session commands:
    another is excluded from it at the next ``/reindex`` — which is the usual
    reason to register one.
 
-``/remember <note>``
-   Add a long-term memory for *this* corpus.  With no argument, list them.
+``/remember <fact>``
+   Record a fact about *this* workspace as workspace knowledge -- the same as
+   ``/knowledge add`` with its defaults (:ref:`knowledge`).  An instruction is
+   refused: it belongs in a rule.  With no argument, list the workspace's
+   knowledge.
 
 ``/recall <rule>``
    Add a rule for *every* corpus, injected into every request that changes or
@@ -227,9 +230,9 @@ Knowledge layers, on different clocks
    * - Layer
      - Latency
      - Where
-   * - memories (``remember`` tool, ``/remember``)
+   * - workspace knowledge (``/remember``, ``/knowledge``)
      - next turn
-     - ``memories-*.md``
+     - ``knowledge.sqlite3`` under the state directory
    * - learned rules (``/recall``)
      - next launch, every corpus
      - ``rules-learned.md`` under the state directory
@@ -255,9 +258,9 @@ harness by them:
 * Qwen3 models have a **thinking mode**.  The chat disables it through
   ``chat_template_kwargs.enable_thinking=false``; leaving it off is deliberate,
   since here it only burns tokens.
-* The model *uses* its memory correctly but verbally **denies having one** when
-  asked.  That is a pretraining reflex: judge it by behaviour, not by its
-  self-description.  If a bad answer lands in history, ``/undo`` it — the model
+* The model *uses* the workspace knowledge it is shown but verbally **denies
+  having a memory** when asked.  That is a pretraining reflex: judge it by
+  behaviour, not by its self-description.  If a bad answer lands in history, ``/undo`` it — the model
   imitates its own past answers.
 
 What a turn is allowed to do

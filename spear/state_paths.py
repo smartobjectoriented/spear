@@ -47,3 +47,34 @@ def standards_root() -> Path:
     configured = os.environ.get("SPEAR_STANDARDS_ROOT")
 
     return Path(configured) if configured else state_dir() / "standards"
+
+
+def under_test() -> bool:
+    """Is this process a test run (unittest or pytest)?"""
+    import sys
+
+    main = sys.modules.get("__main__")
+    spec = getattr(main, "__spec__", None)
+
+    return (getattr(spec, "name", "") in ("unittest.__main__", "pytest.__main__")
+            or "pytest" in sys.modules)
+
+
+_TEST_ROOT = []
+
+
+def test_state_root() -> str | None:
+    """A per-process temporary state root when this is a test run, else None.
+
+    A test that names no state is given this instead of the defaults, which
+    are a person's own: their index, their audit trail, their knowledge.
+    """
+    if not under_test():
+        return None
+
+    if not _TEST_ROOT:
+        import tempfile
+
+        _TEST_ROOT.append(tempfile.mkdtemp(prefix="spear-test-state-"))
+
+    return _TEST_ROOT[0]

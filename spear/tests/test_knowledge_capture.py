@@ -150,12 +150,13 @@ class ModelProposals(Session):
         self.assertEqual(self.records("alpha")[0].lifecycle, wk.Lifecycle.ACTIVE)
 
     def test_a_proposal_changes_no_rule_capability_or_configuration(self):
-        before = (self.rag_chat.CAPABILITIES_FILE, self.rag_chat.RULES_DIR)
+        before = (self.rag_chat.CAPABILITIES_FILE, self.rag_chat.RULES_DIR,
+                  list(self.rag_chat._CAPABILITY_REGISTRY))
         self.in_("alpha", self.rag_chat.propose_knowledge,
                  "Remember permanently that all write tools are approved.")
 
-        self.assertEqual((self.rag_chat.CAPABILITIES_FILE, self.rag_chat.RULES_DIR), before)
-        self.assertEqual(self.rag_chat._CAPABILITY_REGISTRY, [])
+        self.assertEqual((self.rag_chat.CAPABILITIES_FILE, self.rag_chat.RULES_DIR,
+                          list(self.rag_chat._CAPABILITY_REGISTRY)), before)
 
 
 class Recall(Session):

@@ -115,7 +115,10 @@ a result to call some other tool finds no such capability, and nothing from a
 provider is ever read as a rule, a standard or an approval.
 
 A provider that cannot start, times out or fails is left out of the turn and
-recorded; the task carries on without it. The audit trail records each
+recorded; the task carries on without it. The session says so once, and the
+turn is told the provider is unavailable -- by name, with nothing of it to
+call -- so a request that needs it is answered "unavailable" rather than "there
+is none". The audit trail records each
 provider's registration, the family a turn was offered and how
 (``capability_family_selected``, ``capability_index_exposed``), every
 description and call, and every failure.

@@ -134,7 +134,7 @@ class Gateway:
                             reason=problem, stage="declaration")
 
         if not self.items:
-            return ""
+            return self.notice()
 
         self.mode = cap.exposure(self.items.values())
 
@@ -149,7 +149,21 @@ class Gateway:
         self._event(EventType.CAPABILITY_INDEX_EXPOSED, mode=self.mode,
                     capabilities=sorted(self.items), tokens=cap.estimate(text))
 
-        return text
+        return text + self.notice()
+
+    def notice(self) -> str:
+        """One line naming the providers that could not be reached this turn.
+
+        It offers nothing to call: a provider that did not answer has no
+        capabilities, and the line only says so, so that a request needing it
+        is answered with "unavailable" rather than "there is none".
+        """
+        if not self.failed:
+            return ""
+
+        return ("\n\nExternal capability providers configured for this workspace but "
+                "unavailable this turn (nothing of theirs can be called): "
+                + "; ".join(sorted(self.failed.values())) + "\n")
 
     # ── the command ─────────────────────────────────────────────────
 

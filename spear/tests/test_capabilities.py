@@ -192,6 +192,29 @@ class Exposure(unittest.TestCase):
                                   "'{\"name\": \"uart\"}'")[0], 0)
         self.assertIn(EventType.CAPABILITY_DESCRIBED, trace.kinds())
 
+    def test_a_provider_that_cannot_start_is_named_and_offers_nothing(self):
+        ghost = cap.ProviderConfig(id="ghost", transport="stdio",
+                                   command=("/nonexistent/server",), scope=cap._scope("global"),
+                                   read=frozenset({"get_project_status"}))
+        door, text, trace, registry = gateway(ghost)
+        self.addCleanup(registry.close)
+
+        self.assertEqual(door.items, {})
+        self.assertIn("unavailable this turn", text)
+        self.assertIn("ghost", text)
+        self.assertNotIn("spear-capability invoke", text)
+        self.assertIn(EventType.EXTERNAL_CAPABILITY_FAILED, trace.kinds())
+
+    def test_a_dead_provider_beside_a_live_one_keeps_the_live_one(self):
+        ghost = cap.ProviderConfig(id="ghost", transport="stdio",
+                                   command=("/nonexistent/server",), scope=cap._scope("global"))
+        door, text, _, registry = gateway(config(), ghost)
+        self.addCleanup(registry.close)
+
+        self.assertIn("tracker/lookup_component", door.items)
+        self.assertIn("ghost", text)
+        self.assertFalse(any(item.startswith("ghost/") for item in door.items))
+
     def test_the_index_is_far_smaller_than_the_schemas(self):
         door, text, _, registry = gateway(config("big", "--extra", "47"))
         self.addCleanup(registry.close)

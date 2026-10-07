@@ -64,6 +64,9 @@ def two_cells():
     return EvidenceLedger().observe_cells([horizontal(), vertical()])
 
 
+@unittest.skipUnless(diagram_geometry.layout_path(SID, REV).is_file(),
+                     "needs the bound standard's layout artifact, which only an "
+                     "installation with that (licensed) document has")
 class Recovery(unittest.TestCase):
     """The cells, read back out of the store's own layout artifact."""
 

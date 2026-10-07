@@ -585,8 +585,10 @@ class TaskController:
                                 prior=answer_scope.prior_scope(context.conversation,
                                                                standard_bound=bound))
         phase = context_selection.primary_phase(scope, bound=bound)
+        gateway = getattr(context, "capability_gateway", None)
         selection = tool_selection.DeterministicToolSelector().select(
-            phase, [item.name for item in view.definitions], coding=coding)
+            phase, [item.name for item in view.definitions], coding=coding,
+            external=getattr(gateway, "providers", ()) if gateway and gateway.items else ())
         tool_selection.check_contract(view.definitions, self.registry, coding=coding)
         context.trace.emit(EventType.TOOLSET_SELECTED, context.task_id,
                            session_id=context.session_id, status=EventStatus.OK,

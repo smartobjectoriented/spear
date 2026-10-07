@@ -2211,11 +2211,11 @@ def run_cmd_result(cmd, need_confirm=True, cancellation=None, execution_mode=Non
     # The coding core's control plane answers gateway commands before they
     # get here. One that arrives anyway came from a runtime that has no
     # gateway, and no shell ever runs it.
-    from capability_gateway import is_capability_command
+    import host_commands
 
-    if is_capability_command(cmd):
-        return ToolResult("denied", "external capabilities are not available on this "
-                                    "runtime; nothing was run")
+    if host_commands.recognised(cmd):
+        return ToolResult("denied", f"{host_commands.recognised(cmd)} is not available on "
+                                    f"this runtime; nothing was run")
 
     mode = execution_mode or EXECUTION_MODE
     assessment = (COMMAND_POLICY.classify_script(cmd) if exec_cmd
@@ -6127,7 +6127,8 @@ def coding_host(agent_context, cache, record):
     return SpearHost(workspace_root=str(WORKSPACE.root), authorize=authorize,
                      resolve=resolve, write=write, delete=delete, run=run,
                      record=recorded, collation_locale=SandboxSpec().locale,
-                     capabilities=gateway)
+                     capabilities=gateway,
+                     knowledge=getattr(agent_context, "knowledge_door", None))
 
 
 def _core_only(context, args):
@@ -7290,6 +7291,183 @@ def _corpus_rule_parts(workspace):
     return []
 
 
+_KNOWLEDGE_STORE = []
+
+
+def knowledge_store(trace=None, task_id="", session_id=None):
+    """The workspace knowledge store, opened once per session; its audit goes
+    to the trace this call names."""
+    import workspace_knowledge
+
+    path = workspace_knowledge.default_path()
+
+    if not _KNOWLEDGE_STORE or _KNOWLEDGE_STORE[0].path != path:
+        for opened in _KNOWLEDGE_STORE:
+            opened.close()
+
+        _KNOWLEDGE_STORE[:] = [workspace_knowledge.KnowledgeStore(path)]
+
+    store = _KNOWLEDGE_STORE[0]
+
+    def audit(kind, metadata):
+        if trace is not None:
+            trace.emit(EventType(kind), task_id, session_id=session_id,
+                       status=EventStatus.OK, metadata=dict(metadata))
+
+    store.audit = audit
+
+    return store
+
+
+def current_workspace():
+    """This session's workspace, as the context selector identifies it."""
+    return workspace_context.from_session(
+        project=PROJECT, spec={}, registered=PROJECT in load_projects(),
+        project_root=PROJECT_ROOT, corpus_root=CORPUS_ROOT)
+
+
+_KNOWLEDGE_KINDS = {"fact": "PROJECT_FACT", "architecture": "ARCHITECTURE_FACT",
+                    "build": "BUILD_FACT", "relation": "COMPONENT_RELATION",
+                    "decision": "DECISION", "command": "COMMAND_KNOWLEDGE"}
+
+KNOWLEDGE_USAGE = (
+    "usage: /knowledge [list [--all|--proposed|--stale|--revoked]]\n"
+    "       /knowledge add [--kind fact|architecture|build|relation|decision|command]\n"
+    "                      [--subject S] [--tags a,b] [--path P]\n"
+    "                      [--source FILE[:LINE] [--quote TEXT]] <statement>\n"
+    "       /knowledge show|accept|revoke <id> [reason]   /knowledge amend <id> <statement>\n"
+    "       /knowledge check | export [FILE] | purge")
+
+
+def knowledge_command(arguments: str, *, approve=None) -> str:
+    """One /knowledge command, for this session's exact workspace."""
+    import workspace_knowledge as wk
+
+    store, workspace = knowledge_store(TRACE), current_workspace()
+    here = workspace.workspace_id
+
+    # A verb, its options (each value one word, or quoted), then free text
+    # taken exactly as written: a statement is prose, not shell, and an
+    # apostrophe in it is an apostrophe.
+    verb, _, remainder = arguments.strip().partition(" ")
+    verb, options, words = verb or "list", {}, []
+
+    while True:
+        match = re.match(r"\s*--(\w+)\s+(\"[^\"]*\"|'[^']*'|\S+)", remainder)
+
+        if not match:
+            break
+
+        value = match.group(2)
+        options[match.group(1)] = value[1:-1] if value[:1] in "\"'" else value
+        remainder = remainder[match.end():]
+
+    text = remainder.strip()
+    rest = text.split() if verb != "add" else []
+
+    try:
+        if verb == "list":
+            wanted = {"all": (), "proposed": (wk.Lifecycle.PROPOSED,),
+                      "stale": (wk.Lifecycle.STALE,), "revoked": (wk.Lifecycle.REVOKED,)}
+            flag = next((name for name in wanted
+                         if f"--{name}" in arguments.split()), "")
+            store.validate(here, workspace.root)
+            records = store.list(here, wanted.get(flag, (wk.Lifecycle.ACTIVE,)))
+            lines = [f"{wk.summary(record)}  [{record.lifecycle}, {record.provenance}]"
+                     for record in records]
+
+            return (f"{here}\n" + "\n".join(lines)) if lines else f"{here}: no records"
+
+        if verb == "add":
+            unknown = set(options) - {"kind", "subject", "tags", "path", "source", "quote"}
+
+            if unknown:
+                return f"unknown option --{sorted(unknown)[0]}\n{KNOWLEDGE_USAGE}"
+
+            statement = [text]
+            kind = _KNOWLEDGE_KINDS.get(options.get("kind", "fact"), options.get("kind", ""))
+            sources, provenance = (), wk.Provenance.USER_CONFIRMED
+
+            if options.get("source"):
+                path, _, line = options["source"].partition(":")
+                source, why = wk.source_evidence(workspace.root, path, options.get("quote", ""),
+                                                 int(line) if line.isdigit() else None)
+
+                if source is None:
+                    return f"not recorded: {why}"
+
+                sources, provenance = (source,), wk.Provenance.PROJECT_SOURCE
+
+            record = store.add(here, kind=kind, subject=options.get("subject", ""),
+                               statement=" ".join(statement), provenance=provenance,
+                               tags=tuple(tag for tag in options.get("tags", "").split(",")
+                                          if tag),
+                               paths=(options["path"],) if options.get("path") else (),
+                               sources=sources)
+            clash = [group for group in wk.conflicts(store.list(here, (wk.Lifecycle.ACTIVE,)))
+                     if any(item.record_id == record.record_id for item in group)]
+
+            return (f"{record.record_id} recorded for {here} [{record.lifecycle}, "
+                    f"{record.verification}]" + (
+                        "\nKNOWLEDGE CONFLICT with " + ", ".join(
+                            item.record_id for item in clash[0]
+                            if item.record_id != record.record_id)
+                        + ": both stay active and neither is preferred; amend or revoke one"
+                        if clash else ""))
+
+        if verb == "show" and len(rest) == 1:
+            record = store.get(here, rest[0])
+
+            if record is None:
+                return f"{rest[0]}: no such record in this workspace"
+
+            return wk.detail(record, store.history(here, rest[0]))
+
+        if verb == "accept" and len(rest) == 1:
+            return f"{store.accept(here, rest[0]).record_id} is now active"
+
+        if verb == "revoke" and rest:
+            record = store.revoke(here, rest[0], " ".join(rest[1:]))
+            return f"{record.record_id} revoked (kept in the history; /knowledge purge deletes)"
+
+        if verb == "amend" and len(rest) >= 2:
+            record = store.amend(here, rest[0], text.split(None, 1)[1])
+            return f"{record.record_id} is now version {record.version}"
+
+        if verb == "check" and not rest:
+            stale = store.validate(here, workspace.root)
+            restored = store.revalidate(here, workspace.root)
+            clashes = wk.conflicts(store.list(here, (wk.Lifecycle.ACTIVE,)))
+
+            return "\n".join([f"stale: {', '.join(r.record_id for r in stale) or 'none'}",
+                              f"revalidated: {', '.join(r.record_id for r in restored) or 'none'}",
+                              f"conflicts: " + ("; ".join(
+                                  " vs ".join(r.record_id for r in group) for group in clashes)
+                                  or "none")])
+
+        if verb == "export" and len(rest) <= 1:
+            text = json.dumps(store.export(here), indent=1, ensure_ascii=False)
+
+            if rest:
+                with open(rest[0], "w", encoding="utf-8") as handle:
+                    handle.write(text)
+
+                return f"exported {here} to {rest[0]}"
+
+            return text
+
+        if verb == "purge" and not rest:
+            if not (approve or confirm)(f"Delete every knowledge record of {here}, "
+                                        f"history included?"):
+                return "nothing deleted"
+
+            return f"deleted {store.purge(here)} records of {here}"
+    except wk.KnowledgeError as exc:
+        return f"not recorded: {exc}"
+
+    return KNOWLEDGE_USAGE
+
+
 _CAPABILITY_REGISTRY = []
 
 
@@ -7366,6 +7544,27 @@ def select_turn_context(*, user_input, turn_scope, binding, write, project_spec,
                    retrieval, False, "retrieval"))))
     shared.append(sel.Candidate("request", sel.SourceType.USER_REQUEST, "user", user_input,
                                 mandatory=True, rendered_by_runtime=True))
+
+    # The workspace's own knowledge, checked against its sources first. It
+    # is one candidate, already this workspace's by construction: the store
+    # is only ever asked for this exact identity.
+    import workspace_knowledge
+
+    store = knowledge_store(trace, task_id, session_id)
+    store.validate(workspace.workspace_id, workspace.root)
+    known = workspace_knowledge.select(
+        store.list(workspace.workspace_id, (workspace_knowledge.Lifecycle.ACTIVE,)), user_input)
+
+    if known.text:
+        shared.append(sel.Candidate("knowledge:workspace", sel.SourceType.WORKSPACE_KNOWLEDGE,
+                                    "workspace knowledge", known.text, bucket="knowledge"))
+
+        for group in known.conflicts:
+            store.audit("knowledge_conflict", {
+                "workspace": workspace.workspace_id, "subject": group[0].subject,
+                "records": [record.record_id for record in group],
+                "provenance": [record.provenance for record in group],
+                "reason": "active records disagree; neither is preferred"})
 
     # Each registered provider is a candidate like a rule: its scope and task
     # classes decide where it applies. Its capabilities are listed only for
@@ -7451,8 +7650,19 @@ def select_turn_context(*, user_input, turn_scope, binding, write, project_spec,
                "project_rules": selection.text("project_rules") + selection.text("metadata"),
                "memories": selection.text("memories"), "skills": skills_text,
                "retrieval": selection.text("retrieval")}
+        out["knowledge"] = selection.text("knowledge")
+        out["knowledge_door"] = None
         out["coding_context"] = "".join(out[key] for key in ("global_rules", "project_rules",
-                                                             "memories", "skills"))
+                                                             "memories", "skills", "knowledge"))
+
+        if out["knowledge"] and on_core:
+            out["knowledge_door"] = workspace_knowledge.Door(store, workspace.workspace_id)
+            store.audit("knowledge_selected", {
+                "workspace": workspace.workspace_id, "phase": phase, "mode": known.mode,
+                "shown": [record.record_id for record in known.shown],
+                "indexed": len(known.indexed), "tokens": sel.estimate_tokens(out["knowledge"]),
+                "reason": "the workspace's active knowledge"})
+
         admitted = tuple(item.item_id.split(":", 1)[1] for item in selection.selected
                          if item.bucket == "capabilities")
         out["gateway"], out["capabilities"] = None, ""
@@ -7610,7 +7820,7 @@ def banner(collection, history, n_rules, model_name, n_mem=0):
 #: The slash commands, as the banner lists them and as Tab completes them:
 #: one list, so a command cannot be completed and go unlisted, or the reverse.
 SESSION_COMMANDS = ("/search", "/reindex", "/corpus", "/history", "/skills",
-                    "/remember", "/recall", "/forget", "/good", "/bad",
+                    "/remember", "/recall", "/knowledge", "/forget", "/good", "/bad",
                     "/undo", "/clear", "/model", "/tools")
 OPERATOR_COMMANDS = ("/standard", "/finetune")
 
@@ -8155,6 +8365,11 @@ def main():
 
             continue
 
+        if user_input == "/knowledge" or user_input.startswith("/knowledge "):
+            print(knowledge_command(user_input[len("/knowledge"):].strip()) + "\n")
+
+            continue
+
         if user_input.startswith("/remember"):
             note = user_input[len("/remember"):].strip()
 
@@ -8660,6 +8875,7 @@ def main():
             coding_host=lambda ctx, cache, record: coding_host(ctx, cache, record),
             coding_context=chosen["coding_context"],
             capability_gateway=chosen.get("gateway"),
+            knowledge_door=chosen.get("knowledge_door"),
             workspace_context=workspace,
             context_selections=context_selections,
             phase_contexts=phase_contexts,

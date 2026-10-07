@@ -10,6 +10,7 @@ is the whole decision now; the fixtures are synthetic.
 
 from __future__ import annotations
 
+import os
 import sys
 import tempfile
 import unittest
@@ -39,6 +40,10 @@ def library(directory, extra=()):
 class Offering(unittest.TestCase):
     def setUp(self):
         self.skills = tempfile.mkdtemp()
+        self._knowledge = mock.patch.dict(os.environ, {"SPEAR_KNOWLEDGE_DB": os.path.join(
+            tempfile.mkdtemp(), "knowledge.sqlite3")})
+        self._knowledge.start()
+        self.addCleanup(self._knowledge.stop)
         library(self.skills)
         self.root = tempfile.mkdtemp()
 

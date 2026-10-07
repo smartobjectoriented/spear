@@ -428,7 +428,7 @@ class MixedOrchestrator:
             max_tool_actions=context.max_tool_actions)
         normative.conversation = turn[:-1] + [ConversationMessage("user", (TextBlock(question),))]
         normative.work_phase = None
-        normative.capability_gateway = None
+        normative.capability_gateway = normative.knowledge_door = None
         self._view(normative, request, question, coding=False)
         prepass = (getattr(context, "phase_contexts", None) or {}).get(MIXED_PREPASS)
 
@@ -487,6 +487,7 @@ class MixedOrchestrator:
         # Only the implementation may reach the external capabilities its
         # workspace admits; the passes on either side of it never do.
         context.capability_gateway = (implementation or {}).get("gateway")
+        context.knowledge_door = (implementation or {}).get("knowledge_door")
         self._toolset(context, MIXED_IMPLEMENTATION, context.tools, coding=True)
         self._event(context, EventType.CONTEXT_SELECTED, {
             "phase": MIXED_IMPLEMENTATION, "id": "normative:constraint-set",
@@ -529,7 +530,7 @@ class MixedOrchestrator:
     def _check(self, context, packet, root):
         """Every constraint's status against the final files, and the source
         fingerprint they were read at."""
-        context.capability_gateway = None
+        context.capability_gateway = context.knowledge_door = None
         self._toolset(context, MIXED_POSTCHECK, (), coding=False)
         self._event(context, EventType.NORMATIVE_POSTCHECK_STARTED,
                     {"set_id": packet.set_id, "constraints": len(packet.constraints)})

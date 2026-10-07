@@ -8,6 +8,7 @@ The provider is a synthetic MCP server over stdio (tests/mcp_fixture_server.py).
 from __future__ import annotations
 
 import json
+import os
 import sys
 import tempfile
 import unittest
@@ -399,6 +400,10 @@ class Selection(unittest.TestCase):
 
         self.rag_chat = rag_chat
         self.root = tempfile.mkdtemp()
+        self._knowledge = mock.patch.dict(os.environ, {"SPEAR_KNOWLEDGE_DB": os.path.join(
+            tempfile.mkdtemp(), "knowledge.sqlite3")})
+        self._knowledge.start()
+        self.addCleanup(self._knowledge.stop)
         self.file = Path(tempfile.mkdtemp(), "capabilities.json")
         self.file.write_text(json.dumps({"providers": [
             {"id": "tracker-a", "command": [sys.executable, SERVER], "scope": "corpus app-a",

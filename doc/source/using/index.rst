@@ -15,5 +15,6 @@ that changes them.
    projects
    retrieval
    context
+   knowledge
    capabilities
    configuration

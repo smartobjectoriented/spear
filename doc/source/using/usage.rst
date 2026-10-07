@@ -162,6 +162,11 @@ Session commands:
    everywhere — "an existing copyright header is never rewritten" — and
    ``/remember`` for what is true of one tree only.
 
+``/knowledge [add|list|show|accept|amend|revoke|check|export|purge]``
+   This workspace's recorded knowledge: facts about it, each with where it came
+   from, kept across sessions and shown to the turns that change or ask about
+   it.  Descriptive only, never a rule; see :ref:`knowledge`.
+
 ``/forget <regex>``
    Prune the history-search index.  The archive file itself is kept.
 

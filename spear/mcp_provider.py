@@ -9,6 +9,13 @@ requested: nothing a server offers reaches a turn except as a capability.
 
 The server is started from its registered command, with only the
 environment the registration names, and lives as long as the provider.
+
+One protocol version is spoken, and a server that answers with another is
+refused rather than spoken to on assumptions. If SPEAR comes to need much
+more of the protocol -- an HTTP transport, resources, prompts,
+authentication, server notifications, several versions -- an SDK-backed
+provider is the better course; it would replace this module behind the
+same CapabilityProvider interface and change nothing above it.
 """
 
 from __future__ import annotations
@@ -19,7 +26,9 @@ import queue
 import subprocess
 import threading
 
-from capabilities import Capability, CapabilityError, Invocation, ProviderConfig, capability
+from capabilities import (Capability, CapabilityError, CapabilityProtocolError,
+                          CapabilityTimeout, CapabilityUnavailable, Invocation, ProviderConfig,
+                          capability)
 
 PROTOCOL_VERSION = "2025-06-18"
 CLIENT = {"name": "spear", "version": "1"}
@@ -53,14 +62,22 @@ class MCPProvider:
                 stderr=subprocess.DEVNULL, cwd=self._cwd, env=environment, text=True,
                 encoding="utf-8", bufsize=1)
         except OSError as exc:
-            raise CapabilityError(f"{self.id}: the server could not start ({exc})") from exc
+            raise CapabilityUnavailable(f"{self.id}: the server could not start "
+                                        f"({type(exc).__name__})") from exc
 
         self._lines = queue.Queue()
         reader = threading.Thread(target=self._read, args=(self._process, self._lines),
                                   daemon=True)
         reader.start()
-        self._request("initialize", {"protocolVersion": PROTOCOL_VERSION,
-                                     "capabilities": {}, "clientInfo": CLIENT})
+        answer = self._request("initialize", {"protocolVersion": PROTOCOL_VERSION,
+                                              "capabilities": {}, "clientInfo": CLIENT})
+
+        if answer.get("protocolVersion") != PROTOCOL_VERSION:
+            self.close()
+            raise CapabilityProtocolError(
+                f"{self.id}: the server speaks MCP {answer.get('protocolVersion')!r}; "
+                f"SPEAR speaks {PROTOCOL_VERSION}")
+
         self._send({"jsonrpc": "2.0", "method": "notifications/initialized"})
 
     @staticmethod
@@ -75,7 +92,7 @@ class MCPProvider:
             self._process.stdin.write(json.dumps(message) + "\n")
             self._process.stdin.flush()
         except (OSError, ValueError) as exc:
-            raise CapabilityError(f"{self.id}: the server is gone ({exc})") from exc
+            raise CapabilityUnavailable(f"{self.id}: the server is gone") from exc
 
     def _request(self, method, params):
         with self._lock:
@@ -89,12 +106,12 @@ class MCPProvider:
                     line = self._lines.get(timeout=self.config.timeout)
                 except queue.Empty as exc:
                     self.close()
-                    raise CapabilityError(f"{self.id}: no answer to {method} within "
-                                          f"{self.config.timeout:g} s") from exc
+                    raise CapabilityTimeout(f"{self.id}: no answer to {method} within "
+                                            f"{self.config.timeout:g} s") from exc
 
                 if line is None:
                     self.close()
-                    raise CapabilityError(f"{self.id}: the server closed the connection")
+                    raise CapabilityUnavailable(f"{self.id}: the server closed the connection")
 
                 try:
                     message = json.loads(line)
@@ -112,7 +129,8 @@ class MCPProvider:
                 result = message.get("result")
 
                 if not isinstance(result, dict):
-                    raise CapabilityError(f"{self.id}: {method} returned no result object")
+                    raise CapabilityProtocolError(f"{self.id}: {method} returned no result "
+                                                  f"object")
 
                 return result
 
@@ -131,8 +149,13 @@ class MCPProvider:
 
         while True:
             result = self._request("tools/list", {"cursor": cursor} if cursor else {})
+            tools = result.get("tools") or []
 
-            for tool in result.get("tools") or ():
+            if not isinstance(tools, list):
+                raise CapabilityProtocolError(f"{self.id}: tools/list returned tools that "
+                                              f"are not a list")
+
+            for tool in tools:
                 try:
                     found.append(capability(
                         self.config, str(tool["name"]), tool.get("description") or "",
@@ -152,9 +175,14 @@ class MCPProvider:
     def invoke(self, name: str, arguments) -> Invocation:
         self._start()
         result = self._request("tools/call", {"name": name, "arguments": dict(arguments)})
+        content = result.get("content") or []
         parts = []
 
-        for block in result.get("content") or ():
+        if not isinstance(content, list):
+            raise CapabilityProtocolError(f"{self.id}: tools/call returned content that is "
+                                          f"not a list")
+
+        for block in content:
             if isinstance(block, dict) and block.get("type") == "text":
                 parts.append(str(block.get("text") or ""))
             elif isinstance(block, dict):

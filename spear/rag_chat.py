@@ -2208,6 +2208,15 @@ def run_cmd_result(cmd, need_confirm=True, cancellation=None, execution_mode=Non
     judge -- and judged as the script it runs in. `timeout` replaces the
     sandbox's default for this call.
     """
+    # The coding core's control plane answers gateway commands before they
+    # get here. One that arrives anyway came from a runtime that has no
+    # gateway, and no shell ever runs it.
+    from capability_gateway import is_capability_command
+
+    if is_capability_command(cmd):
+        return ToolResult("denied", "external capabilities are not available on this "
+                                    "runtime; nothing was run")
+
     mode = execution_mode or EXECUTION_MODE
     assessment = (COMMAND_POLICY.classify_script(cmd) if exec_cmd
                   else COMMAND_POLICY.classify(cmd))
@@ -7457,6 +7466,20 @@ def select_turn_context(*, user_input, turn_scope, binding, write, project_spec,
                 read_only=phase == sel.GENERAL)
             out["capabilities"] = out["gateway"].prepare()
             out["coding_context"] += out["capabilities"]
+        elif admitted:
+            # A change in a standard-bound session that is not about the
+            # standard runs on the legacy runtime, which has no gateway. Its
+            # behaviour is kept as it is; the scope's admission is recorded
+            # rather than silently dropped.
+            out["capabilities_unsupported"] = admitted
+
+            if trace is not None:
+                trace.emit(EventType.CAPABILITY_FAMILY_SELECTED, task_id,
+                           session_id=session_id, status=EventStatus.OK,
+                           metadata={"workspace": workspace.workspace_id, "phase": phase,
+                                     "family": "EXTERNAL", "mode": "UNSUPPORTED",
+                                     "providers": list(admitted),
+                                     "reason": "the legacy runtime has no capability gateway"})
 
         selections[phase], rendered[phase] = selection, out
 
@@ -8595,6 +8618,10 @@ def main():
         if chosen["skills"]:
             offered = chosen["skills"].count("# Skill: ")
             print(f"{C_DIM}  ⎿  {offered} skill{'s' if offered != 1 else ''} available{C_RST}")
+
+        if chosen.get("capabilities_unsupported"):
+            print(f"{C_DIM}  ⎿  external capabilities are not available to this turn: a "
+                  f"standard-bound change runs on the legacy runtime{C_RST}")
 
         def context_items_for(rendered):
             return build_task_context_items(

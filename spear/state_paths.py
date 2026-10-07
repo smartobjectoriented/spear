@@ -73,8 +73,11 @@ def test_state_root() -> str | None:
         return None
 
     if not _TEST_ROOT:
+        import atexit
+        import shutil
         import tempfile
 
         _TEST_ROOT.append(tempfile.mkdtemp(prefix="spear-test-state-"))
+        atexit.register(shutil.rmtree, _TEST_ROOT[0], True)
 
     return _TEST_ROOT[0]

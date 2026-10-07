@@ -302,6 +302,19 @@ class RealStateIsOffLimits(unittest.TestCase):
             os.environ.pop("SPEAR_KNOWLEDGE_DB", None)
             self.assertEqual(wk.default_path(), os.path.join(directory, "knowledge.sqlite3"))
 
+    def test_the_temporary_state_of_a_test_run_does_not_outlive_it(self):
+        import subprocess
+
+        program = ("import sys; sys.modules['pytest'] = type(sys)('pytest'); "
+                   "import state_paths; root = state_paths.test_state_root(); "
+                   "open(root + '/audit.jsonl', 'w').write('x'); print(root)")
+        result = subprocess.run([sys.executable, "-c", program], capture_output=True, text=True,
+                                cwd=str(Path(__file__).resolve().parents[1]), check=True)
+        root = result.stdout.strip()
+
+        self.assertTrue(root)
+        self.assertFalse(os.path.exists(root))
+
 
 if __name__ == "__main__":
     unittest.main()

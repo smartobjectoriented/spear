@@ -82,7 +82,9 @@ Entry format
      - how this tree is built and tested. They win over every probe, and they
        are the **project's own verification**: SPEAR runs them on the final
        tree of a change-making turn, and a failure there makes the turn
-       ``UNVERIFIED`` (:ref:`evidence_verdicts`)
+       ``UNVERIFIED`` (:ref:`evidence_verdicts`). Without them SPEAR probes the
+       tree (CMake, a Makefile, cargo, ...); a Makefile whose bare ``make``
+       only prints help, as a Sphinx one does, is not taken for a build
    * - ``lint_commands``, ``acceptance_commands``
      - further commands recognised as verification when the agent runs them
    * - ``bench``

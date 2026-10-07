@@ -7556,6 +7556,9 @@ def knowledge_command(arguments: str, *, approve=None) -> str:
 
 _CAPABILITY_REGISTRY = []
 
+# Providers whose failure the operator has been told about this session.
+_PROVIDERS_REPORTED = set()
+
 
 def capability_registry(trace=None, task_id="", session_id=None):
     """The session's registered providers, read once; None when there are none."""
@@ -7762,6 +7765,12 @@ def select_turn_context(*, user_input, turn_scope, binding, write, project_spec,
                 read_only=phase == sel.GENERAL)
             out["capabilities"] = out["gateway"].prepare()
             out["coding_context"] += out["capabilities"]
+
+            for provider_id, reason in out["gateway"].failed.items():
+                if provider_id not in _PROVIDERS_REPORTED:
+                    _PROVIDERS_REPORTED.add(provider_id)
+                    print(f"{C_DIM}  ⎿  capability provider unavailable — {reason}; "
+                          f"continuing without it{C_RST}")
         elif admitted:
             # A change in a standard-bound session that is not about the
             # standard runs on the legacy runtime, which has no gateway. Its

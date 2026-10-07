@@ -41,6 +41,14 @@ Every change-making turn on the coding core ends with one of three states:
    * - ``NO_CHANGE``
      - no source changed
 
+``VERIFIED`` is exactly as strong as the checks that ran: the configured
+validation passed on the final source, and nothing more is claimed. A project
+whose tests do not exercise a property can be ``VERIFIED`` while that property
+is wrong -- an external oracle may still find it. Whether a change does what a
+bound standard requires is the normative status, which stays
+``NOT_DEMONSTRATED`` until normative evidence establishes it; a passing build
+never does.
+
 An ``UNVERIFIED`` answer opens with the verdict and its reason, and every
 sentence in it that claims success without hedging is marked
 *(not verified)* where it stands, so the answer cannot say one thing while the

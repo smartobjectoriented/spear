@@ -145,7 +145,8 @@ Session commands:
 
 ``/clear`` (or ``/new``)
    Start a fresh conversation. The corpus, its workspace knowledge and its index
-   are unaffected; only the conversation is dropped.
+   are unaffected; only the conversation is dropped, from the store as well. To
+   start one session without it and keep it for later, launch with ``--fresh``.
 
 ``/corpus [list|add|rm|scan]``
    The registry, without leaving the session.  Registering does not switch

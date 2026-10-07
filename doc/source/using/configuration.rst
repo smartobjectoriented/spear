@@ -170,6 +170,9 @@ Session state and audit
        ``~/.local/state/spear``
    * - ``--operator`` · ``SPEAR_OPERATOR``
      - operator name recorded in the audit trail
+   * - ``--fresh`` · ``SPEAR_FRESH=1``
+     - start without the corpus's stored conversation, and leave it as it is;
+       workspace knowledge, rules and configuration still apply
    * - ``--trace`` · ``SPEAR_TRACE``
      - record a runtime JSONL trace
    * - ``--trace-file`` · ``SPEAR_TRACE_FILE``
@@ -194,7 +197,8 @@ The state directory
      memories-adhoc-<tag>.md           per-corpus durable memories
 
 ``<tag>`` is derived from the corpus root, so history and memories follow the
-tree rather than the directory you happened to launch from.
+tree rather than the directory you happened to launch from. A session resumes
+the stored conversation of its corpus unless it is started with ``--fresh``.
 
 .. note::
 

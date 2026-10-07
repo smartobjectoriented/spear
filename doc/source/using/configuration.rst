@@ -80,6 +80,9 @@ Endpoint and model
      - sampling temperature (default 0.25)
    * - ``--max-tokens`` · ``SPEAR_MAX_TOKENS``
      - cap on one reply
+   * - ``SPEAR_RESPONSE_MAX_TOKENS``
+     - cap on one model response of a coding turn (default 16384); a response
+       cut there is retried and then reported as truncated, never as complete
    * - ``ANTHROPIC_API_KEY``
      - Anthropic credential
 

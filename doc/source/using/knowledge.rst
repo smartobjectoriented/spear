@@ -74,7 +74,10 @@ A record is one fact, with a stable id, and in one of four states:
 
 ``ACTIVE``
    what a turn may be shown. A fact the operator states is active at once,
-   marked ``USER_CONFIRMED``; a fact given with ``--source`` is active only if
+   marked ``USER_CONFIRMED`` -- the operator's word, not a check: SPEAR does not
+   test it against the source, and a turn may take it as given. When it matters
+   that a fact stays true, record it with ``--source`` so it is bound to the
+   file and goes stale when the file changes; a fact given with ``--source`` is active only if
    the file holds the quoted evidence (or the named line), and is marked
    ``SOURCE_VERIFIED`` and bound to that file's content.
 ``PROPOSED``

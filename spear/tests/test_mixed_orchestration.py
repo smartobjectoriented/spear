@@ -252,6 +252,42 @@ class TheThreePasses(MixedTurn):
         self.assertEqual(record.verdict, "VERIFIED + COMPLIANT")
 
 
+class TheEvidenceBoundary(MixedTurn):
+    """Implementation VERIFIED means the configured validation passed on the
+    final source. It does not mean a property no check reads was proven: that
+    is what the normative status is for, and it stays NOT_DEMONSTRATED."""
+
+    WRONG = '''def build_header(flag_x, metadata=None):
+    mode = 1
+    if not flag_x:
+        mode = 2
+    count = [0] * 4
+    return {"mode": mode, "count": count, "metadata": metadata}
+'''
+
+    def test_passing_project_tests_do_not_prove_a_hidden_property(self):
+        record = self.run_mixed([
+            turn("", call("p1", "write_file", path="record.py", content=self.WRONG)),
+            turn("", call("t1", "terminal", command="make")),
+            turn("Done. It builds, and the header is compliant with the standard."),
+            verdicts(("C1", "SATISFIED", 3, "if not flag_x:"),
+                     ("C2", "SATISFIED", 5, "count = [0] * 4"))])
+
+        # The configured validation ran on the final source and passed.
+        self.assertEqual(record.implementation, "VERIFIED")
+
+        # No predicate reads this shape, and the model's word is not evidence.
+        self.assertEqual(record.normative, nc.NOT_DEMONSTRATED)
+        self.assertNotIn("COMPLIANT", record.verdict.replace("NOT COMPLIANT", ""))
+        self.assertIn("*(compliance not established)*", self.result.final_response)
+
+        # The property itself is false: an oracle outside SPEAR finds it.
+        hidden = subprocess.run(
+            [sys.executable, "-c", "import record; assert record.build_header(True)['mode'] == 2"],
+            cwd=self.repo, capture_output=True)
+        self.assertNotEqual(hidden.returncode, 0)
+
+
 class Violations(MixedTurn):
     def test_one_repair_then_a_satisfied_recheck(self):
         record = self.run_mixed([

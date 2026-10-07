@@ -7,6 +7,11 @@ knows one invented project and keeps notes in memory.
     --malformed      declare one tool whose schema is not an object
     --page N         list tools N at a time, with a cursor
     --exit-on-call   die on the first tools/call
+    --exit-on-list   die on the first tools/list, after initializing
+    --list-error     answer tools/list with an error
+    --version V      answer initialize with protocol version V
+    --malformed-call answer tools/call with content that is not a list
+    --forget NAME    answer a call to NAME as an unknown tool, as if it had gone
 """
 
 import argparse
@@ -42,6 +47,11 @@ def main():
     parser.add_argument("--malformed", action="store_true")
     parser.add_argument("--page", type=int, default=0)
     parser.add_argument("--exit-on-call", action="store_true")
+    parser.add_argument("--exit-on-list", action="store_true")
+    parser.add_argument("--list-error", action="store_true")
+    parser.add_argument("--version", default=None)
+    parser.add_argument("--malformed-call", action="store_true")
+    parser.add_argument("--forget", default=None)
     args = parser.parse_args()
 
     tools = list(TOOLS) + [
@@ -75,10 +85,18 @@ def main():
 
         if method == "initialize":
             sys.stdout.write("server log line that is not JSON-RPC\n")
-            answer(request_id, {"protocolVersion": message["params"]["protocolVersion"],
+            answer(request_id, {"protocolVersion": args.version
+                                or message["params"]["protocolVersion"],
                                 "capabilities": {"tools": {}},
                                 "serverInfo": {"name": "fixture", "version": "1"}})
         elif method == "tools/list":
+            if args.exit_on_list:
+                sys.exit(4)
+
+            if args.list_error:
+                answer(request_id, error={"code": -32603, "message": "listing is broken"})
+                continue
+
             start = int((message.get("params") or {}).get("cursor") or 0)
             size = args.page or len(tools)
             page = tools[start:start + size]
@@ -95,6 +113,14 @@ def main():
             time.sleep(args.slow)
             name = message["params"]["name"]
             arguments = message["params"].get("arguments") or {}
+
+            if args.malformed_call:
+                answer(request_id, {"content": "not a list"})
+                continue
+
+            if name == args.forget:
+                answer(request_id, error={"code": -32602, "message": f"unknown tool {name}"})
+                continue
 
             if name == "get_project_status":
                 text = f"branch {arguments.get('branch', 'main')}: last pipeline passed"

@@ -34,14 +34,40 @@ _JSON_TYPES = {"string": str, "integer": int, "number": (int, float), "boolean":
                "object": dict, "array": list, "null": type(None)}
 
 
-_NAMED = re.compile(rf"(?<![\w/.-]){re.escape(COMMAND)}(?![\w-])")
+#: Longest gateway command answered; the arguments are one JSON object.
+MAX_COMMAND_CHARS = 65_536
+
+# Recognised lexically, without parsing the shell: the gateway's name where a
+# shell would run it -- the command's first word, or the first word after a
+# control operator, a newline, an opening parenthesis, a backquote or "$(".
+# Anywhere else (an argument to grep, a path such as ./spear-capability) it
+# is ordinary text and the command an ordinary command, judged by the
+# command policy like any other.
+
+_NAMED = re.compile(r"(?:^|[;&|\n\r(`]|\$\()[ \t]*" + re.escape(COMMAND)
+                    + r"(?![\w./-])")
+
+#: How each refusal or failure is recorded (external_capability_failed's
+#: "outcome"); a successful call is external_capability_invoked.
+SYNTAX, UNKNOWN, NOT_DESCRIBED, VALIDATION, REFUSED = (
+    "syntax", "unknown", "not_described", "validation", "refused")
+UNAVAILABLE, TIMEOUT, PROVIDER_ERROR = "unavailable", "timeout", "provider_error"
 
 
 def is_capability_command(command) -> bool:
-    """Does this terminal command address the gateway at all? Anywhere in it:
-    one buried in a pipeline is answered too, with a refusal, rather than
-    left to a shell that has never heard of it."""
+    """Is this terminal command addressed to the gateway? Once it is, the
+    gateway answers it -- with a result or a refusal -- and no shell sees it."""
     return bool(_NAMED.search(str(command or "")))
+
+
+def _outcome(exc: Exception) -> str:
+    if isinstance(exc, cap.CapabilityTimeout):
+        return TIMEOUT
+
+    if isinstance(exc, cap.CapabilityUnavailable):
+        return UNAVAILABLE
+
+    return PROVIDER_ERROR
 
 
 class Registry:
@@ -107,7 +133,7 @@ class Gateway:
             except cap.CapabilityError as exc:
                 self.failed[provider_id] = str(exc)
                 self._event(EventType.EXTERNAL_CAPABILITY_FAILED, provider=provider_id,
-                            reason=str(exc), stage="list")
+                            reason=str(exc), stage="list", outcome=_outcome(exc))
                 continue
 
             for item in listed:
@@ -138,19 +164,19 @@ class Gateway:
     # ── the command ─────────────────────────────────────────────────
 
     def run(self, command: str) -> tuple[int, str]:
-        """(exit code, what the model reads) for one gateway command."""
-        try:
-            words = shlex.split(command)
-        except ValueError as exc:
-            return 2, f"{COMMAND}: {exc}"
+        """(exit code, what the model reads) for one gateway command.
 
-        if not words or words[0] != COMMAND:
-            return 2, f"{COMMAND} must be run on its own, not inside a pipeline or script."
+        Its words are split, never expanded: no variable, substitution, glob
+        or shell of any kind is involved, and the arguments are parsed as
+        JSON. Anything that is not one plain gateway command is refused.
+        """
+        command = str(command or "")
+        words, problem = _words(command)
+
+        if problem:
+            return self._refuse(SYNTAX, problem, 2)
 
         verb, rest = (words[1] if len(words) > 1 else ""), words[2:]
-
-        if any(token in {"|", "||", "&&", ";", ">", ">>", "<", "&"} for token in rest):
-            return 2, f"{COMMAND} must be run on its own, not inside a pipeline or script."
 
         if not self.items:
             return 1, ("No external capability is available to this task."
@@ -167,8 +193,16 @@ class Gateway:
         if verb == "invoke" and len(rest) in (1, 2):
             return self._invoke(rest[0], rest[1] if len(rest) == 2 else "{}")
 
-        return 2, (f"usage: {COMMAND} list | {COMMAND} describe <id> | "
-                   f"{COMMAND} invoke <id> '<arguments as one JSON object>'")
+        return self._refuse(SYNTAX, f"usage: {COMMAND} list | {COMMAND} describe <id> | "
+                                    f"{COMMAND} invoke <id> '<arguments as one JSON object>'", 2)
+
+    def _refuse(self, outcome, text, code=1, item=None, given=""):
+        self._event(EventType.EXTERNAL_CAPABILITY_FAILED, outcome=outcome,
+                    provider=getattr(item, "provider", ""),
+                    capability=getattr(item, "id", "") or given[:120],
+                    action=getattr(item, "action", ""), reason=text[:300])
+
+        return code, text
 
     def resolve(self, given: str):
         """The admitted capability a model named: its full id, or a bare name
@@ -186,8 +220,9 @@ class Gateway:
         near = difflib.get_close_matches(capability_id, sorted(self.items), n=3, cutoff=0.6)
         hint = f" Closest available: {', '.join(near)}." if near else ""
 
-        return 1, (f"{capability_id}: no such capability is available to this task.{hint} "
-                   f"`{COMMAND} list` shows the ones that are.")
+        return self._refuse(UNKNOWN, f"{capability_id}: no such capability is available to "
+                                     f"this task.{hint} `{COMMAND} list` shows the ones that "
+                                     f"are.", given=capability_id)
 
     def _describe(self, capability_id):
         item = self.resolve(capability_id)
@@ -210,37 +245,33 @@ class Gateway:
         capability_id = item.id
 
         if capability_id not in self.described:
-            return 1, (f"{capability_id} has not been described in this task. Run "
-                       f"`{COMMAND} describe {capability_id}` first, then invoke it with "
-                       f"the arguments it declares.")
+            return self._refuse(NOT_DESCRIBED, f"{capability_id} has not been described in "
+                                f"this task. Run `{COMMAND} describe {capability_id}` first, "
+                                f"then invoke it with the arguments it declares.", item=item)
 
         try:
             arguments = json.loads(raw)
         except ValueError as exc:
-            return 2, f"{capability_id}: the arguments are not valid JSON ({exc})."
+            return self._refuse(VALIDATION, f"{capability_id}: the arguments are not valid "
+                                f"JSON ({exc}).", 2, item=item)
 
         problem = contract(item, arguments)
 
         if problem:
-            return 2, f"{capability_id}: {problem}"
+            return self._refuse(VALIDATION, f"{capability_id}: {problem}", 2, item=item)
 
         refusal = self._permit(item)
 
         if refusal:
-            self._event(EventType.EXTERNAL_CAPABILITY_FAILED, provider=item.provider,
-                        capability=capability_id, action=item.action, reason=refusal,
-                        stage="policy")
-            return 1, f"{capability_id}: refused: {refusal}"
+            return self._refuse(REFUSED, f"{capability_id}: refused: {refusal}", item=item)
 
         started = time.perf_counter()
 
         try:
             result = self.registry.provider(item.provider).invoke(item.name, arguments)
         except cap.CapabilityError as exc:
-            self._event(EventType.EXTERNAL_CAPABILITY_FAILED, provider=item.provider,
-                        capability=capability_id, action=item.action, reason=str(exc),
-                        stage="invoke")
-            return 1, f"{capability_id}: the provider failed: {exc}"
+            return self._refuse(_outcome(exc), f"{capability_id}: the provider failed: {exc}",
+                                item=item)
 
         self._event(EventType.EXTERNAL_CAPABILITY_INVOKED, provider=item.provider,
                     capability=capability_id, action=item.action, error=result.is_error,
@@ -279,6 +310,30 @@ class Gateway:
                             status=EventStatus.OK,
                             metadata={"workspace": self.workspace, "phase": self.phase,
                                       **metadata})
+
+
+def _words(command: str):
+    """(the words of one plain gateway command, "") or ((), why it is not one)."""
+    if len(command) > MAX_COMMAND_CHARS:
+        return (), f"{COMMAND}: the command is longer than {MAX_COMMAND_CHARS} characters."
+
+    if any(char in command for char in "\n\r\x00"):
+        return (), f"{COMMAND} takes one line; run it on its own."
+
+    lexer = shlex.shlex(command, posix=True, punctuation_chars=";&|()<>")
+    lexer.whitespace_split = True
+
+    try:
+        words = list(lexer)
+    except ValueError as exc:
+        return (), f"{COMMAND}: {exc}."
+
+    if (not words or words[0] != COMMAND
+            or any(word and set(word) <= set(";&|()<>") for word in words)):
+        return (), (f"{COMMAND} must be run on its own -- not in a pipeline, a list, a "
+                    f"redirection or a substitution.")
+
+    return words, ""
 
 
 def contract(item: cap.Capability, arguments) -> str:

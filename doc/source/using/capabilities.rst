@@ -6,9 +6,13 @@ External capabilities
 A turn can be given operations that reach outside its workspace: an issue
 tracker's search, a service's status, a note created somewhere else. SPEAR
 calls these *external capabilities*. They come from *providers* the deployment
-registers; the Model Context Protocol (MCP) is the first kind of provider, over
-its stdio transport, and only for tools. A server's prompts and resources are
-not used.
+registers; the Model Context Protocol (MCP) is the first kind of provider.
+
+SPEAR implements the part of MCP that tools need, over the stdio transport:
+``initialize``, ``tools/list`` (following its pagination) and ``tools/call``,
+in protocol version ``2025-06-18``. A server that answers with another version
+is refused. Resources, server prompts, the HTTP transport and server
+notifications are not supported.
 
 Nothing is discovered: a provider SPEAR has not been told about does not exist
 to it, and a registered provider applies only where its entry says.
@@ -75,6 +79,17 @@ capabilities is shown them in its context and runs them with one command
 through its terminal, which SPEAR answers itself and never hands to a shell::
 
    spear-capability invoke <id> '<arguments as one JSON object>'
+
+The command is recognised where a shell would run it: as the first word, or
+after ``;``, ``&``, ``|``, a newline, ``(``, a backquote or ``$(``. Once
+recognised it is answered by SPEAR -- with a result or a refusal -- whatever
+is wrong with it, and nothing of it is run: it must stand alone on one line,
+its words are split but never expanded, and its arguments are parsed as JSON.
+The name anywhere else, such as an argument to ``grep``, is ordinary text.
+
+A change in a standard-bound session that does not concern the standard runs
+on SPEAR's earlier runtime, which has no capability gateway: such a turn is not
+offered external capabilities, says so, and records it.
 
 How much it is shown depends on the size of the family:
 

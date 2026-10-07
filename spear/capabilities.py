@@ -53,6 +53,18 @@ class CapabilityError(RuntimeError):
     """A provider could not answer; the turn continues without it."""
 
 
+class CapabilityUnavailable(CapabilityError):
+    """The provider could not be started, or went away."""
+
+
+class CapabilityTimeout(CapabilityError):
+    """The provider did not answer in time."""
+
+
+class CapabilityProtocolError(CapabilityError):
+    """The provider answered with something the protocol does not allow."""
+
+
 @dataclass(frozen=True)
 class Capability:
     id: str                         # "<provider>/<name>", stable within a deployment
@@ -278,6 +290,7 @@ def render(items, mode: str) -> str:
 
 
 __all__ = ["READ", "WRITE", "EXTERNAL", "DIRECT", "INDEXED", "DIRECT_LIMIT", "DIRECT_TOKENS",
-           "Capability", "CapabilityError", "CapabilityProvider", "Invocation",
+           "Capability", "CapabilityError", "CapabilityProtocolError", "CapabilityProvider",
+           "CapabilityTimeout", "CapabilityUnavailable", "Invocation",
            "ProviderConfig", "capability", "described", "estimate", "exposure",
            "index_line", "load_configs", "plain", "render"]

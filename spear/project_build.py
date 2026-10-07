@@ -129,6 +129,26 @@ def _make_test_target(root):
     return ""
 
 
+def _default_goal(root):
+    """The target a bare `make` runs: .DEFAULT_GOAL, else the first rule."""
+    for name in ("Makefile", "makefile"):
+        try:
+            with open(os.path.join(root, name), encoding="utf-8", errors="replace") as handle:
+                text = handle.read()
+        except OSError:
+            continue
+
+        declared = re.search(r"^\.DEFAULT_GOAL\s*:?=\s*(\S+)", text, re.M)
+
+        if declared:
+            return declared.group(1)
+
+        first = re.search(r"^([A-Za-z0-9_-][A-Za-z0-9_.-]*)\s*:(?!=)", text, re.M)
+        return first.group(1) if first else ""
+
+    return ""
+
+
 def probe(root, *, infer_unittest=False):
     """The build and test commands this tree actually supports.
 
@@ -148,7 +168,10 @@ def probe(root, *, infer_unittest=False):
             "ctest --test-dir build/harness --output-on-failure",
             "cmake")
 
-    if here("Makefile") or here("makefile"):
+    # A Makefile whose bare `make` only prints its help -- Sphinx generates one
+    # -- builds nothing: offered as the build, it "passed" every change.
+
+    if (here("Makefile") or here("makefile")) and _default_goal(root) != "help":
         return ProjectCommands("make", _make_test_target(root), "make")
 
     if here("Cargo.toml"):
@@ -211,7 +234,10 @@ def commands(root, *, spec=None, cache_dir=None, refresh=False,
             with open(path, "r", encoding="utf-8") as handle:
                 found = ProjectCommands.from_dict(json.load(handle))
 
-            if found is not None:
+            # Cached before a help-only Makefile was told apart from a build.
+            stale = found is not None and found.source == "make" and _default_goal(root) == "help"
+
+            if found is not None and not stale:
                 return found
         except (OSError, ValueError):
             pass

@@ -51,6 +51,26 @@ class Probe(unittest.TestCase):
 
         self.assertNotIn("-D", found.build)
 
+    def test_a_makefile_whose_bare_make_prints_help_is_not_a_build(self):
+        sphinx = ".PHONY: help clean html\n\nhelp:\n\t@echo \"Please use make <target>\"\n\n" \
+                 "html:\n\tsphinx-build -b html source build\n"
+        cases = ((sphinx, ""),
+                 (".DEFAULT_GOAL := help\nall:\n\tcc a.c\nhelp:\n\t@echo targets\n", ""),
+                 ("help:\n\t@echo targets\n.DEFAULT_GOAL := all\nall:\n\tcc a.c\n", "make"),
+                 ("all: fw\nfw: main.c\n\tcc -o fw main.c\nhelp:\n\t@echo\n", "make"))
+
+        for makefile, build in cases:
+            with self.subTest(makefile=makefile[:30]):
+                self.assertEqual(project_build.probe(self.tree(Makefile=makefile)).build, build)
+
+    def test_a_cached_help_only_make_is_probed_again(self):
+        root = self.tree(Makefile="help:\n\t@echo targets\nhtml:\n\tsphinx-build . b\n")
+        cache = tempfile.mkdtemp()
+        Path(cache, project_build.CACHE_NAME).write_text(
+            '{"build": "make", "test": "", "source": "make", "schema_version": 1}')
+
+        self.assertEqual(project_build.commands(root, cache_dir=cache).build, "")
+
     def test_the_ordinary_shapes(self):
         for name, expected in (("Makefile", "make"), ("Cargo.toml", "cargo"),
                                ("go.mod", "go"), ("package.json", "npm"),

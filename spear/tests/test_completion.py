@@ -63,6 +63,22 @@ class Verdict(unittest.TestCase):
 
         self.assertEqual(completion.decide(log(PATCH, timed)).state, "UNVERIFIED")
 
+    def test_a_backgrounded_build_proves_nothing(self):
+        """`make &` returns at once with the shell's 0, whatever make does."""
+        for command in ("make fs/vfs.o 2>&1 &", "make &", "make && ./run_tests &",
+                        "make & sleep 1"):
+            with self.subTest(command=command):
+                verdict = completion.decide(log(PATCH, terminal_record(command, "", 0)))
+
+                self.assertEqual(verdict.state, "UNVERIFIED")
+
+    def test_a_redirection_is_not_a_background(self):
+        for command in ("make 2>&1", "make >build.log 2>&1", "make &>build.log"):
+            with self.subTest(command=command):
+                verdict = completion.decide(log(PATCH, terminal_record(command, "", 0)))
+
+                self.assertEqual(verdict.state, "VERIFIED")
+
     def test_a_refused_command_proves_nothing(self):
         refused = record("terminal", {"command": "python3 -m py_compile src/a.sh"},
                          json.dumps({"error": "refused: not allowed"}), ok=False, refused=True)

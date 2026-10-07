@@ -102,7 +102,9 @@ class Check:
     index: int          # the call it belongs to, in log order
 
 
-_SEPARATOR = re.compile(r"(&&|\|\||[;|\n])")
+# A lone & ends a list and runs it in the background; the & of 2>&1, &> and |&
+# is a redirection.
+_SEPARATOR = re.compile(r"(&&|\|\||(?<![&>|])&(?![&>])|[;|\n])")
 _FAILURE = re.compile(r"\bERROR\b|\berror:|\bFAILED\b|\bfailed\b|returned non-zero|"
                       r"No rule to make target|command not found|Traceback")
 _CHECKERS = frozenset({"ls", "readlink", "test", "[", "stat", "file", "realpath"})
@@ -129,6 +131,24 @@ def _stages(command: str):
 
         if argv:
             yield argv, after
+
+
+def _backgrounded(stages) -> list[bool]:
+    """Per stage, whether it runs in the background. `a && b &` sends the
+    whole list there: its exit status is the shell's 0, not the commands'."""
+    flags, group = [], []
+
+    for _, after in stages:
+        group.append(len(flags))
+        flags.append(False)
+
+        if after in (";", "\n", "&", ""):
+            for index in group:
+                flags[index] = after == "&"
+
+            group = []
+
+    return flags
 
 
 def _in_tree(path: str, root: str) -> str | None:
@@ -221,6 +241,7 @@ def timeline(log, generated=generated_path, root=""):
             continue
 
         stages = list(_stages(item.command))
+        background = _backgrounded(stages)
         ran = not item.timed_out and item.exit_code == 0
         masked = False
 
@@ -235,7 +256,9 @@ def timeline(log, generated=generated_path, root=""):
 
             kind = _kind(argv)
 
-            if kind is None:
+            # Sent to the background, a stage returns before it has run.
+
+            if kind is None or background[position]:
                 continue
 
             # Piped into a filter, a stage's exit status is the filter's; what
@@ -256,7 +279,8 @@ def timeline(log, generated=generated_path, root=""):
         # names -- running the program just changed, a linter -- still counts,
         # as a run of the tree as it stands after the command.
 
-        if not any(check.index == index and check.kind != "check" for check in checks):
+        if not any(background) and not any(check.index == index and check.kind != "check"
+                                           for check in checks):
             category, _ = policy.classify_command(item.command, changed_paths=tuple(changed))
 
             if category in _VERIFYING:
@@ -423,9 +447,12 @@ def project_evidence(project_runs, project_commands=None, epoch=0):
 
 
 def _masked(command: str) -> bool:
-    """Whether a stage's exit status is hidden behind a pipe."""
-    return "pipefail" not in command and any(
-        after == "|" for _, after in _stages(command))
+    """Whether a stage's exit status is hidden: behind a pipe, or by running
+    in the background."""
+    stages = list(_stages(command))
+
+    return any(_backgrounded(stages)) or ("pipefail" not in command and any(
+        after == "|" for _, after in stages))
 
 
 def decide(log, *, project_runs=(), project_commands=None, answer="",

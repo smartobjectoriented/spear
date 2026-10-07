@@ -212,7 +212,7 @@ through its tools instead of from retrieved chunks):
 #. selected active durable memories;
 #. the current ``WorkingState`` projection;
 #. compacted and recent conversation;
-#. task-relevant skills and retrieved corpus chunks;
+#. the skills the workspace's scope admits, and retrieved corpus chunks;
 #. bounded tool evidence.
 
 Every item retains provenance, priority and a token estimate.  Stable rules do
@@ -260,13 +260,13 @@ nothing is not used (:ref:`context_selection`).
 The skill library
 -----------------
 
-``skill_library.py`` owns the format and the file/index contract; the
-directory is the source of truth and the ``edgem_skills`` collection is a
-derived index of it.  The two are reconciled on the first lookup of a session
-by comparing a stored digest, so only what changed is embedded.  Before that,
-only ``save_skill`` ever wrote to the collection: a skill added or edited by
-hand was listed by ``/skills`` and never injected, and a deleted one kept
-being injected.
+``skill_library.py`` owns the format, and the directory is the only source:
+each turn is offered every skill whose ``scope`` admits its workspace and whose
+required commands exist, read from the files at that moment, so a skill added,
+edited or deleted by hand takes effect on the next turn.  Which of them fits
+the request is left to the model, which is told to follow one only when it
+does.  A library is expected to stay small; past eight skills for one
+workspace, the rest are left out and the audit trail says so.
 
 A skill may open with a ``SKILL.md`` frontmatter block -- the convention
 agentskills.io and Hermes Agent use -- which the harness reads and the model
@@ -285,10 +285,9 @@ never sees, because it is stripped before injection:
    ---
 
 ``description``
-   One line saying what the procedure is *for*.  It is embedded with the body,
-   because a question resembles a purpose more than it resembles steps.  A
-   skill that declares none is indexed exactly as before, so the library
-   already on disk keeps matching without a re-embed.
+   One line saying what the procedure is *for*, shown with it.  ``/skills``
+   lists it, and a skill that declares none is listed by its body's first
+   line.
 
 ``scope``
    The registered projects the procedure belongs to -- a bitbake procedure has

@@ -59,6 +59,10 @@ def refusal(path: str, label: str | None = None) -> str:
     if real != str(path):
         candidates.append(real)
 
+    # A directory is judged as the tree it is: `mkdir generated` or a write
+    # aimed at `.../generated` itself is a change inside it.
+    candidates += [item.rstrip("/") + "/" for item in list(candidates) if os.path.isdir(item)]
+
     for candidate in candidates:
         if _GENERATED_PATH.search(candidate):
             return f"{label} is a generated file — change its source"

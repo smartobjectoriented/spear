@@ -5,8 +5,8 @@ import unittest
 from unittest.mock import patch
 
 sys.argv = ["rag_chat", "--safe"]
-import rag_chat
-from cancellation import CancellationSource
+from cli import rag_chat
+from runtime.cancellation import CancellationSource
 
 
 class TheHeartbeat(unittest.TestCase):

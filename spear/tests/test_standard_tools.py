@@ -4,22 +4,22 @@ import unittest
 from dataclasses import replace
 from pathlib import Path
 
-from agent_roles import AgentRole
-from result_store import ResultStore
-from standard_ingest import ingest_pdf
-from standard_retrieval import rebuild_lexical_index
-from standard_store import StandardStore
-from standard_tools import (
+from runtime.agent_roles import AgentRole
+from runtime.result_store import ResultStore
+from standard.standard_ingest import ingest_pdf
+from standard.standard_retrieval import rebuild_lexical_index
+from standard.standard_store import StandardStore
+from standard.standard_tools import (
     INVALID_SOURCE_ID, STANDARD_TOOL_NAMES, StandardToolService,
     _FETCH_RESULT_POLICY, render_fetch_for_model, standard_tool_specs,
 )
 from tests.standard_fixture import synthetic_pdf_bytes
-from tool_exposure import ToolExposurePolicy
-from tool_registry import ToolRegistry, ToolResultPolicy
-from tool_router import (
+from harness.tool_exposure import ToolExposurePolicy
+from harness.tool_registry import ToolRegistry, ToolResultPolicy
+from harness.tool_router import (
     ToolExecutionContext, ToolHandlerResult, ToolResultStatus, ToolRouter,
 )
-from tracing import NullTraceRecorder, TraceEmitter
+from runtime.tracing import NullTraceRecorder, TraceEmitter
 
 
 class StandardToolTests(unittest.TestCase):

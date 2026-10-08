@@ -1,6 +1,6 @@
 import unittest
 
-from tool_registry import (
+from harness.tool_registry import (
     ToolCategory, ToolMutability, ToolRegistry, ToolSpec, native_tool_specs,
 )
 

@@ -23,7 +23,7 @@ from __future__ import annotations
 
 import re
 
-import normative_dimensions
+from normative import normative_dimensions
 from corpus import BITS, OFFSET, WORD, WORD_COUNT
 
 ANSWERED = "ANSWERED"

@@ -4,33 +4,33 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from agent_runtime import (
+from runtime.agent_runtime import (
     AgentContext, AgentRuntime, RuntimeTerminalReason, _asked,
     _record_project_verification, conclude_demand, is_write_request,
     may_demand_write, wants_write,
 )
-from compaction import (
+from runtime.compaction import (
     CompactionMode, CompactionPolicy, CompactionRequest, CompactionService,
 )
-from budgets import BudgetKind, BudgetLimit, BudgetManager
-from checkpoint import CheckpointManager, RollbackStatus
-from context_engine import (
+from runtime.budgets import BudgetKind, BudgetLimit, BudgetManager
+from harness.checkpoint import CheckpointManager, RollbackStatus
+from context.context_engine import (
     ContextEngine, ContextItem, ContextLayer, ContextRequest, Freshness,
 )
-from model_backend import (
+from models.model_backend import (
     ConversationMessage, ModelToolCall, ModelTurn, StopReason, TextBlock,
     ToolDefinition,
 )
-import project_build
-from tracing import EventType, TraceEmitter
-from session_store import (
+from evidence import project_build
+from runtime.tracing import EventType, TraceEmitter
+from runtime.session_store import (
     FileSessionStore, SessionConfiguration, SessionHandle, new_session_id,
 )
-from tool_router import ToolResultEnvelope, ToolResultStatus
-from working_state import (
+from harness.tool_router import ToolResultEnvelope, ToolResultStatus
+from runtime.working_state import (
     ActionKind, StateEventType, StateSource, TerminalStatus, WorkingState,
 )
-from verification import CompletionVerificationStatus
+from evidence.verification import CompletionVerificationStatus
 
 
 class MemoryRecorder:
@@ -273,7 +273,7 @@ class RoomToWorkIsNotRoomToRead(unittest.TestCase):
     def test_the_reading_allowance_is_capped_not_merely_scaled(self):
         """Measured: the ceiling rose to 500, the nudge moved to a hundred
         rounds, and a master run read for thirty minutes and wrote nothing."""
-        import agent_runtime
+        from runtime import agent_runtime
 
         self.assertEqual(agent_runtime._investigation_ceiling(60), 12)
         self.assertEqual(agent_runtime._investigation_ceiling(120), 24)
@@ -416,8 +416,8 @@ class ALoopThatAnnouncesItselfMustAlsoEnd(unittest.TestCase):
                       [kind for kind, _ in observer.notices])
 
     def test_the_third_identical_call_is_refused_outright(self):
-        import agent_runtime
-        from tool_router import ToolResultEnvelope, ToolResultStatus
+        from runtime import agent_runtime
+        from harness.tool_router import ToolResultEnvelope, ToolResultStatus
 
         envelope = ToolResultEnvelope(
             "c1", "a1", "bash", True, ToolResultStatus.OK,
@@ -551,7 +551,7 @@ class AskingMoreThanOnce(unittest.TestCase):
                       "the round after the demand offers writing only")
 
     def test_and_not_forever(self):
-        import agent_runtime
+        from runtime import agent_runtime
 
         self.assertLessEqual(len(self.turn()),
                              agent_runtime.WRITE_REDIRECT_LIMIT)
@@ -1122,7 +1122,7 @@ class ReadOnlyIntentTests(unittest.TestCase):
         self.assertIn("write_request_unanswered", reasons)
 
     def test_a_read_only_turn_never_narrows_the_tools_to_the_writing_ones(self):
-        source = Path(__file__).resolve().parents[1] / "agent_runtime.py"
+        source = Path(__file__).resolve().parents[1] / "runtime/agent_runtime.py"
         text = source.read_text()
 
         for block in text.split("only_tools = _WRITE_TOOLS")[:-1]:
@@ -1771,7 +1771,7 @@ class ContextOwnershipTests(unittest.TestCase):
         service = CompactionService(policy=policy)
         artifact = service.compact(CompactionRequest(
             state,
-            __import__("context_engine").ContextRequest(
+            __import__("context.context_engine", fromlist=["ContextRequest"]).ContextRequest(
                 items, context_limit=2000, output_reserve=0, safety_margin=0,
             ),
         )).artifact
@@ -1828,7 +1828,7 @@ class ContextOwnershipTests(unittest.TestCase):
 
     def test_runtime_has_no_transitional_global_dependency(self):
         source = Path(__file__).resolve().parents[1].joinpath(
-            "agent_runtime.py"
+            "runtime/agent_runtime.py"
         ).read_text()
         self.assertNotIn("CURRENT_WORKING_STATE", source)
         self.assertNotIn("CURRENT_COMPACTION_ARTIFACT", source)
@@ -1838,11 +1838,11 @@ class ContextOwnershipTests(unittest.TestCase):
 class ProductionWiringTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        import rag_chat
+        from cli import rag_chat
         cls.rag_chat = rag_chat
 
     def test_real_transitional_tool_boundary_runs_without_cli_or_globals(self):
-        from tool_runtime import AuditLogger, ExecutionMode, Workspace
+        from harness.tool_runtime import AuditLogger, ExecutionMode, Workspace
 
         backend = ScriptedBackend([
             tool_turn("write", "write_file", path="created.txt", content="value"),

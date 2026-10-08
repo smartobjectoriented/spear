@@ -31,7 +31,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-from tool_registry import (
+from harness.tool_registry import (
     VALID_EXECUTION_MODES, ToolCategory, ToolMutability, ToolSpec,
     native_tool_specs,
 )
@@ -69,7 +69,7 @@ class AnUnknownModeIsRefused(unittest.TestCase):
             build(mutability=ToolMutability.READ_ONLY, modes=("often",))
 
     def test_the_vocabulary_is_exactly_the_execution_modes(self):
-        from tool_runtime import ExecutionMode
+        from harness.tool_runtime import ExecutionMode
 
         self.assertEqual(VALID_EXECUTION_MODES,
                          {str(mode) for mode in ExecutionMode})
@@ -141,7 +141,7 @@ class TheRealRegistryPasses(unittest.TestCase):
     """
 
     def specs(self):
-        import rag_chat
+        from cli import rag_chat
 
         return list(rag_chat.TOOL_REGISTRY.list_specs())
 
@@ -183,7 +183,7 @@ class TheCheckLivesInOnePlace(unittest.TestCase):
     def test_the_spec_validates_itself(self):
         import inspect
 
-        import tool_registry
+        from harness import tool_registry
 
         source = inspect.getsource(tool_registry.ToolSpec.__post_init__)
 
@@ -193,7 +193,7 @@ class TheCheckLivesInOnePlace(unittest.TestCase):
     def test_the_registry_adds_no_second_copy(self):
         import inspect
 
-        import tool_registry
+        from harness import tool_registry
 
         source = inspect.getsource(tool_registry.ToolRegistry.register)
 
@@ -203,7 +203,7 @@ class TheCheckLivesInOnePlace(unittest.TestCase):
         """The runtime must not have become "mutating means unsafe"."""
         import inspect
 
-        import tool_router
+        from harness import tool_router
 
         source = inspect.getsource(tool_router.ToolRouter._policy_gate)
         gate = source[source.index("spec.execution_modes"):]

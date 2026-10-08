@@ -93,7 +93,7 @@ fi
 # Tagged with the release the tree is, from the one place that says it: a
 # hard-coded number here drifted to 1.0 while the release line was 0.2.
 TAG="${TAG:-spear:$("$REPO/scripts/spearversion.sh")-$PROFILE}"
-[ -f "$APP/rag_chat.py" ] || { echo "no harness under $APP — set SPEAR_APP" >&2; exit 1; }
+[ -f "$APP/cli/rag_chat.py" ] || { echo "no harness under $APP — set SPEAR_APP" >&2; exit 1; }
 
 # The same machine settings the launcher reads, for the same reason: this is
 # where a deployment says that its rules, skills and benches live outside the

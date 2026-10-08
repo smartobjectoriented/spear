@@ -9,10 +9,10 @@ between one turn and the next — has nothing to do with any particular subject.
 
 import unittest
 
-import requirement_set
-import work_phase
-from requirement_set import Disposition, Requirement, RequirementSet
-from work_phase import Phase, WorkPhaseLedger
+from normative import requirement_set
+from runtime import work_phase
+from normative.requirement_set import Disposition, Requirement, RequirementSet
+from runtime.work_phase import Phase, WorkPhaseLedger
 
 
 SOURCE = "src/link/handshake.c"
@@ -479,7 +479,7 @@ class TheMatrixIsTheReview(unittest.TestCase):
         self.assertTrue(row["evidence"])
 
     def test_the_note_names_the_open_ones(self):
-        import agent_runtime
+        from runtime import agent_runtime
 
         ledger = governed()
         ledger.record_plan([item_for(R1)])
@@ -490,7 +490,7 @@ class TheMatrixIsTheReview(unittest.TestCase):
         self.assertIn("not closed", note)
 
     def test_there_is_no_note_without_a_contract(self):
-        import agent_runtime
+        from runtime import agent_runtime
 
         ledger = WorkPhaseLedger()
         ledger.engage(authority_bound=True, write_requested=True)

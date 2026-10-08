@@ -18,12 +18,12 @@ from unittest import mock
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-import capabilities as cap
-import capability_gateway as gw
-import context_selection as cs
-import mcp_provider
-import tool_selection as ts
-from tracing import EventType
+from harness import capabilities as cap
+from harness import capability_gateway as gw
+from context import context_selection as cs
+from harness import mcp_provider
+from harness import tool_selection as ts
+from runtime.tracing import EventType
 
 SERVER = str(Path(__file__).resolve().parent / "mcp_fixture_server.py")
 
@@ -355,7 +355,7 @@ class Untrusted(unittest.TestCase):
 
 class SpearHostRoute(unittest.TestCase):
     def host(self, door):
-        from control_plane import SpearHost
+        from harness.control_plane import SpearHost
 
         ran = []
         host = SpearHost(workspace_root=tempfile.mkdtemp(), authorize=lambda *a: "refused",
@@ -419,7 +419,7 @@ class Selection(unittest.TestCase):
     """Through rag_chat's own selection, with a capabilities file."""
 
     def setUp(self):
-        import rag_chat
+        from cli import rag_chat
 
         self.rag_chat = rag_chat
         self.root = tempfile.mkdtemp()

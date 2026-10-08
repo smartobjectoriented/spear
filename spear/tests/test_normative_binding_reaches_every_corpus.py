@@ -26,20 +26,20 @@ import tempfile
 import unittest
 from pathlib import Path
 
-import normative_precedence
-from agent_runtime import AgentRuntime
-from session_store import (FileSessionStore, SessionConfiguration,
+from normative import normative_precedence
+from runtime.agent_runtime import AgentRuntime
+from runtime.session_store import (FileSessionStore, SessionConfiguration,
                            SessionHandle, new_session_id)
-from standard_ingest import ingest_pdf
-from standard_retrieval import StandardRetrieval, rebuild_lexical_index
-from standard_crossrefs import rebuild_cross_reference_index
-from standard_store import StandardStore
-from standard_tools import StandardToolService
-from task_controller import TaskController, TaskRequest
+from standard.standard_ingest import ingest_pdf
+from standard.standard_retrieval import StandardRetrieval, rebuild_lexical_index
+from standard.standard_crossrefs import rebuild_cross_reference_index
+from standard.standard_store import StandardStore
+from standard.standard_tools import StandardToolService
+from runtime.task_controller import TaskController, TaskRequest
 from tests.standard_fixture import synthetic_pdf_bytes
 from tests.test_agent_runtime import ScriptedBackend, make_context, text_turn
-from tool_registry import ToolRegistry
-from tool_router import ToolRouter
+from harness.tool_registry import ToolRegistry
+from harness.tool_router import ToolRouter
 
 ROOT = Path(__file__).resolve().parent.parent
 
@@ -127,7 +127,7 @@ class CorpusKindDoesNotDecide(unittest.TestCase):
     def test_the_shipped_prompt_does_not_carry_the_contract(self):
         """It comes from the binding, so no prompt needs to carry it -- and a
         prompt that did would say it twice."""
-        import rag_chat
+        from cli import rag_chat
 
         body = rag_chat.ADHOC_PROMPT
 

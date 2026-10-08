@@ -31,7 +31,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-import rag_chat
+from cli import rag_chat
 
 
 class Registry(unittest.TestCase):
@@ -69,19 +69,19 @@ class TheIndexerIsDeclared(Registry):
         self.register(kind="generic")
 
         self.assertEqual(rag_chat.corpus_indexer(), "generic")
-        self.assertTrue(rag_chat.reindex_command()[1].endswith("index_dir.py"))
+        self.assertTrue(rag_chat.reindex_command()[1].endswith("retrieval/index_dir.py"))
 
     def test_the_curated_walk_is_asked_for_by_name(self):
         self.register(kind="generic", indexer="buildsystem")
 
-        self.assertTrue(rag_chat.reindex_command()[1].endswith("index_corpus.py"))
+        self.assertTrue(rag_chat.reindex_command()[1].endswith("retrieval/index_corpus.py"))
 
     def test_the_kind_does_not_choose_it(self):
         """The whole point: a label must not move the machinery."""
         self.register(kind="buildsystem")
 
         self.assertEqual(rag_chat.corpus_indexer(), "generic")
-        self.assertTrue(rag_chat.reindex_command()[1].endswith("index_dir.py"))
+        self.assertTrue(rag_chat.reindex_command()[1].endswith("retrieval/index_dir.py"))
 
     def test_both_indexers_are_told_the_collection(self):
         """Left to derive its own name, the curated walk indexed into one
@@ -196,7 +196,7 @@ class NoBehaviourHidesBehindTheKind(unittest.TestCase):
         self.assertEqual(offenders, {})
 
     def test_the_registry_documents_the_keys(self):
-        body = (ROOT / "rag_chat.py").read_text(encoding="utf-8")
+        body = (ROOT / "cli/rag_chat.py").read_text(encoding="utf-8")
 
         for key in ("collection", "indexer", "autoindex", "prompt_file"):
             with self.subTest(key=key):
@@ -256,7 +256,7 @@ class NoBehaviourHidesBehindTheKind(unittest.TestCase):
     def test_the_cli_offers_each_behaviour_separately(self):
         """One flag that switched four things at once is how they became
         invisible."""
-        body = (ROOT / "rag_chat.py").read_text(encoding="utf-8")
+        body = (ROOT / "cli/rag_chat.py").read_text(encoding="utf-8")
         for flag in ("--kind", "--indexer", "--autoindex", "--prompt-file"):
             with self.subTest(flag=flag):
                 self.assertIn(flag, body)

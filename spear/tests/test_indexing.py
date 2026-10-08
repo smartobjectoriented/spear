@@ -13,9 +13,9 @@ import unittest
 from pathlib import Path
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-import embedding
-import index_corpus
-import rag_chat
+from retrieval import embedding
+from retrieval import index_corpus
+from cli import rag_chat
 
 
 class ChunkCapTest(unittest.TestCase):
@@ -160,13 +160,13 @@ class HelpDoesNotIndexTest(unittest.TestCase):
 
     def test_index_dir_prints_usage_and_indexes_nothing(self):
         for flag in ("--help", "-h"):
-            done = self._usage("index_dir.py", flag)
+            done = self._usage("retrieval/index_dir.py", flag)
             self.assertEqual(0, done.returncode, done.stderr)
             self.assertIn("spear-index", done.stdout)
             self.assertNotIn("Indexing", done.stdout)
 
     def test_index_corpus_prints_usage_and_indexes_nothing(self):
-        done = self._usage("index_corpus.py", "--help")
+        done = self._usage("retrieval/index_corpus.py", "--help")
         self.assertEqual(0, done.returncode, done.stderr)
         self.assertNotIn("Indexing", done.stdout)
 
@@ -176,7 +176,7 @@ class ReindexOptionsTest(unittest.TestCase):
     the corpus re-pollutes itself."""
 
     def setUp(self):
-        import rag_chat
+        from cli import rag_chat
         self.rag_chat = rag_chat
         self.tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
@@ -238,7 +238,7 @@ class ReindexTargetsTheCorpusNotTheCwdTest(unittest.TestCase):
     """
 
     def setUp(self):
-        import rag_chat
+        from cli import rag_chat
         self.rag_chat = rag_chat
         self.tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
@@ -295,14 +295,14 @@ class ReindexTargetsTheCorpusNotTheCwdTest(unittest.TestCase):
                                 "kind": "buildsystem",
                                 "indexer": "buildsystem"}})
         cmd = self.rag_chat.reindex_command()
-        self.assertTrue(cmd[1].endswith("index_corpus.py"), cmd)
+        self.assertTrue(cmd[1].endswith("retrieval/index_corpus.py"), cmd)
         self.assertIn(f"{self.root}/agency", cmd)
         # Told the collection the session queries, like the generic walk.
         self.assertIn("--collection", cmd)
 
     def test_the_generic_indexer_is_the_default(self):
         cmd = self.rag_chat.reindex_command()
-        self.assertTrue(cmd[1].endswith("index_dir.py"), cmd)
+        self.assertTrue(cmd[1].endswith("retrieval/index_dir.py"), cmd)
         self.assertIn("--collection", cmd)
 
     def test_corpora_below_are_excluded_from_an_umbrella_reindex(self):
@@ -337,7 +337,7 @@ class CorpusCommandTest(unittest.TestCase):
     """
 
     def setUp(self):
-        import rag_chat
+        from cli import rag_chat
         self.rag_chat = rag_chat
         self.tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
@@ -503,7 +503,7 @@ class IndexTargetTest(unittest.TestCase):
             [sys.executable, "-c",
              f"import sys; sys.path.insert(0, {self.APP!r});"
              f" sys.argv = ['x', *{list(argv)!r}];"
-             " import index_corpus as m; print(m.PROJECT_ROOT)"],
+             " from retrieval import index_corpus as m; print(m.PROJECT_ROOT)"],
             capture_output=True, text=True, cwd=cwd or self.APP)
         self.assertEqual(0, out.returncode, out.stderr)
         return out.stdout.strip()
@@ -555,7 +555,7 @@ class GpuPinningTest(unittest.TestCase):
         keep = "CUDA_VISIBLE_DEVICES" in env
         code = (
             f"import sys, os; sys.path.insert(0, {self.APP!r});"
-            f" import embedding;"
+            f" from retrieval import embedding;"
             f" ({keep!r}) or os.environ.pop('CUDA_VISIBLE_DEVICES', None);"
             f" embedding.GPU_CONF = {path!r};"
             f" embedding._pin_gpu();"
@@ -594,7 +594,7 @@ class EnclosingCorpusTest(unittest.TestCase):
     """
 
     def setUp(self):
-        import rag_chat
+        from cli import rag_chat
         self.rag_chat = rag_chat
         self.tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
@@ -720,8 +720,8 @@ class WriteRequiresPriorReadTest(unittest.TestCase):
     """
 
     def setUp(self):
-        import rag_chat
-        from tool_runtime import Workspace
+        from cli import rag_chat
+        from harness.tool_runtime import Workspace
         self.rag_chat = rag_chat
         self.tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
@@ -739,7 +739,7 @@ class WriteRequiresPriorReadTest(unittest.TestCase):
         # asks whether the file was read.
 
         from unittest.mock import patch
-        from tool_runtime import ExecutionMode
+        from harness.tool_runtime import ExecutionMode
 
         with patch.object(self.rag_chat, "EXECUTION_MODE", ExecutionMode.AUTO):
             return self.rag_chat.execute_tool(
@@ -842,8 +842,8 @@ class EditFileTest(unittest.TestCase):
     """
 
     def setUp(self):
-        import rag_chat
-        from tool_runtime import Workspace, ExecutionMode
+        from cli import rag_chat
+        from harness.tool_runtime import Workspace, ExecutionMode
         self.rag_chat = rag_chat
         self.tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
@@ -884,7 +884,7 @@ class ToolErrorHandlerTest(unittest.TestCase):
     tool failure took the whole process down on a traceback."""
 
     def test_a_tool_call_exposes_name_as_an_attribute(self):
-        from model_backend import ModelToolCall
+        from models.model_backend import ModelToolCall
         c = ModelToolCall(id="1", name="edit_file", arguments={"path": "x"})
         self.assertEqual("edit_file", c.name)
         with self.assertRaises(TypeError):
@@ -1069,7 +1069,7 @@ class FileCapRefusesRatherThanTruncatesTests(unittest.TestCase):
         env = dict(os.environ, SPEAR_INDEX_MAX_FILES=cap,
                    SPEAR_DB_PATH=str(self.root / "_chromadb"))
         return subprocess.run(
-            [sys.executable, os.path.join(self.APP, "index_dir.py"),
+            [sys.executable, os.path.join(self.APP, "retrieval/index_dir.py"),
              str(self.root), *args],
             capture_output=True, text=True, env=env, cwd=self.APP)
 
@@ -1133,7 +1133,7 @@ class PathScopedExclusionTests(unittest.TestCase):
     def run_indexer(self, *args):
         env = dict(os.environ, SPEAR_DB_PATH=str(self.root / "_chromadb"))
         return subprocess.run(
-            [sys.executable, os.path.join(self.APP, "index_dir.py"),
+            [sys.executable, os.path.join(self.APP, "retrieval/index_dir.py"),
              str(self.root), "--include-build", *args],
             capture_output=True, text=True, env=env, cwd=self.APP)
 
@@ -1154,7 +1154,7 @@ class UmbrellaSessionTests(unittest.TestCase):
     """A session launched above the corpora keeps its map and its federation."""
 
     def setUp(self):
-        import rag_chat
+        from cli import rag_chat
         self.rag_chat = rag_chat
 
     def test_the_federation_survives_a_spec_that_is_not_in_the_registry(self):

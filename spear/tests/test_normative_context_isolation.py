@@ -37,9 +37,9 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-import answer_scope
-import code_evidence
-import normative_claims
+from context import answer_scope
+from evidence import code_evidence
+from normative import normative_claims
 
 #: Two names that exist only in this project's source.
 IMPL = "FooImpl"

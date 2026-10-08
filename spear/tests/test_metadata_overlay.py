@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import unittest
 
-import metadata_overlay as mo
-import provision_identity as pi
+from context import metadata_overlay as mo
+from normative import provision_identity as pi
 
 UNIT = {"source_id": "std-" + "e" * 32, "section": "5.4", "page": 3,
         "modality": "NONE", "content_type": "INFORMATIVE",

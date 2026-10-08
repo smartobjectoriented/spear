@@ -19,17 +19,17 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-import standard_answer_policy
-from agent_runtime import AgentContext, AgentRuntime, standard_policy_for
-from context_engine import ContextEngine, ContextItem, ContextLayer, Freshness
-from model_backend import (
+from standard import standard_answer_policy
+from runtime.agent_runtime import AgentContext, AgentRuntime, standard_policy_for
+from context.context_engine import ContextEngine, ContextItem, ContextLayer, Freshness
+from models.model_backend import (
     ConversationMessage, ModelToolCall, ModelTurn, StopReason, TextBlock,
     ToolDefinition,
 )
-from standard_answer_policy import StandardAnswerPolicy, policy_for
-from tool_router import ToolResultEnvelope, ToolResultStatus
-from tracing import TraceEmitter
-from working_state import WorkingState
+from standard.standard_answer_policy import StandardAnswerPolicy, policy_for
+from harness.tool_router import ToolResultEnvelope, ToolResultStatus
+from runtime.tracing import TraceEmitter
+from runtime.working_state import WorkingState
 
 BINDING = {"standard_id": "ANSI-VITA-49.2", "revision": "2017-R2024"}
 REAL_ID = "std-5287d23d6932688558e46a628f8aaec2"
@@ -379,7 +379,7 @@ class SingleImplementation(unittest.TestCase):
     """K: the evaluation runners own no policy of their own."""
 
     def test_the_runners_contain_no_decision_logic(self):
-        for name in ("eval/abstention/harvest.py", "eval/modeluse/harness.py"):
+        for name in ("eval/abstention/harvest.py", "eval/modeluse/modeluse_harness.py"):
             source = (ROOT / name).read_text("utf-8")
 
             with self.subTest(name=name):

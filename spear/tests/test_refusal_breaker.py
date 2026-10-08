@@ -11,12 +11,12 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-import refusal_breaker
-from agent_runtime import AgentRuntime, RuntimeTerminalReason
+from harness import refusal_breaker
+from runtime.agent_runtime import AgentRuntime, RuntimeTerminalReason
 from tests.test_agent_loop import Host, call, turn
 from tests.test_agent_runtime import MemoryRecorder, make_context
 from tests.test_core_runtime import TOOLS, Backend, _Recording
-from tracing import EventType, TraceEmitter
+from runtime.tracing import EventType, TraceEmitter
 
 REFUSED = ("refused: command refused: '/srv/other/tree' is in another tree than this "
            "project (/srv/work).")

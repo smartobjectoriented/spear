@@ -33,12 +33,12 @@ from types import SimpleNamespace
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-import answer_scope
-import code_evidence
-import evidence_bootstrap
-import normative_claims
-import standard_scope
-from tool_registry import ToolCategory
+from context import answer_scope
+from evidence import code_evidence
+from evidence import evidence_bootstrap
+from normative import normative_claims
+from standard import standard_scope
+from harness.tool_registry import ToolCategory
 
 #: A term this document defines and English does not.
 TERM = "XCW"

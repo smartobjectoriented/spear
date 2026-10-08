@@ -5,21 +5,21 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from agent_runtime import AgentRuntime
-from checkpoint import CheckpointManager
-from context_engine import ContextItem, ContextLayer, Freshness
-from task_controller import TaskController, TaskRequest, TaskStatus
+from runtime.agent_runtime import AgentRuntime
+from harness.checkpoint import CheckpointManager
+from context.context_engine import ContextItem, ContextLayer, Freshness
+from runtime.task_controller import TaskController, TaskRequest, TaskStatus
 from tests.test_agent_runtime import (
     GroundedToolExecutor, ScriptedBackend, make_context, text_turn, tool_turn,
 )
 from tests.test_task_controller import registry
-from training_data import (
+from training.training_data import (
     TRAINING_SCHEMA_VERSION, TrainingDataError, TrainingEligibility,
     TrainingEpisode, TrainingRecorder, TrainingRedactionPolicy,
 )
-from training_store import TrainingStore, TrainingStoreError
-from verification import CompletionVerificationStatus
-from working_state import StateEventType
+from training.training_store import TrainingStore, TrainingStoreError
+from evidence.verification import CompletionVerificationStatus
+from runtime.working_state import StateEventType
 
 
 def make_controller(context, store, **kwargs):
@@ -41,7 +41,7 @@ class TrainingCaptureTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             store = TrainingStore(Path(directory) / "training")
             context = make_context(ScriptedBackend([text_turn("answer")]))
-            with patch("training_readiness.TrainingReadinessIndex.update_episode",
+            with patch("training.training_readiness.TrainingReadinessIndex.update_episode",
                        side_effect=RuntimeError("secondary failure")):
                 result = make_controller(context, store).run(TaskRequest(
                     "answer", context, (directory,), enable_planning=False,
@@ -175,8 +175,8 @@ class TrainingCaptureTests(unittest.TestCase):
             self.assertIn("passed", outcomes)
 
     def test_cancelled_budget_and_stalled_are_failure_trajectories(self):
-        from budgets import BudgetKind, BudgetLimit, BudgetManager
-        from cancellation import CancellationSource
+        from runtime.budgets import BudgetKind, BudgetLimit, BudgetManager
+        from runtime.cancellation import CancellationSource
 
         cases = []
         cancelled = make_context(ScriptedBackend([text_turn()]), task_id="cancelled")

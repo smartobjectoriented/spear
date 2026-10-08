@@ -4,7 +4,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from tracing import (
+from runtime.tracing import (
     EventStatus,
     EventType,
     JsonlTraceRecorder,
@@ -14,11 +14,11 @@ from tracing import (
     create_trace_emitter,
     new_task_id,
 )
-from agent_runtime import AgentContext, AgentRuntime
-from compaction import CompactionPolicy
-from context_engine import ContextEngine, ContextItem, ContextLayer
-from model_backend import ConversationMessage, TextBlock
-from working_state import WorkingState
+from runtime.agent_runtime import AgentContext, AgentRuntime
+from runtime.compaction import CompactionPolicy
+from context.context_engine import ContextEngine, ContextItem, ContextLayer
+from models.model_backend import ConversationMessage, TextBlock
+from runtime.working_state import WorkingState
 
 
 class MemoryRecorder:
@@ -178,7 +178,7 @@ class TimingTests(unittest.TestCase):
 class RagChatTracingIntegrationTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        import rag_chat
+        from cli import rag_chat
         cls.rag_chat = rag_chat
 
     def setUp(self):
@@ -201,7 +201,7 @@ class RagChatTracingIntegrationTests(unittest.TestCase):
         )
 
     def test_model_boundary_emits_context_and_timing_pair(self):
-        from model_backend import ModelTurn, StopReason
+        from models.model_backend import ModelTurn, StopReason
 
         class FakeBackend:
             model = "scripted-local"
@@ -263,7 +263,7 @@ class RagChatTracingIntegrationTests(unittest.TestCase):
         self.assertIn(EventType.TOOL_CALL_FAILED, types)
 
     def test_broken_recorder_cannot_change_model_or_tool_results(self):
-        from model_backend import ModelTurn, StopReason
+        from models.model_backend import ModelTurn, StopReason
 
         class FakeBackend:
             def complete(self, **kwargs):
@@ -295,7 +295,7 @@ class RagChatTracingIntegrationTests(unittest.TestCase):
         self.assertEqual(sample["task_id"], "task_integration")
 
     def test_scripted_task_has_expected_end_to_end_event_sequence(self):
-        from model_backend import ModelTurn, StopReason
+        from models.model_backend import ModelTurn, StopReason
 
         class FakeBackend:
             model = "scripted-local"

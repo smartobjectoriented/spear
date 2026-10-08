@@ -21,7 +21,7 @@ import sys
 sys.path.insert(0, os.environ.get(
     "SPEAR_APP", str(pathlib.Path(__file__).resolve().parents[1] / "spear")))
 
-import workspace_knowledge as wk  # noqa: E402
+from context import workspace_knowledge as wk  # noqa: E402
 
 
 def main() -> int:

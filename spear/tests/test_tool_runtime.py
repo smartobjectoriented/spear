@@ -18,9 +18,9 @@ from unittest.mock import ANY, MagicMock, patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-import tool_runtime
+from harness import tool_runtime
 
-from tool_runtime import (
+from harness.tool_runtime import (
     AuditLogger,
     AuthorizationResult,
     Capability,
@@ -51,7 +51,7 @@ class RagChatWorkspaceIntegrationTests(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        import rag_chat
+        from cli import rag_chat
 
         cls.rag_chat = rag_chat
 
@@ -90,7 +90,7 @@ class RagChatWorkspaceIntegrationTests(unittest.TestCase):
         another spelling of the same read.
         """
 
-        from model_backend import ConversationMessage, TextBlock, ToolResultBlock
+        from models.model_backend import ConversationMessage, TextBlock, ToolResultBlock
 
         class Context:
             conversation = [
@@ -430,7 +430,7 @@ class RagChatWorkspaceIntegrationTests(unittest.TestCase):
 class RagChatCompatibilityTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        import rag_chat
+        from cli import rag_chat
 
         cls.rag_chat = rag_chat
 
@@ -468,9 +468,9 @@ class RagChatCompatibilityTests(unittest.TestCase):
         self.assertEqual(completions.kwargs["model"], "qwen3")
 
     def test_rag_and_agent_loop_constants_are_unchanged(self):
-        # Anchored on the module's own directory, not an absolute literal: the
+        # Anchored on the module's own location, not an absolute literal: the
         # literal went stale when the tree was relocated and startup broke.
-        app_dir = os.path.dirname(os.path.realpath(self.rag_chat.__file__))
+        app_dir = os.path.dirname(os.path.dirname(os.path.realpath(self.rag_chat.__file__)))
         self.assertEqual(self.rag_chat.APP_DIR, app_dir)
         self.assertEqual(self.rag_chat.ROOT_DIR, os.path.dirname(app_dir))
         # The production default is the checkout's own index; a test run that
@@ -549,7 +549,7 @@ class RagChatCompatibilityTests(unittest.TestCase):
                 os.environ["SPEAR_BACKEND_LABEL"] = prev
 
     def test_backend_picker_prefers_flags_then_memory_then_prompt(self):
-        import backend_select
+        from cli import backend_select
 
         with tempfile.TemporaryDirectory() as tmp:
             with patch.object(backend_select, "STATE_FILE", os.path.join(tmp, "b.conf")):
@@ -1682,7 +1682,7 @@ class CommandRunnerTests(unittest.TestCase):
             workspace = Workspace.from_path(temporary)
             assessment = CommandPolicy().classify("pwd")
             runner = CommandRunner()
-            with patch("tool_runtime.subprocess.run") as run:
+            with patch("harness.tool_runtime.subprocess.run") as run:
                 run.return_value.returncode = 0
                 run.return_value.stdout = "ok"
                 run.return_value.stderr = ""
@@ -1802,7 +1802,7 @@ class ResourceLimitsTests(unittest.TestCase):
 
     def test_active_limits_fail_closed_when_prlimit_is_unavailable(self):
         sandbox = tool_runtime.BubblewrapSandbox(prlimit_binary="/definitely/missing/prlimit")
-        with patch("tool_runtime.subprocess.run") as run:
+        with patch("harness.tool_runtime.subprocess.run") as run:
             result = sandbox.run(
                 self.workspace, ["/bin/true"], resource_limits=DEFAULT_RESOURCE_LIMITS
             )
@@ -2721,7 +2721,7 @@ class Slirp4netnsNetworkTests(unittest.TestCase):
 
     def test_auto_workspace_mutation_fails_closed_without_sandbox(self):
         sandbox = self.sandbox(binary="/definitely/missing/bwrap")
-        import rag_chat
+        from cli import rag_chat
 
         old_mode = rag_chat.EXECUTION_MODE
         old_sandbox = getattr(rag_chat.COMMAND_RUNNER, "sandbox", None)
@@ -2737,7 +2737,7 @@ class Slirp4netnsNetworkTests(unittest.TestCase):
 
     def test_auto_shell_complex_fails_closed_without_sandbox(self):
         sandbox = self.sandbox(binary="/definitely/missing/bwrap")
-        import rag_chat
+        from cli import rag_chat
 
         old_mode = rag_chat.EXECUTION_MODE
         old_sandbox = getattr(rag_chat.COMMAND_RUNNER, "sandbox", None)
@@ -2753,7 +2753,7 @@ class Slirp4netnsNetworkTests(unittest.TestCase):
 
     def test_ask_complex_command_keeps_explicit_confirmation_gate(self):
         sandbox = self.sandbox(binary="/definitely/missing/bwrap")
-        import rag_chat
+        from cli import rag_chat
 
         old_mode = rag_chat.EXECUTION_MODE
         old_sandbox = getattr(rag_chat.COMMAND_RUNNER, "sandbox", None)
@@ -2770,7 +2770,7 @@ class Slirp4netnsNetworkTests(unittest.TestCase):
 
     def test_ask_complex_command_fails_closed_after_approved_confirmation(self):
         sandbox = self.sandbox(binary="/definitely/missing/bwrap")
-        import rag_chat
+        from cli import rag_chat
 
         old_mode = rag_chat.EXECUTION_MODE
         old_sandbox = getattr(rag_chat.COMMAND_RUNNER, "sandbox", None)
@@ -2965,7 +2965,7 @@ class Phase1bRagChatRoutingTests(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        import rag_chat
+        from cli import rag_chat
 
         cls.rag_chat = rag_chat
 
@@ -4114,7 +4114,7 @@ class SystemdScopeRunnerTests(unittest.TestCase):
 
     def test_linger_is_never_enabled_automatically(self):
         runner = self.available_runner()
-        with patch("tool_runtime.subprocess.run") as run:
+        with patch("harness.tool_runtime.subprocess.run") as run:
             runner.availability_for(CgroupLimits(tasks_max=8))
         for call in run.call_args_list:
             self.assertNotIn("loginctl", " ".join(call.args[0]))
@@ -4123,7 +4123,7 @@ class SystemdScopeRunnerTests(unittest.TestCase):
 
     def test_terminate_uses_systemctl_kill_with_a_bounded_timeout(self):
         runner = self.available_runner()
-        with patch("tool_runtime.subprocess.run") as run:
+        with patch("harness.tool_runtime.subprocess.run") as run:
             run.return_value = subprocess.CompletedProcess([], 0, "", "")
             runner.terminate("spear-tool-abc.scope")
         run.assert_called_once()
@@ -4136,7 +4136,7 @@ class SystemdScopeRunnerTests(unittest.TestCase):
 
     def test_terminate_never_walks_pid_trees_or_writes_cgroup_kill(self):
         runner = self.available_runner()
-        with patch("tool_runtime.subprocess.run") as run:
+        with patch("harness.tool_runtime.subprocess.run") as run:
             run.return_value = subprocess.CompletedProcess([], 0, "", "")
             runner.terminate("spear-tool-abc.scope")
         rendered = " ".join(run.call_args.args[0])
@@ -4149,7 +4149,7 @@ class SystemdScopeRunnerTests(unittest.TestCase):
                        OSError("boom"),
                        subprocess.CompletedProcess([], 1, "", "no such unit")):
             with self.subTest(effect=type(effect).__name__):
-                with patch("tool_runtime.subprocess.run") as run:
+                with patch("harness.tool_runtime.subprocess.run") as run:
                     if isinstance(effect, subprocess.CompletedProcess):
                         run.return_value = effect
                     else:
@@ -4762,7 +4762,7 @@ class ShowDiffTests(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        import rag_chat
+        from cli import rag_chat
         cls.rag_chat = rag_chat
 
     def render(self, old, new):
@@ -4861,7 +4861,7 @@ class TurnEvidenceTests(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        import rag_chat
+        from cli import rag_chat
         cls.rag_chat = rag_chat
 
     def test_no_tool_activity_adds_nothing(self):
@@ -4894,7 +4894,7 @@ class UnverifiedChangeTests(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        import rag_chat
+        from cli import rag_chat
         cls.rag_chat = rag_chat
 
     EDIT = 'edit_file {"path": "a.c"}\nOK: a.c updated'
@@ -4933,7 +4933,7 @@ class TrajectoryRecordingTests(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        import rag_chat
+        from cli import rag_chat
         cls.rag_chat = rag_chat
 
     def setUp(self):
@@ -5005,7 +5005,7 @@ class BenchLocationTests(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        import rag_chat
+        from cli import rag_chat
         cls.rag_chat = rag_chat
 
     def setUp(self):
@@ -5282,7 +5282,7 @@ class SandboxDownStopsBlindEditsTests(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        import rag_chat
+        from cli import rag_chat
         cls.rag_chat = rag_chat
 
     def setUp(self):
@@ -5347,7 +5347,7 @@ class LearnedRulesAreGlobalTests(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        import rag_chat
+        from cli import rag_chat
         cls.rag_chat = rag_chat
 
     def setUp(self):
@@ -5399,7 +5399,7 @@ class RepeatedCorpusSearchIsCachedTests(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        import rag_chat
+        from cli import rag_chat
         cls.rag_chat = rag_chat
 
     def _context(self, cache):
@@ -5501,7 +5501,7 @@ class CorpusRulesTravelWithTheHarnessTests(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        import rag_chat
+        from cli import rag_chat
         cls.rag_chat = rag_chat
 
     def setUp(self):

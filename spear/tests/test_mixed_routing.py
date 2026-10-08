@@ -19,9 +19,9 @@ from types import SimpleNamespace
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-import answer_scope
-import standard_scope
-from agent_runtime import is_write_request
+from context import answer_scope
+from standard import standard_scope
+from runtime.agent_runtime import is_write_request
 
 ARM = SimpleNamespace(standard_id="ARM-DDI0487", revision="M.c")
 VITA = SimpleNamespace(standard_id="ANSI-VITA-49.2", revision="2017-R2024")

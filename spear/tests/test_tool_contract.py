@@ -27,9 +27,9 @@ from tests.test_wrapper_parity import BashHost
 def production_views():
     """The coding views SPEAR builds, for every role and turn shape."""
     sys.argv = sys.argv[:1]
-    import rag_chat
-    from agent_roles import AgentRole
-    from tool_exposure import ToolExposurePolicy
+    from cli import rag_chat
+    from runtime.agent_roles import AgentRole
+    from harness.tool_exposure import ToolExposurePolicy
 
     policy = ToolExposurePolicy()
 

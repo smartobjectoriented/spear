@@ -2,10 +2,10 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from result_store import ResultStore, ResultStoreError
-from tool_registry import ToolCategory, ToolRegistry, ToolResultPolicy, ToolSpec
-from tool_router import ToolExecutionContext, ToolRouter
-from tracing import TraceEmitter
+from runtime.result_store import ResultStore, ResultStoreError
+from harness.tool_registry import ToolCategory, ToolRegistry, ToolResultPolicy, ToolSpec
+from harness.tool_router import ToolExecutionContext, ToolRouter
+from runtime.tracing import TraceEmitter
 
 
 class ResultStoreTests(unittest.TestCase):

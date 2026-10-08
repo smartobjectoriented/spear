@@ -19,9 +19,9 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-import diagram_geometry
-from diagram_geometry import Cell, cells_for_unit, independent
-from evidence_guard import (
+from standard import diagram_geometry
+from standard.diagram_geometry import Cell, cells_for_unit, independent
+from evidence.evidence_guard import (
     CELL_LOCAL_RANGE_USED_AS_GLOBAL, EvidenceLedger, guard, safe_rendering,
     validate,
 )
@@ -352,7 +352,7 @@ class Untouched(unittest.TestCase):
         self.assertEqual(self.structure_ledger().cell_fields, {})
 
     def test_octet_entailment_is_unchanged(self):
-        from structural_entailment import Member, unique_placement
+        from evidence.structural_entailment import Member, unique_placement
         proof = unique_placement(
             Member("Reserved", None, 4),
             [Member("A", 0, 4), Member("B", 8, 4), Member("Reserved", None, 4)],
@@ -362,14 +362,14 @@ class Untouched(unittest.TestCase):
         self.assertEqual(proof.interval, (4, 7))
 
     def test_the_zero_tool_bootstrap_is_unchanged(self):
-        import evidence_bootstrap
+        from evidence import evidence_bootstrap
 
         self.assertTrue(evidence_bootstrap.should_bootstrap(
             "Give the bit range of the Beamwidth field.", [],
             answer="something"))
 
     def test_the_empty_structure_recovery_is_unchanged(self):
-        import evidence_recovery
+        from evidence import evidence_recovery
 
         calls = [{"tool": "standard.get_structure", "origin": "MODEL",
                   "empty_structure": True}]
@@ -379,7 +379,7 @@ class Untouched(unittest.TestCase):
             answer="Nothing is defined."))
 
     def test_the_round_budget_rendering_is_unchanged(self):
-        from evidence_progress import ProgressTracker, bounded_absence
+        from evidence.evidence_progress import ProgressTracker, bounded_absence
         rendered = bounded_absence("What bit positions does X occupy?",
                                    self.structure_ledger(), ProgressTracker(),
                                    reason="ROUND_BUDGET", rounds=14)

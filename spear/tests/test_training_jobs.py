@@ -3,7 +3,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from training_jobs import (
+from training.training_jobs import (
     TrainingJob, TrainingJobError, TrainingJobStatus, TrainingJobStore,
 )
 

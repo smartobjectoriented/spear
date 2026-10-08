@@ -18,11 +18,11 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-import context_selection as cs
-import context_sources as src
-import tool_selection as ts
-from context_selection import Candidate, SourceType
-from workspace_context import from_session
+from context import context_selection as cs
+from context import context_sources as src
+from harness import tool_selection as ts
+from context.context_selection import Candidate, SourceType
+from context.workspace_context import from_session
 
 RULE_A = "---\nscope: corpus alpha\n---\nAlpha builds with `make alpha-fw`."
 RULE_B = "---\nscope: corpus beta\n---\nBeta builds with `ninja -C out beta`."
@@ -303,7 +303,7 @@ class ToolFamilies(unittest.TestCase):
         self.assertEqual((post.family, post.tools), (ts.EVIDENCE_PROVIDERS, ()))
 
     def test_the_contract_holds_for_the_coding_view_and_refuses_an_unread_argument(self):
-        from tool_registry import ToolDefinition, coding_schemas
+        from harness.tool_registry import ToolDefinition, coding_schemas
 
         schemas = coding_schemas()
         view = [ToolDefinition(name, "", dict(schemas[name]["parameters"]))
@@ -340,7 +340,7 @@ class ThroughTheOrchestration(unittest.TestCase):
     """The passes of a MIXED turn run on their own selections, and say so."""
 
     def run_turn(self):
-        from context_engine import ContextItem, ContextLayer, Freshness
+        from context.context_engine import ContextItem, ContextLayer, Freshness
         from tests.test_mixed_orchestration import SATISFIED_ALL, MixedTurn, fix
 
         class Turn(MixedTurn):
@@ -371,7 +371,7 @@ class ThroughTheOrchestration(unittest.TestCase):
         self.assertNotIn("NORMATIVE-ONLY", implementation)
 
     def test_each_pass_records_its_tool_family_and_the_packet(self):
-        from tracing import EventType
+        from runtime.tracing import EventType
 
         turn = self.run_turn()
         families = {event.metadata["phase"]: event.metadata

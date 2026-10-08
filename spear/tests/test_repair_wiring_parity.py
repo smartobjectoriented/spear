@@ -15,8 +15,8 @@ from __future__ import annotations
 import inspect
 import unittest
 
-import agent_runtime
-import standard_answer_policy
+from runtime import agent_runtime
+from standard import standard_answer_policy
 
 
 BINDING = {"standard_id": "ACME-1", "revision": "R1",
@@ -51,8 +51,8 @@ class BothCallSitesSupplyIt(unittest.TestCase):
     def test_the_evaluation_harness_supplies_it(self):
         import pathlib
 
-        source = (pathlib.Path(agent_runtime.__file__).parent
-                  / "eval" / "modeluse" / "harness.py").read_text()
+        source = (pathlib.Path(agent_runtime.__file__).parent.parent
+                  / "eval" / "modeluse" / "modeluse_harness.py").read_text()
 
         self.assertIn("repair_ask=repair_ask", source)
 
@@ -78,8 +78,8 @@ class BothCallSitesSupplyIt(unittest.TestCase):
 class TheRepairStaysOneShot(unittest.TestCase):
 
     def test_a_refused_repair_is_not_retried(self):
-        import answer_repair
-        import normative_claims
+        from runtime import answer_repair
+        from normative import normative_claims
 
         asked = []
 

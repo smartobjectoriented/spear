@@ -17,7 +17,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-import evidence_bootstrap as bootstrap
+from evidence import evidence_bootstrap as bootstrap
 
 
 class TriggerPredicate(unittest.TestCase):
@@ -106,16 +106,16 @@ class DeterministicRouting(unittest.TestCase):
 
 class PolicyIsSeparateFromTheGuard(unittest.TestCase):
     def test_the_bootstrap_module_does_not_import_the_guard(self):
-        source = (ROOT / "evidence_bootstrap.py").read_text()
+        source = (ROOT / "evidence/evidence_bootstrap.py").read_text()
         self.assertNotIn("evidence_guard", source)
 
     def test_the_guard_module_does_not_import_the_bootstrap(self):
-        source = (ROOT / "evidence_guard.py").read_text()
+        source = (ROOT / "evidence/evidence_guard.py").read_text()
         self.assertNotIn("evidence_bootstrap", source)
 
     def test_no_standard_tool_semantics_are_referenced(self):
         # The policy chooses a call; it never reimplements one.
-        source = (ROOT / "evidence_bootstrap.py").read_text()
+        source = (ROOT / "evidence/evidence_bootstrap.py").read_text()
         self.assertNotIn("StandardToolService", source)
         self.assertNotIn("STANDARD_STORE", source)
 

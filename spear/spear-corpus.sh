@@ -36,5 +36,5 @@ PY="$SCRIPT_DIR/bin/python3"
 
 exec "$PY" -c 'import sys
 sys.path.insert(0, sys.argv[1])
-import rag_chat
+from cli import rag_chat
 print(rag_chat.handle_corpus_command(sys.argv[2:]))' "$SCRIPT_DIR" "$@"

@@ -10,7 +10,7 @@ APP=/opt/spear/spear
 if ! /opt/spear/spear/bin/python - <<'PYBWRAP' 2>/dev/null; then
 import sys, tempfile
 sys.path.insert(0, "/opt/spear/spear")
-from tool_runtime import BubblewrapSandbox, Workspace
+from harness.tool_runtime import BubblewrapSandbox, Workspace
 # The harness's OWN sandbox, not a simpler bwrap invocation. A weaker probe
 # passed while the real thing failed: `bwrap --unshare-user true` needs no
 # /proc, so it said OK inside a container where mounting proc is forbidden,
@@ -51,7 +51,7 @@ fi
 "$APP/bin/python" - <<'PY'
 import os, sys
 sys.path.insert(0, "/opt/spear/spear")
-import rag_chat
+from cli import rag_chat
 found = miss = 0
 for name, spec in sorted(rag_chat.load_projects().items()):
     if os.path.isdir(spec["path"]):
@@ -99,7 +99,7 @@ PY
 "$APP/bin/python" - <<'PYSTD'
 import sys
 sys.path.insert(0, "/opt/spear/spear")
-import rag_chat
+from cli import rag_chat
 
 operator = rag_chat.STANDARD_OPERATOR
 
@@ -145,4 +145,4 @@ if [ -d "$ONNX" ] && [ ! -e "$HOME/.cache/chroma/onnx_models" ]; then
         && ln -s "$ONNX" "$HOME/.cache/chroma/onnx_models" 2>/dev/null || true
 fi
 
-exec "$APP/bin/python" "$APP/rag_chat.py" "$@"
+exec "$APP/bin/python" "$APP/cli/rag_chat.py" "$@"

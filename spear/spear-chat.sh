@@ -56,7 +56,7 @@ while [ $# -gt 0 ]; do
     case "$1" in
         # Answered here and now: --help must not index a corpus, start
         # llama-server, or open an SSH tunnel on the way to printing text.
-        --help|-h)      exec "$PY" "$SCRIPT_DIR/rag_chat.py" --help ;;
+        --help|-h)      exec "$PY" "$SCRIPT_DIR/cli/rag_chat.py" --help ;;
         --reds)         MODE=reds ;;
         --remote|--pod) MODE=remote ;;
         --local)        MODE=local ;;
@@ -74,12 +74,12 @@ done
 # to the very machine we are running on.
 if [ -n "${SPEAR_API_BASE:-}" ] && [ -z "$MODE" ]; then
     echo "→ endpoint pinned: $SPEAR_API_BASE (model ${SPEAR_MODEL_NAME:-?}) — nothing to start"
-    exec "$PY" "$SCRIPT_DIR/rag_chat.py" "${ARGS[@]}"
+    exec "$PY" "$SCRIPT_DIR/cli/rag_chat.py" "${ARGS[@]}"
 fi
 
 # ── which backend? an explicit flag wins; otherwise ask on a TTY, or reuse the
 #    last choice. The picker writes its own persistence and prints ONE token.
-CHOICE=$("$PY" "$SCRIPT_DIR/backend_select.py" "${ARGS[@]}" ${MODE:+--$MODE})
+CHOICE=$("$PY" "$SCRIPT_DIR/cli/backend_select.py" "${ARGS[@]}" ${MODE:+--$MODE})
 BACKEND="${CHOICE%%:*}"
 CHOSEN_MODEL="${CHOICE#*:}"; [ "$CHOSEN_MODEL" = "$CHOICE" ] && CHOSEN_MODEL=""
 case "$BACKEND" in
@@ -108,7 +108,7 @@ esac
 DB_PATH="$SCRIPT_DIR/chromadb"
 if [ ! -d "$DB_PATH" ]; then
     echo "First launch — indexing the corpus..."
-    "$PY" "$SCRIPT_DIR/index_corpus.py"; echo ""
+    "$PY" "$SCRIPT_DIR/retrieval/index_corpus.py"; echo ""
 fi
 
 if [ "$MODE" = anthropic ]; then
@@ -330,4 +330,4 @@ else
     echo "→ LOCAL model on the laptop"
 fi
 
-exec "$PY" "$SCRIPT_DIR/rag_chat.py" "${ARGS[@]}"
+exec "$PY" "$SCRIPT_DIR/cli/rag_chat.py" "${ARGS[@]}"

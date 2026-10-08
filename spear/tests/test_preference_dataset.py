@@ -4,13 +4,13 @@ import unittest
 from dataclasses import replace
 from pathlib import Path
 
-from preference_dataset import (
+from training.preference_dataset import (
     DecisionContextFingerprint, OutcomeLabel, PreferenceConfiguration,
     PreferenceDatasetBuilder, PreferenceDatasetError, PreferenceProfile,
 )
-from sft_dataset import ReviewStatus, SFTDatasetBuilder
+from training.sft_dataset import ReviewStatus, SFTDatasetBuilder
 from tests.test_sft_dataset import call, episode, turn
-from training_store import TrainingStore
+from training.training_store import TrainingStore
 
 
 def context_with_failure():

@@ -33,10 +33,10 @@ from types import SimpleNamespace
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-import rag_chat
-from tool_exposure import ToolExposurePolicy
-from tool_registry import ToolMutability, native_tool_specs
-from tool_router import ToolResultStatus
+from cli import rag_chat
+from harness.tool_exposure import ToolExposurePolicy
+from harness.tool_registry import ToolMutability, native_tool_specs
+from harness.tool_router import ToolResultStatus
 
 READ_ONLY_ASK = "Inspect foo.c and explain it. Do not modify anything."
 WRITE_ASK = "Replace foo.c with the corrected version."
@@ -67,7 +67,7 @@ class safe_mode:
         self.mode = mode
 
     def __enter__(self):
-        from tool_runtime import ExecutionMode
+        from harness.tool_runtime import ExecutionMode
 
         self.previous = rag_chat.EXECUTION_MODE
         rag_chat.EXECUTION_MODE = getattr(ExecutionMode, self.mode)
@@ -201,7 +201,7 @@ class TheRouterRefusesWhoeverAsks(unittest.TestCase):
                     getattr(spec, "mutability", None), ToolMutability.MUTATING)
 
     def test_the_gate_runs_before_the_handler(self):
-        router = sys.modules["tool_router"].ToolRouter
+        router = sys.modules["harness.tool_router"].ToolRouter
         source = inspect.getsource(router.execute)
         gate = source.index("self._policy_gate(")
         dispatch = source.index("spec.handler_key") if "spec.handler_key" in source \
@@ -261,21 +261,21 @@ class ReadingStillWorks(unittest.TestCase):
 
     def test_the_read_floor_survives_a_read_only_request(self):
         floor = ToolExposurePolicy.floor(
-            __import__("agent_roles", fromlist=["AgentRole"]).AgentRole.MAIN
-            if hasattr(__import__("agent_roles"), "AgentRole")
+            __import__("runtime.agent_roles", fromlist=["AgentRole"]).AgentRole.MAIN
+            if hasattr(__import__("runtime.agent_roles", fromlist=["AgentRole"]), "AgentRole")
             else None, read_only=True)
 
         self.assertIn("bash", floor)
 
     def test_no_mutating_tool_is_in_the_read_only_floor(self):
-        from tool_exposure import AgentRole
+        from harness.tool_exposure import AgentRole
 
         floor = set(ToolExposurePolicy.floor(AgentRole.MAIN, read_only=True))
 
         self.assertEqual(floor & set(MUTATING), set())
 
     def test_a_read_only_command_is_not_a_mutation(self):
-        from tool_runtime import CommandClassification
+        from harness.tool_runtime import CommandClassification
 
         for command in ("cat foo.c", "grep -rn ack src/", "ls -la"):
             with self.subTest(command=command):
@@ -294,7 +294,7 @@ class TheCompileRefusalStaysAccurate(unittest.TestCase):
         self.assertIn("do not try another way", text)
 
     def test_a_compiler_is_not_classified_read_only(self):
-        from tool_runtime import CommandClassification
+        from harness.tool_runtime import CommandClassification
 
         self.assertNotEqual(
             rag_chat.COMMAND_POLICY.classify("gcc -o probe probe.c").classification,

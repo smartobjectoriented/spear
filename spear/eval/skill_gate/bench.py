@@ -31,10 +31,10 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE.parent.parent))
 
-import context_selection as cs                      # noqa: E402
-import context_sources as src                       # noqa: E402
-import skill_library                                # noqa: E402
-from workspace_context import from_session         # noqa: E402
+from context import context_selection as cs  # noqa: E402
+from context import context_sources as src  # noqa: E402
+from context import skill_library  # noqa: E402
+from context.workspace_context import from_session         # noqa: E402
 
 LIBRARY_HITS, DISTANCE, CAP = 8, 0.55, 2
 

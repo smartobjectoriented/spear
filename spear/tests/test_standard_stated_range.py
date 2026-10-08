@@ -5,7 +5,7 @@ Every fixture here is invented. No licensed normative text appears in this file.
 
 import unittest
 
-from standard_stated_range import (
+from standard.standard_stated_range import (
     AMBIGUOUS_ASCENDING_RANGE, COUNT_DESCRIPTOR, DISQUALIFYING_CONTEXT,
     GEOMETRY_RANGE_CONFLICT, MAX_BIT, NO_BITFIELD_CONTEXT, RANGE_EXCEEDS_WORD_WIDTH,
     PROSE_CONTEXT, RANGE_OUTSIDE_RULER, RANGE_OUT_OF_BOUNDS, UNIT_FOLLOWS_RANGE,

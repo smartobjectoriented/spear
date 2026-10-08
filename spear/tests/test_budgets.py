@@ -1,13 +1,13 @@
 import tempfile
 import unittest
 
-from budgets import BudgetExceeded, BudgetKind, BudgetLimit, BudgetManager
-from agent_runtime import AgentRuntime, RuntimeTerminalReason
-from compaction import ModelBackendSummarizer, StructuredCompactionState
-from model_backend import ModelTurn, StopReason
-from session_store import FileSessionStore, SessionConfiguration, SessionHandle, SessionSnapshot
+from runtime.budgets import BudgetExceeded, BudgetKind, BudgetLimit, BudgetManager
+from runtime.agent_runtime import AgentRuntime, RuntimeTerminalReason
+from runtime.compaction import ModelBackendSummarizer, StructuredCompactionState
+from models.model_backend import ModelTurn, StopReason
+from runtime.session_store import FileSessionStore, SessionConfiguration, SessionHandle, SessionSnapshot
 from tests.test_agent_runtime import ScriptedBackend, make_context, text_turn
-from working_state import WorkingState
+from runtime.working_state import WorkingState
 
 
 class BudgetManagerTests(unittest.TestCase):

@@ -23,10 +23,10 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-import agent_runtime
-import work_phase
-from requirement_set import Disposition, Requirement, RequirementSet
-from work_phase import WorkPhaseLedger
+from runtime import agent_runtime
+from runtime import work_phase
+from normative.requirement_set import Disposition, Requirement, RequirementSet
+from runtime.work_phase import WorkPhaseLedger
 
 ACCEPT = "src/link/handshake.c"
 QUERY = "src/link/query.c"

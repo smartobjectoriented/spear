@@ -18,8 +18,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-import normative_claims as nc
-import standard_answer_policy as sap
+from normative import normative_claims as nc
+from standard import standard_answer_policy as sap
 from tests import synthetic_standard
 from tests.test_agent_runtime import text_turn
 from tests.test_mixed_orchestration import PREPASS_ANSWER, SATISFIED_ALL, MixedTurn, fix

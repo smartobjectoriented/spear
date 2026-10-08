@@ -3,11 +3,11 @@ import unittest
 import subprocess
 from pathlib import Path
 
-from inference_service import FakeInferenceServiceController, GPUWorkloadOwner
-from training_handoff import TrainingResourceHandoff, TrainingResourceLease
-from inference_service import SSHInferenceServiceController
+from models.inference_service import FakeInferenceServiceController, GPUWorkloadOwner
+from training.training_handoff import TrainingResourceHandoff, TrainingResourceLease
+from models.inference_service import SSHInferenceServiceController
 from tests.deployment_fixture import GPU_UUID, deployment
-from training_launcher import TrainingExecutionConfiguration, TrainingLauncherError
+from training.training_launcher import TrainingExecutionConfiguration, TrainingLauncherError
 
 
 class HandoffTests(unittest.TestCase):

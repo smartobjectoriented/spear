@@ -12,7 +12,7 @@ GPU UUID is zeroes. A test that needs a different value overrides it; a test
 about a MISSING value leaves it out.
 """
 
-from training_launcher import TrainingExecutionConfiguration
+from training.training_launcher import TrainingExecutionConfiguration
 
 HOST = "gpu-host.example"
 REMOTE_ROOT = "/srv/training"

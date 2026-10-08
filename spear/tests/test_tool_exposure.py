@@ -1,9 +1,9 @@
 import unittest
 
-from agent_roles import AgentRole, explorer_role, planning_role, reviewer_role
-from tool_exposure import ToolExposurePolicy
-from tool_registry import ToolRegistry, native_tool_specs
-from agent_runtime import AgentRuntime
+from runtime.agent_roles import AgentRole, explorer_role, planning_role, reviewer_role
+from harness.tool_exposure import ToolExposurePolicy
+from harness.tool_registry import ToolRegistry, native_tool_specs
+from runtime.agent_runtime import AgentRuntime
 
 
 def registry():

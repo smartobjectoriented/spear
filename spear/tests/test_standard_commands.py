@@ -4,10 +4,10 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from standard_commands import (
+from standard.standard_commands import (
     StandardCommandError, StandardOperator, handle_standard_command,
 )
-from standard_store import StandardStore
+from standard.standard_store import StandardStore
 from tests.standard_fixture import synthetic_pdf_bytes
 
 
@@ -180,7 +180,7 @@ class RetrievalFollowsTheDocumentTests(unittest.TestCase):
                           "SPEAR_STANDARD_EVIDENCE_COMPLETION", summary)
 
     def test_the_retriever_reads_the_documents_completion_budget(self):
-        from standard_retrieval import StandardRetrieval
+        from standard.standard_retrieval import StandardRetrieval
 
         with tempfile.TemporaryDirectory() as directory, \
                 mock.patch.dict(os.environ, self.CLEAN):
@@ -211,7 +211,7 @@ class RetrievalFollowsTheDocumentTests(unittest.TestCase):
 class NoCorpusEmbeddingOnTheLocalCpuTests(unittest.TestCase):
 
     def test_a_local_cpu_embedder_is_skipped_not_run(self):
-        import standard_commands
+        from standard import standard_commands
 
         class Local:                        # no `target`: runs on this machine
             pass
@@ -267,7 +267,7 @@ class CompletionTests(unittest.TestCase):
         self.temp.cleanup()
 
     def complete(self, words, text):
-        from standard_commands import complete_standard
+        from standard.standard_commands import complete_standard
         return complete_standard(words, text, self.store)
 
     def test_actions(self):

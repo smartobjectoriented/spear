@@ -36,7 +36,7 @@ from unittest.mock import patch
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-import embedding                                            # noqa: E402
+from retrieval import embedding  # noqa: E402
 
 REPO = ROOT.parent
 
@@ -175,7 +175,7 @@ class TheCodeDoesNotKnowWhereTheWorkerLives(unittest.TestCase):
         that happens to be somebody's."""
         import ast
 
-        tree = ast.parse((ROOT / "embedding.py").read_text(encoding="utf-8"))
+        tree = ast.parse((ROOT / "retrieval/embedding.py").read_text(encoding="utf-8"))
         literals = [node.value for node in ast.walk(tree)
                     if isinstance(node, ast.Constant)
                     and isinstance(node.value, str)]

@@ -15,9 +15,9 @@ import unittest
 from tests.test_agent_loop import call, turn
 from tests.test_mixed_orchestration import (CODING, FIXED, OPAQUE, MixedTurn, fix, opaque,
                                             verdicts)
-from tracing import EventType
+from runtime.tracing import EventType
 
-import normative_constraints as nc
+from normative import normative_constraints as nc
 
 CHECK = (f"{sys.executable} -B -c \"import record; "
          f"assert len(record.build_header(True)['count']) == 4\"")

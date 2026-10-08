@@ -20,7 +20,7 @@ from __future__ import annotations
 
 import unittest
 
-import normative_claims as nc
+from normative import normative_claims as nc
 
 
 def evidence(*units):

@@ -11,7 +11,7 @@ import hashlib
 import json
 from typing import Mapping, Sequence
 
-from memory_store import MarkdownMemoryStore, MemoryScope, MemorySource
+from context.memory_store import MarkdownMemoryStore, MemoryScope, MemorySource
 
 
 def fragments(expectation: str | Sequence[str]) -> tuple[str, ...]:

@@ -1,7 +1,7 @@
 import hashlib
 import unittest
 
-from standard_schema import (
+from standard.standard_schema import (
     StandardCitation, StandardContentType, StandardDocumentUnit,
     StandardModality, make_source_id, source_content_sha256,
 )

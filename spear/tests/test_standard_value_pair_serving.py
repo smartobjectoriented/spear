@@ -14,14 +14,14 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from standard_semantic import (
+from standard.standard_semantic import (
     APPROVAL_SCHEMA_VERSION, CoordinateDomain, PositionSource, SpanRole,
     StandardBitfieldApproval, associate_words, promote_bitfield,
     review_evidence_fingerprint,
 )
-from standard_structure_access import StandardStructureAccess
-from standard_value_pair import SUPPORTED_VALUE_WIDTH, value_local_pairs
-from standard_word_association import field_candidates
+from standard.standard_structure_access import StandardStructureAccess
+from standard.standard_value_pair import SUPPORTED_VALUE_WIDTH, value_local_pairs
+from standard.standard_word_association import field_candidates
 from tests.standard_word_fixture import (
     FINGERPRINT, LAYOUT, REV, SID, bitfield, ruler_row, table, word_row,
 )

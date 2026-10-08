@@ -16,9 +16,9 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-import completion
-from completion import Evidence, ProjectValidationEvidence
-from project_build import ProjectCommands
+from evidence import completion
+from evidence.completion import Evidence, ProjectValidationEvidence
+from evidence.project_build import ProjectCommands
 
 COMMANDS = ProjectCommands(build="cmake --build build", test="ctest --test-dir build",
                            source="cmake")
@@ -135,7 +135,7 @@ class ConfiguredAndProbed(unittest.TestCase):
     def test_d_a_help_only_makefile_is_no_build_to_verify_with(self):
         import tempfile
 
-        import project_build
+        from evidence import project_build
 
         root = tempfile.mkdtemp()
         Path(root, "Makefile").write_text("help:\n\t@echo targets\nhtml:\n\tsphinx-build . b\n")

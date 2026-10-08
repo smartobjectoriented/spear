@@ -2,15 +2,15 @@ import tempfile
 import unittest
 from pathlib import Path
 
-import rag_chat
-from finetune_commands import (
+from cli import rag_chat
+from cli.finetune_commands import (
     FinetuneCommandError, handle_finetune_command, parse_finetune_command,
 )
 from tests.test_training_controller import FakeTrainingLauncher
-from training_controller import TrainingController
+from training.training_controller import TrainingController
 from tests.deployment_fixture import deployment
-from training_launcher import TrainingExecutionConfiguration
-from training_store import TrainingStore
+from training.training_launcher import TrainingExecutionConfiguration
+from training.training_store import TrainingStore
 
 
 class FinetuneCommandTests(unittest.TestCase):
@@ -51,13 +51,13 @@ class FinetuneCommandTests(unittest.TestCase):
                              for item in rag_chat.CANONICAL_TOOLS))
 
     def test_runtime_cannot_import_or_dispatch_training_control(self):
-        root = Path(rag_chat.__file__).parent
-        runtime = (root / "agent_runtime.py").read_text()
-        registry = (root / "tool_registry.py").read_text()
+        root = Path(rag_chat.__file__).parent.parent
+        runtime = (root / "runtime/agent_runtime.py").read_text()
+        registry = (root / "harness/tool_registry.py").read_text()
         self.assertNotIn("training_controller", runtime)
         self.assertNotIn("finetune", runtime.lower())
         self.assertNotIn("finetune", registry.lower())
-        chat = (root / "rag_chat.py").read_text()
+        chat = (root / "cli/rag_chat.py").read_text()
         self.assertLess(chat.index('user_input == "/finetune"'),
                         chat.index("working_state = WorkingState.start"))
 

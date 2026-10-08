@@ -8,10 +8,10 @@ here is invented; no licensed text appears.
 
 import unittest
 
-from standard_semantic import (
+from standard.standard_semantic import (
     StandardBitfieldApproval, StructuralCompleteness, promote_bitfield,
 )
-from standard_word_association import (
+from standard.standard_word_association import (
     is_pure_numeric_ruler_cell, field_candidates, ruler_band, unpositioned_labels,
 )
 from tests.standard_word_fixture import (

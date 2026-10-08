@@ -2,7 +2,7 @@ import json
 import unittest
 from pathlib import Path
 
-from context_engine import (
+from context.context_engine import (
     ApproximateTokenEstimator,
     ContextEngine,
     ContextError,
@@ -13,11 +13,11 @@ from context_engine import (
     working_state_context_item,
     working_state_projection,
 )
-from agent_runtime import AgentContext, AgentRuntime
-from compaction import CompactionPolicy
-from model_backend import ToolDefinition
-from tracing import EventType, TraceEmitter
-from working_state import (
+from runtime.agent_runtime import AgentContext, AgentRuntime
+from runtime.compaction import CompactionPolicy
+from models.model_backend import ToolDefinition
+from runtime.tracing import EventType, TraceEmitter
+from runtime.working_state import (
     ActionKind,
     StateEvent,
     StateEventType,
@@ -245,11 +245,11 @@ class MemoryRecorder:
 class ContextRuntimeIntegrationTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        import rag_chat
+        from cli import rag_chat
         cls.rag_chat = rag_chat
 
     def test_simple_provider_neutral_turn_preserves_layers_and_message_types(self):
-        from model_backend import ConversationMessage, ModelTurn, StopReason, TextBlock
+        from models.model_backend import ConversationMessage, ModelTurn, StopReason, TextBlock
 
         class FakeBackend:
             model = "scripted-local"
@@ -309,7 +309,7 @@ class ContextRuntimeIntegrationTests(unittest.TestCase):
         self.assertEqual(backend.request["conversation"], tuple(conversation))
 
     def test_context_trace_contains_counts_not_prompt_content(self):
-        from model_backend import ConversationMessage, ModelTurn, StopReason, TextBlock
+        from models.model_backend import ConversationMessage, ModelTurn, StopReason, TextBlock
 
         class FakeBackend:
             max_tokens = 16
@@ -352,7 +352,7 @@ class ContextRuntimeIntegrationTests(unittest.TestCase):
 
     def test_context_engine_has_no_provider_specific_imports(self):
         source = Path(__file__).resolve().parents[1].joinpath(
-            "context_engine.py"
+            "context/context_engine.py"
         ).read_text()
         self.assertNotIn("model_backend", source)
         self.assertNotIn("OpenAI", source)
@@ -372,12 +372,12 @@ class AnswerScopeRuleTests(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        import rag_chat
+        from cli import rag_chat
 
         cls.rag_chat = rag_chat
 
     def items(self, base):
-        from working_state import WorkingState
+        from runtime.working_state import WorkingState
 
         return self.rag_chat.build_task_context_items(
             system_instructions=base, system_source="probe",

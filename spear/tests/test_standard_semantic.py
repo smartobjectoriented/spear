@@ -9,25 +9,25 @@ import unittest
 from dataclasses import replace
 from pathlib import Path
 
-from standard_ingest import ingest_pdf
-from standard_layout import extract_layout
-from standard_store import StandardStore, StandardStoreError
-from standard_structure import (
+from standard.standard_ingest import ingest_pdf
+from standard.standard_layout import extract_layout
+from standard.standard_store import StandardStore, StandardStoreError
+from standard.standard_structure import (
     ProvenanceQuality, extract_structures, structure_fingerprint,
 )
-from standard_structure_store import StandardStructureStore, build_manifest
-from standard_semantic import (
+from standard.standard_structure_store import StandardStructureStore, build_manifest
+from standard.standard_semantic import (
     APPROVING_VERDICTS, BitOrder, SemanticRole, SpanRole,
     StandardBitfieldApproval, StandardSemanticError, bit_order_of,
     build_semantics, promote_bitfield, semantic_fingerprint, validate_semantics,
 )
-from standard_semantic_store import (
+from standard.standard_semantic_store import (
     StandardApprovalStore, StandardSemanticStore, build_semantic_manifest,
     operator_identity,
 )
-from standard_tools import STANDARD_TOOL_NAMES, StandardToolService
+from standard.standard_tools import STANDARD_TOOL_NAMES, StandardToolService
 from tests.standard_geometry_fixture import semantic_bitfield_pdf_bytes
-from tool_registry import ToolRegistry
+from harness.tool_registry import ToolRegistry
 
 SID, REV = "SEM", "R1"
 OPERATOR = "test-operator"
@@ -392,7 +392,7 @@ class SemanticStoreTests(_Semantic):
         outside.mkdir()
         escaped = directory / "escape.json"
         escaped.symlink_to(outside)
-        from standard_semantic_store import _atomic_write
+        from standard.standard_semantic_store import _atomic_write
         with self.assertRaises(StandardSemanticError):
             _atomic_write(escaped, b"{}")
 
@@ -459,7 +459,8 @@ class ToolSurfaceTests(_Semantic):
         for forbidden in ("standard.validate",
                           "standard.build_structure", "standard.approve_bitfield"):
             self.assertNotIn(forbidden, names)
-        import standard_semantic, standard_semantic_store
+        from standard import standard_semantic
+        from standard import standard_semantic_store
         for module in (standard_semantic, standard_semantic_store):
             self.assertFalse(hasattr(module, "register"))
 

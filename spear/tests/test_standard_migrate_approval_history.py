@@ -14,23 +14,23 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from standard_approval_history import (
+from standard.standard_approval_history import (
     ApprovalEventType, EvidenceStatus, StandardApprovalHistory,
 )
-from standard_commands import (
+from standard.standard_commands import (
     StandardCommandError, StandardOperator, handle_standard_command,
     standard_help_lines, standard_usage,
 )
-from standard_ingest import ingest_pdf
-from standard_layout import extract_layout
-from standard_semantic import (
+from standard.standard_ingest import ingest_pdf
+from standard.standard_layout import extract_layout
+from standard.standard_semantic import (
     APPROVAL_SCHEMA_VERSION, StandardBitfieldApproval, build_semantics,
     semantic_fingerprint,
 )
-from standard_semantic_store import StandardApprovalStore
-from standard_store import StandardStore
-from standard_structure import extract_structures, structure_fingerprint
-from standard_structure_store import StandardStructureStore, build_manifest
+from standard.standard_semantic_store import StandardApprovalStore
+from standard.standard_store import StandardStore
+from standard.standard_structure import extract_structures, structure_fingerprint
+from standard.standard_structure_store import StandardStructureStore, build_manifest
 from tests.standard_geometry_fixture import semantic_bitfield_pdf_bytes
 
 SID, REV = "SEM", "R1"
@@ -67,8 +67,8 @@ class _Migration(unittest.TestCase):
         self.approvals = StandardApprovalStore(self.store)
         self.history = StandardApprovalHistory(self.store)
         self.operator = StandardOperator(self.store)
-        from standard_value_pair import value_local_pairs
-        from standard_word_association import field_candidates
+        from standard.standard_value_pair import value_local_pairs
+        from standard.standard_word_association import field_candidates
         pairs, _ = value_local_pairs(self.candidate.to_dict(),
                                      self.table.to_dict())
         self.width = len(field_candidates(

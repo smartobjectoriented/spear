@@ -148,24 +148,24 @@ class TheNewNameIsTheOneThatWorks(unittest.TestCase):
         return new
 
     def test_state_dir(self):
-        self.check("backend_select", "STATE_FILE", "SPEAR_STATE_DIR",
+        self.check("cli.backend_select", "STATE_FILE", "SPEAR_STATE_DIR",
                    "/tmp/spear-probe-state",
                    "/tmp/spear-probe-state/active-backend.conf")
 
     def test_api_base(self):
-        self.check("rag_chat", "LLAMA_SERVER_URL", "SPEAR_API_BASE",
+        self.check("cli.rag_chat", "LLAMA_SERVER_URL", "SPEAR_API_BASE",
                    "http://127.0.0.1:9/v1", "http://127.0.0.1:9/v1")
 
     def test_db_path(self):
-        self.check("rag_chat", "DB_PATH", "SPEAR_DB_PATH",
+        self.check("cli.rag_chat", "DB_PATH", "SPEAR_DB_PATH",
                    "/tmp/spear-probe-db", "/tmp/spear-probe-db")
 
     def test_corpus_root(self):
-        self.check("rag_chat", "CORPORA_ROOT", "SPEAR_CORPUS_ROOT",
+        self.check("cli.rag_chat", "CORPORA_ROOT", "SPEAR_CORPUS_ROOT",
                    "/tmp/spear-probe-corpora", "/tmp/spear-probe-corpora")
 
     def test_a_runtime_limit(self):
-        self.check("agent_runtime", "CLAUSE_REDIRECT_LIMIT",
+        self.check("runtime.agent_runtime", "CLAUSE_REDIRECT_LIMIT",
                    "SPEAR_CLAUSE_REDIRECTS", "9", 9)
 
     def tearDown(self):
@@ -179,7 +179,7 @@ class TheTraceSwitchMovedToo(unittest.TestCase):
     """SPEAR_TRACE and SPEAR_TRACE_FILE, read where tracing is set up."""
 
     def source(self):
-        return (ROOT / "rag_chat.py").read_text(encoding="utf-8")
+        return (ROOT / "cli/rag_chat.py").read_text(encoding="utf-8")
 
     def test_the_switch_is_read_under_the_new_name(self):
         self.assertIn('"SPEAR_TRACE"', self.source())
@@ -206,7 +206,7 @@ class DerivedAndPropagatedNames(unittest.TestCase):
 
     def test_the_training_log_marker_matches_what_the_remote_emits(self):
         """Both halves, or the launcher parses lines nothing writes."""
-        source = (ROOT / "training_launcher.py").read_text(encoding="utf-8")
+        source = (ROOT / "training/training_launcher.py").read_text(encoding="utf-8")
 
         self.assertIn("sed 's/^/SPEAR_LOG:/'", source)
         self.assertIn('len("SPEAR_LOG:")', source)
@@ -214,7 +214,7 @@ class DerivedAndPropagatedNames(unittest.TestCase):
         self.assertNotIn("EDGEM_LOG", source)
 
     def test_the_remote_heredoc_delimiter_still_pairs(self):
-        source = (ROOT / "training_launcher.py").read_text(encoding="utf-8")
+        source = (ROOT / "training/training_launcher.py").read_text(encoding="utf-8")
 
         self.assertEqual(source.count("SPEAR_RUN"), 2)
         self.assertNotIn("EDGEM_RUN", source)

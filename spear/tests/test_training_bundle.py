@@ -10,16 +10,16 @@ from pathlib import Path
 from tests.test_preference_dataset import bad_turn, good_turn
 from tests.test_sft_dataset import episode, turn
 from tests.test_training_readiness import with_origin
-from training_bundle import (
+from training.training_bundle import (
     AxolotlConfigGenerator, AxolotlProfile, SourceModelProfile,
     TokenizerValidator, TrainingBundleBuilder, TrainingBundleConfiguration,
     TrainingBundleError, TrainingHardwareReport, validate_loss_mask_intent,
     validate_training_bundle, VRAMFeasibility,
 )
-from training_governance import DataOrigin, TrainingDataGovernancePolicy
-from training_readiness import TrainingReadinessPolicy
-from training_store import TrainingStore
-from training import main as training_main
+from training.training_governance import DataOrigin, TrainingDataGovernancePolicy
+from training.training_readiness import TrainingReadinessPolicy
+from training.training_store import TrainingStore
+from training.__main__ import main as training_main
 
 
 class FakeTokenizer:

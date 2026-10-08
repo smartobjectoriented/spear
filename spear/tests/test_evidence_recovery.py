@@ -19,10 +19,10 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-import evidence_bootstrap
-import evidence_recovery
-from evidence_guard import EvidenceLedger, guard
-from evidence_recovery import (
+from evidence import evidence_bootstrap
+from evidence import evidence_recovery
+from evidence.evidence_guard import EvidenceLedger, guard
+from evidence.evidence_recovery import (
     EMPTY_STRUCTURE_RECOVERY, ZERO_TOOL_BOOTSTRAP, is_empty_structure, route,
     should_recover,
 )

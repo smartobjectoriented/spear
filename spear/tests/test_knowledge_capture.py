@@ -20,16 +20,16 @@ from unittest import mock
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-import knowledge_migration
-import workspace_knowledge as wk
-from memory_store import MarkdownMemoryStore, MemoryScope, MemorySource
+from context import knowledge_migration
+from context import workspace_knowledge as wk
+from context.memory_store import MarkdownMemoryStore, MemoryScope, MemorySource
 
 
 class Session(unittest.TestCase):
     """rag_chat's commands, against a temporary state and two workspaces."""
 
     def setUp(self):
-        import rag_chat
+        from cli import rag_chat
 
         self.rag_chat = rag_chat
         self.state = tempfile.mkdtemp()
@@ -281,7 +281,7 @@ class Migration(Session):
 
 class LegacyStoreIsNoLongerRead(unittest.TestCase):
     def test_nothing_reads_or_writes_the_markdown_notes_any_more(self):
-        import rag_chat
+        from cli import rag_chat
 
         for gone in ("load_memories", "save_memory", "memory_store"):
             self.assertFalse(hasattr(rag_chat, gone), gone)
@@ -307,7 +307,7 @@ class RealStateIsOffLimits(unittest.TestCase):
         import subprocess
 
         program = ("import sys; sys.modules['pytest'] = type(sys)('pytest'); "
-                   "import state_paths; root = state_paths.test_state_root(); "
+                   "from runtime import state_paths; root = state_paths.test_state_root(); "
                    "open(root + '/audit.jsonl', 'w').write('x'); print(root)")
         result = subprocess.run([sys.executable, "-c", program], capture_output=True, text=True,
                                 cwd=str(Path(__file__).resolve().parents[1]), check=True)

@@ -1,7 +1,7 @@
 import unittest
 
-from training_data import TRAINING_SCHEMA_VERSION, TrainingEpisode
-from training_governance import DataOrigin, TrainingDataGovernancePolicy
+from training.training_data import TRAINING_SCHEMA_VERSION, TrainingEpisode
+from training.training_governance import DataOrigin, TrainingDataGovernancePolicy
 
 
 def episode(origin):

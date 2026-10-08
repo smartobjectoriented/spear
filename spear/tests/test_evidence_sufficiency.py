@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import unittest
 
-import evidence_sufficiency as es
+from evidence import evidence_sufficiency as es
 
 ALONE = [["Rule 1-1"]]
 EITHER = [["Rule 1-1"], ["Rule 1-2"]]

@@ -3,26 +3,26 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from agent_roles import explorer_role
-from agent_runtime import AgentContext, AgentRuntime
-from cancellation import CancellationScope, CancellationSource
-from compaction import CompactionPolicy
-from context_engine import ContextEngine, ContextItem, ContextLayer, Freshness
-from model_backend import (
+from runtime.agent_roles import explorer_role
+from runtime.agent_runtime import AgentContext, AgentRuntime
+from runtime.cancellation import CancellationScope, CancellationSource
+from runtime.compaction import CompactionPolicy
+from context.context_engine import ContextEngine, ContextItem, ContextLayer, Freshness
+from models.model_backend import (
     ConversationMessage, ModelToolCall, ModelTurn, StopReason, TextBlock,
     ToolDefinition,
 )
-from orchestration import (
+from runtime.orchestration import (
     ExplorationPolicy, ExplorationRequest, ExplorationService,
     ExplorationStatus,
 )
-from session_store import (
+from runtime.session_store import (
     FileSessionStore, SessionConfiguration, SessionEventType, SessionHandle,
     new_session_id,
 )
-from tool_router import ToolResultEnvelope, ToolResultStatus
-from tracing import EventType, TraceEmitter
-from working_state import WorkingState
+from harness.tool_router import ToolResultEnvelope, ToolResultStatus
+from runtime.tracing import EventType, TraceEmitter
+from runtime.working_state import WorkingState
 
 
 class Recorder:

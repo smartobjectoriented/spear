@@ -16,16 +16,16 @@ import unittest
 from pathlib import Path
 from types import SimpleNamespace
 
-import request_intent
-import request_scope
-from agent_runtime import (_WRITE_REQUEST_RE, conclude_demand, is_write_request,
+from context import request_intent
+from context import request_scope
+from runtime.agent_runtime import (_WRITE_REQUEST_RE, conclude_demand, is_write_request,
                            unverified_write_note, wants_write)
-from model_backend import ConversationMessage, TextBlock
-from agent_roles import AgentRole
-from tool_exposure import ToolExposurePolicy
-from tool_registry import ToolRegistry, native_tool_specs
-from tool_router import ToolExecutionContext, ToolRouter
-from tracing import TraceEmitter
+from models.model_backend import ConversationMessage, TextBlock
+from runtime.agent_roles import AgentRole
+from harness.tool_exposure import ToolExposurePolicy
+from harness.tool_registry import ToolRegistry, native_tool_specs
+from harness.tool_router import ToolExecutionContext, ToolRouter
+from runtime.tracing import TraceEmitter
 
 
 def registry():

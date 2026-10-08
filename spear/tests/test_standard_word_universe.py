@@ -8,11 +8,11 @@ itself whole. Every fixture here is invented; no licensed text appears.
 import unittest
 from dataclasses import replace
 
-from standard_semantic import (
+from standard.standard_semantic import (
     SemanticRole, StandardBitfieldApproval, StructuralCompleteness,
     promote_bitfield,
 )
-from standard_word_association import (
+from standard.standard_word_association import (
     field_candidates, is_pure_numeric_ruler_cell, unpositioned_labels,
 )
 from tests.standard_word_fixture import (

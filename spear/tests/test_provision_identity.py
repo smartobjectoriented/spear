@@ -22,7 +22,7 @@ from __future__ import annotations
 
 import unittest
 
-import provision_identity as pi
+from normative import provision_identity as pi
 
 SECTION = "5.2"
 

@@ -17,8 +17,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-import provenance_guard
-from provenance_guard import (
+from evidence import provenance_guard
+from evidence.provenance_guard import (
     FABRICATED_PATH, FABRICATED_SOURCE_ID, FABRICATED_URL, ProvenanceLedger,
     findings, guard, sanitize,
 )

@@ -1,19 +1,19 @@
 import tempfile
 import unittest
 
-from agent_runtime import AgentContext, AgentRuntime, RuntimeTerminalReason
-from cancellation import CancellationSource
-from context_engine import ContextEngine
-from failure_policy import FailureKind, RetryPolicy
-from session_store import (
+from runtime.agent_runtime import AgentContext, AgentRuntime, RuntimeTerminalReason
+from runtime.cancellation import CancellationSource
+from context.context_engine import ContextEngine
+from runtime.failure_policy import FailureKind, RetryPolicy
+from runtime.session_store import (
     FileSessionStore, SessionConfiguration, SessionHandle, new_session_id,
     restore_session,
 )
 from tests.test_agent_runtime import (
     GroundedToolExecutor, ScriptedBackend, make_context, text_turn, tool_turn,
 )
-from tracing import TraceEmitter
-from working_state import TerminalStatus
+from runtime.tracing import TraceEmitter
+from runtime.working_state import TerminalStatus
 
 
 class RuntimeResumptionTests(unittest.TestCase):

@@ -20,9 +20,9 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-import agent_runtime
-from requirement_set import Disposition, Requirement, RequirementSet
-from work_phase import WorkPhaseLedger
+from runtime import agent_runtime
+from normative.requirement_set import Disposition, Requirement, RequirementSet
+from runtime.work_phase import WorkPhaseLedger
 
 SOURCE = "src/link/handshake.c"
 HANDLE = "std-0a1b2c3d4e5f"
@@ -130,7 +130,7 @@ class WhatWasLeftOutOfScopeIsInTheRecord(unittest.TestCase):
     narrowing is a visible decision rather than a silence."""
 
     def published(self):
-        import requirement_set
+        from normative import requirement_set
 
         def record(key, section, text, force=3):
             return type("R", (), {"key": key, "section": section, "text": text,

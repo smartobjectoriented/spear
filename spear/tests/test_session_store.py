@@ -3,17 +3,17 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from compaction import (
+from runtime.compaction import (
     CompactionArtifact, ConversationSummary, StructuredCompactionState,
 )
-from context_engine import ContextItem, ContextLayer
-from model_backend import ConversationMessage, TextBlock, ToolUseBlock
-from session_store import (
+from context.context_engine import ContextItem, ContextLayer
+from models.model_backend import ConversationMessage, TextBlock, ToolUseBlock
+from runtime.session_store import (
     FileSessionStore, InFlightOperation, SessionCompatibilityError,
     SessionConfiguration, SessionError, SessionEvent, SessionEventType,
     SessionHandle, SessionSnapshot, new_session_id, restore_session,
 )
-from working_state import (
+from runtime.working_state import (
     StateEvent, StateEventType, StateSource, TerminalStatus, WorkingState,
 )
 

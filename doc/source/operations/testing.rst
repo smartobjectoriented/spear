@@ -19,7 +19,7 @@ Everything uses the application's own virtualenv:
 
    $ cd ~/spear/spear
 
-   $ ./bin/python -m py_compile model_backend.py agent_runtime.py task_controller.py rag_chat.py tool_runtime.py control_plane.py agent/*.py
+   $ ./bin/python -m compileall -q agent cli context evidence harness models normative retrieval runtime standard training
    $ PYTHONPATH=. ./bin/python -m unittest discover -s tests -p "test_*.py"
    Ran … tests — OK (skipped=…)
 

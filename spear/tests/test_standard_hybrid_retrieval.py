@@ -10,17 +10,17 @@ import unittest
 from dataclasses import replace
 from pathlib import Path
 
-from standard_crossrefs import rebuild_cross_reference_index
-from standard_ingest import ingest_pdf
-import standard_retrieval
-from standard_retrieval import StandardRetrieval, rebuild_lexical_index
-from standard_retrieval_eval import (
+from standard.standard_crossrefs import rebuild_cross_reference_index
+from standard.standard_ingest import ingest_pdf
+from standard import standard_retrieval
+from standard.standard_retrieval import StandardRetrieval, rebuild_lexical_index
+from standard.standard_retrieval_eval import (
     StandardRetrievalEvaluationItem, evaluate_retrieval,
 )
-from standard_store import StandardStore, StandardStoreError
-from standard_vector_index import encode_vectors, rebuild_vector_index, vector_entries
-import standard_vector_index
-from standard_schema import sha256_json
+from standard.standard_store import StandardStore, StandardStoreError
+from standard.standard_vector_index import encode_vectors, rebuild_vector_index, vector_entries
+from standard import standard_vector_index
+from standard.standard_schema import sha256_json
 from tests.standard_fixture import synthetic_pdf_bytes
 
 
@@ -251,7 +251,7 @@ class StandardHybridRetrievalTests(unittest.TestCase):
         Schema-1 units carry no heading classification, so two lines opening with
         the same clause number are both anchors and the reference stays unresolved.
         """
-        from standard_ingest import build_manifest, extract_pdf_pages
+        from standard.standard_ingest import build_manifest, extract_pdf_pages
         from tests.standard_extraction_fixture import legacy_canonical_units
 
         root = Path(self.temp.name); pdf = root / "ambiguous.pdf"

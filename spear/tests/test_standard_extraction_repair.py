@@ -10,13 +10,13 @@ from pathlib import Path
 
 from dataclasses import replace
 
-from standard_ingest import (
+from standard.standard_ingest import (
     EXTRACTOR_VERSION, canonical_units, extract_pdf_pages, verify_against_contents,
 )
-from standard_schema import (
+from standard.standard_schema import (
     StandardContentType, StandardLayoutKind, StandardModality,
 )
-from standard_store import StandardStore
+from standard.standard_store import StandardStore
 from tests.standard_extraction_fixture import (
     EXTRACTION_PAGES, classifier_pdf_bytes, contents_target_pdf_bytes,
     extraction_pdf_bytes, positioned_pdf_bytes, wide_column_pdf_bytes,
@@ -253,9 +253,9 @@ class ClauseUniquenessTests(unittest.TestCase):
         self.assertIn("clause number was already opened earlier", demoted.warnings)
 
     def test_the_surviving_anchor_makes_the_reference_resolvable(self):
-        from standard_crossrefs import rebuild_cross_reference_index
-        from standard_ingest import build_manifest, ingest_pdf
-        from standard_store import StandardStore
+        from standard.standard_crossrefs import rebuild_cross_reference_index
+        from standard.standard_ingest import build_manifest, ingest_pdf
+        from standard.standard_store import StandardStore
 
         store = StandardStore(self.root / "store")
         ingest_pdf(store, self.pdf, standard_id="AMB", revision="R1",
@@ -302,7 +302,7 @@ class ColumnSetNumberTests(unittest.TestCase):
         self.assertEqual(opened[0].page, 3)
 
     def test_the_heading_gap_limit_is_measured_from_the_document(self):
-        from standard_ingest import _heading_gap_limit, _page_lines
+        from standard.standard_ingest import _heading_gap_limit, _page_lines
         narrow = _heading_gap_limit(_page_lines(("1 A\n2 B\n",)))
         wide = _heading_gap_limit(_page_lines(("x" * 400 + "\n" + "y" * 400 + "\n",)))
         self.assertGreater(wide, narrow)

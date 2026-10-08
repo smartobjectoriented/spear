@@ -1,15 +1,15 @@
 import json
 import unittest
 
-from agent_roles import AgentRole, AgentRoleSpec, explorer_role
-from agent_runtime import AgentRuntime
-from budgets import BudgetKind, BudgetLimit, BudgetManager
-from model_backend import ModelTurn, StopReason
-from orchestration import (
+from runtime.agent_roles import AgentRole, AgentRoleSpec, explorer_role
+from runtime.agent_runtime import AgentRuntime
+from runtime.budgets import BudgetKind, BudgetLimit, BudgetManager
+from models.model_backend import ModelTurn, StopReason
+from runtime.orchestration import (
     DelegationManager, DelegationRequest, DelegationResult, DelegationStatus,
     DelegationUsage, ExplorationRequest, ExplorationService,
 )
-from reviewer import ReviewService
+from runtime.reviewer import ReviewService
 from tests.test_agent_runtime import ScriptedBackend, make_context
 from tests.test_orchestration import ReadExecutor
 from tests.test_reviewer import (

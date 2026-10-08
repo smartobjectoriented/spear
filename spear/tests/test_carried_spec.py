@@ -16,7 +16,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-from agent_runtime import AgentContext, is_write_request
+from runtime.agent_runtime import AgentContext, is_write_request
 
 # Synthetic: what a previous turn concluded, in the words of a standard that
 # does not exist. The shape is what matters -- a rule cited, a second fact
@@ -43,7 +43,7 @@ class TheContextCarriesIt(unittest.TestCase):
     def test_the_rule_is_built_from_it(self):
         """The text goes into the system rules, which the terminal never
         echoes -- so this is the only place the wiring is visible at all."""
-        import task_controller
+        from runtime import task_controller
         import inspect
 
         source = inspect.getsource(task_controller.TaskController.run)
@@ -53,7 +53,7 @@ class TheContextCarriesIt(unittest.TestCase):
         self.assertIn("is_write_request(asked)", source)
 
     def test_it_is_not_carried_into_a_question(self):
-        import task_controller
+        from runtime import task_controller
         import inspect
 
         source = inspect.getsource(task_controller.TaskController.run)

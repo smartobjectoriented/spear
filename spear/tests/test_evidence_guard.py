@@ -17,7 +17,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-from evidence_guard import EvidenceLedger, guard, safe_rendering, validate
+from evidence.evidence_guard import EvidenceLedger, guard, safe_rendering, validate
 
 
 def _payload():

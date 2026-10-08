@@ -17,7 +17,7 @@ import os
 import unittest
 from unittest import mock
 
-import standard_tools
+from standard import standard_tools
 
 
 class TheRequestedModeIsConfiguration(unittest.TestCase):
@@ -75,19 +75,19 @@ class AnEmbedderCannotChangeAnExplicitlyLexicalPath(unittest.TestCase):
     configured, an explicitly lexical request stays lexical."""
 
     def test_explicit_lexical_reports_lexical_only(self):
-        import standard_retrieval
+        from standard import standard_retrieval
 
         self.assertEqual(standard_retrieval._capability("lexical", "lexical"),
                          standard_retrieval.LEXICAL_ONLY)
 
     def test_hybrid_with_vectors_is_reported_as_the_other_thing(self):
-        import standard_retrieval
+        from standard import standard_retrieval
 
         self.assertEqual(standard_retrieval._capability("hybrid", "hybrid"),
                          standard_retrieval.HYBRID_LEXICAL_VECTOR)
 
     def test_the_two_capabilities_are_distinguishable(self):
-        import standard_retrieval
+        from standard import standard_retrieval
 
         self.assertNotEqual(standard_retrieval.LEXICAL_ONLY,
                             standard_retrieval.HYBRID_LEXICAL_VECTOR)

@@ -19,8 +19,8 @@ from __future__ import annotations
 
 import unittest
 
-import normative_force as nf
-import provision_identity as pi
+from normative import normative_force as nf
+from normative import provision_identity as pi
 
 UNIT = {"source_id": "std-" + "1" * 32, "section": "5.2", "page": 3,
         "content_type": "TEXT", "modality": "NONE"}

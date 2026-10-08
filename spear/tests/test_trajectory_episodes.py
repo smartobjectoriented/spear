@@ -3,11 +3,11 @@ import tempfile
 import unittest
 from pathlib import Path
 
-import sft_dataset
-import trajectory_episodes as convert
-from sft_dataset import SFTDatasetBuilder
-from training_data import TrainingEligibility
-from training_store import TrainingStore
+from training import sft_dataset
+from training import trajectory_episodes as convert
+from training.sft_dataset import SFTDatasetBuilder
+from training.training_data import TrainingEligibility
+from training.training_store import TrainingStore
 
 
 def row(**overrides):
@@ -170,8 +170,8 @@ class TheOperatorCommand(unittest.TestCase):
     """/finetune ingest, end to end from a recorded file to stored episodes."""
 
     def test_ingesting_a_file_stores_its_episodes(self):
-        import finetune_commands
-        from training_controller import TrainingController
+        from cli import finetune_commands
+        from training.training_controller import TrainingController
 
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -191,8 +191,8 @@ class TheOperatorCommand(unittest.TestCase):
         self.assertEqual(len(stored), 2)
 
     def test_ingesting_twice_does_not_duplicate(self):
-        import finetune_commands
-        from training_controller import TrainingController
+        from cli import finetune_commands
+        from training.training_controller import TrainingController
 
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -209,8 +209,8 @@ class TheOperatorCommand(unittest.TestCase):
         self.assertEqual(len(stored), 1)
 
     def test_a_missing_file_is_refused_rather_than_reported_empty(self):
-        import finetune_commands
-        from training_controller import TrainingController
+        from cli import finetune_commands
+        from training.training_controller import TrainingController
 
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

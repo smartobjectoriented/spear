@@ -1,7 +1,7 @@
 #!/bin/bash
 # Write spear/machine.env, this machine's local configuration, from what the
-# machine already has. See spear/machine_config.py, or spear-configure --help.
+# machine already has. See spear/cli/machine_config.py, or spear-configure --help.
 REPO="$(cd "$(dirname "$(readlink -f "$0")")/.." && pwd)"
 # The release this is: "[spear vX.Y.Z] <script> <args>" on stderr, once.
 [ -r "$REPO/scripts/common/banner.sh" ] && . "$REPO/scripts/common/banner.sh"
-exec "$REPO/spear/bin/python" "$REPO/spear/machine_config.py" "$@"
+exec "$REPO/spear/bin/python" "$REPO/spear/cli/machine_config.py" "$@"

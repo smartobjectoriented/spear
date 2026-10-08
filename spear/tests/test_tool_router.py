@@ -3,25 +3,25 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from agent_runtime import AgentContext, AgentRuntime
-from compaction import CompactionPolicy
-from context_engine import ContextEngine, ContextItem, ContextLayer
-from hooks import HookManager
-from model_backend import (
+from runtime.agent_runtime import AgentContext, AgentRuntime
+from runtime.compaction import CompactionPolicy
+from context.context_engine import ContextEngine, ContextItem, ContextLayer
+from runtime.hooks import HookManager
+from models.model_backend import (
     ConversationMessage, ModelToolCall, ModelTurn, StopReason, TextBlock,
     ToolResultBlock,
 )
-from result_store import ResultStore
-from tool_registry import (
+from runtime.result_store import ResultStore
+from harness.tool_registry import (
     ToolCategory, ToolMutability, ToolRegistry, ToolResultPolicy, ToolSpec,
 )
-from tool_router import (
+from harness.tool_router import (
     MAX_FAILED_REPEATS, ToolExecutionContext, ToolHandlerResult,
     ToolResultStatus, ToolRouter, _REPEAT_KEY, action_signature,
     invalidates_reads,
 )
-from tracing import EventType, TraceEmitter
-from working_state import WorkingState
+from runtime.tracing import EventType, TraceEmitter
+from runtime.working_state import WorkingState
 
 
 class MemoryRecorder:
@@ -226,7 +226,7 @@ class ToolRouterTests(unittest.TestCase):
         self.assertEqual(invoked, [])
 
     def test_router_has_no_cli_or_concrete_tool_dependency(self):
-        source = Path(__file__).resolve().parents[1].joinpath("tool_router.py").read_text()
+        source = Path(__file__).resolve().parents[1].joinpath("harness/tool_router.py").read_text()
         self.assertNotIn("import rag_chat", source)
         self.assertNotIn("print(", source)
 
@@ -812,8 +812,8 @@ class ToolRouterRuntimeIntegrationTests(unittest.TestCase):
 class ProductionCommandBoundaryTests(unittest.TestCase):
     def test_registered_bash_still_crosses_command_runner_and_sandbox_preflight(self):
         from unittest.mock import patch
-        import rag_chat
-        from tool_runtime import ExecutionMode, ToolResult, Workspace
+        from cli import rag_chat
+        from harness.tool_runtime import ExecutionMode, ToolResult, Workspace
 
         with tempfile.TemporaryDirectory() as temporary:
             old_workspace = rag_chat.WORKSPACE

@@ -4,13 +4,13 @@ from pathlib import Path
 
 from tests.test_preference_dataset import bad_turn, good_turn
 from tests.test_sft_dataset import episode, turn
-from training_governance import DataOrigin, TrainingDataGovernancePolicy
-from training_readiness import (
+from training.training_governance import DataOrigin, TrainingDataGovernancePolicy
+from training.training_readiness import (
     ReadinessLevel, TrainingReadinessEvaluator, TrainingReadinessIndex,
     TrainingReadinessPolicy, TrainingStrategyRecommendation,
 )
-from training_store import TrainingStore
-from training_splits import split_group_for_episode
+from training.training_store import TrainingStore
+from training.training_splits import split_group_for_episode
 
 
 def with_origin(value, origin):

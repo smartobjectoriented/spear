@@ -62,73 +62,82 @@ Top level
 .. note::
 
    ``spear`` being both the application directory and the virtualenv root
-   is why ``bin/``, ``lib/`` and ``include/`` sit next to ``rag_chat.py``.
+   is why ``bin/``, ``lib/`` and ``include/`` sit next to the packages.
    It is unusual but deliberate: the app and its exact dependency set travel
    together.
 
 The application
 ===============
 
+The code is one package per concern, imported from ``spear/`` as their common
+root (``from evidence import completion``).  ``rag_chat`` and the other
+commands are run as files (``spear/bin/python spear/cli/rag_chat.py``); the
+launchers and the image do that for you.
+
 .. list-table::
    :header-rows: 1
-   :widths: 30 70
+   :widths: 22 78
 
-   * - File
+   * - Package
      - Role
-   * - ``rag_chat.py``
-     - Application/REPL startup, project selection, retrieval helpers, concrete
-       tool handlers, the coding core's host ports, history and rendering.
-   * - ``task_controller.py`` / ``answer_scope.py``
-     - UI-free task orchestration: the request class, and which path runs it.
+   * - ``cli/``
+     - The commands: ``rag_chat.py`` (REPL startup, project selection,
+       retrieval helpers, tool handlers, the coding core's host ports, history
+       and rendering), ``backend_select.py`` (the startup backend picker),
+       ``machine_config.py`` (``spear-configure``) and
+       ``finetune_commands.py``.
    * - ``agent/``
      - The coding core: its loop, tool dispatch, tools and prompt.  It imports
        nothing of SPEAR and talks to a ``Host`` interface
        (:doc:`/reasoning/implementation`).
-   * - ``control_plane.py``
-     - ``SpearHost``, the coding core's control plane.
-   * - ``completion.py``
-     - The evidence plane: canonical evidence, source epochs and the
-       implementation verdict.
-   * - ``agent_runtime.py``
+   * - ``harness/``
+     - The execution harness: ``control_plane.py`` (``SpearHost``),
+       ``tool_runtime.py`` (policy, workspace, sandbox, resource control,
+       audit; imports nothing from ``rag_chat``, so it can be tested in
+       isolation), ``tool_registry.py`` / ``tool_router.py`` (declarative
+       exposure and structured lifecycle), ``target_policy.py``,
+       ``refusal_breaker.py``, ``checkpoint.py``, and the external
+       capabilities (``capabilities.py``, ``capability_gateway.py``,
+       ``mcp_provider.py``).
+   * - ``runtime/``
      - The provider-neutral model/tool loop of the normative and general
-       runtime, and the coding-core turn wrapper.
-   * - ``mixed_orchestration.py``
-     - The MIXED pipeline (:doc:`/reasoning/mixed`).
-   * - ``normative_constraints.py`` / ``normative_coverage.py`` /
-       ``normative_predicates.py`` / ``normative_evidence.py``
-     - The constraint packet, structural coverage and applicability, the
-       source predicates, and conformance-check bindings.
-   * - ``working_state.py`` / ``context_engine.py`` / ``compaction.py``
-     - Grounded task truth and bounded layered model context.
-   * - ``workspace_knowledge.py`` / ``knowledge_migration.py``
-     - Typed, provenance-aware workspace knowledge, and the on-request
-       migration of legacy Markdown memories into it (``memory_store.py``
-       still reads those).
-   * - ``capabilities.py`` / ``capability_gateway.py`` / ``mcp_provider.py``
-     - External capabilities: the registry, the gateway the coding core
-       reaches them through, and the MCP stdio provider.
-   * - ``tool_registry.py`` / ``tool_router.py`` / ``result_store.py``
-     - Declarative tool exposure, structured lifecycle and retained evidence.
-   * - ``tool_runtime.py``
-     - The execution harness: policy, workspace, sandbox, resource control,
-       audit.  Deliberately imports nothing from ``rag_chat``, so it can be
-       tested in isolation.
-   * - ``model_backend.py``
-     - Provider-neutral model turns (``ModelTurn``) for the normative runtime,
-       and raw OpenAI-compatible turns (``RawTurn``) for the coding core.
-   * - ``index_corpus.py`` / ``index_dir.py``
-     - Corpus ingestion into Chroma.
-   * - ``training*.py`` / ``sft_dataset.py`` / ``preference_dataset.py``
+       runtime and the coding-core turn wrapper (``agent_runtime.py``), the
+       UI-free task orchestration (``task_controller.py``), grounded task truth
+       and compaction (``working_state.py``, ``compaction.py``), sessions,
+       budgets and the runtime trace.
+   * - ``evidence/``
+     - The evidence plane: canonical evidence, source epochs and the
+       implementation verdict (``completion.py``), the project's own build and
+       test commands (``project_build.py``), and the evidence guards.
+   * - ``context/``
+     - What a turn is given: deterministic context selection, the workspace
+       context, workspace knowledge (``workspace_knowledge.py``, with
+       ``knowledge_migration.py`` for legacy Markdown memories), skills, and
+       the request's class and scope (``answer_scope.py``,
+       ``request_scope.py``).
+   * - ``normative/``
+     - The MIXED pipeline (``mixed_orchestration.py``,
+       :doc:`/reasoning/mixed`), the constraint packet, structural coverage and
+       applicability, the source predicates and conformance-check bindings.
+   * - ``standard/``
+     - The normative store: ingestion, structure, semantic records, retrieval,
+       review and the standard's tools.
+   * - ``models/``
+     - Provider-neutral model turns (``ModelTurn``) and raw OpenAI-compatible
+       turns (``RawTurn``) for the coding core, in ``model_backend.py``;
+       operator-only control of the serving process and of a training host.
+   * - ``retrieval/``
+     - Embedding and corpus ingestion into Chroma (``index_corpus.py``,
+       ``index_dir.py``).
+   * - ``training/``
      - The fine-tuning subsystem: capture, curation, governance, readiness,
        frozen bundles and the operator control plane, none of it
-       model-visible (:doc:`/model/training`).
-   * - ``inference_service.py`` / ``remote_readiness.py``
-     - Operator-only control of the serving process, and what a training host
-       is missing.  Used by the single-GPU handoff.
-   * - ``backend_select.py``
-     - The startup backend picker.  Writes ``active-backend.conf``.
+       model-visible (:doc:`/model/training`); ``python -m training`` is its
+       command line.
    * - ``tests/``
      - The test suite; see :doc:`/operations/testing`.
+   * - ``eval/`` · ``benchmarks/``
+     - Evaluation harnesses and the benchmark runner.
 
 Configuration
 =============
@@ -278,10 +287,10 @@ arrangement, and the rest of this documentation uses the names:
      - ``spear/spear-corpus.sh``
      - the corpus registry (``/corpus`` in the chat)
    * - ``spear-index``
-     - ``spear/bin/python spear/index_dir.py``
+     - ``spear/bin/python spear/retrieval/index_dir.py``
      - index any tree
    * - ``spear-reindex``
-     - ``spear/bin/python spear/index_corpus.py``
+     - ``spear/bin/python spear/retrieval/index_corpus.py``
      - rebuild a build-system corpus with the curated walk
    * - ``spear-server``
      - ``server/inference/serve.sh``

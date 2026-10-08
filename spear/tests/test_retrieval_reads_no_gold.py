@@ -17,10 +17,10 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from standard_crossrefs import rebuild_cross_reference_index
-from standard_ingest import ingest_pdf
-from standard_retrieval import StandardRetrieval, rebuild_lexical_index
-from standard_store import StandardStore
+from standard.standard_crossrefs import rebuild_cross_reference_index
+from standard.standard_ingest import ingest_pdf
+from standard.standard_retrieval import StandardRetrieval, rebuild_lexical_index
+from standard.standard_store import StandardStore
 from tests.standard_fixture import synthetic_pdf_bytes
 from tests.test_standard_hybrid_retrieval import HYBRID_PAGES
 

@@ -11,8 +11,8 @@ from unittest.mock import MagicMock
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-import web_fetch                                              # noqa: E402
-from web_fetch import FetchRefused, fetch                     # noqa: E402
+from harness import web_fetch  # noqa: E402
+from harness.web_fetch import FetchRefused, fetch                     # noqa: E402
 
 
 def resolver(address):
@@ -236,7 +236,7 @@ class OfflineSessionTests(unittest.TestCase):
 
     def _rag_chat(self, argv):
         import importlib
-        import rag_chat
+        from cli import rag_chat
 
         saved = sys.argv
         sys.argv = ["rag_chat.py", *argv]

@@ -6,9 +6,9 @@ that a conversation's subject does not become a question's subject.
 
 import unittest
 
-import answer_scope as scope
-import standard_query_expansion as expansion
-from tool_registry import ToolCategory
+from context import answer_scope as scope
+from standard import standard_query_expansion as expansion
+from harness.tool_registry import ToolCategory
 
 
 class CurrentTurn(unittest.TestCase):

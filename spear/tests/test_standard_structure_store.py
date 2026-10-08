@@ -6,16 +6,16 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from standard_ingest import ingest_pdf
-from standard_layout import extract_layout
-from standard_store import StandardStore
-from standard_structure import (
+from standard.standard_ingest import ingest_pdf
+from standard.standard_layout import extract_layout
+from standard.standard_store import StandardStore
+from standard.standard_structure import (
     StandardStructureError, extract_structures, structure_fingerprint,
 )
-from standard_structure_store import (
+from standard.standard_structure_store import (
     MANIFEST_FILE, STRUCTURE_FILE, StandardStructureStore, build_manifest,
 )
-from standard_structure_review import (
+from standard.standard_structure_review import (
     HUMAN_VERDICTS, UNREVIEWED, StandardStructureReview, run_review, sample_tables,
 )
 from tests.standard_geometry_fixture import geometry_pdf_bytes
@@ -116,7 +116,7 @@ class StructureStoreTests(_Stored):
             self.structures_store.load(SID, REV)
 
     def test_traversal_and_symlink_escape_are_refused(self):
-        from standard_store import StandardStoreError
+        from standard.standard_store import StandardStoreError
         for standard_id in ("../../etc", "..", "a/b"):
             with self.assertRaises((StandardStoreError, StandardStructureError)):
                 self.structures_store.directory(standard_id, REV)

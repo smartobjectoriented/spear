@@ -3,22 +3,22 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from agent_runtime import AgentRuntime
-from budgets import BudgetKind, BudgetLimit, BudgetManager
-from cancellation import CancellationSource
-from checkpoint import CheckpointManager, CheckpointStatus
-from diff_evidence import DiffEvidence
-from model_backend import ModelTurn, StopReason
-from task_controller import TaskController, TaskRequest, TaskStatus
+from runtime.agent_runtime import AgentRuntime
+from runtime.budgets import BudgetKind, BudgetLimit, BudgetManager
+from runtime.cancellation import CancellationSource
+from harness.checkpoint import CheckpointManager, CheckpointStatus
+from evidence.diff_evidence import DiffEvidence
+from models.model_backend import ModelTurn, StopReason
+from runtime.task_controller import TaskController, TaskRequest, TaskStatus
 from tests.test_agent_runtime import (
     GroundedToolExecutor, ScriptedBackend, make_context, text_turn, tool_turn,
 )
 from tests.test_planning import plan_turn
 from tests.test_reviewer import finding, review_json
 from tests.test_orchestration import final_report
-from tool_registry import ToolCategory, ToolRegistry, native_tool_specs
-from verification import CompletionVerificationStatus
-from working_state import StateEventType
+from harness.tool_registry import ToolCategory, ToolRegistry, native_tool_specs
+from evidence.verification import CompletionVerificationStatus
+from runtime.working_state import StateEventType
 
 
 def registry():
@@ -274,7 +274,7 @@ class ReadOnlyScopeTests(unittest.TestCase):
     """
 
     def test_the_rule_is_stated_and_derived_from_the_view(self):
-        from tool_exposure import READ_ONLY_RULE, READ_ONLY_RULE_ID, ToolExposurePolicy
+        from harness.tool_exposure import READ_ONLY_RULE, READ_ONLY_RULE_ID, ToolExposurePolicy
 
         self.assertTrue(ToolExposurePolicy.read_only_intent(
             "Answer which file defines add without editing files."))
@@ -286,17 +286,17 @@ class ReadOnlyScopeTests(unittest.TestCase):
         # One definition, used by the controller and inherited by the child
         # roles -- never re-inferred from the wording a second time.
 
-        controller = Path(__file__).resolve().parents[1] / "task_controller.py"
-        orchestration = Path(__file__).resolve().parents[1] / "orchestration.py"
+        controller = Path(__file__).resolve().parents[1] / "runtime/task_controller.py"
+        orchestration = Path(__file__).resolve().parents[1] / "runtime/orchestration.py"
         self.assertIn("READ_ONLY_RULE_ID", controller.read_text())
         self.assertIn("view.read_only", controller.read_text())
         self.assertIn("READ_ONLY_RULE_ID", orchestration.read_text())
 
     def test_the_explorer_inherits_the_scope_rule(self):
-        from agent_runtime import AgentContext
-        from context_engine import ContextItem, ContextLayer, Freshness
-        from orchestration import ExplorationRequest, ExplorationService
-        from tool_exposure import READ_ONLY_RULE, READ_ONLY_RULE_ID
+        from runtime.agent_runtime import AgentContext
+        from context.context_engine import ContextItem, ContextLayer, Freshness
+        from runtime.orchestration import ExplorationRequest, ExplorationService
+        from harness.tool_exposure import READ_ONLY_RULE, READ_ONLY_RULE_ID
 
         rule = ContextItem(READ_ONLY_RULE_ID, ContextLayer.SYSTEM_RULES,
                            "tool_exposure", READ_ONLY_RULE, 100,

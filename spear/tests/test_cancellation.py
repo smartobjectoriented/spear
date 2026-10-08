@@ -3,13 +3,13 @@ import tempfile
 import unittest
 from unittest.mock import Mock
 
-from cancellation import (
+from runtime.cancellation import (
     CancellationScope, CancellationSource, OperationCancelled,
 )
-from tool_registry import ToolCategory, ToolMutability, ToolRegistry, ToolSpec
-from tool_router import ToolExecutionContext, ToolResultStatus, ToolRouter
-from tracing import TraceEmitter
-from tool_runtime import CommandRunner, ToolResult, Workspace
+from harness.tool_registry import ToolCategory, ToolMutability, ToolRegistry, ToolSpec
+from harness.tool_router import ToolExecutionContext, ToolResultStatus, ToolRouter
+from runtime.tracing import TraceEmitter
+from harness.tool_runtime import CommandRunner, ToolResult, Workspace
 
 
 class CancellationTests(unittest.TestCase):

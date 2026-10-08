@@ -33,7 +33,7 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE.parent.parent))
 
-import workspace_knowledge as wk                # noqa: E402
+from context import workspace_knowledge as wk  # noqa: E402
 
 FACTS = [
     (wk.Kind.PROJECT_FACT, "thermal driver", "The thermal sensor driver lives in drivers/hwmon/tmp_sense.c."),

@@ -2,12 +2,12 @@ import json
 import tempfile
 import unittest
 
-from compaction import StructuredCompactionState
-from model_backend import ModelTurn, StopReason
-from planning import PlanStepDefinition, PlanningPolicy, PlanningService
-from session_store import FileSessionStore, SessionConfiguration, SessionSnapshot
+from runtime.compaction import StructuredCompactionState
+from models.model_backend import ModelTurn, StopReason
+from runtime.planning import PlanStepDefinition, PlanningPolicy, PlanningService
+from runtime.session_store import FileSessionStore, SessionConfiguration, SessionSnapshot
 from tests.test_agent_runtime import ScriptedBackend, make_context
-from working_state import (
+from runtime.working_state import (
     ActionKind, PlanStepStatus, StateEvent, StateEventType, StateSource,
     StateTransitionError, WorkingState,
 )

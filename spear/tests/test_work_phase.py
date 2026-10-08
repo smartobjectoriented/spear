@@ -10,8 +10,8 @@ mechanism is sound.
 
 import unittest
 
-import work_phase
-from work_phase import GapItem, Phase, WorkPhaseLedger
+from runtime import work_phase
+from runtime.work_phase import GapItem, Phase, WorkPhaseLedger
 
 
 #: A fictional document, and the two provisions this suite plans against.

@@ -14,7 +14,7 @@ from unittest import mock
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-import rag_chat
+from cli import rag_chat
 
 STORED = [{"role": "user", "content": "rename cnt to count in parse.c"},
           {"role": "assistant", "content": "Done."}]

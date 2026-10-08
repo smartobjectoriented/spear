@@ -16,10 +16,10 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from standard_structure_access import _packing_groups, _value_groups
-from standard_tools import standard_tool_specs
+from standard.standard_structure_access import _packing_groups, _value_groups
+from standard.standard_tools import standard_tool_specs
 
-import normative_precedence
+from normative import normative_precedence
 
 
 class NormativePrompt(unittest.TestCase):
@@ -104,7 +104,7 @@ class NormativePrompt(unittest.TestCase):
     def test_no_shipped_prompt_carries_it(self):
         """Attached to the binding AND written into a prompt would say the
         same rules twice."""
-        import rag_chat
+        from cli import rag_chat
 
         for body in (rag_chat.ADHOC_PROMPT,
                      (Path(__file__).resolve().parent.parent
@@ -204,7 +204,7 @@ class ServedGroupSemantics(unittest.TestCase):
     def test_the_description_is_serving_time_only(self):
         # It must not appear in anything the store persists: adding an
         # explanation must never move a semantic fingerprint.
-        from standard_semantic import StandardFieldDefinition
+        from standard.standard_semantic import StandardFieldDefinition
         self.assertNotIn("semantic_kind",
                          list(StandardFieldDefinition.__dataclass_fields__))
         self.assertNotIn("interpretation",

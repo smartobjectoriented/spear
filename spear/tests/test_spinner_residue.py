@@ -6,7 +6,7 @@ import unittest
 from contextlib import redirect_stdout
 
 sys.argv = ["rag_chat", "--safe"]
-import rag_chat
+from cli import rag_chat
 
 CLEAR = "\r\033[K"
 ANSI = re.compile(r"\033\[[0-9;]*m")

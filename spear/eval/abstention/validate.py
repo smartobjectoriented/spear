@@ -23,7 +23,7 @@ HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 sys.path.insert(0, str(HERE.parent.parent))
 
-from sft_dataset import SFTDatasetError, _validate_structure
+from training.sft_dataset import SFTDatasetError, _validate_structure
 
 # Identifier shapes the tools hand out. Anything cited must have been returned.
 

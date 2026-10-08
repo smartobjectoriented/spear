@@ -16,12 +16,12 @@ from benchmarks.scoring import score_task, summarize_trace
 from benchmarks.tasks import (
     TASKS, create_fixture, create_memory_fixture, fixture_version, get_tasks,
 )
-from agent_roles import AgentRole
-from memory_store import MarkdownMemoryStore
-import project_build
-from tool_exposure import ToolExposurePolicy
-from tool_registry import ToolRegistry, native_tool_specs
-from tool_runtime import (
+from runtime.agent_roles import AgentRole
+from context.memory_store import MarkdownMemoryStore
+from evidence import project_build
+from harness.tool_exposure import ToolExposurePolicy
+from harness.tool_registry import ToolRegistry, native_tool_specs
+from harness.tool_runtime import (
     CommandClassification, CommandPolicy, ToolResult, Workspace,
 )
 
@@ -690,7 +690,7 @@ class ProjectVerifierConfinementTests(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        import rag_chat
+        from cli import rag_chat
 
         cls.rag_chat = rag_chat
 
@@ -772,7 +772,7 @@ class SingleRootBoundaryTests(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        import rag_chat
+        from cli import rag_chat
 
         cls.rag_chat = rag_chat
 

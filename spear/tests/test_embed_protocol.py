@@ -31,7 +31,7 @@ REPO = ROOT.parent
 sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(REPO / "server" / "embed"))
 
-import embedding                                             # noqa: E402
+from retrieval import embedding  # noqa: E402
 import protocol                                              # noqa: E402
 
 TARGET = "operator@gpu-host.example"

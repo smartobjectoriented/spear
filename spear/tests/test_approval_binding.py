@@ -12,8 +12,8 @@ from __future__ import annotations
 
 import unittest
 
-import approval_binding as ab
-import provision_identity as pi
+from harness import approval_binding as ab
+from normative import provision_identity as pi
 
 UNIT = {
     "source_id": "std-" + "c" * 32, "section": "5.2", "page": 7,

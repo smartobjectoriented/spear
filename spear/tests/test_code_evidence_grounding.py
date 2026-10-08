@@ -8,9 +8,9 @@ returned this turn grounds the EXISTENCE of a name and nothing else.
 
 import unittest
 
-import code_evidence
-import normative_claims
-import standard_answer_policy
+from evidence import code_evidence
+from normative import normative_claims
+from standard import standard_answer_policy
 
 
 CLAUSE = {"units": [{

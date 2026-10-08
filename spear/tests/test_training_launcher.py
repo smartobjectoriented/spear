@@ -6,8 +6,8 @@ from pathlib import Path
 
 from tests.test_training_jobs import job
 from tests.deployment_fixture import HOST, REMOTE_ROOT, deployment
-import training_launcher
-from training_launcher import (
+from training import training_launcher
+from training.training_launcher import (
     SSHTrainingLauncher, TrainingExecutionConfiguration, TrainingLauncherError,
 )
 

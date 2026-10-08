@@ -12,9 +12,9 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-import agent_runtime
-from agent_runtime import AgentRuntime, RuntimeTerminalReason
-from model_backend import ToolDefinition
+from runtime import agent_runtime
+from runtime.agent_runtime import AgentRuntime, RuntimeTerminalReason
+from models.model_backend import ToolDefinition
 from tests.test_agent_loop import Host, call, turn
 from tests.test_agent_runtime import ScriptedBackend, make_context, text_turn
 
@@ -115,7 +115,7 @@ class OneCodingLoop(unittest.TestCase):
 
     def test_no_legacy_mechanism_is_reached(self):
         from unittest.mock import patch
-        import agent_runtime
+        from runtime import agent_runtime
 
         def tripped(name):
             def fail(*args, **kwargs):

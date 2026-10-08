@@ -29,12 +29,12 @@ from unittest.mock import patch
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-import completion
-import rag_chat
+from evidence import completion
+from cli import rag_chat
 from agent import dispatch, tools
 from agent.host import CommandOutcome
-from cancellation import NEVER_CANCELLED
-from tool_runtime import ExecutionMode, Workspace, decode_command_output
+from runtime.cancellation import NEVER_CANCELLED
+from harness.tool_runtime import ExecutionMode, Workspace, decode_command_output
 
 NAMES = ("read_file", "search_files", "patch", "write_file", "delete_file", "terminal")
 SANDBOX = shutil.which("bwrap") is not None
@@ -416,7 +416,7 @@ class DeletingALinkDeletesTheLink(Envelope):
         self.assertTrue(Path(self.root, "board/virt64/initrd.cpio").is_file())
 
     def test_a_link_goes_under_a_real_checkpoint(self):
-        from checkpoint import CheckpointManager
+        from harness.checkpoint import CheckpointManager
 
         os.makedirs(f"{self.root}/images")
         os.symlink("../board/virt64/initrd.cpio", f"{self.root}/images/initrd.cpio")
@@ -448,7 +448,7 @@ class DeletingALinkDeletesTheLink(Envelope):
 
 class APortDefectEndsTheCallNotTheSession(unittest.TestCase):
     def test_an_exception_in_a_port_is_a_failed_call(self):
-        from control_plane import SpearHost
+        from harness.control_plane import SpearHost
 
         def broken(*args):
             raise RuntimeError("boom")
@@ -507,10 +507,10 @@ class TheVocabularyTableMatchesItsSources(unittest.TestCase):
     translated."""
 
     def test_each_phrase_is_still_in_the_source(self):
-        import control_plane
+        from harness import control_plane
 
         sources = "".join(Path(ROOT, name).read_text()
-                          for name in ("request_scope.py", "tool_runtime.py"))
+                          for name in ("context/request_scope.py", "harness/tool_runtime.py"))
         sources = sources.replace('"\n', "").replace('f"', "").replace('    "', "")
         sources = " ".join(sources.split())
 
@@ -528,7 +528,7 @@ class ABitbakeBuildIsABuild(unittest.TestCase):
     when they are the program run."""
 
     def test_classification(self):
-        from verification import VerificationCategory, VerificationPolicy
+        from evidence.verification import VerificationCategory, VerificationPolicy
 
         policy = VerificationPolicy()
         cases = {

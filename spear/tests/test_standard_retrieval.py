@@ -3,10 +3,10 @@ import unittest
 import json
 from pathlib import Path
 
-from standard_ingest import ingest_pdf
-from standard_retrieval import StandardRetrieval, rebuild_lexical_index
-from standard_store import StandardStore
-from standard_store import StandardStoreError
+from standard.standard_ingest import ingest_pdf
+from standard.standard_retrieval import StandardRetrieval, rebuild_lexical_index
+from standard.standard_store import StandardStore
+from standard.standard_store import StandardStoreError
 from tests.standard_fixture import synthetic_pdf_bytes
 
 

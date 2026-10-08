@@ -13,8 +13,8 @@ from __future__ import annotations
 
 import unittest
 
-import answer_repair as ar
-import normative_claims as nc
+from runtime import answer_repair as ar
+from normative import normative_claims as nc
 
 
 def evidence(*units):
@@ -185,7 +185,7 @@ class WhatWithheldAnAnswerIsReportable(unittest.TestCase):
     """
 
     def trace(self):
-        import standard_answer_policy
+        from standard import standard_answer_policy
 
         policy = standard_answer_policy.policy_for(
             {"standard_id": "ACME-1", "revision": "2030",

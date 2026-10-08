@@ -3,8 +3,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
-import training_promotion as promotion
-from training_data import TrainingEligibility, TrainingRedactionPolicy
+from training import training_promotion as promotion
+from training.training_data import TrainingEligibility, TrainingRedactionPolicy
 
 PRIVATE_KEY = ("-----BEGIN RSA PRIVATE KEY-----\n"
                "AAAAB3NzaC1yc2EAAAADAQABAAABgQ\n"
@@ -113,8 +113,8 @@ class Secrets(unittest.TestCase):
 
 class ThroughTheCommand(unittest.TestCase):
     def test_ingest_reports_stored_imitable_and_refused_separately(self):
-        import finetune_commands
-        from training_controller import TrainingController
+        from cli import finetune_commands
+        from training.training_controller import TrainingController
 
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -144,7 +144,7 @@ class WhereTheRecorderWrites(unittest.TestCase):
     def test_the_default_follows_the_recorder_not_a_guess(self):
         import os
         from unittest.mock import patch
-        import finetune_commands
+        from cli import finetune_commands
 
         with patch.dict(os.environ, {"SPEAR_STATE_DIR": "/state"}, clear=True):
             self.assertEqual(finetune_commands.default_trajectory_file(),
@@ -158,8 +158,8 @@ class WhereTheRecorderWrites(unittest.TestCase):
     def test_with_nothing_set_the_command_asks_rather_than_assumes(self):
         import os
         from unittest.mock import patch
-        import finetune_commands
-        from training_controller import TrainingController
+        from cli import finetune_commands
+        from training.training_controller import TrainingController
 
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

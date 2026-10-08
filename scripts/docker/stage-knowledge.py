@@ -38,7 +38,7 @@ def main() -> int:
     args = ap.parse_args()
 
     sys.path.insert(0, str(os.environ.get("SPEAR_APP", APP)))
-    import workspace_knowledge as wk
+    from context import workspace_knowledge as wk
 
     out = pathlib.Path(args.out)
 

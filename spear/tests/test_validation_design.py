@@ -24,9 +24,9 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-import work_phase
-from requirement_set import Disposition, Requirement, RequirementSet
-from work_phase import (EXISTING_PROVEN, FOCUSED_PLANNED, NOT_PRACTICAL,
+from runtime import work_phase
+from normative.requirement_set import Disposition, Requirement, RequirementSet
+from runtime.work_phase import (EXISTING_PROVEN, FOCUSED_PLANNED, NOT_PRACTICAL,
                         WorkPhaseLedger, validation_design)
 
 SOURCE = "src/link/handshake.c"

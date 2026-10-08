@@ -1,6 +1,6 @@
 import unittest
 
-from progress_monitor import ProgressMonitor, action_fingerprint, read_evidence
+from runtime.progress_monitor import ProgressMonitor, action_fingerprint, read_evidence
 
 
 class ProgressMonitorTests(unittest.TestCase):

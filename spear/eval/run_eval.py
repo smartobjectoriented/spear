@@ -20,7 +20,7 @@ import collections
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import chromadb
-import rag_chat
+from cli import rag_chat
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 

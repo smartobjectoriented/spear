@@ -17,9 +17,9 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-import normative_constraints as nc
-import normative_predicates as np
-from normative_constraints import Constraint, NormativeConstraintSet
+from normative import normative_constraints as nc
+from normative import normative_predicates as np
+from normative.normative_constraints import Constraint, NormativeConstraintSet
 
 
 def constraint(text, cid="C1", modality="SHALL", condition="", resolved=True,

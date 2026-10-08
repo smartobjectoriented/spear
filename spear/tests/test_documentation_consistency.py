@@ -28,8 +28,8 @@ def literal(name: str) -> str:
 
 class CodingCore(unittest.TestCase):
     def test_the_documented_toolset_is_the_coding_view(self):
-        from tool_exposure import ToolExposurePolicy
-        from tool_registry import coding_schemas
+        from harness.tool_exposure import ToolExposurePolicy
+        from harness.tool_registry import coding_schemas
 
         names = set(ToolExposurePolicy._CODING_READ + ToolExposurePolicy._CODING_WRITE)
         text = page("reasoning/implementation.rst")
@@ -45,7 +45,7 @@ class CodingCore(unittest.TestCase):
 
 class RequestClasses(unittest.TestCase):
     def test_every_class_is_documented(self):
-        import answer_scope
+        from context import answer_scope
 
         text = page("overview/architecture.rst")
 
@@ -56,8 +56,8 @@ class RequestClasses(unittest.TestCase):
 
 class Verdicts(unittest.TestCase):
     def test_every_implementation_state_is_documented(self):
-        import completion
-        from completion import Evidence
+        from evidence import completion
+        from evidence.completion import Evidence
 
         states = {
             completion.decide([]).state,
@@ -72,7 +72,7 @@ class Verdicts(unittest.TestCase):
             self.assertIn(literal(state), text)
 
     def test_every_normative_status_and_composite_is_documented(self):
-        import normative_constraints as nc
+        from normative import normative_constraints as nc
 
         text = page("reasoning/evidence.rst")
 
@@ -86,8 +86,8 @@ class Verdicts(unittest.TestCase):
 
 class MixedMode(unittest.TestCase):
     def test_predicates_relations_and_applicability_are_documented(self):
-        import normative_coverage as cov
-        import normative_predicates as np
+        from normative import normative_coverage as cov
+        from normative import normative_predicates as np
 
         text = page("reasoning/mixed.rst")
 
@@ -97,7 +97,7 @@ class MixedMode(unittest.TestCase):
             self.assertIn(literal(name), text)
 
     def test_conformance_checks_are_documented_where_they_are_configured(self):
-        import normative_evidence as ne
+        from normative import normative_evidence as ne
 
         for name, text in (("using/projects.rst", page("using/projects.rst")),
                            ("reasoning/mixed.rst", page("reasoning/mixed.rst"))):
@@ -114,7 +114,7 @@ class MixedMode(unittest.TestCase):
 
 class CommandLine(unittest.TestCase):
     def test_every_permission_and_corpus_flag_is_documented(self):
-        source = (ROOT / "rag_chat.py").read_text(encoding="utf-8")
+        source = (ROOT / "cli/rag_chat.py").read_text(encoding="utf-8")
         start, end = source.index("PERMISSIONS  ("), source.index("SESSION SETTINGS  (")
         flags = set(re.findall(r"(?<![\w-])(--[a-z][a-z-]+)", source[start:end]))
         text = page("using/usage.rst")

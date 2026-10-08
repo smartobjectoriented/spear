@@ -77,7 +77,7 @@ Every episode carries a ``DataOrigin``:
    * - Origin
      - Meaning
    * - ``NORMAL_USAGE``
-     - Real work.  The only origin a real bundle admits by default.
+     - Real work.  Admitted by default.
    * - ``BENCHMARK``
      - Produced while measuring.  Training on it would train on the exam.
    * - ``TEST_FIXTURE``
@@ -85,7 +85,12 @@ Every episode carries a ``DataOrigin``:
    * - ``SYNTHETIC``
      - Generated rather than observed.  Smoke tests only.
    * - ``MANUAL_IMPORT``
-     - Hand-added, and marked as such.
+     - Hand-added, and marked as such.  Admitted by default.
+   * - ``LICENSED_STANDARD``
+     - Work done against a bound licensed standard, whatever the episode
+       claims.  Not admitted by default.
+
+An origin nobody can classify becomes ``UNKNOWN``, which no profile admits.
 
 A bundle built from a prohibited origin is not a warning — it is a bundle that
 declares ``smoke_test_only`` and whose runbook refuses to print a training
@@ -289,13 +294,15 @@ suggestion to rent something.
 
    The remote stack is pinned by Axolotl, not by us: installing
    ``axolotl 0.18.0`` on that host moved ``transformers`` to 5.14.1, ``peft``
-   to 0.19.1 and ``bitsandbytes`` to 0.49.1.  The venv's previous state is kept
-   in ``qwen3-finetune/.venv-freeze-before-axolotl.txt``.
+   to 0.19.1 and ``bitsandbytes`` to 0.49.1.  Freeze the venv
+   (``pip freeze``) before installing it, so its previous state can be
+   restored.
 
 Related material
 ================
 
 ``qwen3-finetune/`` holds the experiment side: the LoRA trainers, the pod
-scripts, the corpus builders (deployment-specific, not shipped:
-``scripts/merge_corpora.py``) and the preflight.  It is a working area, not a
+scripts, the corpus tooling (``scripts/merge_corpora.py``; the builders that
+read a deployment's own sources are deployment-specific and not shipped) and
+the preflight.  It is a working area, not a
 product surface — the governed path is the one described above.

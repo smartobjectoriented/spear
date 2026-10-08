@@ -32,11 +32,11 @@ Three git objects work together, and GitHub surfaces them in different places:
    * - Tag ``vX.Y.Z``
      - ``v0.2.0``
      - Immutable point marking a delivered version. Release candidates use the
-       ``-rc`` suffix (``v0.2.1-rc``).
+       ``-rcN`` suffix (``v0.3.0-rc1``).
    * - GitHub Release
      - "SPEAR v0.2.0"
      - The release page (notes + assets), attached to a tag. Exactly one is
-       flagged *Latest*; ``-rc`` tags are published as *pre-release*.
+       flagged *Latest*; ``-rcN`` tags are published as *pre-release*.
 
 Versioning
 **********
@@ -58,8 +58,8 @@ format of the standard store — so that is what the numbers are about:
 The served model is not part of the version: it is chosen per deployment
 (``spear/active-model.conf``, ``machine.env``) and changes without a release.
 
-Release candidates append ``-rc`` (optionally ``-rcN`` for successive
-candidates), e.g. ``v0.3.0-rc``.
+Release candidates append ``-rcN``, numbered from 1 for each version, e.g.
+``v0.3.0-rc1`` then ``v0.3.0-rc2``.
 
 Which release is running?
 *************************
@@ -69,11 +69,12 @@ once per invocation — also when it runs another one (``spear-image`` runs the
 scripts under ``scripts/docker``, ``spear-chat`` re-executes itself under
 ``systemd-run``)::
 
-   [spear v0.2.0] spear-chat --reds --auto
+   [spear v0.3.0-rc1] spear-chat --reds --auto
 
-The version comes from ``scripts/spearversion.sh``, which reads the git release
-tag (``git describe``) and keeps only the base version: a tagged commit and
-development on top of ``v0.2.0`` both report ``0.2.0``, while ``-rc`` is kept.
+The version comes from ``scripts/spearversion.sh``, which reads the latest
+``v*`` release tag (``git describe``) and keeps only the base version: a tagged
+commit and development on top of ``v0.3.0-rc1`` both report ``0.3.0-rc1``;
+the ``-rcN`` suffix is kept.
 A tree without git metadata — a tarball, a container image — falls back to
 the ``SPEAR_VERSION_FALLBACK`` constant of that script.
 ``spearversion.sh`` can also be run on its own. The documentation derives its
@@ -88,7 +89,7 @@ Branch layout
            \
    release/v0.2  ●──●──●             maintenance line for 0.2.x
                  │  │  └─ v0.2.1     (tags live on the branch)
-                 │  └──── v0.2.1-rc
+                 │  └──── v0.2.1-rc1
                  └─────── v0.2.0
 
 While a minor line has not diverged from ``main`` yet (no work started on the
@@ -131,10 +132,10 @@ fast-forwarding.
    # bump SPEAR_VERSION_FALLBACK in scripts/spearversion.sh to 0.2.1
 
    # optional: publish a candidate first
-   git tag -a v0.2.1-rc -m "spear v0.2.1-rc"
-   git push origin release/v0.2 v0.2.1-rc
-   gh release create v0.2.1-rc --title "SPEAR v0.2.1-rc" \
-       --target release/v0.2 --prerelease --generate-notes
+   git tag -a v0.2.1-rc1 -m "spear v0.2.1-rc1"
+   git push origin release/v0.2 v0.2.1-rc1
+   gh release create v0.2.1-rc1 --title "SPEAR v0.2.1-rc1" \
+       --target release/v0.2 --prerelease --notes-file <notes>
 
    # final release
    git tag -a v0.2.1 -m "spear v0.2.1"
@@ -162,6 +163,22 @@ tag:
        --target release/v0.3 --latest --notes-file <notes>
 
 The release notes are the version's ``CHANGELOG`` entry.
+
+A minor line may open with release candidates, as ``v0.3.0-rc1`` did. The
+release commit on ``main`` then sets ``SPEAR_VERSION_FALLBACK`` to the
+candidate (``0.3.0-rc1``) and its *Maintained versions* row to *Release
+candidate*; the branch is created the same way, and the tag and Release carry
+the candidate name, published as a pre-release:
+
+.. code-block:: sh
+
+   git tag -a v0.3.0-rc1 -m "spear v0.3.0-rc1"
+   git push origin release/v0.3 v0.3.0-rc1
+   gh release create v0.3.0-rc1 --title "SPEAR v0.3.0-rc1" \
+       --target release/v0.3 --prerelease --notes-file <notes>
+
+A later candidate, and the final ``vX.Y.0``, are tagged on ``release/vX.Y``
+like a patch release, with the fallback bumped in the commit they point at.
 
 After tagging: propagate the release to ``main``
 ************************************************
@@ -219,7 +236,7 @@ Rules of thumb
   *on* the branch.
 * Tags are immutable: never move or delete a published ``vX.Y.Z`` tag. To
   correct a release, cut the next patch.
-* Exactly one GitHub Release carries the *Latest* flag; every ``-rc`` Release is
-  a *pre-release* so it never shadows the latest stable version.
+* Exactly one GitHub Release carries the *Latest* flag; every ``-rcN`` Release
+  is a *pre-release* so it never shadows the latest stable version.
 * Once a ``release/vX.Y`` branch has diverged from ``main``, backport fixes with
   ``git cherry-pick`` — do not fast-forward the branch onto ``main``.

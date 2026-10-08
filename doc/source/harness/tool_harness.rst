@@ -16,10 +16,14 @@ The registry serves two vocabularies, and a turn sees exactly one of them:
 
 **The coding core's six tools** — ``read_file``, ``search_files``, ``patch``,
 ``write_file``, ``delete_file``, ``terminal`` — on every request with no
-standard engaged, and in the implementation pass of a MIXED request. The core
-reaches the harness through SpearHost (:doc:`/reasoning/implementation`), which
-calls the same router authorization, workspace resolution, command policy and
-sandbox described below.
+standard engaged, and in the implementation pass of a MIXED request (it needs
+an OpenAI-compatible endpoint). The core reaches the harness through SpearHost
+(``control_plane.py``, :doc:`/reasoning/implementation`), which calls the same
+router authorization, workspace resolution, target policy, command policy and
+sandbox described below. External capabilities and workspace knowledge add no
+tool: they are reached with the ``spear-capability`` and ``spear-knowledge``
+host commands, which SpearHost answers itself and never hands to a shell
+(:ref:`control_plane`).
 
 **The normative runtime's tools** — the ``standard.*`` tools, the file and
 command tools of that runtime, ``search_corpus``, and the web pair — in a
@@ -78,26 +82,28 @@ Decision layer — *what may run at all*
    * - ``CapabilityPolicy``
      - Immutable per-mode capability set.  ``for_mode()`` is the only way to
        ask what a mode grants.
-   * - ``CommandPolicy.assess()``
-     - Classifies an argv into a ``CommandAssessment``:
+   * - ``CommandPolicy.classify()``
+     - Classifies a command into a ``CommandAssessment``:
        ``READ_ONLY``, ``WORKSPACE_MUTATING``, ``SHELL_COMPLEX`` or
        ``DANGEROUS``.
-   * - ``AuthorizationResult``
-     - The outcome: granted capabilities, and whether a confirmation is
-       required.
+   * - ``CommandPolicy.authorize()`` → ``AuthorizationResult``
+     - The outcome: the granted capabilities, or a terminal ``denied`` /
+       ``cancelled`` result; in ``ASK`` the confirmation is asked here.
    * - ``ExecutionProfile``
      - The pure execution contract derived from granted capabilities:
        ``workspace_read``, ``workspace_write``, ``shell_complex``,
-       ``network``, and the not-yet-implemented ``gpu`` / ``ssh`` /
-       ``container_runtime`` / ``secrets_allowed``.
+       ``network``, the vetted ``host_read_paths``, and the
+       not-yet-implemented ``gpu`` / ``ssh`` / ``container_runtime`` /
+       ``secrets_allowed``.
 
 Boundary layer — *where it runs*
 --------------------------------
 
 ``Workspace``
-   A canonical root that every filesystem tool path must resolve inside.
-   ``resolve()`` rejects traversal, absolute paths (unless explicitly allowed)
-   and — importantly — symlink escapes, by resolving the whole path including
+   A canonical set of roots that every filesystem tool path must resolve
+   inside.  ``resolve()`` rejects traversal, host absolute paths into the
+   launch directory (unless explicitly allowed) and — importantly — symlink
+   escapes, by resolving the whole path including
    the parent of a not-yet-existing file before checking containment.
 
 ``CommandRunner``
@@ -136,8 +142,12 @@ Life of a tool call
 
 #. ``ToolExposurePolicy`` supplies the role's model-visible registry view.
 #. The model proposes a tool call and ``ToolRouter`` validates its schema.
+#. The router's hard gates run: the request scope and the target policy
+   (sibling targets, generated and snapshot targets, what a shell command
+   writes, searches outside the project), then the execution modes the tool's
+   spec declares (``execution_modes``).
 #. The router invokes the registered handler and observer hooks.
-#. ``CommandPolicy.assess()`` classifies the argv.
+#. ``CommandPolicy.classify()`` classifies the command.
 #. The classification is intersected with the capabilities the current mode
    grants.  Anything not granted ends here.
 #. In ``ASK`` mode a confirmation is requested for mutating or network work.
@@ -155,7 +165,7 @@ Life of a tool call
 #. Grounded mutations update ``WorkingState`` and mutating attempts are
    recorded by ``AuditLogger``.
 
-Every one of the step-6 checks returns a ``failed`` ``ToolResult`` rather than
+Every one of the step-9 checks returns a ``failed`` ``ToolResult`` rather than
 proceeding in a degraded mode.  There is no code path from "mechanism
 unavailable" to "run it anyway".
 
@@ -170,21 +180,27 @@ link or a ``..`` does not change it.
 
 A refusal is deterministic, so asking again cannot change it.  When a turn
 asks for the same refused operation five times -- the same tool, target and
-refusal once spacing, quoting and trailing slashes are set aside -- it is
-stopped with an answer that names the refusal, and the stop is audited
+refusal once spacing, quoting, a leading ``./`` and trailing slashes are set
+aside -- it is stopped with an answer that names the refusal, and the stop is audited
 (``repeated_refusal_stopped``).  ``SPEAR_REFUSAL_REPEATS`` sets the limit.  One
 model response is bounded too: ``SPEAR_RESPONSE_MAX_TOKENS`` (16384) caps what
 a single response may generate, and a response cut there is reported as
 truncated.
+
+The core's ``terminal`` is bounded the same way: a call runs for 180 s unless
+it asks for another ``timeout``, and one above 600 s is refused; its output is
+cut to 50 000 characters, keeping the head and the tail (``agent/tools.py``).
+The timeout replaces the sandbox's own default (45 s) for that call only.
 
 Once the sandbox is known to be down
 ====================================
 
 The checks above decide one command at a time.  One conclusion outlives the
 command that reached it: when a command's output reports the sandbox missing,
-``_registered_command`` records it on the turn's cache, and every later file
-write or deletion in that turn — through either tool surface — is refused
-explicitly instead of performed.
+``_registered_command`` (the normative runtime's command handler) records it on
+the turn's cache, and every later file write or deletion in that turn is
+refused explicitly instead of performed — the coding core's write and delete
+ports read the same mark.
 
 The reason is not sandbox purity but verifiability.  Without the sandbox
 nothing the model writes can be read back, compiled or run, so an edit made

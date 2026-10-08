@@ -129,6 +129,9 @@ Or, for one foreground run without persisting:
 Logs and audit
 ==============
 
+The paths below are relative to the state directory: ``SPEAR_STATE_DIR``, or
+``spear/`` when it is not set.
+
 Server log
    Server-side: model load, context, slot activity.  In the journal
    (``sudo journalctl -u spear-inference``), or in the file the unit was
@@ -151,10 +154,10 @@ benchmark run with:
 
 .. code-block:: console
 
-   $ SPEAR_TRACE=1 spear-chat
+   $ spear-chat --trace                  # or SPEAR_TRACE=1
 
-Events are appended to ``audit/runtime-trace.jsonl``; ``SPEAR_TRACE_FILE``
-chooses another location.  Traces record timing, counts, provider and model
+Events are appended to ``audit/runtime-trace.jsonl``; ``--trace-file``
+(``SPEAR_TRACE_FILE``) chooses another location.  Traces record timing, counts, provider and model
 identifiers, normalized outcomes and safe tool metadata.  They do **not** record
 raw prompts, model responses, command strings, tool content, query or note
 values, environment variables, or authorization data.  Workspace-relative file

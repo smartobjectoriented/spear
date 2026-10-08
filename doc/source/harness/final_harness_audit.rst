@@ -37,7 +37,8 @@ CORE / DEFAULT ON
 * ``AgentRuntime`` (the normative and general runtime)
 * ``WorkingState`` and ``ContextEngine``
 * transactional semantic compaction
-* selected ``MemoryStore`` memories
+* selected ``MarkdownMemoryStore`` memories and workspace knowledge
+  (``KnowledgeStore``)
 * ``ToolRegistry`` / ``ToolRouter`` / ``ResultStore``
 * ``SessionStore`` and cancellation
 * ``VerificationPolicy`` and ``CheckpointManager``
@@ -47,6 +48,8 @@ CORE / DEFAULT ON
 OPTIONAL
 
 * deterministic planning when ``PlanningPolicy`` identifies a complex task
+* external capabilities, when a deployment registers MCP providers
+  (``capability_gateway.py``)
 * compatibility code-block mutation fallback
 * legacy ``chat_once`` and ``execute_tool`` APIs
 
@@ -86,7 +89,8 @@ Ownership invariants
 
 ``WorkingState`` is task truth; ``SessionStore`` is resumable runtime state;
 ``CheckpointManager`` is filesystem recovery; ``ResultStore`` owns large tool
-evidence; ``MemoryStore`` owns durable knowledge; ``ContextEngine`` is the
+evidence; ``MarkdownMemoryStore`` owns durable memories and ``KnowledgeStore``
+the workspace's knowledge; ``ContextEngine`` is the
 only production context composer; and ``BudgetManager`` owns agent-level
 budgets. Legacy projections remain only where CLI/history compatibility or
 weaker local models require them.
@@ -94,8 +98,12 @@ weaker local models require them.
 Security and provider boundary
 ==============================
 
-All command execution still flows through ``ToolRouter`` and the existing
-CommandPolicy/CommandRunner/Bubblewrap boundary. Read-only child roles receive
+All command execution still passes ``ToolRouter``'s authorization and the
+CommandPolicy/CommandRunner/Bubblewrap boundary — the coding core's included,
+through SpearHost. The two host commands, ``spear-capability`` and
+``spear-knowledge``, are answered by SpearHost and never reach a shell; the MCP
+providers behind the first run on the host, outside the sandbox, under the
+gateway's read/write policy. Read-only child roles receive
 no checkpoint, memory-write, web or mutating-tool capability. Lower runtime
 modules do not import the CLI, and provider-specific protocol details remain
 inside backend adapters.
@@ -107,13 +115,12 @@ The code-block fallback, ``chat_once``/``enforce_ctx_budget`` compatibility
 path and string ``execute_tool`` facade remain maintenance debt because tests
 and legacy callers still reach them.
 
-``ToolSpec.execution_modes`` is declared and never used — no spec sets it and
-nothing reads it.  It is recorded here rather than quietly deleted because a
-field with that name invites the reading that the registry filters tools by
-execution mode, and it does not: what a mode actually gates is authorization,
-in ``CapabilityPolicy`` and ``CommandPolicy`` (:doc:`/harness/security_model`).  Either
-the field grows a reader or it goes; leaving it as decoration is the one option
-that misleads. Explorer/Reviewer contract reliability,
+``ToolSpec.execution_modes`` is enforced by ``ToolRouter``: a tool called in a
+mode its spec does not declare is denied (``execution_mode_denied``), and a
+mutating spec must declare its modes and may not declare ``safe``.  It does not
+filter what the registry exposes, and it adds to, rather than replaces, the
+authorization in ``CapabilityPolicy`` and ``CommandPolicy``
+(:doc:`/harness/security_model`). Explorer/Reviewer contract reliability,
 long-context benchmark scoring and repair quality need more model evidence.
 ToolSearch, parallel agents, model routing, new retrieval, and new planning or
 review capabilities are deliberately not implemented.

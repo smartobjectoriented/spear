@@ -11,8 +11,8 @@ delay it changes, and the guards that will interrupt you.
 The corpus is the unit
 ======================
 
-Everything is a **corpus**: a working tree with its own retrieval index,
-history and memories.  A corpus declares what it does — ``indexer:
+Everything is a **corpus**: a working tree with its own retrieval index
+and conversation history.  A corpus declares what it does — ``indexer:
 buildsystem`` selects the curated BitBake/Yocto walk, ``autoindex`` builds a
 missing index on sight, ``prompt_file`` gives it a domain prompt, ``collection``
 names an existing index instead of deriving one from the path.  ``kind`` is a
@@ -99,10 +99,14 @@ Command line
    * - ``spear-chat --remote --pod-host H --pod-port P``
      - point at a remote pod without editing ``pod.conf``
    * - ``spear-chat --provider anthropic --model <id>``
-     - use the Anthropic API instead of an OpenAI-compatible endpoint
+     - use the Anthropic API instead of an OpenAI-compatible endpoint; it
+       answers normative and general questions, and does not drive the coding
+       core
    * - ``spear-chat --ctx 65536 --temp 0.1 …``
      - session settings, each also an environment variable; ``--help`` lists
        them all and the flag wins
+   * - ``spear-chat --fresh``
+     - start without this corpus's stored conversation, and leave it stored
    * - ``spear-chat --record FILE`` / ``--replay FILE``
      - write down every model turn, or answer from a recording while the
        tools, files and gates still run for real
@@ -166,7 +170,7 @@ Session commands:
    everywhere — "an existing copyright header is never rewritten" — and
    ``/remember`` for what is true of one tree only.
 
-``/knowledge [add|list|show|accept|amend|revoke|check|export|purge]``
+``/knowledge [add|list|show|accept|amend|revoke|check|export|purge|migrate-remember]``
    This workspace's recorded knowledge: facts about it, each with where it came
    from, kept across sessions and shown to the turns that change or ask about
    it.  Descriptive only, never a rule; see :ref:`knowledge`.
@@ -235,13 +239,13 @@ Knowledge layers, on different clocks
      - next turn
      - ``knowledge.sqlite3`` under the state directory
    * - learned rules (``/recall``)
-     - next launch, every corpus
+     - next turn, every corpus
      - ``rules-learned.md`` under the state directory
    * - skills (``save_skill``, learned procedures)
      - next turn, scope and prerequisite gated
      - ``skills/*.md``
    * - rules (project conventions)
-     - next launch
+     - next turn, scope gated
      - ``rules.d/*.md``
    * - tool behaviour rules
      - next launch
@@ -269,7 +273,8 @@ What a turn is allowed to do
 
 Which request class a turn falls into decides which path runs it
 (:doc:`/reasoning/index`): an implementation request runs on the coding core
-behind SpearHost, a question about a bound standard on the normative runtime,
+behind SpearHost (in a standard-bound session, on SPEAR's earlier runtime), a
+question about a bound standard on the normative runtime,
 and a change that must satisfy the standard through the MIXED orchestration.
 On every path:
 
@@ -279,8 +284,11 @@ On every path:
 * every path a tool touches must resolve inside the workspace, and a shell
   command is held to the same write scope as the file tools;
 * generated files and snapshot or third-party copies are never written;
-* every mutation is checkpointed, so ``/undo`` can restore it, and recorded in
-  the audit trail;
+* every mutation is checkpointed (the file's earlier content is kept under the
+  state directory) and recorded in the audit trail;
+* a turn that keeps repeating an operation that was refused is stopped
+  (``SPEAR_REFUSAL_REPEATS``, five by default), and one model response is
+  bounded (``SPEAR_RESPONSE_MAX_TOKENS``);
 * the round and tool budgets (``--max-tool-rounds``, ``--max-commands``) bound
   a turn;
 * the verdict at the end is computed from what the tools did, not from what

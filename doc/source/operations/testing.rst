@@ -23,14 +23,29 @@ Everything uses the application's own virtualenv:
    $ PYTHONPATH=. ./bin/python -m unittest discover -s tests -p "test_*.py"
    Ran … tests — OK (skipped=…)
 
-The discovery command is authoritative, and takes a few minutes.  It covers the
-coding core and its control plane, the evidence plane and its verdicts, the
-normative runtime and the MIXED orchestration, the runtime, context, memory,
-sessions, verification, checkpoints, the tool architecture and the security
-substrate — with scripted backends; it does not require a real model API.
+The discovery command is authoritative: about 4400 tests, a few minutes.  It
+covers the coding core and its control plane, the evidence plane and its
+verdicts, the normative runtime and the MIXED orchestration, workspace context,
+knowledge and capabilities, sessions, verification, checkpoints, the tool
+architecture and the security substrate — with scripted backends; it does not
+require a real model API.
 
-The skips are the opt-in suites below.  A checkout with no Internet, no
-systemd user bus and no patience still runs the full always-on set.
+A test never touches the operator's own state.  One that names no state
+directory is given a temporary one (``state_paths.test_state_root``), removed
+when the run exits, and the knowledge store refuses to open its default path
+under test at all.
+
+Most skips are the opt-in suites below.  The others are tests that need what a
+clean install does not have: the bubblewrap sandbox, or a licensed standard in
+the store.  A checkout with no Internet, no systemd user bus and no patience
+still runs the full always-on set.
+
+The server component has its own suite — the runtime manifest, the bootstrap,
+the launcher and the embedding worker — run from the same directory:
+
+.. code-block:: console
+
+   $ ./bin/python -m unittest discover -s ../server/tests -p "test_*.py"
 
 Opt-in suites
 =============
@@ -51,6 +66,10 @@ Opt-in suites
    * - ``SPEAR_TEST_NETWORK_RACE=1``
      - 40 repetitions per arm with injected delays, plus a CPU-load arm
      - a few minutes
+   * - ``SPEAR_TEST_EMBED_EQUIVALENCE=1``
+     - the server's embedding worker reproduces, bit for bit, the vectors
+       of the worker it replaced
+     - the embedding model's weights (``BAAI/bge-m3``)
 
 .. code-block:: console
 

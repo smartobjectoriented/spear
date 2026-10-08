@@ -18,7 +18,7 @@ Prerequisites
    * - Linux with systemd
      - the execution harness places each tool call in a transient user scope;
        without a user manager it cannot apply resource control
-   * - Python 3.12
+   * - Python 3.12 or later
      - the client runs from its own virtualenv under ``spear/``
    * - An inference endpoint
      - local, remote or hosted — see :ref:`Model backends <backends>`
@@ -43,13 +43,18 @@ register a project.
    $ cd ~/spear
    $ spear/deploy/install.sh
 
-The installer creates the virtualenv under ``spear/``, installs the client
-requirements from ``spear/deploy/requirements.txt`` and prepares the sandbox
-profile. Check what the harness needs before first use:
+The installer creates the virtualenv under ``spear/``, installs PyTorch and the
+client requirements from ``spear/deploy/requirements.txt``, and caches the
+active embedding model. It is idempotent. Check what the harness needs before
+first use:
 
 .. code-block:: console
 
    $ spear/deploy/preflight.sh
+
+On Ubuntu 24.04 and later, unprivileged user namespaces are restricted by
+AppArmor and ``bwrap`` cannot start; ``sudo spear/deploy/enable-sandbox.sh``
+installs the profile that allows it.
 
 The launcher is ``spear/spear-chat.sh``; putting it on your ``PATH`` as
 ``spear-chat`` is the usual arrangement.
@@ -71,8 +76,10 @@ If you have an inference endpoint and only want to use SPEAR, Docker is enough:
    $ scripts/docker/build.sh
 
 The build takes a while, mostly for the embedding model. See :ref:`Container
-<container>` for what the image carries, what it expects mounted, and the two
-security options without which the harness refuses to run any command.
+<container>` for what the image carries, what it expects mounted, and the
+three security options without which the harness refuses to run any command.
+Without ``--profile`` it builds the ``public`` image; ``--profile private``
+builds the one ``spear-docker.sh`` runs on this machine.
 
 The inference runtime
 *********************
@@ -109,16 +116,25 @@ What ends up where
    * - ``doc/``
      - this documentation
    * - ``docker/``
-     - the container build and launcher
+     - the container image: ``Dockerfile`` and entrypoint
+   * - ``scripts/``
+     - the operator scripts: ``spear-configure``, ``spear-image``, the
+       container build and launcher under ``scripts/docker/``, the version
+       helper
    * - ``spear/projects.json``
      - the corpus registry for **this** machine (untracked)
    * - ``spear/machine.env``
      - machine-specific settings (untracked), written by ``spear-configure``
+   * - ``spear/capabilities.json``
+     - the external capabilities (MCP providers) of **this** machine
+       (untracked, optional; ``SPEAR_CAPABILITIES_FILE`` moves it)
    * - ``$SPEAR_STATE_DIR``
-     - everything a session accumulates; defaults to
-       ``~/.local/state/spear``
+     - everything a session accumulates — history, audit trail, workspace
+       knowledge (``knowledge.sqlite3``), ingested standards;
+       ``spear-configure`` sets it to ``~/.local/state/spear``, and without
+       it the harness falls back to ``spear/``
 
-The two untracked files are the boundary between the platform and the machine.
+The untracked files are the boundary between the platform and the machine.
 Nothing machine-specific belongs in a tracked file — see
 :ref:`Configuration reference <configuration>`.
 
@@ -142,9 +158,9 @@ Checking the installation
 .. code-block:: console
 
    $ spear/spear-chat.sh --help          # the CLI, its flags and its settings
-   $ cd spear && ./bin/python -m unittest discover -s tests
+   $ cd spear && PYTHONPATH=. ./bin/python -m unittest discover -s tests
 
-The suite runs offline and takes a couple of minutes.
+The suite runs offline and takes a few minutes (:ref:`testing`).
 
 .. seealso::
 

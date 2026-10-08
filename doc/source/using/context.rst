@@ -32,7 +32,8 @@ Every turn is classified from its own words:
      - What is on the table
    * - ``NORMATIVE``
      - about the specification — what it defines, requires or means
-     - the authoritative tools; the working-tree tools are withheld
+     - with a standard bound, the authoritative tools; the working-tree
+       tools are withheld
    * - ``IMPLEMENTATION``
      - about this project's code — read it, change it, build it
      - with no standard engaged, the coding core's six tools
@@ -103,10 +104,11 @@ Practical consequences
   the document; "and what about that other thing we saw" gets the conversation.
 * To compare, say so. A comparison is a MIXED question and is given both sides.
 * ``/clear`` starts a fresh conversation when a session has drifted far from
-  what you now want to ask.
+  what you now want to ask; ``spear-chat --fresh`` starts a session without
+  the stored conversation and leaves it for later.
 * ``/history`` shows what the session is carrying.
 
 .. seealso::
 
    :ref:`Authoritative standards <standards>` · :ref:`Normative answer guards
-   <guards>`
+   <guards>` · :ref:`What a turn is shown <context_selection>`

@@ -98,7 +98,7 @@ One scope per sandboxed command, named from a UUID only:
    /usr/bin/systemd-run --user --scope --quiet --collect
        --unit=spear-tool-<uuid4 hex>.scope
        -p MemoryMax=…  -p MemorySwapMax=…  -p TasksMax=…  -p CPUQuota=…%
-       -- /usr/bin/bwrap … /usr/bin/prlimit … -- COMMAND
+       -- bwrap … /usr/bin/prlimit … -- COMMAND
 
 An inactive contract produces the bwrap argv **unchanged** — no wrapper, no
 ``systemd-run``, no behavioural difference at all.
@@ -132,13 +132,25 @@ Availability and the user bus
 .. code-block:: python
 
    class CgroupAvailability(StrEnum):
-       UNKNOWN, AVAILABLE, SYSTEMD_RUN_ABSENT, SYSTEMCTL_ABSENT,
+       UNKNOWN, AVAILABLE, SYSTEMD_RUN_ABSENT, DELEGATED, SYSTEMCTL_ABSENT,
        USER_BUS_UNAVAILABLE, CONTROLLERS_UNAVAILABLE, REFUSED
 
 Detection reads no secret: it checks that ``systemd-run`` and ``systemctl``
 exist and are executable, that ``$XDG_RUNTIME_DIR`` is a directory, that
 ``…/bus`` **is a socket** (``S_ISSOCK`` — the socket is never connected to or
 read), and that the required controllers are delegated.
+
+Delegation to a container runtime
+---------------------------------
+
+Inside a container there is no systemd to make a scope with, but the cgroup
+belongs to the container runtime.  ``scripts/docker/spear-docker.sh`` starts
+the container with ``--memory``, ``--pids-limit`` and ``--cpus`` mirroring
+``DEFAULT_CGROUP_LIMITS``, and sets ``SPEAR_RESOURCE_CONTROL=delegated`` on the
+same command line.  With that variable, availability is ``DELEGATED`` and the
+command runs unwrapped: the contract is honoured by the runtime that owns the
+cgroup, for the container as a whole rather than per command, not dropped.  Nothing in SPEAR can verify the claim, which is why the
+flags and the variable live together in one launcher.
 
 The supervisor environment
 --------------------------
@@ -156,7 +168,10 @@ So exactly one variable is passed, and only to ``systemd-run``:
 .. code-block:: python
 
    def supervisor_env(self):
-       return {"XDG_RUNTIME_DIR": f"/run/user/{os.getuid()}"}
+       return {"XDG_RUNTIME_DIR": str(self.runtime_dir())}
+
+where ``runtime_dir()`` is the supervisor's own ``$XDG_RUNTIME_DIR``, or
+``/run/user/<uid>`` when it is unset.
 
 Because ``bwrap`` applies ``--clearenv``, this cannot reach the command.  The
 tests assert both halves: the scoped ``Popen`` receives that environment, the
@@ -340,7 +355,8 @@ Production defaults
 ===================
 
 These are **active**.  ``CommandRunner`` carries them, so every command
-``rag_chat`` runs is scoped:
+``rag_chat`` runs is scoped (or, in a delegated container, bounded by the
+container's own limits):
 
 .. code-block:: python
 

@@ -45,9 +45,17 @@ Files
    * - ``spear/active-model.conf``
      - no
      - the served model
+   * - ``spear/capabilities.json``
+     - no
+     - the external capability providers (:ref:`capabilities`);
+       ``SPEAR_CAPABILITIES_FILE`` names another file
    * - ``spear/rules.d/``
-     - yes
-     - project-independent rules injected into every session
+     - yes (a README)
+     - the rules, each applied where its header scopes it
+       (:ref:`context_selection`); ``SPEAR_RULES_DIR`` relocates it
+   * - ``spear/skills/``
+     - yes (a README)
+     - the skill library; ``SPEAR_SKILLS_DIR`` relocates it
    * - ``server/runtime/manifest.json``
      - yes
      - the pinned inference runtime
@@ -84,7 +92,8 @@ Endpoint and model
      - cap on one model response of a coding turn (default 16384); a response
        cut there is retried and then reported as truncated, never as complete
    * - ``ANTHROPIC_API_KEY``
-     - Anthropic credential
+     - Anthropic credential; an ``ant auth login`` session is used when it is
+       unset
 
 Corpora and retrieval
 *********************
@@ -155,9 +164,14 @@ Permissions and execution
    * - ``--allow-absolute-paths``
      - accept host absolute paths into the launch directory
    * - ``--max-commands`` · ``SPEAR_MAX_COMMANDS``
-     - bash commands per task
+     - tool calls per task (default 500, doubled for a change request unless
+       set)
    * - ``--max-tool-rounds`` · ``SPEAR_MAX_TOOL_ROUNDS``
-     - tool rounds per task
+     - model rounds per task (default 250, doubled for a change request unless
+       set)
+   * - ``SPEAR_REFUSAL_REPEATS``
+     - how many times a turn may repeat an operation already refused before
+       it is stopped (default 5)
 
 Session state and audit
 ***********************
@@ -169,8 +183,9 @@ Session state and audit
    * - Flag / variable
      - Meaning
    * - ``--state-dir`` · ``SPEAR_STATE_DIR``
-     - where the session accumulates; defaults to
-       ``~/.local/state/spear``
+     - where the session accumulates; ``machine.env`` sets it
+       (``~/.local/state/spear`` in the example). Unset, the chat keeps its
+       state in the ``spear/`` directory itself
    * - ``SPEAR_COMMON_STATE_DIR``
      - common state, read under the user's own and never written; unset by
        default, set by the image (:ref:`common-state`)
@@ -179,6 +194,9 @@ Session state and audit
    * - ``--fresh`` · ``SPEAR_FRESH=1``
      - start without the corpus's stored conversation, and leave it as it is;
        workspace knowledge, rules and configuration still apply
+   * - ``SPEAR_KNOWLEDGE_DB``
+     - the workspace knowledge store (default ``knowledge.sqlite3`` under
+       the state directory; :ref:`knowledge`)
    * - ``--trace`` · ``SPEAR_TRACE``
      - record a runtime JSONL trace
    * - ``--trace-file`` · ``SPEAR_TRACE_FILE``
@@ -198,19 +216,21 @@ The state directory
        sessions/<id>/events.jsonl      the turn-by-turn event stream
        sessions/<id>/snapshot.json     the conversation it ran on
        tool-actions.jsonl              metadata-only action log
+       runtime-trace.jsonl             the runtime trace
+       checkpoints/                    file contents captured before a mutation
      standards/                        the normative store
      knowledge.sqlite3                 workspace knowledge
+     rules-learned.md                  the rules taught with /recall
      history-adhoc-<tag>.json          per-corpus conversation history
-     memories-adhoc-<tag>.md           per-corpus durable memories
 
-``<tag>`` is derived from the corpus root, so history and memories follow the
-tree rather than the directory you happened to launch from. A session resumes
+``<tag>`` is derived from the corpus root, so history follows the tree rather
+than the directory you happened to launch from. A session resumes
 the stored conversation of its corpus unless it is started with ``--fresh``.
 
 .. note::
 
    Pointing ``SPEAR_STATE_DIR`` at a fresh directory gives a session that
-   carries nothing: no history, no memories, no audit. That is the supported
+   carries nothing: no history, no workspace knowledge, no audit. That is the supported
    way to get a clean run.
 
 Not configuration

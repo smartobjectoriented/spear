@@ -27,7 +27,8 @@ Manage it from the shell or from inside a session:
 .. code-block:: console
 
    $ spear-corpus                       # list
-   $ spear-corpus add <name> [path] [--kind K] [--indexer I] [--autoindex]
+   $ spear-corpus add <name> [path] [--kind K] [--indexer I] [--autoindex] \
+                      [--public] [--prompt-file F]
    $ spear-corpus rm <name>
    $ spear-corpus scan [path] [--min N]      # split a workspace by file count
 
@@ -59,8 +60,8 @@ Entry format
        (which defaults to the repository root, so a corpus living inside the
        repository is found wherever the repository is cloned)
    * - ``kind``
-     - a free label. It scopes skills and prints in the listing; it does not
-       select behaviour
+     - a free label, printed in the listing. It selects no behaviour, and
+       rules and skills are scoped by project name, not by kind
    * - ``indexer``
      - ``buildsystem`` or ``generic``
    * - ``autoindex``
@@ -229,8 +230,9 @@ before — and is given only:
 * what its request class calls for: the coding rules, workspace knowledge
   (:ref:`knowledge`), procedures and
   build commands for a change; the standard and its tools, and no
-  implementation material, for a question about the standard; little more than
-  the request for a general question. A MIXED change is selected once per pass;
+  implementation material, for a question about the standard; for a general
+  question, the rules that name the ``general`` class, workspace knowledge and
+  read-only external capabilities. A MIXED change is selected once per pass;
 * material of this workspace, or material explicitly declared generic;
 * a rule scoped to paths only when the request names such a path.
 
@@ -327,7 +329,8 @@ Indexing
 .. code-block:: text
 
    /reindex                  rebuild the index for the current corpus
-   /corpus                   list and switch
+   /corpus                   list and manage the registry (switching is
+                             spear-chat --corpus <name>)
 
 Indexing is not optional in practice. See :ref:`Retrieval <retrieval>` for what
 it measurably buys, and :ref:`Troubleshooting <troubleshooting>` for the

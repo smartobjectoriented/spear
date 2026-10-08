@@ -24,12 +24,19 @@ The OpenAI-compatible path covers a locally served model, a model served on
 another machine, and hosted endpoints that speak the same protocol. What
 changes between them is a URL.
 
+.. note::
+
+   The coding core needs an OpenAI-compatible endpoint: it keeps its own
+   OpenAI-format history and calls the endpoint directly. The Anthropic
+   backend serves normative and general questions only.
+
 Selecting a backend
 *******************
 
 Launched without a backend flag, an interactive session lists the configured
 choices and preselects the one used last — remembered in
-``spear/active-backend.conf``. A flag skips the picker; off a terminal, the
+``active-backend.conf`` in the state directory (``SPEAR_STATE_DIR``, else
+``spear/``). A flag skips the picker; off a terminal, the
 last choice is reused silently.
 
 .. code-block:: console
@@ -96,15 +103,19 @@ Two settings interact with it:
    * - Setting
      - Effect
    * - ``--max-tokens`` (``SPEAR_MAX_TOKENS``)
-     - cap on one reply; reserved out of the window so a long edit completes
-       instead of being truncated mid-call
+     - cap on one reply (default 8192); reserved out of the window so a long
+       edit completes instead of being truncated mid-call
    * - ``SPEAR_CONTEXT_FRACTION``
      - the fraction of the window the prompt may occupy before compaction
+       (default 0.95)
 
-These two, and the sampling temperature below, govern the normative and
-general runtime. The coding core (:doc:`/reasoning/implementation`) reserves
-its own output budget, sends no sampling parameters of its own, and does not
-compact: it stops at half the window and asks for a summary.
+These two, and the sampling settings below, govern the normative and general
+runtime. The coding core (:doc:`/reasoning/implementation`) reserves its own
+output budget, sends no sampling parameters of its own, and does not compact:
+it stops at half the window and asks for a summary. One coding-core response
+is capped at ``SPEAR_RESPONSE_MAX_TOKENS`` (default 16384), so a reply that
+degenerates into a repeating tool call ends as truncated instead of running
+to the full reservation.
 
 Sampling
 ********
@@ -112,6 +123,12 @@ Sampling
 ``--temp`` (``SPEAR_TEMP``) defaults to ``0.25``. A low temperature gives more
 conservative, more consistent edits; a model that falls into repetition at a
 low temperature wants it raised rather than lowered.
+
+Alongside the temperature, the normative and general runtime sends
+``top_p`` 0.8, ``top_k`` 20, a repetition penalty of 1.05 and disables the
+model's thinking mode. ``SPEAR_SAMPLING=server`` sends none of them, so the
+server's own configuration applies — which is what the coding core always
+does.
 
 Recording and replaying
 ***********************
@@ -145,7 +162,11 @@ ends.
    * - ``--temp`` / ``SPEAR_TEMP``
      - sampling temperature (default 0.25)
    * - ``--max-tokens`` / ``SPEAR_MAX_TOKENS``
-     - cap on one reply
+     - cap on one reply (default 8192)
+   * - ``SPEAR_RESPONSE_MAX_TOKENS``
+     - cap on one coding-core response (default 16384)
+   * - ``SPEAR_SAMPLING``
+     - ``server`` to send no sampling parameters at all
    * - ``ANTHROPIC_API_KEY``
      - credential for the Anthropic provider
 

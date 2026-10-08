@@ -26,7 +26,7 @@ Commits
 *******
 
 A commit message says **why**, in prose. The subject line is imperative and
-short — the median across the history is 53 characters, the longest 77 — and
+short — the median across the history is 56 characters, the longest 80 — and
 the body explains the decision: what was wrong before, what was measured, and
 what was rejected.
 
@@ -41,8 +41,8 @@ what was rejected.
 This is not a style preference. The subject tells a reader scanning
 ``git log`` whether a change concerns them; the body is the only place the
 reasoning survives, because the code that results from it cannot state what
-it *isn't* doing. Roughly a thousand lines of the history are message bodies,
-which is the ratio to aim for.
+it *isn't* doing. A body runs to well over ten lines on average across the
+history, which is the ratio to aim for.
 
 A commit that changes behaviour and a commit that renames things are two
 commits. When one file carries both, stage only the change that belongs, and

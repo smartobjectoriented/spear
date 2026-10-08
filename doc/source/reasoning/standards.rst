@@ -294,11 +294,13 @@ only structures a person has approved:
 
 .. code-block:: text
 
-   /standard candidates <id> <revision>
+   standard_structure_review.py --standard <id> --revision <revision> --bitfields
    /standard approve-bitfield <id> <revision> <candidate-id> <verdict> <role,role,...>
    /standard build-structure <id> <revision>
 
-``build-structure`` promotes the approved candidates and only those. An
+The structure review is operator-only: it shows each candidate as a grid with
+its warnings and its sources, and prints the ``approve-bitfield`` command that
+records a person's verdict on it. ``build-structure`` promotes the approved candidates and only those. An
 unapproved one has no route to an answer however it is asked for — which is
 the point: a bit layout SPEAR guessed at is exactly the kind of thing that
 looks authoritative and is not.
@@ -343,6 +345,11 @@ The rest of the operator commands
      - make a candidate the corpus that answers
    * - ``/standard approve <id> <revision> [<reviewer>]``
      - record human validation
+   * - ``/standard approve-bitfield <id> <revision> <candidate-id> <verdict> <roles>``
+     - approve one candidate structure, with the role of each field
+   * - ``/standard approval-history <id> <revision> [<candidate-id>]``
+     - the recorded approval decisions, and whether they agree with the active
+       approvals
    * - ``/standard build-structure [<id> <revision>]``
      - build the structure registry ``standard.get_structure`` reads
 

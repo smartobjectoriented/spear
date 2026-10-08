@@ -39,11 +39,13 @@ only prerequisite:
 
    $ git clone https://github.com/smartobjectoriented/spear ~/spear
    $ cd ~/spear
-   $ scripts/docker/build.sh                        # ~20 min, mostly the embedder
+   $ scripts/docker/build.sh --profile private      # ~20 min, mostly the embedder
    $ scripts/docker/spear-docker.sh --reds --auto   # opens the tunnel, then chats
 
-That image carries the harness and the embedder; you mount your own source
-trees. :doc:`/start/container_run` is the user's guide, and
+``spear-docker.sh`` runs the ``private`` image of this machine,
+``spear:<version>-private``; a bare ``build.sh`` builds the ``public`` one,
+which is the image to hand to someone else (:ref:`image-profiles`). The image
+carries the harness and the embedder; you mount your own source trees. :doc:`/start/container_run` is the user's guide, and
 :doc:`/start/container` describes what is baked, what is mounted, and the three
 ``--security-opt`` flags without which the harness refuses to run any command
 at all.
@@ -94,7 +96,7 @@ in it:
    $ spear-chat --ask              # confirm each change and command
 
 That is an *ad-hoc* project. To register it — so it gets a name, a retrieval
-index, declared build and test commands, and its own memories — add it to the
+index, declared build and test commands, and its own knowledge — add it to the
 registry and index it:
 
 .. code-block:: console
@@ -105,7 +107,9 @@ registry and index it:
 
 :doc:`/using/projects` documents every key a project can declare, including
 ``build_commands`` and ``test_commands``, which SPEAR runs on the final tree of
-every change.
+every change. A project that declares none is still checked: SPEAR probes the
+tree for the usual build and test commands, and a declared kind always wins
+over a probed one.
 
 The permission mode is chosen at launch: ``--safe`` (the default) changes
 nothing, ``--ask`` confirms every change and command, ``--auto`` runs without
@@ -123,7 +127,23 @@ A request about the tree runs on the coding core (:ref:`implementation_mode`):
 The core reads, edits and runs ``make`` inside the workspace; every call
 crosses the control plane, and in ``--ask`` you confirm each one. The answer
 ends with SPEAR's own verdict on what was shown — ``VERIFIED`` if a build ran
-and passed on the final source, ``UNVERIFIED`` (with the reason) if not.
+and passed on the final source, ``UNVERIFIED`` (with the reason) if not. A
+command sent to the background (``make &``), or a Makefile that only prints its
+help, does not count as a check.
+
+Tell SPEAR what it should keep knowing about the workspace; later coding and
+general turns in that workspace, and no other, are given it:
+
+.. code-block:: text
+
+   > /remember The board's console is on UART2, not UART0.
+   > /knowledge list
+
+What the model itself offers to remember stays a proposal until you accept it
+(:ref:`knowledge`). ``spear-chat --fresh`` starts without the stored
+conversation; knowledge, rules and configuration still apply. Tools of external
+MCP servers are made available per workspace in ``capabilities.json``
+(:ref:`capabilities`).
 
 Bind a standard
 ===============

@@ -98,6 +98,11 @@ Filesystem
    * - ``/opt/toolchains``
      - read-only, when the host has it — cross-toolchains linked from
        ``/usr/local/bin``
+   * - outside reads
+     - only when ``host:read`` was granted: the vetted paths the command
+       names, read-only (``--ro-bind-try``) at their own path, bound before
+       the workspace so a declared tree under one keeps its access
+       (:doc:`security_model`)
    * - the workspace
      - **the only host-writable mount**, at its own host path by default (see
        below); the registered corpora beside it unless ``--single-root``
@@ -206,7 +211,11 @@ Closed network
 
 ``run()`` builds the bwrap argv, wraps it in a scope if cgroup limits are
 active, spawns it with ``env={}`` (or the supervisor environment when scoped),
-and waits with a bounded ``communicate(timeout=...)``.
+and waits with a bounded ``communicate(timeout=...)``.  The sandbox's own
+defaults are 45 s and 10 000 characters per stream; the coding core's
+``terminal`` replaces them for its call (180 s by default, at most 600 s, and
+its own 50 000-character head/tail bound, :doc:`tool_harness`).  A cancelled
+turn stops the command the same way a timeout does.
 
 On timeout it terminates the scope first — systemd reaches descendants a
 ``Popen`` handle cannot — then stops the process without waiting for EOF.

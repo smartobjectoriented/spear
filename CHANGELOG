@@ -1,3 +1,27 @@
+v0.3.0 (8 oct 2026)
+
+First stable release of the 0.3 line: v0.3.0-rc1, below, with the fixes and
+additions made during its candidacy.
+
+	•	Container image: the coding core is copied into the image; an image
+		built from v0.3.0-rc1 did not start.
+
+	•	Common and local state: an image carries a read-only common state --
+		the normative store and, with build.sh --knowledge, the active
+		workspace knowledge of named projects (private profile only) -- read
+		under each user's own. A user's change to a common record stays in
+		their own state.
+
+	•	spear-consolidate merges users' knowledge back into the team's
+		common store for the next image: records are added, updated or
+		revoked with their history, and anything changed on both sides or
+		contradicting a common fact is reported as a conflict, not merged.
+
+	•	Documentation and every diagram brought up to date with the code.
+
+Correction to the v0.3.0-rc1 notes: skills are selected by workspace scope,
+never by resemblance, and at most eight are offered to a turn.
+
 v0.3.0-rc1 (8 oct 2026)
 
 First release candidate of the 0.3 line. SPEAR becomes a controlled coding

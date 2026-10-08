@@ -31,6 +31,7 @@ APP="${SPEAR_APP:-$REPO/spear}"
 # get there by omission.
 PROFILE=public
 BAKE=""
+KNOWLEDGE=""
 TAG=""
 
 while [ $# -gt 0 ]; do
@@ -39,9 +40,12 @@ while [ $# -gt 0 ]; do
         --profile=*) PROFILE="${1#*=}"; shift ;;
         --bake) BAKE="$2"; shift 2 ;;
         --bake=*) BAKE="${1#*=}"; shift ;;
+        --knowledge) KNOWLEDGE="$2"; shift 2 ;;
+        --knowledge=*) KNOWLEDGE="${1#*=}"; shift ;;
         -h|--help)
             cat <<'USAGE'
 scripts/docker/build.sh [TAG] [--profile public|private] [--bake name,name,...]
+                        [--knowledge name,name,...|all]
 
   --profile public       (default) only normative documents that declare
                          themselves PUBLIC, and of rules, skills, benches and
@@ -54,6 +58,9 @@ scripts/docker/build.sh [TAG] [--profile public|private] [--bake name,name,...]
   --bake a,b,c           copy these registered corpora INTO the image, for a
                          container that has to work with nothing mounted.
                          Default: none, and they are expected at /corpora.
+  --knowledge a,b|all    ship the active workspace knowledge of these projects
+                         as the image's common state, read under each user's
+                         own. Default: none.
 USAGE
             exit 0 ;;
         -*) echo "unknown option: $1" >&2; exit 1 ;;
@@ -72,6 +79,14 @@ esac
 if [ "$PROFILE" = public ] && [ -n "$BAKE" ]; then
     echo "--bake needs --profile private: a public image carries no corpus" \
          "tree, since nothing says which ones may be redistributed" >&2
+    exit 1
+fi
+
+# Knowledge is what one deployment has learned about its own trees, customer
+# code included, and nothing records which of it may be passed on.
+if [ "$PROFILE" = public ] && [ -n "$KNOWLEDGE" ]; then
+    echo "--knowledge needs --profile private: a public image carries no" \
+         "workspace knowledge, since nothing says which of it may be redistributed" >&2
     exit 1
 fi
 
@@ -175,6 +190,10 @@ REGISTRY="$REPO/docker/projects.docker.json"
 
 "$HERE/stage-standards.py" --profile "$PROFILE" "$STAGE/standards"
 CONTEXTS+=(--build-context "standards=$STAGE/standards")
+
+SPEAR_COMMON_STATE_DIR="${SPEAR_COMMON_STATE_DIR:-}" \
+    "$HERE/stage-knowledge.py" --workspaces "$KNOWLEDGE" "$STAGE/common"
+CONTEXTS+=(--build-context "common=$STAGE/common")
 
 RESTRICT=()
 [ -n "$BAKE" ] && RESTRICT=(--restrict-registry)

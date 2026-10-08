@@ -7355,7 +7355,8 @@ def knowledge_store(trace=None, task_id="", session_id=None):
         for opened in _KNOWLEDGE_STORE:
             opened.close()
 
-        _KNOWLEDGE_STORE[:] = [workspace_knowledge.KnowledgeStore(path)]
+        _KNOWLEDGE_STORE[:] = [workspace_knowledge.KnowledgeStore(
+            path, common=workspace_knowledge.default_common_path())]
 
     store = _KNOWLEDGE_STORE[0]
 
@@ -7423,7 +7424,8 @@ def knowledge_command(arguments: str, *, approve=None) -> str:
                          if f"--{name}" in arguments.split()), "")
             store.validate(here, workspace.root)
             records = store.list(here, wanted.get(flag, (wk.Lifecycle.ACTIVE,)))
-            lines = [f"{wk.summary(record)}  [{record.lifecycle}, {record.provenance}]"
+            lines = [f"{wk.summary(record)}  [{record.lifecycle}, {record.provenance}"
+                     f"{', common' if store.layer(here, record.record_id) == 'common' else ''}]"
                      for record in records]
 
             return (f"{here}\n" + "\n".join(lines)) if lines else f"{here}: no records"
@@ -7532,7 +7534,11 @@ def knowledge_command(arguments: str, *, approve=None) -> str:
                                         f"history included?"):
                 return "nothing deleted"
 
-            return f"deleted {store.purge(here)} records of {here}"
+            deleted = store.purge(here)
+            kept = len(store.list(here))
+
+            return (f"deleted {deleted} records of {here}"
+                    + (f"; {kept} common records stay, they come with the image" if kept else ""))
     except wk.KnowledgeError as exc:
         return f"not recorded: {exc}"
 

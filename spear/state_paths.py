@@ -32,6 +32,17 @@ def state_dir() -> Path:
     return Path(configured) if configured else DEFAULT
 
 
+def common_dir() -> Path | None:
+    """The common state root, SPEAR_COMMON_STATE_DIR, or None.
+
+    Read, never written: what a team ships to everyone who runs an image,
+    under each user's own state.
+    """
+    configured = os.environ.get("SPEAR_COMMON_STATE_DIR")
+
+    return Path(configured) if configured else None
+
+
 def standards_root() -> Path:
     """The normative-standard store inside it.
 

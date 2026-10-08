@@ -1,7 +1,8 @@
 #!/bin/bash
 # Manage SPEAR container images: one entry point over scripts/docker/.
 #
-#     spear-image build   <public|private> [--bake a,b,...] [--tag TAG]
+#     spear-image build   <public|private> [--bake a,b,...] [--knowledge a,b,...|all]
+#                         [--tag TAG]
 #     spear-image list
 #     spear-image inspect <public|private|TAG>
 #     spear-image run     <public|private|TAG> [spear-docker options] [-- harness args]
@@ -65,17 +66,19 @@ case "$action" in
             *) die "build needs a profile: public or private" ;;
         esac
 
-        tag="" bake=()
+        tag="" bake=() knowledge=()
 
         while [ $# -gt 0 ]; do
             case "$1" in
                 --tag) tag="$2"; shift 2 ;;
                 --bake) bake=(--bake "$2"); shift 2 ;;
+                --knowledge) knowledge=(--knowledge "$2"); shift 2 ;;
                 *) die "build: unknown option $1" ;;
             esac
         done
 
-        exec "$DOCKER_SCRIPTS/build.sh" ${tag:+"$tag"} --profile "$profile" "${bake[@]}" ;;
+        exec "$DOCKER_SCRIPTS/build.sh" ${tag:+"$tag"} --profile "$profile" "${bake[@]}" \
+            "${knowledge[@]}" ;;
 
     list)
         # The label, not the repository name: an image retagged for a registry

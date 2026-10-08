@@ -112,6 +112,14 @@ and a new tree inherits none. It is stored in SPEAR's state directory
 (``knowledge.sqlite3``, or ``SPEAR_KNOWLEDGE_DB``), never in the project's
 repository.
 
+A team shares what it knows through an image's **common state**
+(:ref:`common-state`): records read under the user's own and never written.
+They are listed with ``common``, and are revoked, amended or found stale like
+any other: the first change copies the record into the user's store, which
+then shadows it, and the next user is still given the original. ``/knowledge
+purge`` deletes the user's records only. ``spear-consolidate`` merges users'
+records back into the common store for the next image.
+
 What a turn is shown
 ********************
 

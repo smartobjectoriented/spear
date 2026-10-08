@@ -226,6 +226,188 @@ class Lifecycle(Store):
         self.assertEqual(self.store.list(A), [])
 
 
+class Common(Store):
+    """What an image ships is read by every user and written by none."""
+
+    STAGE = ROOT.parent / "scripts" / "docker" / "stage-knowledge.py"
+
+    def setUp(self):
+        super().setUp()
+        self.shared = self.fact()
+        self.fact(statement="The board boots from QSPI.", subject="boot medium",
+                  provenance=wk.Provenance.MODEL_DERIVED)
+        self.fact(workspace="adhoc:/home/someone/tree", subject="adhoc")
+        self.fact(workspace=B, subject="beta")
+        self.store.amend(A, self.shared.record_id, "The UART driver lives in hal/uart.c.")
+        self.common = os.path.join(self.dir, "common")
+        self.stage(A)
+        self.user = wk.KnowledgeStore(os.path.join(self.dir, "user", "knowledge.sqlite3"),
+                                      common=os.path.join(self.common, "knowledge.sqlite3"))
+        self.addCleanup(self.user.close)
+
+    def stage(self, workspaces):
+        import subprocess
+
+        return subprocess.run([sys.executable, str(self.STAGE), "--workspaces", workspaces,
+                               "--store", self.path, self.common],
+                              capture_output=True, text=True)
+
+    def test_only_the_active_records_of_the_named_workspace_travel_without_history(self):
+        records = self.user.list(A)
+
+        self.assertEqual([record.record_id for record in records], [self.shared.record_id])
+        self.assertEqual(self.user.layer(A, self.shared.record_id), "common")
+        self.assertEqual(len(self.user.history(A, self.shared.record_id)), 1)
+        self.assertEqual(self.user.list(B), [])
+
+    def test_a_users_change_is_theirs_and_leaves_the_common_store_alone(self):
+        self.user.revoke(A, self.shared.record_id, "not on this board")
+
+        self.assertEqual(self.user.list(A, (wk.Lifecycle.ACTIVE,)), [])
+        self.assertEqual(self.user.layer(A, self.shared.record_id), "local")
+        self.assertEqual([item.version for item in
+                          self.user.history(A, self.shared.record_id)], [2, 3])
+
+        fresh = wk.KnowledgeStore(os.path.join(self.dir, "other.sqlite3"),
+                                  common=self.user.common)
+        self.addCleanup(fresh.close)
+        self.assertEqual(fresh.get(A, self.shared.record_id).lifecycle, wk.Lifecycle.ACTIVE)
+
+    def test_purge_removes_only_the_users_records(self):
+        self.user.add(A, kind=wk.Kind.DECISION, subject="mine", statement="We ship v2.",
+                      provenance=wk.Provenance.USER_CONFIRMED)
+
+        self.assertEqual(self.user.purge(A), 1)
+        self.assertEqual(len(self.user.list(A)), 1)
+
+    def test_a_workspace_with_nothing_recorded_is_refused_and_none_named_stages_nothing(self):
+        refused = self.stage("gamma-fw")
+
+        self.assertEqual(refused.returncode, 1)
+        self.assertIn("alpha-fw, beta-fw", refused.stderr)
+        self.assertEqual(self.stage("").returncode, 0)
+        self.assertEqual(os.listdir(self.common), [])
+
+    def test_all_never_includes_an_adhoc_tree(self):
+        self.stage("all")
+        common = wk.KnowledgeStore(os.path.join(self.dir, "probe.sqlite3"),
+                                   common=os.path.join(self.common, "knowledge.sqlite3"))
+        self.addCleanup(common.close)
+
+        self.assertEqual(len(common.list(B)), 1)
+        self.assertEqual(common.list("adhoc:/home/someone/tree"), [])
+
+
+class Consolidation(Store):
+    """Users' knowledge flows back into the common store, and only what agrees."""
+
+    CONSOLIDATE = ROOT.parent / "scripts" / "spear-consolidate"
+
+    def setUp(self):
+        super().setUp()
+        self.team = self.path
+        self.uart = self.fact()
+        self.users = []
+
+    def user(self):
+        # A user of the image: the team store staged, then their own on top.
+
+        import subprocess
+
+        staged = tempfile.mkdtemp()
+        subprocess.run([sys.executable, str(Common.STAGE), "--workspaces", A,
+                        "--store", self.team, staged], check=True, capture_output=True)
+        store = wk.KnowledgeStore(os.path.join(tempfile.mkdtemp(), "knowledge.sqlite3"),
+                                  common=os.path.join(staged, "knowledge.sqlite3"))
+        self.addCleanup(store.close)
+        self.users.append(store)
+
+        return store
+
+    def merge(self, user, apply=True):
+        local = wk.KnowledgeStore(user.path, read_only=True)
+        self.addCleanup(local.close)
+        outcomes = wk.consolidate(self.store, local)
+
+        if apply:
+            wk.apply_consolidation(self.store, local, outcomes)
+
+        return {outcome.record.record_id: (outcome.action, outcome.why) for outcome in outcomes}
+
+    def test_accepted_knowledge_is_added_and_a_proposal_waits(self):
+        user = self.user()
+        mine = user.add(A, kind=wk.Kind.BUILD_FACT, subject="image", statement="The image is "
+                        "built by make image.", provenance=wk.Provenance.USER_CONFIRMED)
+        guess = user.add(A, kind=wk.Kind.PROJECT_FACT, subject="flash", statement="The board "
+                         "boots from QSPI.", provenance=wk.Provenance.MODEL_DERIVED)
+        report = self.merge(user)
+
+        self.assertEqual(report[mine.record_id][0], wk.ADDED)
+        self.assertEqual(report[guess.record_id][0], wk.SKIPPED)
+        self.assertEqual(self.store.get(A, mine.record_id).statement, mine.statement)
+        self.assertIsNone(self.store.get(A, guess.record_id))
+
+    def test_a_revocation_reaches_the_common_store_with_its_history(self):
+        user = self.user()
+        user.revoke(A, self.uart.record_id, "the HAL was removed")
+
+        self.assertEqual(self.merge(user)[self.uart.record_id][0], wk.REVOKED_IN_COMMON)
+        self.assertEqual(self.store.get(A, self.uart.record_id).lifecycle, wk.Lifecycle.REVOKED)
+        self.assertEqual([item.version for item in self.store.history(A, self.uart.record_id)],
+                         [1, 2])
+
+    def test_two_users_who_changed_the_same_record_do_not_overwrite_each_other(self):
+        first, second = self.user(), self.user()
+        first.amend(A, self.uart.record_id, "The UART driver lives in hal/uart.c.")
+        second.amend(A, self.uart.record_id, "The UART driver lives in bsp/uart.c.")
+
+        self.assertEqual(self.merge(first)[self.uart.record_id][0], wk.UPDATED)
+        action, why = self.merge(second)[self.uart.record_id]
+        self.assertEqual(action, wk.CONFLICT)
+        self.assertIn("changed in common", why)
+        self.assertIn("hal/uart.c", self.store.get(A, self.uart.record_id).statement)
+
+        # The next image gives everyone the merged answer.
+
+        self.assertIn("hal/uart.c", self.user().get(A, self.uart.record_id).statement)
+
+    def test_a_new_fact_that_contradicts_a_common_one_is_a_conflict(self):
+        user = self.user()
+        other = user.add(A, kind=wk.Kind.PROJECT_FACT, subject="uart driver",
+                         statement="The UART driver lives in legacy/uart.c.",
+                         provenance=wk.Provenance.USER_CONFIRMED)
+
+        self.assertEqual(self.merge(user)[other.record_id], (
+            wk.CONFLICT, f"contradicts {self.uart.record_id}"))
+
+    def test_the_same_fact_learned_twice_is_kept_once(self):
+        first, second = self.user(), self.user()
+
+        for user in (first, second):
+            user.add(A, kind=wk.Kind.DECISION, subject="release", statement="Releases are "
+                     "tagged vX.Y.Z.", provenance=wk.Provenance.USER_CONFIRMED)
+
+        self.merge(first)
+        self.assertEqual({action for action, _ in self.merge(second).values()}, {wk.DUPLICATE})
+        self.assertEqual(len(self.store.list(A)), 2)
+
+    def test_the_command_reports_without_writing_unless_asked(self):
+        import subprocess
+
+        user = self.user()
+        user.revoke(A, self.uart.record_id)
+        self.store.close()
+        command = [sys.executable, str(self.CONSOLIDATE), "--into", self.team, user.path]
+        dry = subprocess.run(command, capture_output=True, text=True)
+
+        self.assertEqual(dry.returncode, 0, dry.stderr)
+        self.assertIn("revoked", dry.stdout)
+        self.assertEqual(self.open().get(A, self.uart.record_id).lifecycle, wk.Lifecycle.ACTIVE)
+
+        subprocess.run(command + ["--apply"], check=True, capture_output=True)
+        self.assertEqual(self.open().get(A, self.uart.record_id).lifecycle, wk.Lifecycle.REVOKED)
+
+
 class Selection(Store):
     def many(self, count):
         return [self.fact(statement=f"Component c{index:03d} is owned by team {index % 5}.",

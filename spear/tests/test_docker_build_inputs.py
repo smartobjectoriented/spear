@@ -216,6 +216,29 @@ class EveryOptionalInputIsDeclaredOptional(unittest.TestCase):
              "SPEAR_BENCH_DIR", "SPEAR_NOTES_DIR"})
 
 
+class EveryImportedPackageIsCopied(unittest.TestCase):
+    """`COPY *.py` takes the modules, not the packages they import.
+
+    rag_chat imports the coding core from agent/ at startup, and an image
+    without it does not start.
+    """
+
+    def test_each_local_package_a_module_imports_is_in_the_image(self):
+        sources = {source.rstrip("/") for context, source, _ in copies()
+                   if context is None}
+
+        for package in sorted(path.parent.name
+                              for path in DEFAULT_CONTEXT.glob("*/*.py")):
+            imported = re.compile(rf"^\s*(from|import) {package}\b", re.MULTILINE)
+            users = [module.name for module in DEFAULT_CONTEXT.glob("*.py")
+                     if imported.search(module.read_text())]
+
+            if users:
+                with self.subTest(package=package):
+                    self.assertIn(package, sources,
+                                  f"{', '.join(users)} imports {package}")
+
+
 class NothingPrivateIsRequired(unittest.TestCase):
     def test_the_builder_refuses_on_nothing_a_clone_lacks(self):
         """Every precondition is about code or build output, never content.

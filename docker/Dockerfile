@@ -83,6 +83,7 @@ ONNXMiniLM_L6_V2()(['warm'])" \
 # leaves on a mounted volume is root-owned.
 COPY --chmod=0777 --from=index . $APP/chromadb/
 COPY *.py *.md $APP/
+COPY agent/ $APP/agent/
 # rules.d/, skills/ and benches/ are CONTENT, and a deployment's own copy is
 # usually not in the repository -- see build.sh, which resolves each to the
 # in-tree directory, to its SPEAR_*_DIR, or to an empty one. An empty context

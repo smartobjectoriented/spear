@@ -11,31 +11,31 @@ import unittest
 from dataclasses import replace
 from pathlib import Path
 
-from standard_ingest import ingest_pdf
-from standard_layout import extract_layout
-from standard_prose_range import StandardReviewedLink
-from standard_semantic import (
+from standard.standard_ingest import ingest_pdf
+from standard.standard_layout import extract_layout
+from standard.standard_prose_range import StandardReviewedLink
+from standard.standard_semantic import (
     StandardBitfieldApproval, build_semantics, normative_links_for,
     promote_bitfield, review_evidence_fingerprint,
 )
-from standard_semantic_store import (
+from standard.standard_semantic_store import (
     StandardApprovalStore, StandardSemanticStore, build_semantic_manifest,
 )
-from standard_retrieval import rebuild_lexical_index
-from standard_store import StandardStore
-from standard_structure import extract_structures, structure_fingerprint
-from standard_structure_access import (
+from standard.standard_retrieval import rebuild_lexical_index
+from standard.standard_store import StandardStore
+from standard.standard_structure import extract_structures, structure_fingerprint
+from standard.standard_structure_access import (
     AMBIGUOUS_STRUCTURE, STALE_APPROVAL, STALE_REVIEW_EVIDENCE,
     STALE_SEMANTIC_STORE, STRUCTURE_INCOMPLETE, STRUCTURE_NOT_APPROVED,
     STRUCTURE_NOT_FOUND, StandardStructureAccess, StructureAccessError,
 )
-from standard_structure_store import StandardStructureStore, build_manifest
-from standard_tools import STANDARD_TOOL_NAMES, StandardToolService
-from standard_word_association import associate_words, field_candidates
+from standard.standard_structure_store import StandardStructureStore, build_manifest
+from standard.standard_tools import STANDARD_TOOL_NAMES, StandardToolService
+from standard.standard_word_association import associate_words, field_candidates
 from tests.standard_geometry_fixture import semantic_bitfield_pdf_bytes
-from tool_registry import ToolRegistry
-from tool_router import ToolExecutionContext
-from tracing import NullTraceRecorder, TraceEmitter
+from harness.tool_registry import ToolRegistry
+from harness.tool_router import ToolExecutionContext
+from runtime.tracing import NullTraceRecorder, TraceEmitter
 
 SID, REV = "SEM", "R1"
 OPERATOR = "test-operator"
@@ -91,8 +91,8 @@ class _Served(unittest.TestCase):
     def persist(self, approval):
         StandardApprovalStore._atomic_write = getattr(
             StandardApprovalStore, "_atomic_write", None)
-        from standard_semantic_store import _atomic_write
-        from standard_schema import canonical_json
+        from standard.standard_semantic_store import _atomic_write
+        from standard.standard_schema import canonical_json
         path = StandardApprovalStore(self.store).path(SID, REV)
         _atomic_write(path, canonical_json({
             "schema_version": approval.schema_version, "standard_id": SID,

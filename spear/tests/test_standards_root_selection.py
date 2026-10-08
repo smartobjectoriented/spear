@@ -13,7 +13,7 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-import state_paths
+from runtime import state_paths
 
 
 class TheStandardsRootIsSelectable(unittest.TestCase):

@@ -6,12 +6,12 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
 
-from checkpoint import (
+from harness.checkpoint import (
     CheckpointError, CheckpointManager, CheckpointStatus, MutationType,
     PathRollbackStatus, RollbackResult, RollbackStatus,
 )
-from cancellation import CancellationSource, NEVER_CANCELLED
-from tracing import TraceEmitter
+from runtime.cancellation import CancellationSource, NEVER_CANCELLED
+from runtime.tracing import TraceEmitter
 
 
 class CheckpointTests(unittest.TestCase):
@@ -170,8 +170,8 @@ class CheckpointTests(unittest.TestCase):
 
 class ProductionMutationCheckpointTests(unittest.TestCase):
     def setUp(self):
-        import rag_chat
-        from tool_runtime import Workspace
+        from cli import rag_chat
+        from harness.tool_runtime import Workspace
         self.rag_chat = rag_chat
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
@@ -199,7 +199,7 @@ class ProductionMutationCheckpointTests(unittest.TestCase):
         # Patching only the approval left that premise implicit and, once a
         # categorical mode check was added ahead of it, untrue.
 
-        from tool_runtime import ExecutionMode
+        from harness.tool_runtime import ExecutionMode
 
         with patch.object(self.rag_chat, "EXECUTION_MODE", ExecutionMode.AUTO), \
                 patch.object(self.rag_chat, "authorize_mutation", return_value=None):

@@ -18,9 +18,9 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-import evidence_progress
-from evidence_guard import EvidenceLedger
-from evidence_progress import (
+from evidence import evidence_progress
+from evidence.evidence_guard import EvidenceLedger
+from evidence.evidence_progress import (
     BUDGET, EXHAUSTED, NO_PROGRESS_LIMIT, ProgressTracker, bounded_absence,
     evidence_signature, should_terminate,
 )
@@ -270,8 +270,8 @@ class ProseQuestionEnding(unittest.TestCase):
     """
 
     def test_a_question_that_asked_for_no_positions_is_not_told_about_them(self):
-        from evidence_guard import EvidenceLedger
-        from evidence_progress import ProgressTracker, bounded_absence
+        from evidence.evidence_guard import EvidenceLedger
+        from evidence.evidence_progress import ProgressTracker, bounded_absence
 
         text = bounded_absence(
             "How should the ACK be managed when using VITA49.2 Commands packets?",
@@ -281,8 +281,8 @@ class ProseQuestionEnding(unittest.TestCase):
         self.assertIn("does not settle the question as asked", text)
 
     def test_a_question_about_a_field_still_is(self):
-        from evidence_guard import EvidenceLedger
-        from evidence_progress import ProgressTracker, bounded_absence
+        from evidence.evidence_guard import EvidenceLedger
+        from evidence.evidence_progress import ProgressTracker, bounded_absence
 
         text = bounded_absence(
             "Give the bit range of the Coarse Time field.",

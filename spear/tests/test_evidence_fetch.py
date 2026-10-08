@@ -16,8 +16,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-import evidence_fetch
-from evidence_guard import (
+from evidence import evidence_fetch
+from evidence.evidence_guard import (
     CONTRADICTS_ESTABLISHED_EVIDENCE, EvidenceLedger, _DENIAL_ONLY, guard,
     safe_rendering, validate,
 )
@@ -279,7 +279,7 @@ class Contradiction(unittest.TestCase):
     def test_the_guard_and_the_oracle_agree_on_the_ft3g2_wordings(self):
         import sys
         sys.path.insert(0, str(ROOT / "eval" / "abstention"))
-        import normative_dimensions as nd
+        from normative import normative_dimensions as nd
 
         for tail, dimension in (
                 ("the bit ranges are not specified", nd.BITS),
@@ -417,7 +417,7 @@ class Unchanged(unittest.TestCase):
         self.assertIn("word 1: bits 31..16 are currently unclaimed", rendered)
 
     def test_the_bootstrap_is_untouched_by_the_ledger(self):
-        import evidence_bootstrap
+        from evidence import evidence_bootstrap
 
         self.assertFalse(evidence_bootstrap.should_bootstrap(
             "Give the octet offset of every field.",

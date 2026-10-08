@@ -13,8 +13,8 @@ from __future__ import annotations
 
 import unittest
 
-import evidence_graph as eg
-import provision_identity as pi
+from evidence import evidence_graph as eg
+from normative import provision_identity as pi
 
 
 def unit(position, text, *, section="5.2", page=10, content_type="UNKNOWN",

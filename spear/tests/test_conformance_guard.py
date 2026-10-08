@@ -18,11 +18,11 @@ from unittest.mock import patch
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-import conformance_guard
-from conformance_guard import (
+from evidence import conformance_guard
+from evidence.conformance_guard import (
     UNREAD_CLAUSE, UNSCOPED_VERDICT, ClauseLedger, clauses_in, findings, guard,
 )
-from standard_schema import StandardBinding
+from standard.standard_schema import StandardBinding
 
 import synthetic_standard
 
@@ -191,7 +191,7 @@ class BoundStandardUrls(unittest.TestCase):
     BOUND = "https://standards.example/doc/vita492-standard/"
 
     def setUp(self):
-        import rag_chat
+        from cli import rag_chat
         self.rag = rag_chat
         self.addCleanup(setattr, rag_chat, "STANDARD_ENGAGED_BEFORE",
                         rag_chat.STANDARD_ENGAGED_BEFORE)

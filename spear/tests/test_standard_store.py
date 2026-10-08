@@ -3,7 +3,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from standard_store import StandardStore, StandardStoreError
+from standard.standard_store import StandardStore, StandardStoreError
 
 
 class StandardStoreSecurityTests(unittest.TestCase):
@@ -28,7 +28,7 @@ class StandardStoreSecurityTests(unittest.TestCase):
             root.mkdir(mode=0o777)
             os.chmod(root, 0o777)
 
-            with mock.patch("standard_store.os.getuid",
+            with mock.patch("standard.standard_store.os.getuid",
                             return_value=os.getuid() + 1):
                 StandardStore(root)
 

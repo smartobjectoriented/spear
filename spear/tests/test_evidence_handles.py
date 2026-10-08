@@ -8,7 +8,7 @@ back to it -- still carried the source ids, and fetching one is all it takes.
 
 import unittest
 
-import evidence_handles
+from evidence import evidence_handles
 
 
 class Redaction(unittest.TestCase):

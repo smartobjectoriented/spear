@@ -8,7 +8,7 @@ import os
 import tempfile
 import unittest
 
-import rag_chat
+from cli import rag_chat
 
 
 class Collection:

@@ -1,11 +1,11 @@
 import unittest
 
-from tool_router import ToolResultEnvelope, ToolResultStatus
-from verification import (
+from harness.tool_router import ToolResultEnvelope, ToolResultStatus
+from evidence.verification import (
     CompletionVerificationStatus, VerificationCategory, VerificationCoverage,
     VerificationHints, VerificationPolicy,
 )
-from working_state import (
+from runtime.working_state import (
     ActionKind, StateEvent, StateEventType, StateSource, VerificationOutcome,
     WorkingState,
 )

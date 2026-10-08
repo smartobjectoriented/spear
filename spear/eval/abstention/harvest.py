@@ -25,9 +25,9 @@ HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 sys.path.insert(0, str(HERE.parent.parent))
 
-import standard_answer_policy
+from standard import standard_answer_policy
 from corpus import SyntheticTools
-from evidence_guard import explain
+from evidence.evidence_guard import explain
 from scenarios import SCENARIOS
 
 def _system_prompt():
@@ -43,7 +43,7 @@ def _system_prompt():
     if configured:
         return pathlib.Path(configured).read_text("utf-8")
 
-    import rag_chat
+    from cli import rag_chat
 
     return rag_chat.ADHOC_PROMPT
 
@@ -338,7 +338,7 @@ def run(scenario, tool_view):
 
 
 def tool_view():
-    from standard_tools import STANDARD_TOOL_NAMES, standard_tool_specs
+    from standard.standard_tools import STANDARD_TOOL_NAMES, standard_tool_specs
     return [{"type": "function",
              "function": {"name": spec.name, "description": spec.description,
                           "parameters": spec.input_schema}}

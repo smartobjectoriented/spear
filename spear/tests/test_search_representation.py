@@ -17,12 +17,12 @@ from __future__ import annotations
 
 import unittest
 
-from standard_retrieval import rebuild_lexical_index
-from standard_schema import (
+from standard.standard_retrieval import rebuild_lexical_index
+from standard.standard_schema import (
     StandardContentType, StandardDocumentUnit, StandardModality,
     StandardTableCell, StandardTableStructure, source_content_sha256,
 )
-from standard_vector_index import retrieval_text, structural_context
+from standard.standard_vector_index import retrieval_text, structural_context
 
 SID, REV, PDF = "ACME-1", "2030", "a" * 64
 

@@ -8,7 +8,7 @@ through. Every fixture here is invented; no licensed text appears.
 
 import unittest
 
-from standard_stated_range import (
+from standard.standard_stated_range import (
     DISQUALIFYING_CONTEXT, PROSE_CONTEXT, RangeContext, RangeStatus,
     accepted_ranges, is_document_reference, parse_stated_ranges,
 )

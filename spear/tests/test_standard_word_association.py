@@ -6,12 +6,12 @@ Every fixture here is invented. No licensed normative text appears in this file.
 import unittest
 from dataclasses import replace
 
-from standard_semantic import (
+from standard.standard_semantic import (
     DefinitionCompleteness, PositionSource, RULER_FRAGMENTED, SemanticRole,
     SpanRole, StandardBitfieldApproval, StandardSemanticError, promote_bitfield,
     semantic_fingerprint, validate_semantics, StandardSemanticSet,
 )
-from standard_word_association import (
+from standard.standard_word_association import (
     NO_WORD_INDEX_IN_ROW, WORD_LINES_NOT_SEPARABLE, WORD_LINE_COUNT_MISMATCH,
     AssociationSource, associate_words, field_candidates, is_word_count,
     word_index_cells,

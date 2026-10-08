@@ -9,14 +9,14 @@ import unittest
 from dataclasses import replace
 from pathlib import Path
 
-from standard_ingest import (
+from standard.standard_ingest import (
     canonical_units, extract_pdf_pages, ingest_pdf, verify_against_contents,
 )
-from standard_review import (
+from standard.standard_review import (
     UNREVIEWED, StandardReview, build_review_sample, write_review_sample,
 )
-from standard_schema import StandardContentType, StandardLayoutKind, StandardModality
-from standard_store import StandardStore
+from standard.standard_schema import StandardContentType, StandardLayoutKind, StandardModality
+from standard.standard_store import StandardStore
 from tests.standard_extraction_fixture import semantic_pdf_bytes
 
 
@@ -183,7 +183,7 @@ class StructuralGateTests(unittest.TestCase):
         self.assertGreater(before["clauses_in_both"], 0)
 
     def test_classification_registers_no_tool_of_its_own(self):
-        from standard_tools import STANDARD_TOOL_NAMES
+        from standard.standard_tools import STANDARD_TOOL_NAMES
         self.assertEqual(set(STANDARD_TOOL_NAMES),
                          {"standard.search", "standard.fetch", "standard.cite",
                           "standard.get_structure"})

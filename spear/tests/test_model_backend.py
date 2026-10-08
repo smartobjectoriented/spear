@@ -5,8 +5,8 @@ from unittest.mock import patch
 from pathlib import Path
 from types import SimpleNamespace
 
-import model_backend
-from model_backend import (
+from models import model_backend
+from models.model_backend import (
     AnthropicBackend,
     ModelBackendConfigurationError,
     ConversationMessage,
@@ -202,8 +202,8 @@ class OpenAICompatibleBackendTests(unittest.TestCase):
         ))
 
     def test_fake_backend_four_turn_scenario_uses_spear_tools_and_policy(self):
-        import rag_chat
-        from tool_runtime import ExecutionMode, Workspace
+        from cli import rag_chat
+        from harness.tool_runtime import ExecutionMode, Workspace
 
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
@@ -615,7 +615,7 @@ class AnthropicBackendTests(unittest.TestCase):
         self.assertEqual(built, {"api_key": "controlled-secret"})
 
     def test_login_is_offered_never_automatic_and_fails_closed(self):
-        import rag_chat
+        from cli import rag_chat
 
         # Already authenticated: no prompt, no subprocess.
         with patch.object(rag_chat, "anthropic_credentials_available", return_value=True), \
@@ -671,7 +671,7 @@ class AnthropicBackendTests(unittest.TestCase):
         self.assertNotIn("bwrap", str(run.call_args))
 
     def test_rag_cli_keeps_qwen_default_and_selects_anthropic_explicitly(self):
-        import rag_chat
+        from cli import rag_chat
 
         self.assertEqual(rag_chat.model_provider_from_argv([]), ("openai-compatible", None))
         self.assertEqual(rag_chat.model_provider_from_argv(
@@ -681,8 +681,8 @@ class AnthropicBackendTests(unittest.TestCase):
             rag_chat.model_provider_from_argv(["--provider", "unsupported"])
 
     def test_agent_loop_gate_executes_only_valid_tool_use_turns(self):
-        import rag_chat
-        from tool_runtime import ExecutionMode, Workspace
+        from cli import rag_chat
+        from harness.tool_runtime import ExecutionMode, Workspace
 
         sentinel = ModelToolCall("write", "write_file", {
             "path": "sentinel.txt", "content": "must not exist",

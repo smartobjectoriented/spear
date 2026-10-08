@@ -8,16 +8,16 @@ consent. Every fixture here is invented; no licensed text appears.
 import unittest
 from dataclasses import replace
 
-from standard_prose_range import (
+from standard.standard_prose_range import (
     ProseRangeError, StandardNormativeRangeLink, StandardReviewedLink,
 )
-from standard_semantic import (
+from standard.standard_semantic import (
     APPROVAL_SCHEMA_VERSION, PositionSource, SemanticRole, SpanRole,
     StandardBitfieldApproval, StandardSemanticError, StructuralCompleteness,
     normative_links_for, promote_bitfield, review_evidence_fingerprint,
     semantic_fingerprint,
 )
-from standard_word_association import associate_words, field_candidates
+from standard.standard_word_association import associate_words, field_candidates
 from tests.standard_word_fixture import (
     FINGERPRINT, LAYOUT, REV, SID, SOURCE, bitfield, ruler_row, table, word_row,
 )
@@ -308,7 +308,7 @@ class EvidenceReproducibilityTests(_Target):
         # The exact divergence that broke the second approval: one path had
         # the raw geometry that cleans a label, the other did not.
         from tests.standard_word_fixture import merged_cell_table
-        from standard_word_association import page_words
+        from standard.standard_word_association import page_words
         source, words = merged_cell_table("FIELD_A (31-16)")
         mark = bitfield(source)
         plain = field_candidates(mark.to_dict(), source.to_dict())
@@ -325,7 +325,7 @@ class EvidenceReproducibilityTests(_Target):
                                         originals=cleaned, **common))
 
     def test_the_evidence_binds_the_canonical_cell_text(self):
-        from standard_semantic import review_evidence
+        from standard.standard_semantic import review_evidence
         payload = review_evidence(
             self.mark.bitfield_id, FINGERPRINT, table=self.source.to_dict(),
             originals=self.originals, roles=("FIELD",),
@@ -342,7 +342,7 @@ class EvidenceReproducibilityTests(_Target):
                          self.evidence(reviewed=reviewed))
 
     def test_an_accepted_link_does_not_change_the_diagram_candidate_evidence(self):
-        from standard_semantic import review_evidence
+        from standard.standard_semantic import review_evidence
         payload = lambda reviewed: review_evidence(
             self.mark.bitfield_id, FINGERPRINT, table=self.source.to_dict(),
             originals=self.originals, roles=("FIELD",),

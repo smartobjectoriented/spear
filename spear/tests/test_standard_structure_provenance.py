@@ -9,18 +9,18 @@ import unittest
 from dataclasses import replace
 from pathlib import Path
 
-from standard_ingest import ingest_pdf
-from standard_layout import extract_layout
-from standard_store import StandardStore
-from standard_structure import (
+from standard.standard_ingest import ingest_pdf
+from standard.standard_layout import extract_layout
+from standard.standard_store import StandardStore
+from standard.standard_structure import (
     GeometryStatus, ProvenanceQuality, StandardStructureError, extract_structures,
     promotion_state, provenance_counts, unresolved_semantic_cells,
     validate_structures,
 )
-from standard_structure_review import (
+from standard.standard_structure_review import (
     REVIEW_DIMENSIONS, StandardStructureReview,
 )
-from standard_structure_store import StandardStructureStore, build_manifest
+from standard.standard_structure_store import StandardStructureStore, build_manifest
 from tests.standard_geometry_fixture import geometry_pdf_bytes
 
 SID, REV = "GEO", "R1"
@@ -91,7 +91,7 @@ class ProvenanceQualityTests(_Extracted):
         self.assertIn("semantic", sample)
 
     def test_a_region_never_inherits_from_an_unbounded_source_set(self):
-        from standard_structure import _MAX_REGION_SOURCES
+        from standard.standard_structure import _MAX_REGION_SOURCES
         for table in self.structures.tables:
             region = [cell for row in table.rows for cell in row.cells
                       if cell.provenance is ProvenanceQuality.TABLE_REGION_INHERITED]
@@ -152,7 +152,7 @@ class PromotionGateTests(_Extracted):
 
 class AutoAcceptAndListTests(_Extracted):
     def test_a_bulleted_or_numbered_list_is_not_auto_accepted(self):
-        from standard_structure import _bullet_led
+        from standard.standard_structure import _bullet_led
         self.assertTrue(_bullet_led([("•", "a"), ("•", "b")]))
         self.assertTrue(_bullet_led([("1.", "a"), ("2.", "b"), ("3.", "c")]))
         self.assertFalse(_bullet_led([("Code", "a"), ("0001", "b")]))

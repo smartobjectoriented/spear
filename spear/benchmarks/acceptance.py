@@ -23,7 +23,7 @@ from pathlib import Path
 import shutil
 import tempfile
 
-from tool_runtime import (
+from harness.tool_runtime import (
     BubblewrapSandbox, Capability, CommandRunner, ExecutionProfile, Workspace,
 )
 

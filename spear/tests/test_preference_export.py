@@ -5,13 +5,13 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from preference_export import main
+from training.preference_export import main
 from tests.test_agent_runtime import ScriptedBackend, make_context, text_turn
 from tests.test_preference_dataset import bad_turn, good_turn
 from tests.test_sft_dataset import episode
 from tests.test_training_data import make_controller
-from task_controller import TaskRequest, TaskStatus
-from training_store import TrainingStore
+from runtime.task_controller import TaskRequest, TaskStatus
+from training.training_store import TrainingStore
 
 
 class PreferenceExportTests(unittest.TestCase):
@@ -69,7 +69,7 @@ class PreferenceExportTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             store = TrainingStore(Path(directory) / "source")
             context = make_context(ScriptedBackend([text_turn("answer")]))
-            with patch("preference_dataset.PreferenceDatasetBuilder.index_episode",
+            with patch("training.preference_dataset.PreferenceDatasetBuilder.index_episode",
                        side_effect=OSError("index unavailable")):
                 result = make_controller(context, store).run(TaskRequest(
                     "answer", context, (directory,), enable_planning=False,

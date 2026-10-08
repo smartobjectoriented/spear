@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import unittest
 
-import standard_retrieval_policy as policy
+from standard import standard_retrieval_policy as policy
 
 
 class AFragmentIsKeptButNotRanked(unittest.TestCase):

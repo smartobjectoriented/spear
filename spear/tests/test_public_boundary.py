@@ -175,9 +175,9 @@ class TheOrganisationIsNamedOnlyWhereItMustBe(unittest.TestCase):
                "infra" + "base")
 
     JUSTIFIED = {
-        "spear/tool_runtime.py":
+        "spear/harness/tool_runtime.py":
             "a measured incident: the entry points a path check refused",
-        "spear/index_dir.py":
+        "spear/retrieval/index_dir.py":
             "measured incidents -- the snapshot suffixes a real build system "
             "leaves, and an index that came out 99.8% vendored",
         "spear/benchmarks/runner.py":
@@ -352,7 +352,7 @@ class TheProductIdentifiesItself(unittest.TestCase):
         """
         import io, sys
         sys.path.insert(0, str(ROOT))
-        import rag_chat
+        from cli import rag_chat
 
         out = io.StringIO()
         stdout, sys.stdout = sys.stdout, out
@@ -369,7 +369,7 @@ class TheProductIdentifiesItself(unittest.TestCase):
 
     def test_the_help_names_the_current_commands(self):
         """The banner is not the only place a name is printed."""
-        source = (ROOT / "rag_chat.py").read_text(encoding="utf-8")
+        source = (ROOT / "cli/rag_chat.py").read_text(encoding="utf-8")
 
         self.assertIn("spear-chat [options]", source)
         self.assertNotIn("edgem" + "-chat", source)

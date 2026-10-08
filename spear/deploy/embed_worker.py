@@ -23,7 +23,7 @@ os.environ.setdefault("SPEAR_EMBED_DEVICE", "cuda")
 # ship the batch on again.
 
 os.environ["SPEAR_EMBED_REMOTE"] = ""
-import embedding                                            # noqa: E402
+from retrieval import embedding  # noqa: E402
 
 
 def main():

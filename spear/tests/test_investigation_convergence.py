@@ -23,10 +23,10 @@ from types import SimpleNamespace
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-import progress_monitor
-import rag_chat
-import tool_router
-import work_phase
+from runtime import progress_monitor
+from cli import rag_chat
+from harness import tool_router
+from runtime import work_phase
 
 SOURCE = "src/link/handshake.c"
 

@@ -18,7 +18,7 @@ sys.path.insert(0, str(ROOT))
 from agent import loop
 from agent.hermes import loop_constants as text
 from agent.host import CommandOutcome
-from model_backend import RawTurn
+from models.model_backend import RawTurn
 
 TOOLS = [{"type": "function", "function": {"name": name, "description": name,
                                            "parameters": {"type": "object"}}}

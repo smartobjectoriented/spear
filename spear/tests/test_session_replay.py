@@ -5,9 +5,9 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-import session_replay
-from model_backend import ModelToolCall, ModelTurn, StopReason
-from session_replay import RecordingBackend, ReplayBackend
+from runtime import session_replay
+from models.model_backend import ModelToolCall, ModelTurn, StopReason
+from runtime.session_replay import RecordingBackend, ReplayBackend
 
 
 class FakeBackend:
@@ -167,7 +167,7 @@ class TheOperatorFlags(unittest.TestCase):
         from unittest.mock import patch
 
         sys.argv = ["rag_chat", "--safe"]
-        import rag_chat
+        from cli import rag_chat
 
         with patch.dict(os.environ, {}, clear=False):
             os.environ.pop(session_replay.RECORD_ENV, None)
@@ -189,7 +189,7 @@ class TheOperatorFlags(unittest.TestCase):
         import sys
 
         sys.argv = ["rag_chat", "--safe"]
-        import rag_chat
+        from cli import rag_chat
 
         for flag in ("--record", "--replay"):
             with self.subTest(flag=flag):

@@ -21,7 +21,7 @@ from unittest.mock import patch
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-import rag_chat
+from cli import rag_chat
 
 
 class RuleScope(unittest.TestCase):

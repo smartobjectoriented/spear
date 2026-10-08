@@ -4,13 +4,13 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from remote_readiness import (
+from models.remote_readiness import (
     RemoteReadinessState, SSHDiagnosis, SSHRemoteProbe, local_doctor,
     load_cached_remote_readiness, save_remote_readiness,
 )
 from tests.deployment_fixture import deployment
-from training_launcher import TrainingExecutionConfiguration, TrainingLauncherError
-from training_store import TrainingStore
+from training.training_launcher import TrainingExecutionConfiguration, TrainingLauncherError
+from training.training_store import TrainingStore
 
 
 class ProbeRunner:

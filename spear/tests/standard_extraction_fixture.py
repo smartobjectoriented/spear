@@ -128,7 +128,7 @@ def legacy_canonical_units(pages, *, standard_id, revision, pdf_sha256):
     """Reproduce ``poppler-layout-v1``: any digit-led line opened a section."""
     import re
 
-    from standard_schema import (
+    from standard.standard_schema import (
         StandardContentType, StandardDocumentUnit, StandardModality,
         make_source_id, source_content_sha256,
     )

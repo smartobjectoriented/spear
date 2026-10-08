@@ -7,7 +7,7 @@ renderer happens to produce. No licensed normative text appears here.
 
 from __future__ import annotations
 
-from standard_structure import (
+from standard.standard_structure import (
     STRUCTURE_EXTRACTOR_VERSION, STRUCTURE_SCHEMA_VERSION, GeometryStatus,
     HeaderCandidate, ProvenanceQuality, StandardBitfieldCandidate,
     StandardBitLabel, StandardBitfieldSpan, StandardTableCandidate,

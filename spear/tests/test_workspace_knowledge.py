@@ -19,8 +19,8 @@ from unittest import mock
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-import context_selection as cs
-import workspace_knowledge as wk
+from context import context_selection as cs
+from context import workspace_knowledge as wk
 from tests.test_capabilities import SERVER, config, gateway
 
 A, B = "alpha-fw", "beta-fw"
@@ -480,7 +480,7 @@ class Door(Store):
 
     def test_it_fails_closed_through_the_host(self):
         from agent import tools
-        from control_plane import SpearHost
+        from harness.control_plane import SpearHost
 
         ran = []
         host = SpearHost(workspace_root=self.dir, authorize=lambda *a: "refused",
@@ -528,7 +528,7 @@ class ThroughTheSession(unittest.TestCase):
     """rag_chat's selection and its /knowledge command, on synthetic workspaces."""
 
     def setUp(self):
-        import rag_chat
+        from cli import rag_chat
 
         self.rag_chat = rag_chat
         self.state = tempfile.mkdtemp()

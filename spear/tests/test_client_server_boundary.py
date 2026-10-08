@@ -162,9 +162,9 @@ class TheEmbeddingWorkerLivesOnTheServerSide(unittest.TestCase):
         self.assertTrue((REPO / "server" / "embed" / "worker.py").is_file())
 
     def test_the_client_speaks_the_protocol_without_importing_it(self):
-        import embedding
+        from retrieval import embedding
 
-        source = (ROOT / "embedding.py").read_text(encoding="utf-8")
+        source = (ROOT / "retrieval/embedding.py").read_text(encoding="utf-8")
 
         self.assertTrue(hasattr(embedding, "EMBED_PROTOCOL_VERSION"))
         self.assertNotIn("from server", source)
@@ -177,9 +177,9 @@ class TheEmbeddingWorkerLivesOnTheServerSide(unittest.TestCase):
 
     def test_the_client_still_ships_no_remote_command(self):
         """The command remains deployment configuration, as E.0 made it."""
-        import embedding
+        from retrieval import embedding
 
-        source = (ROOT / "embedding.py").read_text(encoding="utf-8")
+        source = (ROOT / "retrieval/embedding.py").read_text(encoding="utf-8")
         self.assertIn("SPEAR_EMBED_REMOTE_CMD", source)
         self.assertNotIn("edgem-ai-rag", source)
         self.assertTrue(hasattr(embedding, "remote_command"))

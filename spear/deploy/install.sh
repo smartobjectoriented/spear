@@ -70,7 +70,8 @@ step "verification"
 cd "$APP_DIR"
 "$PY" -c "
 import sys; sys.path.insert(0, '.')
-import embedding, chromadb
+import chromadb
+from retrieval import embedding
 print('  active embedder:', embedding.active_model())
 c = chromadb.PersistentClient(path='chromadb')
 cols = [x for x in c.list_collections() if not x.name.startswith('bench_')]

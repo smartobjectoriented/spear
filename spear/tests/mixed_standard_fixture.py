@@ -27,10 +27,10 @@ def mixed_pdf_bytes() -> bytes:
 
 def build_store(root):
     """A bound store for the fixture, with its lexical and cross-reference indexes."""
-    from standard_crossrefs import rebuild_cross_reference_index
-    from standard_ingest import ingest_pdf
-    from standard_retrieval import rebuild_lexical_index
-    from standard_store import StandardStore
+    from standard.standard_crossrefs import rebuild_cross_reference_index
+    from standard.standard_ingest import ingest_pdf
+    from standard.standard_retrieval import rebuild_lexical_index
+    from standard.standard_store import StandardStore
 
     pdf = root / "mixed.pdf"
     pdf.write_bytes(mixed_pdf_bytes())

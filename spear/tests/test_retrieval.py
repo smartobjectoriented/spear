@@ -4,8 +4,8 @@ import sys
 import unittest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-import embedding
-import rag_chat
+from retrieval import embedding
+from cli import rag_chat
 
 
 class IdentTermsTest(unittest.TestCase):

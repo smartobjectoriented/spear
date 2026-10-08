@@ -18,9 +18,9 @@ from unittest import mock
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-import normative_constraints as nc
-import normative_coverage as cov
-import provision_identity as pi
+from normative import normative_constraints as nc
+from normative import normative_coverage as cov
+from normative import provision_identity as pi
 from tests.standard_fixture import synthetic_pdf_bytes
 
 STANDARD_ID, REVISION = "SYNTH-LIST", "L-1"
@@ -42,9 +42,9 @@ PAGES = ((
 
 
 def build_store(root):
-    from standard_ingest import ingest_pdf
-    from standard_retrieval import rebuild_lexical_index
-    from standard_store import StandardStore
+    from standard.standard_ingest import ingest_pdf
+    from standard.standard_retrieval import rebuild_lexical_index
+    from standard.standard_store import StandardStore
 
     pdf = root / "list.pdf"
     pdf.write_bytes(synthetic_pdf_bytes(PAGES))

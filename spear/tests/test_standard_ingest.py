@@ -4,10 +4,10 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from standard_ingest import StandardIngestionError, ingest_pdf
-from standard_retrieval import rebuild_lexical_index
-from standard_schema import StandardContentType, StandardModality
-from standard_store import StandardCollisionError, StandardStore
+from standard.standard_ingest import StandardIngestionError, ingest_pdf
+from standard.standard_retrieval import rebuild_lexical_index
+from standard.standard_schema import StandardContentType, StandardModality
+from standard.standard_store import StandardCollisionError, StandardStore
 from tests.standard_fixture import PAGES, synthetic_pdf_bytes
 
 

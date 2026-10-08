@@ -41,7 +41,7 @@ def _system_prompt():
     if configured:
         return pathlib.Path(configured).read_text("utf-8")
 
-    import rag_chat
+    from cli import rag_chat
 
     return rag_chat.ADHOC_PROMPT
 
@@ -60,7 +60,7 @@ def tool_view():
     the serving one, and without touching any store: only the descriptions and
     schemas are needed.
     """
-    from standard_tools import STANDARD_TOOL_NAMES, standard_tool_specs
+    from standard.standard_tools import STANDARD_TOOL_NAMES, standard_tool_specs
 
     return [{"type": "function",
              "function": {"name": spec.name, "description": spec.description,

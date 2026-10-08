@@ -16,10 +16,10 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-import conformance_mode
-import standard_answer_policy as sap
-from conformance_guard import ClauseLedger
-from conformance_mode import CodeReadLedger, is_conformance_turn, record, render
+from evidence import conformance_mode
+from standard import standard_answer_policy as sap
+from evidence.conformance_guard import ClauseLedger
+from evidence.conformance_mode import CodeReadLedger, is_conformance_turn, record, render
 
 SID, REV = "ANSI-VITA-49.2", "2017-R2024"
 FETCH = {"unit": {"section": "8.4.1.1", "text": "Rule 8.4.1.1-2: only one bit"}}

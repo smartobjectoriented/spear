@@ -16,7 +16,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from standard_subfield_assignment import (
+from standard.standard_subfield_assignment import (
     AMBIGUOUS_NAME_MATCH, CROSS_REFERENCE_UNRESOLVED, NO_ASSIGNMENT,
     NORMATIVE_SUBFIELD_ASSIGNMENT, PARTIAL_ASSIGNMENT, SLOT_CONFLICT,
     STATED_RANGE_CONFLICT, AssignmentForm, PackingSlot,

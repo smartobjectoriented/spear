@@ -27,9 +27,9 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-import agent_runtime
-from agent_runtime import AgentRuntime, carried_obligations
-from model_backend import (
+from runtime import agent_runtime
+from runtime.agent_runtime import AgentRuntime, carried_obligations
+from models.model_backend import (
     ConversationMessage, TextBlock, ToolDefinition,
 )
 
@@ -279,7 +279,7 @@ class TheGateAndThePromptAskOneQuestion(unittest.TestCase):
         self.assertNotIn('getattr(context, "prior_clauses"', source)
 
     def test_the_prompt_reads_the_same_predicate(self):
-        import task_controller
+        from runtime import task_controller
 
         source = inspect.getsource(task_controller.TaskController.run)
 

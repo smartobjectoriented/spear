@@ -19,12 +19,12 @@ from unittest import mock
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-import capabilities as cap
-import capability_gateway as gw
-import context_selection as cs
-import mcp_provider
+from harness import capabilities as cap
+from harness import capability_gateway as gw
+from context import context_selection as cs
+from harness import mcp_provider
 from tests.test_capabilities import SERVER, config, gateway
-from tracing import EventType
+from runtime.tracing import EventType
 
 OWNER = "spear-capability invoke tracker/lookup_component '{\"name\": \"uart\"}'"
 
@@ -55,7 +55,7 @@ class FailsClosed(unittest.TestCase):
     """Every way a recognised command can go wrong, through SpearHost."""
 
     def host(self, door):
-        from control_plane import SpearHost
+        from harness.control_plane import SpearHost
 
         self.ran = []
         return SpearHost(workspace_root=tempfile.mkdtemp(), authorize=lambda *a: "refused",
@@ -276,7 +276,7 @@ class LegacyRuntime(unittest.TestCase):
     legacy runtime, which has no gateway: kept as it is, and said so."""
 
     def test_no_shell_runs_a_gateway_command_there(self):
-        import rag_chat
+        from cli import rag_chat
 
         result = rag_chat.run_cmd_result("spear-capability list", need_confirm=False)
 
@@ -284,7 +284,7 @@ class LegacyRuntime(unittest.TestCase):
         self.assertIn("not available on this runtime", result.summary)
 
     def test_the_admission_is_recorded_not_dropped(self):
-        import rag_chat
+        from cli import rag_chat
         from tests.test_capabilities import Recorder
 
         root = tempfile.mkdtemp()

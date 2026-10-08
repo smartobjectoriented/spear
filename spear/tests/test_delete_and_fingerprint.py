@@ -10,10 +10,10 @@ import unittest
 from pathlib import Path
 from types import SimpleNamespace
 
-import rag_chat
-from progress_monitor import action_fingerprint
-from tool_registry import native_tool_specs
-from tool_runtime import ExecutionMode, Workspace
+from cli import rag_chat
+from runtime.progress_monitor import action_fingerprint
+from harness.tool_registry import native_tool_specs
+from harness.tool_runtime import ExecutionMode, Workspace
 
 
 FILE = "/home/operator/soo/so3/doc/source/user_space.rst"

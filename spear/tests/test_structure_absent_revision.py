@@ -14,8 +14,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
-import standard_structure_access as access
-from standard_store import StandardStore
+from standard import standard_structure_access as access
+from standard.standard_store import StandardStore
 
 
 class AnUnbuiltRevisionIsAState(unittest.TestCase):

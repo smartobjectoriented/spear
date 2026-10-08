@@ -5,16 +5,16 @@ from pathlib import Path
 
 from tests.test_sft_dataset import episode, turn
 from tests.test_training_readiness import with_origin
-from training_bundle import SourceModelProfile, TrainingBundleConfiguration
-from training_controller import TrainingController, TrainingControllerError
-from training_jobs import TrainingJobStatus
+from training.training_bundle import SourceModelProfile, TrainingBundleConfiguration
+from training.training_controller import TrainingController, TrainingControllerError
+from training.training_jobs import TrainingJobStatus
 from tests.deployment_fixture import deployment
-from training_launcher import (
+from training.training_launcher import (
     PreflightResult, StartResult, StatusResult, TrainingExecutionConfiguration,
 )
-from training_store import TrainingStore
-from inference_service import FakeInferenceServiceController
-from training_handoff import TrainingResourceHandoff
+from training.training_store import TrainingStore
+from models.inference_service import FakeInferenceServiceController
+from training.training_handoff import TrainingResourceHandoff
 
 
 class FakeTrainingLauncher:

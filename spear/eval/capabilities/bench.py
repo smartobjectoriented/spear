@@ -30,7 +30,7 @@ HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE.parent.parent))
 sys.path.insert(0, str(HERE))
 
-import capabilities as cap                      # noqa: E402
+from harness import capabilities as cap  # noqa: E402
 import catalog                                  # noqa: E402
 
 PROVIDER = cap.ProviderConfig(id="ops", transport="stdio", command=("none",),
@@ -111,8 +111,8 @@ def discovery_bench(url, name):
 
 
 def latency_bench():
-    import capability_gateway as gw
-    import mcp_provider
+    from harness import capability_gateway as gw
+    from harness import mcp_provider
 
     server = str(HERE.parent.parent / "tests" / "mcp_fixture_server.py")
     rows = {key: [] for key in ("connect+list", "cached list", "describe", "invoke")}

@@ -9,14 +9,14 @@ wrong. Every fixture here is invented; no licensed normative text appears.
 import unittest
 from dataclasses import replace
 
-from standard_semantic import (
+from standard.standard_semantic import (
     PositionSource, SemanticRole, StandardBitfieldApproval, promote_bitfield,
 )
-from standard_word_association import (
+from standard.standard_word_association import (
     RULER_LINE_EXCLUDED, AssociationSource, associate_words, field_candidates,
     isolate_from_ruler_line, page_words, ruler_band,
 )
-from standard_structure import HeaderCandidate, StandardTableRow
+from standard.standard_structure import HeaderCandidate, StandardTableRow
 from tests.standard_word_fixture import (
     FINGERPRINT, LAYOUT, REV, SID, SOURCE, bitfield, cell, line_y,
     merged_cell_table, raw, ruler_row, span_of, table, word_row,

@@ -2,21 +2,21 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from agent_runtime import AgentRuntime
-from result_store import ResultStore
-from session_store import FileSessionStore, SessionConfiguration, SessionHandle, new_session_id
-from standard_ingest import ingest_pdf
-from standard_retrieval import StandardRetrieval, rebuild_lexical_index
-from standard_crossrefs import rebuild_cross_reference_index
-from standard_vector_index import rebuild_vector_index
-from standard_store import StandardStore
-from standard_tools import StandardToolService
-from task_controller import TaskController, TaskRequest, TaskStatus
+from runtime.agent_runtime import AgentRuntime
+from runtime.result_store import ResultStore
+from runtime.session_store import FileSessionStore, SessionConfiguration, SessionHandle, new_session_id
+from standard.standard_ingest import ingest_pdf
+from standard.standard_retrieval import StandardRetrieval, rebuild_lexical_index
+from standard.standard_crossrefs import rebuild_cross_reference_index
+from standard.standard_vector_index import rebuild_vector_index
+from standard.standard_store import StandardStore
+from standard.standard_tools import StandardToolService
+from runtime.task_controller import TaskController, TaskRequest, TaskStatus
 from tests.standard_fixture import synthetic_pdf_bytes
 from tests.test_standard_hybrid_retrieval import FixtureSemanticEmbedder
 from tests.test_agent_runtime import ScriptedBackend, make_context, text_turn, tool_turn
-from tool_registry import ToolRegistry
-from tool_router import ToolExecutionContext, ToolRouter
+from harness.tool_registry import ToolRegistry
+from harness.tool_router import ToolExecutionContext, ToolRouter
 
 
 class StandardEndToEndTests(unittest.TestCase):
@@ -85,7 +85,7 @@ class StandardEndToEndTests(unittest.TestCase):
             self.assertNotIn("Implementations shall reject reserved value", system)
 
     def test_agent_runtime_has_no_standard_or_vita_orchestration_branch(self):
-        runtime = Path(__file__).parents[1] / "agent_runtime.py"
+        runtime = Path(__file__).parents[1] / "runtime/agent_runtime.py"
         text = runtime.read_text("utf-8")
         self.assertNotIn("VITA", text)
         self.assertNotIn("standard.search", text)

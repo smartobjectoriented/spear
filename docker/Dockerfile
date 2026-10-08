@@ -82,8 +82,18 @@ ONNXMiniLM_L6_V2()(['warm'])" \
 # moment the container runs as the host user -- which it must, or every file it
 # leaves on a mounted volume is root-owned.
 COPY --chmod=0777 --from=index . $APP/chromadb/
-COPY *.py *.md $APP/
+COPY *.md $APP/
 COPY agent/ $APP/agent/
+COPY cli/ $APP/cli/
+COPY context/ $APP/context/
+COPY evidence/ $APP/evidence/
+COPY harness/ $APP/harness/
+COPY models/ $APP/models/
+COPY normative/ $APP/normative/
+COPY retrieval/ $APP/retrieval/
+COPY runtime/ $APP/runtime/
+COPY standard/ $APP/standard/
+COPY training/ $APP/training/
 # rules.d/, skills/ and benches/ are CONTENT, and a deployment's own copy is
 # usually not in the repository -- see build.sh, which resolves each to the
 # in-tree directory, to its SPEAR_*_DIR, or to an empty one. An empty context

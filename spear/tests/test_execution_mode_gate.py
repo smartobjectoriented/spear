@@ -32,14 +32,14 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-from cancellation import NEVER_CANCELLED
-from tool_registry import (
+from runtime.cancellation import NEVER_CANCELLED
+from harness.tool_registry import (
     ToolCategory, ToolMutability, ToolRegistry, ToolSpec,
 )
-from tool_router import (
+from harness.tool_router import (
     ToolExecutionContext, ToolHandlerResult, ToolResultStatus, ToolRouter,
 )
-from tracing import TraceEmitter
+from runtime.tracing import TraceEmitter
 
 SCHEMA = {"type": "object", "properties": {"value": {"type": "string"}}}
 
@@ -157,7 +157,7 @@ class AnAbsentDeclarationIsUnrestricted(unittest.TestCase):
     """CASE 8 -- the compatibility semantic, read off the registry."""
 
     def test_every_read_only_native_spec_relies_on_it(self):
-        import rag_chat
+        from cli import rag_chat
 
         unrestricted = [item.name for item in rag_chat.TOOL_REGISTRY.list_specs()
                         if item.mutability == ToolMutability.READ_ONLY
@@ -238,7 +238,7 @@ class EveryMutatingToolDeclaresItsModes(unittest.TestCase):
     """
 
     def test_no_mutating_tool_permits_safe_mode(self):
-        import rag_chat
+        from cli import rag_chat
 
         for item in rag_chat.TOOL_REGISTRY.list_specs():
             if item.mutability != ToolMutability.MUTATING:
@@ -252,7 +252,7 @@ class EveryMutatingToolDeclaresItsModes(unittest.TestCase):
     def test_the_session_carries_its_mode_to_the_router(self):
         import inspect
 
-        import rag_chat
+        from cli import rag_chat
 
         # Every tool call's context, the router's and the agent core's, is
         # built in one place.

@@ -20,8 +20,8 @@ from unittest import mock
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-import context_selection as cs
-import rag_chat
+from context import context_selection as cs
+from cli import rag_chat
 
 SKILLS = {
     "c-readability": ("[any]", "Improve the readability of a C function."),

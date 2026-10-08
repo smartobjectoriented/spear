@@ -12,13 +12,13 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from standard_ingest import ingest_pdf
-from standard_layout import extract_layout
-from standard_semantic import SpanRole
-from standard_store import StandardStore
-from standard_structure import extract_structures
-from standard_structure_review import StandardStructureReview, recommend
-from standard_structure_store import StandardStructureStore, build_manifest
+from standard.standard_ingest import ingest_pdf
+from standard.standard_layout import extract_layout
+from standard.standard_semantic import SpanRole
+from standard.standard_store import StandardStore
+from standard.standard_structure import extract_structures
+from standard.standard_structure_review import StandardStructureReview, recommend
+from standard.standard_structure_store import StandardStructureStore, build_manifest
 from tests.standard_geometry_fixture import semantic_bitfield_pdf_bytes
 
 SID, REV = "SEM", "R1"
@@ -115,7 +115,7 @@ class RecommendationTests(unittest.TestCase):
     def test_the_panel_shows_both_authorities_and_the_status_between_them(self):
         import io
 
-        from standard_structure_review import _render_bitfield
+        from standard.standard_structure_review import _render_bitfield
         self.relabel(0, "SUBFIELD_LENGTH (23-12)")
         out = io.StringIO()
         _render_bitfield(self.review, self.table_id, out)
@@ -167,7 +167,7 @@ class RecommendationTests(unittest.TestCase):
     def test_the_suggested_command_names_the_candidate_not_a_reviewer(self):
         import io
 
-        from standard_structure_review import _render_bitfield
+        from standard.standard_structure_review import _render_bitfield
         out = io.StringIO()
         _render_bitfield(self.review, self.table_id, out)
         text = out.getvalue()

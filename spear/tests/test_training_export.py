@@ -7,9 +7,9 @@ from unittest.mock import patch
 from tests.test_sft_dataset import episode, turn
 from tests.test_agent_runtime import ScriptedBackend, make_context, text_turn
 from tests.test_training_data import make_controller
-from task_controller import TaskRequest, TaskStatus
-from training_export import main
-from training_store import TrainingStore
+from runtime.task_controller import TaskRequest, TaskStatus
+from training.training_export import main
+from training.training_store import TrainingStore
 
 
 class TrainingExportCLITests(unittest.TestCase):
@@ -42,7 +42,7 @@ class TrainingExportCLITests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             store = TrainingStore(Path(directory) / "source")
             context = make_context(ScriptedBackend([text_turn("answer")]))
-            with patch("sft_dataset.SFTDatasetBuilder.persist_episode_candidates",
+            with patch("training.sft_dataset.SFTDatasetBuilder.persist_episode_candidates",
                        side_effect=OSError("secondary storage failed")):
                 result = make_controller(context, store).run(TaskRequest(
                     "answer", context, (directory,), enable_planning=False,

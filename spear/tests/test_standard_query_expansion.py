@@ -7,7 +7,7 @@ and only its own, and only where the question asked in shorthand.
 
 import unittest
 
-import standard_query_expansion as expansion
+from standard import standard_query_expansion as expansion
 
 # A technical family, an ordinary word that merely begins alike, and some
 # filler so document frequencies mean something.

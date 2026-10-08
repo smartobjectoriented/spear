@@ -11,8 +11,8 @@ import unittest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-import standard_scope                                          # noqa: E402
-from standard_schema import StandardBinding                    # noqa: E402
+from standard import standard_scope  # noqa: E402
+from standard.standard_schema import StandardBinding                    # noqa: E402
 
 
 def binding(standard_id="ANSI-VITA-49.2", revision="2017-R2024"):

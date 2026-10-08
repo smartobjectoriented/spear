@@ -18,8 +18,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-from evidence_guard import EvidenceLedger, explain, guard, validate
-from structural_entailment import (
+from evidence.evidence_guard import EvidenceLedger, explain, guard, validate
+from evidence.structural_entailment import (
     DETERMINISTIC_ENTAILMENT, EXPLICIT, MEMBERS_DO_NOT_ACCOUNT_FOR_EXTENT,
     NO_CANDIDATE_WIDTH, NO_CONTAINER_EXTENT, OVERLAPPING_MEMBERS,
     PLACEMENT_NOT_UNIQUE, REJECTED, Member, unique_placement,
@@ -208,7 +208,7 @@ class HeldOpen(unittest.TestCase):
                                  self.structure_ledger()), [])
 
     def test_the_h4_rendering_is_unchanged(self):
-        from evidence_guard import safe_rendering
+        from evidence.evidence_guard import safe_rendering
         rendered = safe_rendering(self.structure_ledger())
 
         self.assertIn("Reserved — normative position and width are not "

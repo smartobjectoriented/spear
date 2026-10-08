@@ -21,10 +21,10 @@ from unittest.mock import patch
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-import rag_chat
+from cli import rag_chat
 from agent import dispatch, tools
-from cancellation import NEVER_CANCELLED
-from tool_runtime import ExecutionMode
+from runtime.cancellation import NEVER_CANCELLED
+from harness.tool_runtime import ExecutionMode
 
 NAMES = ("read_file", "search_files", "patch", "write_file", "delete_file", "terminal")
 

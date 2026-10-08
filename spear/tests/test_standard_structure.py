@@ -9,23 +9,23 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from standard_ingest import ingest_pdf
-from standard_layout import extract_layout
-from standard_schema import StandardContentType
-from standard_store import StandardStore
-from standard_structure import (
+from standard.standard_ingest import ingest_pdf
+from standard.standard_layout import extract_layout
+from standard.standard_schema import StandardContentType
+from standard.standard_store import StandardStore
+from standard.standard_structure import (
     GeometryStatus, HeaderCandidate, StandardStructureError, extract_structures,
     structure_fingerprint, validate_structures,
 )
-from standard_structure_store import (
+from standard.standard_structure_store import (
     StandardStructureStore, build_manifest,
 )
-from standard_structure_review import (
+from standard.standard_structure_review import (
     StandardStructureReview, UNREVIEWED, run_review, sample_tables,
 )
-from standard_tools import STANDARD_TOOL_NAMES, StandardToolService
+from standard.standard_tools import STANDARD_TOOL_NAMES, StandardToolService
 from tests.standard_geometry_fixture import geometry_pdf_bytes
-from tool_registry import ToolRegistry
+from harness.tool_registry import ToolRegistry
 
 SID, REV = "GEO", "R1"
 
@@ -261,7 +261,7 @@ class GeometryValidationTests(_Geometry):
 
     def test_a_continuation_to_an_unknown_table_is_rejected(self):
         from dataclasses import replace
-        from standard_structure import StandardTableContinuation
+        from standard.standard_structure import StandardTableContinuation
         broken = replace(self.structures, continuations=(
             StandardTableContinuation("tbl-0000000000000000",
                                       "tbl-1111111111111111"),))
@@ -279,7 +279,8 @@ class ToolSurfaceTests(_Geometry):
         for forbidden in ("standard.validate",
                           "standard.structures", "standard.tables"):
             self.assertNotIn(forbidden, names)
-        import standard_structure, standard_structure_review
+        from standard import standard_structure
+        from standard import standard_structure_review
         self.assertFalse(hasattr(standard_structure, "register"))
         self.assertFalse(hasattr(standard_structure_review, "register"))
 

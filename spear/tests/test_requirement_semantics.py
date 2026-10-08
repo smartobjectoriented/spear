@@ -25,10 +25,10 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-import requirement_set
-import work_phase
-from requirement_set import Disposition, Requirement, RequirementSet
-from work_phase import WorkPhaseLedger
+from normative import requirement_set
+from runtime import work_phase
+from normative.requirement_set import Disposition, Requirement, RequirementSet
+from runtime.work_phase import WorkPhaseLedger
 
 SOURCE = "src/link/handshake.c"
 OTHER = "src/link/device.c"

@@ -30,9 +30,9 @@ from unittest.mock import patch
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-import rag_chat
-from tool_runtime import ExecutionMode
-from tracing import EventType, TraceEmitter
+from cli import rag_chat
+from harness.tool_runtime import ExecutionMode
+from runtime.tracing import EventType, TraceEmitter
 
 # Nothing a refusal is allowed to suggest. A line that names one of these
 # reads as a menu, and the turn goes shopping.
@@ -227,14 +227,14 @@ class TheTraceAlreadyCarriedTheCategory(unittest.TestCase):
         A third would be a refusal whose category nothing stamps, which is
         the shape of the gap this is meant to keep closed.
         """
-        source = Path(ROOT, "tool_router.py").read_text(encoding="utf-8")
+        source = Path(ROOT, "harness/tool_router.py").read_text(encoding="utf-8")
 
         self.assertEqual(source.count("EventType.TOOL_CALL_FAILED"), 2)
 
     def test_every_refusal_category_is_either_announced_or_excluded(self):
         import re
 
-        source = Path(ROOT, "tool_router.py").read_text(encoding="utf-8")
+        source = Path(ROOT, "harness/tool_router.py").read_text(encoding="utf-8")
         categories = set(re.findall(
             r"ToolResultStatus\.[A-Z_]+, \"([a-z_]+)\"", source))
 
@@ -250,7 +250,7 @@ class TheTraceAlreadyCarriedTheCategory(unittest.TestCase):
     def test_the_repeat_suppression_path_uses_it_too(self):
         import inspect
 
-        import tool_router
+        from harness import tool_router
 
         source = inspect.getsource(tool_router.ToolRouter._suppressed_repeat)
 
@@ -259,7 +259,7 @@ class TheTraceAlreadyCarriedTheCategory(unittest.TestCase):
     def test_that_function_stamps_the_category_on_the_event(self):
         import inspect
 
-        import tool_router
+        from harness import tool_router
 
         source = inspect.getsource(tool_router.ToolRouter._early_failure)
         failed = source[source.index("EventType.TOOL_CALL_FAILED"):]
@@ -268,7 +268,7 @@ class TheTraceAlreadyCarriedTheCategory(unittest.TestCase):
 
     def test_the_field_is_optional_on_the_event(self):
         """A reader that does not expect it is unaffected."""
-        from tracing import TraceEvent
+        from runtime.tracing import TraceEvent
 
         field = TraceEvent.__dataclass_fields__["error_category"]
 

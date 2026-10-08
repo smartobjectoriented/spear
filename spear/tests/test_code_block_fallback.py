@@ -6,7 +6,7 @@ to a file that merely got NAMED in the request.
 """
 import unittest
 
-import rag_chat
+from cli import rag_chat
 
 
 LS_RST = """.. _ls:

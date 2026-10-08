@@ -14,20 +14,20 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from standard_semantic import (
+from standard.standard_semantic import (
     APPROVAL_SCHEMA_VERSION, CoordinateDomain, PositionSource, SpanRole,
     StandardBitfieldApproval, UnresolvedCause, associate_words,
     promote_bitfield, review_evidence, review_evidence_fingerprint,
     unresolved_label_of,
 )
-from standard_structure import ProvenanceQuality
-from standard_value_pair import (
+from standard.standard_structure import ProvenanceQuality
+from standard.standard_value_pair import (
     ADJACENT_WORD_PAIR, AMBIGUOUS_SEGMENTS, NO_LOW_SEGMENT, PROVENANCE_NOT_DIRECT,
     SEGMENT_WIDTH_UNSUPPORTED, SUPPORTED_VALUE_WIDTH, SegmentRole,
     WORDS_NOT_ADJACENT, WORD_IDENTITY_NOT_EXPLICIT, WORD_ORDER_REVERSED,
     normalize_value_base, pair_segments, value_local_pairs,
 )
-from standard_word_association import field_candidates
+from standard.standard_word_association import field_candidates
 from tests.standard_word_fixture import (
     FINGERPRINT, LAYOUT, SID, REV, bitfield, cell, ruler_row, table, word_row,
 )

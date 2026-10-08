@@ -24,13 +24,13 @@ from unittest.mock import patch
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-import agent_runtime
-import rag_chat
-import work_phase
-from agent_roles import AgentRole
-from tool_exposure import ToolExposurePolicy
-from tool_runtime import ExecutionMode
-from work_phase import Phase, WorkPhaseLedger
+from runtime import agent_runtime
+from cli import rag_chat
+from runtime import work_phase
+from runtime.agent_roles import AgentRole
+from harness.tool_exposure import ToolExposurePolicy
+from harness.tool_runtime import ExecutionMode
+from runtime.work_phase import Phase, WorkPhaseLedger
 
 CLAUSE = "4.2.1"
 SOURCE = "src/link/handshake.c"

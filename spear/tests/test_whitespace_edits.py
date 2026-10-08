@@ -11,8 +11,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
-import rag_chat
-from tool_runtime import (
+from cli import rag_chat
+from harness.tool_runtime import (
     CommandClassification, CommandPolicy, ExecutionMode, Workspace,
 )
 

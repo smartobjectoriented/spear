@@ -30,11 +30,11 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-import conformance_guard
-import normative_precedence
+from evidence import conformance_guard
+from normative import normative_precedence
 import synthetic_standard
-import standard_answer_policy as sap
-from conformance_guard import ClauseLedger
+from standard import standard_answer_policy as sap
+from evidence.conformance_guard import ClauseLedger
 
 BINDING = synthetic_standard.BINDING
 
@@ -182,7 +182,7 @@ class UnsupportedIsNotNonCompliant(unittest.TestCase):
         the code satisfy every clause retrieved. That is the bug the
         task-scope fix removed, and nothing here may bring it back.
         """
-        from agent_runtime import carried_obligations
+        from runtime.agent_runtime import carried_obligations
 
         class Context:
             prior_clauses = (synthetic_standard.SECTION, "4.4.2", "4.1.1")
@@ -244,7 +244,7 @@ class RepairFollowsTheStandard(unittest.TestCase):
         is what happened to the evidence half of this contract until it moved
         here too.
         """
-        import task_controller
+        from runtime import task_controller
 
         source = inspect.getsource(task_controller.TaskController.run)
 
@@ -284,7 +284,7 @@ class ProvenanceDecidesNormativity(unittest.TestCase):
 
     def test_only_the_normative_tools_write_the_ledger(self):
         """Not a property of today's wiring: of where the runtime calls it."""
-        from agent_runtime import AgentRuntime
+        from runtime.agent_runtime import AgentRuntime
 
         source = inspect.getsource(AgentRuntime.run)
 
@@ -358,7 +358,7 @@ class TheGuardEventReachesTheTrace(unittest.TestCase):
     """
 
     def test_the_runtime_emits_the_precedence_keys(self):
-        from agent_runtime import AgentRuntime
+        from runtime.agent_runtime import AgentRuntime
 
         source = inspect.getsource(AgentRuntime._result)
 

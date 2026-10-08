@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import unittest
 
-import provision_identity as pi
+from normative import provision_identity as pi
 
 SECTION, BINDING = "5.2", {"standard_id": "SYNTH-1", "revision": "2026"}
 
@@ -121,7 +121,7 @@ class RetrievingOneDoesNotEstablishTheOther(unittest.TestCase):
 
 class ApprovalBindsToOneInstance(unittest.TestCase):
     def test_approving_one_does_not_approve_the_other(self):
-        import approval_binding as ab
+        from harness import approval_binding as ab
 
         approvals = ab.load({"approvals": [{
             "identity": {"section": SECTION, "provision_type": pi.RULE, "ordinal": 1},
@@ -134,7 +134,7 @@ class ApprovalBindsToOneInstance(unittest.TestCase):
         self.assertEqual(report[0]["instance_id"], str(record(A).instance_id))
 
     def test_an_approval_that_cannot_pick_one_is_reported_not_guessed(self):
-        import approval_binding as ab
+        from harness import approval_binding as ab
 
         approvals = ab.load({"approvals": [{
             "identity": {"section": SECTION, "provision_type": pi.RULE, "ordinal": 1},

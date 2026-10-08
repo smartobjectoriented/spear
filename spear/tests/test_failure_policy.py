@@ -1,6 +1,6 @@
 import unittest
 
-from failure_policy import (
+from runtime.failure_policy import (
     Failure, FailureKind, RetryAction, RetryPolicy, classify_tool_failure,
 )
 

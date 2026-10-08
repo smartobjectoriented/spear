@@ -15,8 +15,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-import work_order
-from model_backend import ConversationMessage, TextBlock
+from runtime import work_order
+from models.model_backend import ConversationMessage, TextBlock
 
 ORDER = """# Task: VITA 49.2 Acknowledge handling
 

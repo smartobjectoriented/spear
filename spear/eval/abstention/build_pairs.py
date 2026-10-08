@@ -33,7 +33,7 @@ from families import BY_KEY
 from harvest import tool_view
 from pair_spec import AUTHORED, OBSERVED, SPECS, SUPPORTED
 from pair_spec_supported import SUPPORTED_SPECS
-from state_paths import state_dir
+from runtime.state_paths import state_dir
 
 STATE = state_dir()
 TRACES = {"FT0.1": STATE / "ft0.1/harvest.json",

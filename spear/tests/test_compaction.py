@@ -2,7 +2,7 @@ import json
 import unittest
 from unittest.mock import patch
 
-from compaction import (
+from runtime.compaction import (
     CompactionMode,
     CompactionPolicy,
     CompactionRequest,
@@ -12,11 +12,11 @@ from compaction import (
     StructuredCompactionState,
     validate_compaction,
 )
-from agent_runtime import AgentContext, AgentRuntime
-from context_engine import ContextEngine, ContextItem, ContextLayer, ContextRequest, Freshness
-from model_backend import ToolDefinition
-from tracing import EventType, TraceEmitter
-from working_state import (
+from runtime.agent_runtime import AgentContext, AgentRuntime
+from context.context_engine import ContextEngine, ContextItem, ContextLayer, ContextRequest, Freshness
+from models.model_backend import ToolDefinition
+from runtime.tracing import EventType, TraceEmitter
+from runtime.working_state import (
     ActionKind,
     PlanStepStatus,
     StateEvent,
@@ -494,12 +494,12 @@ class CompactionTests(unittest.TestCase):
 
     def test_provider_independent_core_has_no_provider_names(self):
         from pathlib import Path
-        source = Path(__file__).resolve().parents[1].joinpath("compaction.py").read_text()
+        source = Path(__file__).resolve().parents[1].joinpath("runtime/compaction.py").read_text()
         self.assertNotIn("OpenAI", source)
         self.assertNotIn("Anthropic", source)
 
     def test_model_summarizer_emits_model_timing_pair(self):
-        from model_backend import ModelTurn, StopReason
+        from models.model_backend import ModelTurn, StopReason
 
         class FakeBackend:
             model = "local-test"
@@ -532,11 +532,11 @@ class CompactionTests(unittest.TestCase):
 class ProductionIntegrationTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        import rag_chat
+        from cli import rag_chat
         cls.rag_chat = rag_chat
 
     def test_long_task_compacts_then_uses_existing_context_engine_path(self):
-        from model_backend import ConversationMessage, ModelTurn, StopReason, TextBlock
+        from models.model_backend import ConversationMessage, ModelTurn, StopReason, TextBlock
 
         class FakeBackend:
             model = "scripted-local"

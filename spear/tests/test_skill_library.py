@@ -3,8 +3,8 @@ import tempfile
 import unittest
 from datetime import datetime
 
-import skill_library
-from skill_library import (
+from context import skill_library
+from context.skill_library import (
     ANY_SCOPE, Skill, SkillError, applies_to, load_library,
     missing_requirements, parse_skill, reconcile, render_skill, save,
 )

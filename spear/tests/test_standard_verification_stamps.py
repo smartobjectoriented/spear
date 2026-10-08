@@ -12,13 +12,13 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-import standard_store
-from standard_commands import StandardOperator, handle_standard_command
-from standard_crossrefs import rebuild_cross_reference_index
-from standard_ingest import ingest_pdf
-from standard_retrieval import rebuild_lexical_index
-from standard_store import StandardStore, StandardStoreError, VERIFICATION_FILE
-from standard_vector_index import rebuild_vector_index
+from standard import standard_store
+from standard.standard_commands import StandardOperator, handle_standard_command
+from standard.standard_crossrefs import rebuild_cross_reference_index
+from standard.standard_ingest import ingest_pdf
+from standard.standard_retrieval import rebuild_lexical_index
+from standard.standard_store import StandardStore, StandardStoreError, VERIFICATION_FILE
+from standard.standard_vector_index import rebuild_vector_index
 from tests.standard_fixture import synthetic_pdf_bytes
 from tests.test_standard_hybrid_retrieval import HYBRID_PAGES, FixtureSemanticEmbedder
 

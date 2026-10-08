@@ -3,34 +3,34 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from agent_roles import AgentRole, AgentRoleSpec, reviewer_role
-from agent_runtime import AgentContext, AgentRuntime
-from cancellation import CancellationScope, CancellationSource
-from checkpoint import CheckpointManager, RollbackStatus
-from compaction import CompactionPolicy
-from context_engine import ContextEngine, ContextItem, ContextLayer
-from diff_evidence import DiffEvidence, DiffEvidenceService
-from model_backend import (
+from runtime.agent_roles import AgentRole, AgentRoleSpec, reviewer_role
+from runtime.agent_runtime import AgentContext, AgentRuntime
+from runtime.cancellation import CancellationScope, CancellationSource
+from harness.checkpoint import CheckpointManager, RollbackStatus
+from runtime.compaction import CompactionPolicy
+from context.context_engine import ContextEngine, ContextItem, ContextLayer
+from evidence.diff_evidence import DiffEvidence, DiffEvidenceService
+from models.model_backend import (
     ConversationMessage, ModelToolCall, ModelTurn, StopReason, TextBlock,
     ToolDefinition,
 )
-from result_store import ResultStore
-from reviewer import (
+from runtime.result_store import ResultStore
+from runtime.reviewer import (
     FindingCategory, ReviewExecutionStatus, ReviewPolicy, ReviewRepairPolicy,
     ReviewRequest, ReviewService, ReviewVerdict, review_request_from_parent,
 )
-from session_store import (
+from runtime.session_store import (
     FileSessionStore, SessionConfiguration, SessionEventType, SessionHandle,
     new_session_id,
 )
-from tool_registry import ToolRegistry, ToolSpec, native_tool_specs
-from tool_router import (
+from harness.tool_registry import ToolRegistry, ToolSpec, native_tool_specs
+from harness.tool_router import (
     ToolExecutionContext, ToolResultEnvelope, ToolResultStatus, ToolRouter,
 )
-from tool_runtime import CommandPolicy, ExecutionMode
-from tracing import EventType, TraceEmitter
-from verification import VerificationPolicy
-from working_state import (
+from harness.tool_runtime import CommandPolicy, ExecutionMode
+from runtime.tracing import EventType, TraceEmitter
+from evidence.verification import VerificationPolicy
+from runtime.working_state import (
     StateEvent, StateEventType, StateSource, TerminalStatus, WorkingState,
 )
 
@@ -177,7 +177,7 @@ def diff(path="src.py", *, preview="- return value or 0\n+ return value\n",
 def request(parent, *, evidence=None, status=None):
     evaluation = VerificationPolicy().evaluate_completion(parent.working_state)
     if status is not None:
-        from verification import CompletionEvaluation, CompletionVerificationStatus
+        from evidence.verification import CompletionEvaluation, CompletionVerificationStatus
         evaluation = CompletionEvaluation(
             CompletionVerificationStatus(status),
             parent.working_state.mutation_generation,
@@ -616,7 +616,7 @@ class ReviewerGenerationAndPersistenceTests(unittest.TestCase):
         add_verification(state)
         parent = parent_context(ScriptedBackend([]), state=state)
         parent.review_required = True
-        from agent_runtime import AgentResult, RuntimeTerminalReason
+        from runtime.agent_runtime import AgentResult, RuntimeTerminalReason
         result = AgentResult(
             state.task_id, TerminalStatus.RUNNING, RuntimeTerminalReason.COMPLETED,
             "done", state, 1, 1, 1, state.verification_outcome, (), (), (), (),

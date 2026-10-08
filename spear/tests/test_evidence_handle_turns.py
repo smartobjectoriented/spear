@@ -9,15 +9,15 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from result_store import ResultStore
-from standard_ingest import ingest_pdf
-from standard_retrieval import rebuild_lexical_index
-from standard_store import StandardStore
-from standard_tools import STALE_EVIDENCE_HANDLE, StandardToolService
+from runtime.result_store import ResultStore
+from standard.standard_ingest import ingest_pdf
+from standard.standard_retrieval import rebuild_lexical_index
+from standard.standard_store import StandardStore
+from standard.standard_tools import STALE_EVIDENCE_HANDLE, StandardToolService
 from tests.standard_fixture import synthetic_pdf_bytes
-from tool_registry import ToolRegistry
-from tool_router import ToolExecutionContext
-from tracing import NullTraceRecorder, TraceEmitter
+from harness.tool_registry import ToolRegistry
+from harness.tool_router import ToolExecutionContext
+from runtime.tracing import NullTraceRecorder, TraceEmitter
 
 SID, REV = "TEST-STD", "TEST-1"
 

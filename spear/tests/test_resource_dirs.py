@@ -24,8 +24,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-import rag_chat
-import skill_library
+from cli import rag_chat
+from context import skill_library
 
 DIRS = (("SPEAR_RULES_DIR", "rules.d"),
         ("SPEAR_SKILLS_DIR", "skills"),
@@ -145,7 +145,7 @@ class TheOverrideSurvivesImport(unittest.TestCase):
                        SPEAR_STATE_DIR=os.path.join(tmp, "state"))
             out = subprocess.run(
                 [sys.executable, "-c",
-                 "import rag_chat as r; "
+                 "from cli import rag_chat as r; "
                  "print(r.RULES_DIR, r.SKILLS_DIR, r.BENCH_DIR, "
                  "r.SHIPPED_CORPUS_RULES)"],
                 cwd=str(ROOT), env=env, capture_output=True, text=True)

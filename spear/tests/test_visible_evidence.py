@@ -19,12 +19,12 @@ from types import SimpleNamespace
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-import agent_runtime
-import rag_chat
-from agent_runtime import AgentRuntime
-from compaction import CompactionPolicy
-from model_backend import ConversationMessage, TextBlock, ToolResultBlock
-from tool_router import ToolResultEnvelope, ToolResultStatus
+from runtime import agent_runtime
+from cli import rag_chat
+from runtime.agent_runtime import AgentRuntime
+from runtime.compaction import CompactionPolicy
+from models.model_backend import ConversationMessage, TextBlock, ToolResultBlock
+from harness.tool_router import ToolResultEnvelope, ToolResultStatus
 
 from tests.test_agent_runtime import (GroundedToolExecutor, ScriptedBackend,
                                       make_context, text_turn, tool_turn)

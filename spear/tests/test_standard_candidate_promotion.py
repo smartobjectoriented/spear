@@ -8,30 +8,30 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from model_backend import ConversationMessage, TextBlock
-from result_store import ResultStore
-from session_store import (
+from models.model_backend import ConversationMessage, TextBlock
+from runtime.result_store import ResultStore
+from runtime.session_store import (
     FileSessionStore, SessionCompatibilityError, SessionConfiguration,
     SessionSnapshot, new_session_id, restore_session,
 )
-from standard_commands import StandardOperator, handle_standard_command, StandardCommandError
-from standard_crossrefs import rebuild_cross_reference_index
-from standard_ingest import (
+from standard.standard_commands import StandardOperator, handle_standard_command, StandardCommandError
+from standard.standard_crossrefs import rebuild_cross_reference_index
+from standard.standard_ingest import (
     EXTRACTOR_VERSION, build_manifest, extract_pdf_pages, ingest_candidate,
 )
-from standard_layout import StandardLayoutError, extract_layout, validate_layout
-from standard_retrieval import rebuild_lexical_index
-from standard_schema import StandardContentType
-from standard_store import (
+from standard.standard_layout import StandardLayoutError, extract_layout, validate_layout
+from standard.standard_retrieval import rebuild_lexical_index
+from standard.standard_schema import StandardContentType
+from standard.standard_store import (
     INDEX_STATE_READY, INDEX_STATE_REBUILD_REQUIRED, StandardStore,
     StandardStoreError, candidate_id_for, generation_id_for,
 )
-from standard_tools import STANDARD_TOOL_NAMES, StandardToolService
+from standard.standard_tools import STANDARD_TOOL_NAMES, StandardToolService
 from tests.standard_extraction_fixture import (
     extraction_pdf_bytes, legacy_canonical_units,
 )
-from tool_registry import ToolRegistry
-from working_state import WorkingState
+from harness.tool_registry import ToolRegistry
+from runtime.working_state import WorkingState
 
 
 SID, REV = "SYNTH-STD", "R1"
@@ -241,10 +241,10 @@ class CandidatePromotionTests(unittest.TestCase):
     # -- review history ---------------------------------------------------
     def test_promotion_keeps_the_review_with_the_generation_it_judged(self):
         """A review belongs to the corpus it judged, and survives that corpus."""
-        from standard_review import (
+        from standard.standard_review import (
             StandardReview, review_path, write_review_sample,
         )
-        from standard_store import generation_id_for
+        from standard.standard_store import generation_id_for
 
         write_review_sample(self.store, SID, REV)
         review = StandardReview.load(self.store, SID, REV, reviewer="operator")
@@ -264,7 +264,7 @@ class CandidatePromotionTests(unittest.TestCase):
         self.assertFalse(review_path(self.store, SID, REV).exists())
 
     def test_a_review_of_a_superseded_generation_cannot_be_loaded(self):
-        from standard_review import (
+        from standard.standard_review import (
             StandardReview, StandardReviewError, review_path,
             write_review_sample,
         )
@@ -384,7 +384,7 @@ class ToolSurfaceTests(unittest.TestCase):
             pdf = root / "structure.pdf"
             pdf.write_bytes(extraction_pdf_bytes())
             store = StandardStore(root / "standards")
-            from standard_ingest import ingest_pdf
+            from standard.standard_ingest import ingest_pdf
             ingest_pdf(store, pdf, standard_id=SID, revision=REV,
                        source_origin="TEST_FIXTURE")
             registry = ToolRegistry()

@@ -7,7 +7,7 @@ The bar for linking is deliberately high, so most of these tests are refusals.
 import unittest
 from dataclasses import replace
 
-from standard_prose_range import (
+from standard.standard_prose_range import (
     COMPETING_NORMATIVE_RANGES, FIELD_HAS_LOCAL_RANGE, MULTIPLE_NAMES_IN_STATEMENT,
     MULTIPLE_RANGES_IN_STATEMENT, NAME_AMBIGUOUS, NAME_MATCHES_NO_FIELD,
     NAME_TOO_SHORT, NOT_NORMATIVE, NO_QUOTED_FIELD_NAME,
@@ -15,12 +15,12 @@ from standard_prose_range import (
     LinkStatus, MatchMethod, ProseFieldTarget, normalize_field_name,
     normative_range_links, normative_statements, ordinal_word,
 )
-from standard_semantic import (
+from standard.standard_semantic import (
     PositionSource, SemanticRole, SpanRole, StandardBitfieldApproval,
     StructuralCompleteness, normative_links_for, promote_bitfield,
 )
-from standard_prose_range import StandardReviewedLink
-from standard_word_association import field_candidates, unpositioned_labels
+from standard.standard_prose_range import StandardReviewedLink
+from standard.standard_word_association import field_candidates, unpositioned_labels
 from tests.standard_word_fixture import (
     FINGERPRINT, LAYOUT, REV, SID, SOURCE, bitfield, ruler_row, table, word_row,
 )
@@ -278,8 +278,8 @@ class PromotionTests(unittest.TestCase):
         mark = bitfield(source)
         cell = next(c for r in source.rows for c in r.cells
                     if c.text.startswith("Slot Depth"))
-        from standard_prose_range import StandardNormativeRangeLink, MatchMethod
-        from standard_prose_range import LinkStatus as LS
+        from standard.standard_prose_range import StandardNormativeRangeLink, MatchMethod
+        from standard.standard_prose_range import LinkStatus as LS
         forced = {cell.cell_id: StandardNormativeRangeLink(
             candidate_id=mark.bitfield_id, target_cell_id=cell.cell_id,
             target_label=cell.text, normalized_name="slot depth",

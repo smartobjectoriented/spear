@@ -17,13 +17,13 @@ import tempfile
 import unittest
 from pathlib import Path
 
-import provision_identity as pi
-from standard_schema import (
+from normative import provision_identity as pi
+from standard.standard_schema import (
     StandardContentType, StandardDocumentUnit, StandardIngestionManifest,
     StandardModality, StandardTableCell, StandardTableStructure,
     HumanValidationStatus, source_content_sha256,
 )
-from standard_store import StandardStore, corpus_fingerprint
+from standard.standard_store import StandardStore, corpus_fingerprint
 
 SID, REV = "ACME-1", "2030"
 PDF = "a" * 64
@@ -236,7 +236,7 @@ class ANativeTableIsNeverReconstructed(unittest.TestCase):
                   (cell(0, "20", "Key"), cell(1, "Alpha", "Short")))]
 
     def test_adjacency_is_not_consulted(self):
-        import evidence_graph
+        from evidence import evidence_graph
 
         def refuse(units):
             raise AssertionError("adjacency reconstruction was invoked")
@@ -251,7 +251,7 @@ class ANativeTableIsNeverReconstructed(unittest.TestCase):
         self.assertEqual(str(found[0].key), "TableRow 4.2-1:20")
 
     def test_a_ledger_built_from_it_asks_for_no_reconstruction(self):
-        import evidence_graph
+        from evidence import evidence_graph
 
         original = evidence_graph.tables_in
         evidence_graph.tables_in = lambda units: (_ for _ in ()).throw(

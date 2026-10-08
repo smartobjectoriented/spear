@@ -101,7 +101,7 @@ class TheNewWorkerReproducesTheOldOne(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        import embedding
+        from retrieval import embedding
 
         cls.embedding = embedding
         cls.device = os.environ.get("SPEAR_TEST_EMBED_DEVICE", "cpu")

@@ -30,18 +30,18 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-import normative_constraints as nc
-from agent_runtime import AgentRuntime
-from result_store import ResultStore
-from standard_tools import StandardToolService
-from task_controller import TaskController, TaskRequest
+from normative import normative_constraints as nc
+from runtime.agent_runtime import AgentRuntime
+from runtime.result_store import ResultStore
+from standard.standard_tools import StandardToolService
+from runtime.task_controller import TaskController, TaskRequest
 from tests.mixed_standard_fixture import REVISION, STANDARD_ID, build_store
 from tests.test_agent_loop import Host, call, turn
 from tests.test_agent_runtime import ScriptedBackend, make_context, text_turn
 from tests.test_core_runtime import _Recording
-from tool_registry import ToolRegistry, coding_tool_specs, native_tool_specs
-from tool_router import ToolExecutionContext, ToolRouter
-from tracing import EventType, TraceEmitter
+from harness.tool_registry import ToolRegistry, coding_tool_specs, native_tool_specs
+from harness.tool_router import ToolExecutionContext, ToolRouter
+from runtime.tracing import EventType, TraceEmitter
 
 OBJECTIVE = ("Update the header implementation in record.py so it complies with "
              "the Rule 4.2.1 provisions of the standard.")
@@ -168,7 +168,7 @@ class MixedTurn(unittest.TestCase):
         context = make_context(self.backend, executor=execute, rounds=12, actions=12,
                                context_limit=200_000, trace=TraceEmitter(self.recorder),
                                conversation=[])
-        from model_backend import ConversationMessage, TextBlock
+        from models.model_backend import ConversationMessage, TextBlock
         context.conversation = [ConversationMessage("user", (TextBlock(objective),))]
         context.standard_binding = self.store.binding(STANDARD_ID, REVISION).to_dict()
         context.project_root = str(self.repo)
@@ -466,7 +466,7 @@ class NormativeAuthority(MixedTurn):
         self.assertEqual(record.implementation, "UNVERIFIED")
 
     def test_a_failed_project_build_never_leaves_the_implementation_verified(self):
-        from project_build import ProjectCommands
+        from evidence.project_build import ProjectCommands
 
         def build(context):
             context.project_commands = ProjectCommands(build="make", source="make")
@@ -476,7 +476,7 @@ class NormativeAuthority(MixedTurn):
 
         def run_mixed(test, raw, **kwargs):
             from unittest.mock import patch
-            import agent_runtime
+            from runtime import agent_runtime
 
             real = agent_runtime.project_build_runs
 
@@ -548,7 +548,7 @@ class TheOtherPathsAreUntouched(MixedTurn):
             registry.register(spec, _unused)
 
         context = make_context(backend, rounds=6, actions=6, context_limit=200_000)
-        from model_backend import ConversationMessage, TextBlock
+        from models.model_backend import ConversationMessage, TextBlock
         context.conversation = [ConversationMessage("user", (TextBlock(
             "Update record.py so the count has four entries."),))]
         context.project_root = str(self.repo)
@@ -577,8 +577,8 @@ class TheNormativePassReadsOnlyTheBoundStandard(MixedTurn):
         self.assertFalse(set(names) & {"patch", "write_file", "delete_file", "edit_file"})
 
     def test_another_standard_in_the_store_contributes_nothing(self):
-        from standard_ingest import ingest_pdf
-        from standard_retrieval import rebuild_lexical_index
+        from standard.standard_ingest import ingest_pdf
+        from standard.standard_retrieval import rebuild_lexical_index
         from tests.standard_fixture import synthetic_pdf_bytes
 
         other = Path(self.directory) / "other.pdf"
@@ -598,7 +598,7 @@ class TheNormativePassReadsOnlyTheBoundStandard(MixedTurn):
 
 class TheNormativePassIsIsolated(MixedTurn):
     def test_a_failed_pass_leaves_the_implementation_a_live_state(self):
-        from agent_runtime import AgentRuntime
+        from runtime.agent_runtime import AgentRuntime
         from unittest.mock import patch
 
         original = AgentRuntime.run
@@ -607,7 +607,7 @@ class TheNormativePassIsIsolated(MixedTurn):
             result = original(runtime, context, **kwargs)
 
             if context.execution_core == "legacy":
-                from working_state import StateEventType
+                from runtime.working_state import StateEventType
                 context.apply_state_event(StateEventType.TASK_FAILED, summary="guard")
 
             return result
@@ -633,7 +633,7 @@ class TheNormativePassIsIsolated(MixedTurn):
 
 class ThePacketHoldsWhatTheAnswerCites(unittest.TestCase):
     def records(self):
-        import provision_identity
+        from normative import provision_identity
 
         with tempfile.TemporaryDirectory() as directory:
             store = build_store(Path(directory))
@@ -659,7 +659,7 @@ class ThePacketHoldsWhatTheAnswerCites(unittest.TestCase):
 
 class ACitedSourceTheLedgerMissedComesFromTheStore(MixedTurn):
     def test_the_unit_is_read_from_the_bound_store(self):
-        import mixed_orchestration
+        from normative import mixed_orchestration
         from types import SimpleNamespace
 
         unit = next(item for item in self.store.load_units(STANDARD_ID, REVISION)

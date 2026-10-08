@@ -12,15 +12,15 @@ from types import SimpleNamespace
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-import completion
-import project_build
-import rag_chat
-import session_replay
+from evidence import completion
+from evidence import project_build
+from cli import rag_chat
+from runtime import session_replay
 from agent.host import ToolRecord
-from agent_roles import AgentRole
-from model_backend import OpenAICompatibleBackend
-from tool_exposure import ToolExposurePolicy
-from tool_registry import CODING_TOOL_NAMES
+from runtime.agent_roles import AgentRole
+from models.model_backend import OpenAICompatibleBackend
+from harness.tool_exposure import ToolExposurePolicy
+from harness.tool_registry import CODING_TOOL_NAMES
 
 
 def record(name, arguments, result, **kwargs):
@@ -195,7 +195,7 @@ class TheCoreStatesNoSampling(unittest.TestCase):
     """The agent core's request is Hermes': no temperature, top_p or penalties."""
 
     def test_the_raw_request(self):
-        from model_backend import complete_raw_messages
+        from models.model_backend import complete_raw_messages
 
         sent = {}
 

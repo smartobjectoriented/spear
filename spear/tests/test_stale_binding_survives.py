@@ -15,8 +15,8 @@ from __future__ import annotations
 import inspect
 import unittest
 
-import rag_chat
-from standard_commands import StandardCommandError
+from cli import rag_chat
+from standard.standard_commands import StandardCommandError
 
 
 class TheTurnPathHandlesIt(unittest.TestCase):
@@ -43,7 +43,7 @@ class TheRefusalItselfIsUnchanged(unittest.TestCase):
     """The guard must keep refusing. What changed is who dies of it."""
 
     def test_a_moved_corpus_is_still_refused(self):
-        from standard_commands import StandardOperator
+        from standard.standard_commands import StandardOperator
 
         source = inspect.getsource(StandardOperator.active_binding)
 

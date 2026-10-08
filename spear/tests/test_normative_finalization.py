@@ -16,14 +16,14 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-import mixed_orchestration as mo
-from agent_runtime import (DONE, FAILED, FINALIZATION_DEMAND, FINALIZATION_RETRY,
+from normative import mixed_orchestration as mo
+from runtime.agent_runtime import (DONE, FAILED, FINALIZATION_DEMAND, FINALIZATION_RETRY,
                            AgentRuntime, RuntimeTerminalReason)
-from model_backend import ModelToolCall, ModelTurn, StopReason, TextBlock
+from models.model_backend import ModelToolCall, ModelTurn, StopReason, TextBlock
 from tests.test_agent_runtime import (GroundedToolExecutor, ScriptedBackend, make_context,
                                       text_turn, tool_turn)
 from tests.test_mixed_orchestration import PREPASS_ANSWER, SATISFIED_ALL, MixedTurn, fix
-from tracing import EventType
+from runtime.tracing import EventType
 
 WRITTEN = ("<tool_call>\n<function=standard.search>\n<parameter=query>\nacknowledge "
            "packet\n</parameter>\n</function>\n</tool_call>")

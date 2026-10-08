@@ -3,27 +3,27 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from agent_runtime import AgentContext, AgentRuntime
-from budgets import BudgetKind, BudgetLimit, BudgetManager
-from checkpoint import CheckpointManager, CheckpointStatus, MutationType
-from context_engine import ContextEngine
-from diff_evidence import DiffEvidenceService
-from model_backend import ModelTurn, StopReason
-from orchestration import (
+from runtime.agent_runtime import AgentContext, AgentRuntime
+from runtime.budgets import BudgetKind, BudgetLimit, BudgetManager
+from harness.checkpoint import CheckpointManager, CheckpointStatus, MutationType
+from context.context_engine import ContextEngine
+from evidence.diff_evidence import DiffEvidenceService
+from models.model_backend import ModelTurn, StopReason
+from runtime.orchestration import (
     ExplorationReport, ExplorationRequest, ExplorationService, ExplorationStatus,
 )
-from planning import PlanStepDefinition, PlanningService
-from reviewer import ReviewService, review_request_from_parent
-from session_store import (
+from runtime.planning import PlanStepDefinition, PlanningService
+from runtime.reviewer import ReviewService, review_request_from_parent
+from runtime.session_store import (
     FileSessionStore, SessionConfiguration, SessionHandle, SessionSnapshot,
 )
 from tests.test_agent_runtime import (
     GroundedToolExecutor, ScriptedBackend, make_context, text_turn, tool_turn,
 )
 from tests.test_reviewer import ReadExecutor as ReviewExecutor, finding, review_json
-from tracing import TraceEmitter
-from verification import CompletionVerificationStatus, VerificationPolicy
-from working_state import PlanStepStatus, StateEventType, StateSource
+from runtime.tracing import TraceEmitter
+from evidence.verification import CompletionVerificationStatus, VerificationPolicy
+from runtime.working_state import PlanStepStatus, StateEventType, StateSource
 
 
 def task_budget():

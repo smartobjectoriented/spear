@@ -3,17 +3,17 @@ import unittest
 from dataclasses import replace
 from pathlib import Path
 
-from model_backend import ConversationMessage, TextBlock
-from session_store import (
+from models.model_backend import ConversationMessage, TextBlock
+from runtime.session_store import (
     FileSessionStore, SessionCompatibilityError, SessionConfiguration,
     SessionEventType, SessionSnapshot, new_session_id, restore_session,
 )
-from standard_ingest import ingest_pdf
-from standard_retrieval import rebuild_lexical_index
-from standard_store import StandardStore
-from standard_vector_index import rebuild_vector_index
+from standard.standard_ingest import ingest_pdf
+from standard.standard_retrieval import rebuild_lexical_index
+from standard.standard_store import StandardStore
+from standard.standard_vector_index import rebuild_vector_index
 from tests.standard_fixture import synthetic_pdf_bytes
-from working_state import WorkingState
+from runtime.working_state import WorkingState
 
 
 class StandardSessionTests(unittest.TestCase):

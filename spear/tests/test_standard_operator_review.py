@@ -9,19 +9,19 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from agent_roles import AgentRole
-from standard_commands import StandardCommandError, StandardOperator, handle_standard_command
-from standard_ingest import ingest_pdf
-from standard_review import (
+from runtime.agent_roles import AgentRole
+from standard.standard_commands import StandardCommandError, StandardOperator, handle_standard_command
+from standard.standard_ingest import ingest_pdf
+from standard.standard_review import (
     HUMAN_VERDICTS, REVIEW_SCHEMA_VERSION, StandardReview, StandardReviewError,
     UNREVIEWED, main, review_path, run_review,
 )
-from standard_schema import HumanValidationStatus
-from standard_store import StandardStore, candidate_id_for
-from standard_tools import STANDARD_TOOL_NAMES, StandardToolService
+from standard.standard_schema import HumanValidationStatus
+from standard.standard_store import StandardStore, candidate_id_for
+from standard.standard_tools import STANDARD_TOOL_NAMES, StandardToolService
 from tests.standard_extraction_fixture import extraction_pdf_bytes
-from tool_exposure import ToolExposurePolicy
-from tool_registry import ToolRegistry
+from harness.tool_exposure import ToolExposurePolicy
+from harness.tool_registry import ToolRegistry
 
 
 SID, REV = "REVIEW-STD", "R1"
@@ -395,7 +395,7 @@ class ReviewIsOperatorOnlyTests(_ReviewFixture):
             standard_bound=True)
         self.assertEqual(set(visible.names) & {"standard.review",
                                                "standard.approve"}, set())
-        import standard_review
+        from standard import standard_review
         self.assertFalse(hasattr(standard_review, "register"))
         self.assertNotIn("ToolSpec", dir(standard_review))
 

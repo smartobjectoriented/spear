@@ -10,12 +10,12 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-import standard_vector_index
-from standard_commands import StandardOperator, handle_standard_command
-from standard_ingest import ingest_pdf
-from standard_progress import STEPS, TerminalProgress, report
-from standard_store import StandardStore
-from standard_vector_index import rebuild_vector_index
+from standard import standard_vector_index
+from standard.standard_commands import StandardOperator, handle_standard_command
+from standard.standard_ingest import ingest_pdf
+from standard.standard_progress import STEPS, TerminalProgress, report
+from standard.standard_store import StandardStore
+from standard.standard_vector_index import rebuild_vector_index
 from tests.standard_fixture import synthetic_pdf_bytes
 from tests.test_standard_hybrid_retrieval import (
     HYBRID_PAGES, FixtureSemanticEmbedder,
@@ -74,7 +74,7 @@ class TerminalProgressTests(unittest.TestCase):
         out = io.StringIO()
         progress = TerminalProgress(out)
 
-        with mock.patch("standard_progress.time.monotonic", side_effect=[0, 10]):
+        with mock.patch("standard.standard_progress.time.monotonic", side_effect=[0, 10]):
             progress("writing corpus", 0, 100)
             progress("writing corpus", 25, 100)
 

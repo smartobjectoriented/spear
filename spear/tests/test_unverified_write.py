@@ -18,7 +18,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-from agent_runtime import (unverified_change, unverified_write_note,
+from runtime.agent_runtime import (unverified_change, unverified_write_note,
                            _verification_runs)
 
 EDIT = 'edit_file {"path": "src/command/command_wire.h"}\nOK: updated'

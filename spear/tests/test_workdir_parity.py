@@ -108,7 +108,7 @@ class WorkdirParity(unittest.TestCase):
 
 class WorkdirContract(unittest.TestCase):
     def test_the_production_terminal_schema_offers_workdir(self):
-        from tool_registry import coding_schemas
+        from harness.tool_registry import coding_schemas
 
         self.assertIn("workdir", coding_schemas()["terminal"]["parameters"]["properties"])
 

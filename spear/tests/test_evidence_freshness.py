@@ -17,8 +17,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-import completion
-from completion import Evidence
+from evidence import completion
+from evidence.completion import Evidence
 
 
 def edit(path, tool="patch"):

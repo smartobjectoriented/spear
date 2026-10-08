@@ -4,15 +4,15 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from sft_dataset import (
+from training.sft_dataset import (
     ExportProfile, LengthStatus, ReviewStatus, SFTDatasetBuilder,
     SFTDatasetError, SFTExportConfiguration, SFTSampleType,
     SplitConfiguration,
 )
-from training_data import (
+from training.training_data import (
     TRAINING_SCHEMA_VERSION, TrainingEpisode, TrainingToolCall, TrainingTurn,
 )
-from training_store import TrainingStore
+from training.training_store import TrainingStore
 
 
 TOOL_SNAPSHOT = {"schema_version": 1, "tools": [{

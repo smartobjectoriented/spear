@@ -17,30 +17,30 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from standard_ingest import ingest_pdf
-from standard_layout import extract_layout
-from standard_retrieval import rebuild_lexical_index
-from standard_semantic import (
+from standard.standard_ingest import ingest_pdf
+from standard.standard_layout import extract_layout
+from standard.standard_retrieval import rebuild_lexical_index
+from standard.standard_semantic import (
     APPROVAL_SCHEMA_VERSION, SpanRole, StandardBitfieldApproval,
     associate_words, build_semantics, review_evidence_fingerprint,
 )
-from standard_semantic_store import (
+from standard.standard_semantic_store import (
     StandardApprovalStore, StandardSemanticStore, build_semantic_manifest,
 )
-from standard_store import StandardStore
-from standard_structure import extract_structures, structure_fingerprint
-from standard_structure_access import (
+from standard.standard_store import StandardStore
+from standard.standard_structure import extract_structures, structure_fingerprint
+from standard.standard_structure_access import (
     INVALID_DEFINITION_ID, STRUCTURE_NOT_FOUND, StandardStructureAccess,
     StructureAccessError,
 )
-from standard_structure_store import StandardStructureStore, build_manifest
-from standard_tools import StandardToolService
-from standard_value_pair import value_local_pairs
-from standard_word_association import field_candidates
+from standard.standard_structure_store import StandardStructureStore, build_manifest
+from standard.standard_tools import StandardToolService
+from standard.standard_value_pair import value_local_pairs
+from standard.standard_word_association import field_candidates
 from tests.standard_geometry_fixture import semantic_bitfield_pdf_bytes
-from tool_registry import ToolRegistry
-from tool_router import ToolExecutionContext
-from tracing import NullTraceRecorder, TraceEmitter
+from harness.tool_registry import ToolRegistry
+from harness.tool_router import ToolExecutionContext
+from runtime.tracing import NullTraceRecorder, TraceEmitter
 
 SID, REV = "SEM", "R1"
 OPERATOR = "test-operator"

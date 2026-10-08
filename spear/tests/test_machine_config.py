@@ -6,8 +6,8 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-import machine_config
-from machine_config import ConfigureError, LOCAL_MARKER, main, render
+from cli import machine_config
+from cli.machine_config import ConfigureError, LOCAL_MARKER, main, render
 
 
 class FakeTty(io.StringIO):
@@ -129,8 +129,8 @@ class UnreachableHostTests(unittest.TestCase):
 class EmbeddingDetectionTests(unittest.TestCase):
 
     def detect(self, here, there):
-        with mock.patch("embedding.remote_target", return_value="gpu-host"), \
-                mock.patch("embedding.active_model", return_value="BAAI/bge-m3"), \
+        with mock.patch("retrieval.embedding.remote_target", return_value="gpu-host"), \
+                mock.patch("retrieval.embedding.active_model", return_value="BAAI/bge-m3"), \
                 mock.patch.object(machine_config, "local_revision",
                                   return_value=here):
             return machine_config.detect_embedding(lambda model, target: there)
@@ -151,8 +151,8 @@ class EmbeddingDetectionTests(unittest.TestCase):
         def unreachable(model, target):
             raise RuntimeError("cannot reach gpu-host: Connection timed out")
 
-        with mock.patch("embedding.remote_target", return_value="gpu-host"), \
-                mock.patch("embedding.active_model", return_value="BAAI/bge-m3"), \
+        with mock.patch("retrieval.embedding.remote_target", return_value="gpu-host"), \
+                mock.patch("retrieval.embedding.active_model", return_value="BAAI/bge-m3"), \
                 mock.patch.object(machine_config, "local_revision",
                                   return_value="r1"):
             with self.assertRaises(machine_config.HostUnreachable) as caught:
@@ -162,7 +162,7 @@ class EmbeddingDetectionTests(unittest.TestCase):
         self.assertNotIn("resolves", str(caught.exception))
 
     def test_no_host_means_no_embedding(self):
-        with mock.patch("embedding.remote_target", return_value=None):
+        with mock.patch("retrieval.embedding.remote_target", return_value=None):
             self.assertIsNone(machine_config.detect_embedding())
 
 

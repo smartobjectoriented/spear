@@ -5,12 +5,12 @@ from datetime import UTC, datetime
 from pathlib import Path
 from unittest.mock import patch
 
-from agent_roles import explorer_role, reviewer_role
-from memory_store import (
+from runtime.agent_roles import explorer_role, reviewer_role
+from context.memory_store import (
     MarkdownMemoryStore, MemoryRecord, MemoryScope, MemorySource,
     MemoryStoreError,
 )
-from tool_registry import ToolRegistry, native_tool_specs
+from harness.tool_registry import ToolRegistry, native_tool_specs
 
 
 class MemoryStoreTests(unittest.TestCase):
@@ -104,8 +104,8 @@ class MemoryStoreTests(unittest.TestCase):
         import os
         import tempfile
 
-        import rag_chat
-        import workspace_knowledge as wk
+        from cli import rag_chat
+        from context import workspace_knowledge as wk
 
         database = os.path.join(tempfile.mkdtemp(), "knowledge.sqlite3")
         rag_chat._KNOWLEDGE_STORE.clear()

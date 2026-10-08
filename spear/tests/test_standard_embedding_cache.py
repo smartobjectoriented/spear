@@ -10,10 +10,10 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from standard_ingest import ingest_pdf
-from standard_schema import canonical_json, sha256_json
-from standard_store import StandardStore
-from standard_vector_index import rebuild_vector_index, vector_entries
+from standard.standard_ingest import ingest_pdf
+from standard.standard_schema import canonical_json, sha256_json
+from standard.standard_store import StandardStore
+from standard.standard_vector_index import rebuild_vector_index, vector_entries
 from tests.standard_fixture import synthetic_pdf_bytes
 from tests.test_standard_hybrid_retrieval import (
     HYBRID_PAGES, Float32CacheEmbedder, UnavailableEmbedder,

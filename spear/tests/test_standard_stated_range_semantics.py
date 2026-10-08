@@ -11,22 +11,22 @@ import unittest
 from dataclasses import replace
 from pathlib import Path
 
-from standard_ingest import ingest_pdf
-from standard_layout import extract_layout
-from standard_semantic import (
+from standard.standard_ingest import ingest_pdf
+from standard.standard_layout import extract_layout
+from standard.standard_semantic import (
     DefinitionCompleteness, PositionSource, SemanticRole, SpanRole,
     StandardBitfieldApproval, StandardSemanticError, build_semantics,
     promote_bitfield, resolve_position, semantic_fingerprint, validate_semantics,
 )
-from standard_semantic_store import (
+from standard.standard_semantic_store import (
     StandardApprovalStore, StandardSemanticStore, build_semantic_manifest,
 )
-from standard_semantic import PARTIAL_RULER_WARNING
-from standard_stated_range import GEOMETRY_RANGE_CONFLICT
-from standard_store import StandardStore
-from standard_structure import extract_structures, structure_fingerprint
-from standard_structure_store import StandardStructureStore, build_manifest
-from standard_word_association import field_candidates
+from standard.standard_semantic import PARTIAL_RULER_WARNING
+from standard.standard_stated_range import GEOMETRY_RANGE_CONFLICT
+from standard.standard_store import StandardStore
+from standard.standard_structure import extract_structures, structure_fingerprint
+from standard.standard_structure_store import StandardStructureStore, build_manifest
+from standard.standard_word_association import field_candidates
 from tests.standard_geometry_fixture import (
     semantic_bitfield_pdf_bytes, stated_range_pdf_bytes,
 )

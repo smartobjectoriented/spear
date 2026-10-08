@@ -7,11 +7,11 @@ alone held 91 982 units, lines of lists and tables taken for headings.
 
 import unittest
 
-from standard_ingest import (
+from standard.standard_ingest import (
     _LETTERED, _NUMBERED, _clause_parts, _numbering_scheme, _page_lines,
     canonical_units,
 )
-from standard_retrieval import _SECTION_QUERY
+from standard.standard_retrieval import _SECTION_QUERY
 
 SHA = "0" * 64
 

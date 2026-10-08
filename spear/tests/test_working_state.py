@@ -4,13 +4,13 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from tracing import EventType, TraceEmitter
-from agent_runtime import AgentContext, AgentRuntime
-from compaction import CompactionPolicy
-from context_engine import ContextEngine, ContextItem, ContextLayer
-from model_backend import ConversationMessage, TextBlock
+from runtime.tracing import EventType, TraceEmitter
+from runtime.agent_runtime import AgentContext, AgentRuntime
+from runtime.compaction import CompactionPolicy
+from context.context_engine import ContextEngine, ContextItem, ContextLayer
+from models.model_backend import ConversationMessage, TextBlock
 
-from working_state import (
+from runtime.working_state import (
     ActionKind,
     ActionStatus,
     DuplicateEventError,
@@ -435,12 +435,12 @@ class MemoryRecorder:
 class WorkingStateRuntimeIntegrationTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        import rag_chat
+        from cli import rag_chat
         cls.rag_chat = rag_chat
 
     def test_scripted_task_uses_grounded_runtime_facts_without_prose_parsing(self):
-        from model_backend import ModelTurn, StopReason
-        from tool_runtime import AuditLogger, ExecutionMode, Workspace
+        from models.model_backend import ModelTurn, StopReason
+        from harness.tool_runtime import AuditLogger, ExecutionMode, Workspace
 
         class FakeBackend:
             model = "scripted-local"
@@ -524,7 +524,7 @@ class WorkingStateRuntimeIntegrationTests(unittest.TestCase):
             self.assertNotIn("I changed claimed.py", encoded)
 
     def test_nonzero_command_result_is_a_grounded_failed_action(self):
-        from tool_runtime import ToolResult
+        from harness.tool_runtime import ToolResult
 
         state = WorkingState.start("task_command", "Run a command")
         context = AgentContext(

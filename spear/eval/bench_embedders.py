@@ -27,7 +27,7 @@ os.environ.setdefault("HF_HUB_DISABLE_XET", "1")   # xet hangs on this host
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import chromadb
-import rag_chat
+from cli import rag_chat
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 SOURCE = os.environ.get("SPEAR_EVAL_COLLECTION", "")

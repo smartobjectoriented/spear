@@ -17,7 +17,7 @@ import unittest
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent
                        / "eval" / "modeluse"))
 
-import harness
+import modeluse_harness as harness
 
 
 class EveryRetrievalCounts(unittest.TestCase):

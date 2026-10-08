@@ -137,7 +137,7 @@ def run_one(task, configuration: AblationConfig, output: Path, repetition: int, 
             # else, whatever the operator's corpus registry happens to hold.
 
             command = [sys.executable,
-                       str(Path(__file__).resolve().parents[1] / "rag_chat.py"),
+                       str(Path(__file__).resolve().parents[1] / "cli/rag_chat.py"),
                        "--auto", "--here", "--single-root"]
 
             try:

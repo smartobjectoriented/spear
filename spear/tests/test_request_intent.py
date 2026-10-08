@@ -1,7 +1,7 @@
 import unittest
 from types import SimpleNamespace
 
-import request_intent
+from context import request_intent
 
 
 class Backend:
@@ -44,7 +44,7 @@ class ReadingTheRequest(unittest.TestCase):
         self.assertIsNone(request_intent.judge(None, "x"))
 
     def test_a_spent_auxiliary_budget_falls_back_instead_of_failing(self):
-        from budgets import BudgetKind, BudgetLimit, BudgetManager
+        from runtime.budgets import BudgetKind, BudgetLimit, BudgetManager
 
         manager = BudgetManager("task", {BudgetKind.AUXILIARY_MODEL_CALLS:
                                          BudgetLimit(0)})
@@ -71,7 +71,7 @@ class TheFloorIsNeverLowered(unittest.TestCase):
 
 class InTheLoop(unittest.TestCase):
     def test_the_verb_list_being_silent_is_what_triggers_the_call(self):
-        import agent_runtime
+        from runtime import agent_runtime
 
         context = SimpleNamespace(backend=Backend("WRITE"), judge_intent=True,
                                   budget_manager=None,
@@ -84,7 +84,7 @@ class InTheLoop(unittest.TestCase):
         self.assertEqual(len(context.backend.calls), 1)
 
     def test_a_recognised_verb_costs_no_call_at_all(self):
-        import agent_runtime
+        from runtime import agent_runtime
 
         context = SimpleNamespace(backend=Backend("ASK"), judge_intent=True,
                                   budget_manager=None,
@@ -94,7 +94,7 @@ class InTheLoop(unittest.TestCase):
         self.assertEqual(context.backend.calls, [])
 
     def test_the_answer_is_decided_once_per_turn(self):
-        import agent_runtime
+        from runtime import agent_runtime
 
         context = SimpleNamespace(backend=Backend("WRITE"), judge_intent=True,
                                   budget_manager=None,

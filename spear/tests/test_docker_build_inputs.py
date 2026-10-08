@@ -218,21 +218,24 @@ class EveryOptionalInputIsDeclaredOptional(unittest.TestCase):
 
 
 class EveryImportedPackageIsCopied(unittest.TestCase):
-    """`COPY *.py` takes the modules, not the packages they import.
-
-    rag_chat imports the coding core from agent/ at startup, and an image
-    without it does not start.
+    """Each package is a COPY of its own, and one left out is only found when
+    the image is run: rag_chat imports the coding core from agent/ at
+    startup, and an image without it does not start.
     """
 
-    def test_each_local_package_a_module_imports_is_in_the_image(self):
+    NOT_SHIPPED = {"tests", "eval", "benchmarks"}
+
+    def test_each_local_package_production_code_imports_is_in_the_image(self):
         sources = {source.rstrip("/") for context, source, _ in copies()
                    if context is None}
+        packages = {path.parent.name for path in DEFAULT_CONTEXT.glob("*/*.py")}
+        shipped = [path for path in DEFAULT_CONTEXT.glob("*/*.py")
+                   if path.parent.name in packages - self.NOT_SHIPPED]
 
-        for package in sorted(path.parent.name
-                              for path in DEFAULT_CONTEXT.glob("*/*.py")):
+        for package in sorted(packages):
             imported = re.compile(rf"^\s*(from|import) {package}\b", re.MULTILINE)
-            users = [module.name for module in DEFAULT_CONTEXT.glob("*.py")
-                     if imported.search(module.read_text())]
+            users = sorted({module.parent.name for module in shipped
+                            if imported.search(module.read_text())})
 
             if users:
                 with self.subTest(package=package):
@@ -252,7 +255,7 @@ class NothingPrivateIsRequired(unittest.TestCase):
         guards = re.findall(r"\[ -[df] \"([^\"]+)\" \][^\n]*\|\|[^{]*(?:\{[^}]*)?exit 1",
                             script)
         self.assertEqual(sorted(guards),
-                         ['$APP/rag_chat.py', '$REGISTRY'])
+                         ['$APP/cli/rag_chat.py', '$REGISTRY'])
 
         # and $REGISTRY is the generated file, not something a clone must have
         self.assertIn('REGISTRY="$REPO/docker/projects.docker.json"', script)

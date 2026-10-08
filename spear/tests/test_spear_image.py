@@ -83,7 +83,8 @@ class SpearImageTests(unittest.TestCase):
 
     def test_the_tag_is_the_release_not_a_constant(self):
         """The tags said 1.0 while the release line was 0.2."""
-        self.assertRegex(VERSION, r"^\d+\.\d+\.\d+$")
+        # A release candidate carries its suffix (release_process: -rc, -rcN).
+        self.assertRegex(VERSION, r"^\d+\.\d+\.\d+(?:-rc\d*)?$")
         result = self.run_image("inspect", "private")
         self.assertIn(f"spear:{VERSION}-private", result.stdout)
 

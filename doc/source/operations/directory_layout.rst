@@ -33,8 +33,8 @@ Top level
        model fetching, embedding and the runtime bootstrap.
    * - ``scripts/``
      - Release, configuration and image scripts (``spear-configure``,
-       ``spear-image``, ``spearversion.sh``); ``scripts/docker/`` builds and
-       runs the container.
+       ``spear-image``, ``spear-consolidate``, ``spearversion.sh``);
+       ``scripts/docker/`` builds and runs the container.
    * - ``docker/``
      - The container image: ``Dockerfile``, the entrypoint and the
        relative-path corpus registry.  It sits at the root rather than under

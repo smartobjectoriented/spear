@@ -59,6 +59,7 @@ and a shell that has also sourced another tree's ``env.sh`` with a
 
    $ spear-image build private               # spear:<version>-private
    $ spear-image build private --bake so3,so3-doc
+   $ spear-image build private --knowledge so3      # common state, see below
    $ spear-image build public                # spear:<version>-public
    $ spear-image list                        # profile and label of each
    $ spear-image inspect private
@@ -277,7 +278,8 @@ to anyone.
      - only normative documents that declare themselves ``PUBLIC``; of rules,
        skills, benches and notes only the files the repository tracks; no
        retrieval index (it holds chunks of every corpus on the host) and no
-       baked tree (``--bake`` is refused). Anything withheld is printed as
+       baked tree or workspace knowledge (``--bake`` and ``--knowledge`` are
+       refused). Anything withheld is printed as
        ``WITHHELD``. Labelled ``redistributable=true``.
    * - ``private``
      - everything the building host has, licensed documents and the original
@@ -323,6 +325,77 @@ When ``--bake`` is used the image's registry is restricted to what the image
 actually carries. Otherwise the recipient opens the container to a list of
 corpora they do not have and cannot get.
 
+.. _common-state:
+
+Common and local state
+======================
+
+An image carries a **common state**, ``/opt/spear/common``, that everyone who
+runs it reads and nobody writes: the normative store and, when the build is
+asked for it, the workspace knowledge of named projects. Each user keeps their
+own state in the directory mounted on ``/state``, where everything a session
+writes goes.
+
+.. code-block:: console
+
+   $ spear-image build private --knowledge so3,so3-doc
+   $ spear-image build private --knowledge all
+
+Only **active** records travel, each at its current version: proposals nobody
+accepted, revoked records and the earlier wording of an amended one stay with
+the user who built the image. Knowledge of an unregistered tree never travels,
+since it is named after a path on the building host. A recipient's record
+follows the project by its registered name, so the project must be registered
+under the same name in the image's registry.
+
+A user's change to a common record (revoking it, amending it, or the record
+going stale because their tree differs from the builder's) is copied into
+their own state and shadows the common one there; the image is not changed.
+Shipping new knowledge is a new build.
+
+Consolidating
+-------------
+
+The team keeps its common store on the building host, in the directory
+``SPEAR_COMMON_STATE_DIR`` names (``machine.env`` is the place to set it), and
+``--knowledge`` ships from it; without one, the builder's own store is
+shipped. ``spear-consolidate`` merges users' stores into it, so that what each
+of them learns reaches everyone at the next build:
+
+.. code-block:: console
+
+   $ spear-consolidate ~/.local/state/spear/knowledge.sqlite3 alice.sqlite3
+   $ spear-consolidate ~/.local/state/spear/knowledge.sqlite3 alice.sqlite3 --apply
+   $ spear-image build private --knowledge so3
+
+A user's store is ``knowledge.sqlite3`` in their state directory: the one
+mounted on ``/state`` for a container, ``~/.local/state/spear`` on a
+workstation. Without ``--apply`` the command only reports.
+
+.. list-table::
+   :header-rows: 1
+   :widths: 26 74
+
+   * - Outcome
+     - When
+   * - ``added``
+     - an active record the common store does not have
+   * - ``updated`` · ``revoked``
+     - a common record the user amended, accepted or revoked; the common store
+       takes it with its history
+   * - ``duplicate``
+     - the same fact, already common under another id
+   * - ``conflict``
+     - not merged: a common record changed since the user copied it, or a new
+       fact that contradicts an active common one. Settle it in either store
+       and run again; the command exits 1 while any remains
+   * - ``skipped``
+     - a proposal (the user accepts it first), or a record stale in the
+       user's tree only
+
+Knowledge describes the building host's trees, customer code included, so
+``--knowledge`` needs ``--profile private``.
+
 A deployment's own content, and how it gets in
 ==============================================
 
@@ -349,6 +422,8 @@ is a second repository:
      - staged per document by profile (:ref:`image-profiles`)
    * - the corpus trees
      - ``--bake``, once each is registered and indexed on the host
+   * - workspace knowledge
+     - ``--knowledge``, as the image's common state (:ref:`common-state`)
 
 .. important::
 

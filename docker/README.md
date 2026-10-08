@@ -14,6 +14,7 @@ and have the same state you do.
 | **ChromaDB index** (8.5 GB) | image, *if the building host has one* (private only) | re-indexing takes hours *and* needs every corpus tree present — the one thing a newcomer does not have |
 | rules, skills, benches, notes | image, *if present* (public: tracked files only) | a deployment's own content; `build.sh` says which it found |
 | **normative store** | image, *filtered by profile* | a harness that can bind a standard and no standard to bind answers every normative question from the source tree — the one failure this platform exists to prevent |
+| workspace knowledge | image as **common state**, with `--knowledge` (private only); each user's own in the mounted state | what the team learned is given to every user, and what each user changes stays theirs |
 | corpus trees | **mounted**, or baked with `--bake` | working copies change daily; baked is for the container that is handed over with nothing to mount |
 | model weights | **neither** | the harness talks to an endpoint (`--endpoint`), it does not host a model |
 

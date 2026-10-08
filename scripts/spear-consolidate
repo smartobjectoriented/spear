@@ -1,0 +1,83 @@
+#!/usr/bin/env python3
+"""Merge users' workspace knowledge into the team's common store.
+
+    spear-consolidate [--into COMMON] FROM.sqlite3... [--workspaces a,b] [--apply]
+
+COMMON defaults to $SPEAR_COMMON_STATE_DIR/knowledge.sqlite3 and is created on
+the first --apply. Each FROM is a user's own store: ~/.local/state/spear on a
+workstation, the state directory mounted on /state in a container. Without
+--apply nothing is written and the report says what would be.
+
+The next image built with --knowledge ships the result.
+"""
+from __future__ import annotations
+
+import argparse
+import os
+import pathlib
+import sqlite3
+import sys
+
+sys.path.insert(0, os.environ.get(
+    "SPEAR_APP", str(pathlib.Path(__file__).resolve().parents[1] / "spear")))
+
+import workspace_knowledge as wk  # noqa: E402
+
+
+def main() -> int:
+    ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
+    ap.add_argument("sources", nargs="+", metavar="FROM", help="a user's knowledge.sqlite3")
+    ap.add_argument("--into", help="the common store")
+    ap.add_argument("--workspaces", default="", help="comma-separated; default: every "
+                                                     "registered workspace a user has")
+    ap.add_argument("--apply", action="store_true", help="write; without it, report only")
+    args = ap.parse_args()
+
+    common_dir = os.environ.get("SPEAR_COMMON_STATE_DIR")
+    into = args.into or (common_dir and os.path.join(common_dir, "knowledge.sqlite3"))
+
+    if not into:
+        ap.error("name the common store: --into, or SPEAR_COMMON_STATE_DIR")
+
+    for source in args.sources:
+        if not os.path.isfile(source):
+            ap.error(f"{source}: no such store")
+
+    # A dry run merges into a copy, so that each source is reported against
+    # what the ones before it would have added.
+
+    common = wk.KnowledgeStore(into if args.apply else ":memory:")
+
+    if not args.apply and os.path.isfile(into):
+        with sqlite3.connect(f"file:{into}?mode=ro", uri=True) as existing:
+            existing.backup(common._db)
+
+    workspaces = [name for name in args.workspaces.split(",") if name]
+    counts = {}
+
+    for source in args.sources:
+        local = wk.KnowledgeStore(source, read_only=True)
+        outcomes = wk.consolidate(common, local, workspaces)
+        print(f"== {source}")
+
+        for outcome in outcomes:
+            record = outcome.record
+            counts[outcome.action] = counts.get(outcome.action, 0) + 1
+
+            if outcome.action != wk.UNCHANGED:
+                print(f"   {outcome.action:9} {record.workspace_id:14} {record.record_id}  "
+                      f"{record.subject[:50]}" + (f"  -- {outcome.why}" if outcome.why else ""))
+
+        wk.apply_consolidation(common, local, outcomes)
+        local.close()
+
+    common.close()
+    print("   " + (", ".join(f"{count} {action}" for action, count in sorted(counts.items()))
+                   or "nothing to consolidate"))
+    print(f"   {'written to' if args.apply else 'dry run; --apply writes to'} {into}")
+
+    return 1 if counts.get(wk.CONFLICT) else 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

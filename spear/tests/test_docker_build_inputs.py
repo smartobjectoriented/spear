@@ -196,6 +196,7 @@ class EveryOptionalInputIsDeclaredOptional(unittest.TestCase):
         empty one, and an empty standards context is a container that opens
         with no normative store and says nothing about it."""
         for context, stager in (("standards", "stage-standards.py"),
+                                ("common", "stage-knowledge.py"),
                                 ("baked", "stage-corpora.py")):
             with self.subTest(context=context):
                 self.assertIn(stager, self.script)

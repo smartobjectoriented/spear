@@ -257,29 +257,69 @@ CREATE TABLE IF NOT EXISTS versions (
 
 class KnowledgeStore:
     """Every workspace's records, in one SQLite file. Queries always name the
-    workspace: there is no lookup that crosses one."""
+    workspace: there is no lookup that crosses one.
 
-    def __init__(self, path: str, *, audit: Callable[[str, dict], None] | None = None):
+    A COMMON store, when there is one, lies underneath and is never written:
+    the knowledge a team ships with an image, read by everyone who runs it.
+    A local record with the same id shadows the common one, and the first
+    change to a common record copies it and its history here first, so a
+    user can revoke, amend or find stale what the team recorded without
+    touching what the next user is given.
+    """
+
+    def __init__(self, path: str, *, common: str | None = None, read_only: bool = False,
+                 audit: Callable[[str, dict], None] | None = None):
         self.path = path
+        self.common = common
 
-        if path != ":memory:":
-            os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
+        if read_only:
+            self._db = sqlite3.connect(f"file:{path}?mode=ro", uri=True, isolation_level=None)
+        else:
+            if path != ":memory:":
+                os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
 
-        self._db = sqlite3.connect(path, timeout=10, isolation_level=None)
-        self._db.executescript(_SCHEMA)
+            self._db = sqlite3.connect(path, timeout=10, isolation_level=None)
+            self._db.executescript(_SCHEMA)
+
+        self._common = (sqlite3.connect(f"file:{common}?mode=ro", uri=True,
+                                        isolation_level=None)
+                        if common else None)
         self.audit = audit or (lambda kind, metadata: None)
 
     def close(self):
         self._db.close()
+
+        if self._common is not None:
+            self._common.close()
+
+    def _rows(self, query: str, args=()):
+        """(layer, row) for a query run on the local store, then the common one."""
+        yield from (("local", row) for row in self._db.execute(query, args))
+
+        if self._common is not None:
+            yield from (("common", row) for row in self._common.execute(query, args))
+
+    def layer(self, workspace_id: str, record_id: str) -> str | None:
+        """Where the record is served from: "local", "common" or None."""
+        for layer, _ in self._rows("SELECT 1 FROM records WHERE record_id = ? AND "
+                                   "workspace_id = ?", (record_id, workspace_id)):
+            return layer
+
+        return None
 
     # ── writing ─────────────────────────────────────────────────────
 
     def _write(self, record: Record, reason: str) -> Record:
         record = replace(record, updated_at=_now(), reason=reason)
         body = json.dumps(record.to_dict(), sort_keys=True)
+        inherited = (self._common.execute(
+            "SELECT * FROM versions WHERE record_id = ?", (record.record_id,)).fetchall()
+            if self.layer(record.workspace_id, record.record_id) == "common" else ())
 
         with self._db:
             self._db.execute("BEGIN")
+            self._db.executemany("INSERT OR IGNORE INTO versions VALUES (?, ?, ?, ?)",
+                                 inherited)
             self._db.execute(
                 "INSERT INTO records (record_id, workspace_id, lifecycle, body) "
                 "VALUES (?, ?, ?, ?) ON CONFLICT(record_id) DO UPDATE SET "
@@ -426,7 +466,8 @@ class KnowledgeStore:
         return record
 
     def purge(self, workspace_id: str) -> int:
-        """Physically delete one workspace's records and their history."""
+        """Physically delete one workspace's local records and their history.
+        Its common records stay: they are the image's, not this user's."""
         with self._db:
             self._db.execute("BEGIN")
             ids = [row[0] for row in self._db.execute(
@@ -440,9 +481,11 @@ class KnowledgeStore:
     # ── reading ─────────────────────────────────────────────────────
 
     def get(self, workspace_id: str, record_id: str) -> Record | None:
-        row = self._db.execute("SELECT body FROM records WHERE record_id = ? AND "
-                               "workspace_id = ?", (record_id, workspace_id)).fetchone()
-        return Record.from_dict(json.loads(row[0])) if row else None
+        for _, row in self._rows("SELECT body FROM records WHERE record_id = ? AND "
+                                 "workspace_id = ?", (record_id, workspace_id)):
+            return Record.from_dict(json.loads(row[0]))
+
+        return None
 
     def _own(self, workspace_id, record_id) -> Record:
         record = self.get(workspace_id, record_id)
@@ -453,22 +496,31 @@ class KnowledgeStore:
         return record
 
     def list(self, workspace_id: str, lifecycles: Iterable = ()) -> list[Record]:
-        wanted = [str(item) for item in lifecycles]
-        query = "SELECT body FROM records WHERE workspace_id = ?"
-        query += f" AND lifecycle IN ({','.join('?' * len(wanted))})" if wanted else ""
+        # The lifecycle is filtered after the layers are merged: a common
+        # ACTIVE record that this user revoked must not come back through it.
 
-        return sorted((Record.from_dict(json.loads(row[0])) for row in self._db.execute(
-            query, (workspace_id, *wanted))), key=lambda record: record.created_at)
+        wanted = {str(item) for item in lifecycles}
+        records = {}
+
+        for _, row in self._rows("SELECT record_id, body FROM records WHERE "
+                                 "workspace_id = ?", (workspace_id,)):
+            records.setdefault(row[0], row[1])
+
+        return sorted((record for record in map(Record.from_dict, map(
+            json.loads, records.values())) if not wanted or record.lifecycle in wanted),
+            key=lambda record: record.created_at)
 
     def history(self, workspace_id: str, record_id: str) -> list[Record]:
         self._own(workspace_id, record_id)
+        store = self._db if self.layer(workspace_id, record_id) == "local" else self._common
 
-        return [Record.from_dict(json.loads(row[0])) for row in self._db.execute(
+        return [Record.from_dict(json.loads(row[0])) for row in store.execute(
             "SELECT body FROM versions WHERE record_id = ? ORDER BY version", (record_id,))]
 
     def export(self, workspace_id: str) -> dict:
         return {"workspace": workspace_id, "exported_at": _now(),
                 "records": [{**record.to_dict(),
+                             "layer": self.layer(workspace_id, record.record_id),
                              "history": [item.to_dict() for item in
                                          self.history(workspace_id, record.record_id)]}
                             for record in self.list(workspace_id)]}
@@ -536,6 +588,122 @@ class KnowledgeStore:
             restored.append(record)
 
         return restored
+
+
+# ── consolidating a user's knowledge into the common store ──────────
+
+ADDED, UPDATED, REVOKED_IN_COMMON = "added", "updated", "revoked"
+UNCHANGED, DUPLICATE, CONFLICT, SKIPPED = "unchanged", "duplicate", "conflict", "skipped"
+
+
+@dataclass(frozen=True)
+class Outcome:
+    action: str
+    record: Record
+    why: str = ""
+
+
+def consolidate(common: KnowledgeStore, local: KnowledgeStore,
+                workspaces: Iterable[str] = ()) -> list[Outcome]:
+    """What merging LOCAL into COMMON would do, record by record.
+
+    A user's accepted records are added, and their changes to a common record
+    (amended, revoked) replace it, history included. A proposal waits for the
+    user to accept it, and a stale record says only that the user's tree
+    differs. Nothing that disagrees is merged: a record the common store has
+    changed since the user copied it, or a new fact that contradicts an active
+    common one, is a conflict for someone to settle.
+
+    Both stores are opened on their own files, without a common layer:
+    `local` is the user's store, `common` the team's.
+    """
+    names = list(workspaces) or sorted({row[0] for row in local._db.execute(
+        "SELECT workspace_id FROM records WHERE workspace_id NOT LIKE 'adhoc:%'")})
+    outcomes = []
+
+    for workspace in names:
+        for record in local.list(workspace):
+            outcomes.append(_merge_one(common, local, record))
+
+    return outcomes
+
+
+def _body(record: Record) -> dict:
+    return {key: value for key, value in record.to_dict().items()
+            if key not in ("updated_at", "reason")}
+
+
+def _merge_one(common: KnowledgeStore, local: KnowledgeStore, record: Record) -> Outcome:
+    if record.lifecycle == Lifecycle.PROPOSED:
+        return Outcome(SKIPPED, record, "a proposal; accept it first")
+
+    if record.lifecycle == Lifecycle.STALE:
+        return Outcome(SKIPPED, record, "stale in this user's tree")
+
+    current = common.get(record.workspace_id, record.record_id)
+
+    if current is None:
+        if record.lifecycle != Lifecycle.ACTIVE:
+            return Outcome(SKIPPED, record, "revoked, and never common")
+
+        same = common.duplicate(record.workspace_id, record.kind, record.subject,
+                                record.statement, record.sources)
+
+        if same is not None:
+            return Outcome(DUPLICATE, record, f"already common as {same.record_id}")
+
+        rivals = [other for group in conflicts(
+            common.list(record.workspace_id, (Lifecycle.ACTIVE,)) + [record])
+            for other in group if record in group and other is not record]
+
+        if rivals:
+            return Outcome(CONFLICT, record, "contradicts " + ", ".join(
+                other.record_id for other in rivals))
+
+        return Outcome(ADDED, record)
+
+    if _body(current) == _body(record):
+        return Outcome(UNCHANGED, record)
+
+    if not any(_body(earlier) == _body(current)
+               for earlier in local.history(record.workspace_id, record.record_id)):
+        return Outcome(CONFLICT, record, f"changed in common since this user copied it "
+                                         f"(common is at version {current.version})")
+
+    return Outcome(REVOKED_IN_COMMON if record.lifecycle == Lifecycle.REVOKED else UPDATED,
+                   record)
+
+
+def apply_consolidation(common: KnowledgeStore, local: KnowledgeStore,
+                        outcomes: Iterable[Outcome]) -> int:
+    """Write the added, updated and revoked records into COMMON, as LOCAL
+    has them, with their history; return how many."""
+    written = 0
+
+    for outcome in outcomes:
+        if outcome.action not in (ADDED, UPDATED, REVOKED_IN_COMMON):
+            continue
+
+        record = outcome.record
+        row = local._db.execute("SELECT body FROM records WHERE record_id = ?",
+                                (record.record_id,)).fetchone()
+        versions = local._db.execute("SELECT * FROM versions WHERE record_id = ?",
+                                     (record.record_id,)).fetchall()
+
+        with common._db:
+            common._db.execute("BEGIN")
+            common._db.execute(
+                "INSERT INTO records (record_id, workspace_id, lifecycle, body) "
+                "VALUES (?, ?, ?, ?) ON CONFLICT(record_id) DO UPDATE SET "
+                "lifecycle = excluded.lifecycle, body = excluded.body",
+                (record.record_id, record.workspace_id, record.lifecycle, row[0]))
+            common._db.executemany("INSERT OR IGNORE INTO versions VALUES (?, ?, ?, ?)",
+                                   versions)
+
+        common._event("knowledge_consolidated", record, outcome.action)
+        written += 1
+
+    return written
 
 
 def conflicts(records) -> list[list[Record]]:
@@ -751,3 +919,13 @@ def default_path() -> str:
                               "(SPEAR_KNOWLEDGE_DB or SPEAR_STATE_DIR)")
 
     return str(state_paths.state_dir() / "knowledge.sqlite3")
+
+
+def default_common_path() -> str | None:
+    """knowledge.sqlite3 under the common state root, when there is one."""
+    import state_paths
+
+    root = state_paths.common_dir()
+    path = root / "knowledge.sqlite3" if root else None
+
+    return str(path) if path and path.is_file() else None

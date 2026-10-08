@@ -122,24 +122,24 @@ COPY --from=repo corpora/ /corpora/spear/corpora/
 # where an empty /corpora is not a stale corpus but no corpus at all.
 COPY --from=baked --chmod=0777 . /corpora/
 
-# THE NORMATIVE STORE, and the state directory it lives in.
-#
-# Without this the container has a harness that can bind a standard and no
-# standard to bind: /standard list is empty, every normative question falls
-# back to the source tree, and the one capability this platform is built
-# around is silently absent. Which documents travel is decided per document,
-# from what each one declares about itself -- see scripts/docker/stage-standards.py.
-#
-# 0777 because the session WRITES here: history, memories, the audit trail and
-# any standard ingested later all land under SPEAR_STATE_DIR, and the
-# container runs as whichever uid the operator passes.
-COPY --from=standards --chmod=0777 . /opt/spear/state/standards/
-RUN chmod 0777 /opt/spear/state
+# THE COMMON STATE: what the image gives everyone who runs it, read under each
+# user's own state and never written. The normative store, so that a harness
+# that can bind a standard has one to bind (which documents travel is decided
+# per document -- see scripts/docker/stage-standards.py), and the workspace
+# knowledge the build was asked to ship (stage-knowledge.py).
+COPY --from=common . /opt/spear/common/
+ENV SPEAR_COMMON_STATE_DIR=/opt/spear/common
+# The standards store stays writable, so that a standard ingested in the
+# container can be bound there; it is kept apart from the state directory
+# because every documented run mounts its own state over that one.
+COPY --from=standards --chmod=0777 . /opt/spear/common/standards/
+ENV SPEAR_STANDARDS_ROOT=/opt/spear/common/standards
+
+# The user's own state, for a run that mounts none. 0777 because the session
+# WRITES here: history, knowledge, the audit trail, and the container runs as
+# whichever uid the operator passes.
+RUN mkdir -p /opt/spear/state && chmod 0777 /opt/spear/state
 ENV SPEAR_STATE_DIR=/opt/spear/state
-# The standards store is BAKED, the state directory is the caller's: a run that
-# mounts its own state (every documented one does) would otherwise look for the
-# store under it and open with no standard at all.
-ENV SPEAR_STANDARDS_ROOT=/opt/spear/state/standards
 # NOT in /usr/local/bin: the host's copy of that directory is mounted over
 # it (189 toolchain symlinks that ib.md tells the operator to put there),
 # which would hide the entrypoint and stop the container dead.

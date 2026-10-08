@@ -171,6 +171,9 @@ Session state and audit
    * - ``--state-dir`` · ``SPEAR_STATE_DIR``
      - where the session accumulates; defaults to
        ``~/.local/state/spear``
+   * - ``SPEAR_COMMON_STATE_DIR``
+     - common state, read under the user's own and never written; unset by
+       default, set by the image (:ref:`common-state`)
    * - ``--operator`` · ``SPEAR_OPERATOR``
      - operator name recorded in the audit trail
    * - ``--fresh`` · ``SPEAR_FRESH=1``
@@ -196,6 +199,7 @@ The state directory
        sessions/<id>/snapshot.json     the conversation it ran on
        tool-actions.jsonl              metadata-only action log
      standards/                        the normative store
+     knowledge.sqlite3                 workspace knowledge
      history-adhoc-<tag>.json          per-corpus conversation history
      memories-adhoc-<tag>.md           per-corpus durable memories
 

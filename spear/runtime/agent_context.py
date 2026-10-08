@@ -26,7 +26,6 @@ from runtime.tracing import EventStatus, EventType, TraceEmitter, new_action_id
 from harness.tool_router import ToolResultEnvelope
 from evidence.verification import VerificationPolicy
 from runtime.budgets import BudgetManager
-from runtime import work_phase
 from runtime.working_state import (
     ActionKind, StateEvent, StateEventType, StateSource, TerminalStatus,
     VerificationOutcome, WorkingState,

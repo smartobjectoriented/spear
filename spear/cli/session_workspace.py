@@ -8,12 +8,14 @@ import readline
 import subprocess
 from pathlib import Path
 from runtime import work_phase
-from harness.tool_runtime import (
-    CommandClassification, CommandPolicy, BubblewrapSandbox, CommandRunner,
-    ExecutionMode, ExecutionProfile, Capability, DEFAULT_CAPABILITY_POLICY,
-    PathPolicyError, SandboxSpec, ToolPolicy, ToolResult, Workspace,
-    effective_mount_root, shell_argv,
+from harness.command_policy import CommandPolicy, ToolPolicy
+from harness.resource_control import ExecutionProfile
+from harness.sandbox import BubblewrapSandbox
+from harness.tool_primitives import (
+    Capability, CommandClassification, DEFAULT_CAPABILITY_POLICY, ExecutionMode, PathPolicyError, ToolResult, shell_argv,
 )
+from harness.tool_runtime import CommandRunner
+from harness.workspace import SandboxSpec, Workspace, effective_mount_root
 from runtime.tracing import EventStatus, EventType, new_action_id
 from cli.chat_settings import AUDIT_LOGGER, STATE_DIR
 from cli.corpus_registry import load_projects

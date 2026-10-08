@@ -5,7 +5,6 @@ Claude Code-style UI (⏺ bullets, ⎿ tool results, spinner, box).
 Hybrid tool system: explicit !commands + auto-detection + LLM tool calls.
 """
 
-import dataclasses
 import os
 import re
 import sys
@@ -15,6 +14,7 @@ import shlex
 import time
 import subprocess
 from pathlib import Path
+
 # Run as a file, the script's own directory is first on the path; the
 # packages it imports live one level up.
 
@@ -23,30 +23,23 @@ if not __package__:
 
 from context import answer_scope
 from context import context_selection
-from agent import tools as coding_tools
 from retrieval import embedding
 from evidence import evidence_handles
 from context import skill_library
 from normative import requirement_set
 from runtime import work_phase
-from openai import APIError
 from models.model_backend import (
     ConversationMessage, ModelBackendConfigurationError, TextBlock,
 )
 from runtime.cancellation import CancellationSource
 from harness.checkpoint import CheckpointManager
-from harness.tool_runtime import (
-    ExecutionMode, CapabilityPolicy, PathNotFoundError,
-)
+from harness.tool_primitives import ExecutionMode
 from runtime.tracing import EventStatus, EventType, new_task_id
 from runtime.working_state import StateEventType, WorkingState
 from context.context_engine import ContextLayer
 from runtime.compaction import CompactionMode, CompactionPolicy
-from runtime.agent_runtime import (
-    AgentContext, AgentRuntime,
-    strip_fabrications, turn_evidence, unverified_change, validate_agent_turn,
-    verify_demand,
-)
+from runtime.agent_context import AgentContext
+from runtime.agent_runtime import AgentRuntime
 from runtime import session_replay
 from runtime.budgets import BudgetKind, BudgetLimit, BudgetManager
 from evidence.diff_evidence import DiffEvidenceService
@@ -60,7 +53,6 @@ from evidence import project_build
 from standard.standard_commands import (
     StandardCommandError, handle_standard_command, standard_help_lines,
 )
-from harness.target_policy import says_generated  # noqa: E402,F401  (kept for callers)
 from cli import corpus_search, model_io, session_workspace, standard_session
 from cli.chat_settings import (
     APP_DIR, CHECKPOINT_ROOT, CONTEXT_ENGINE, LEARNED_RULES_FILE,

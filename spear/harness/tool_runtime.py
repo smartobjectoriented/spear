@@ -18,10 +18,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Mapping, Sequence
 
-# Not every name below is used here: cli.rag_chat imports its tool-execution
-# names from this module.
-
-from harness.command_policy import CommandAssessment, CommandPolicy, ToolPolicy
+from harness.command_policy import CommandAssessment
 from harness.resource_control import (
     DEFAULT_CGROUP_LIMITS,
     DEFAULT_RESOURCE_LIMITS,
@@ -31,19 +28,15 @@ from harness.resource_control import (
 )
 from harness.sandbox import BubblewrapSandbox
 from harness.tool_primitives import (
-    DEFAULT_CAPABILITY_POLICY,
     Capability,
-    CapabilityPolicy,
-    CommandClassification,
     ExecutionMode,
     NetworkBackend,
-    PathNotFoundError,
     PathPolicyError,
     ToolResult,
     decode_command_output,
     shell_argv,
 )
-from harness.workspace import SandboxSpec, Workspace, effective_mount_root
+from harness.workspace import Workspace
 
 
 class CommandRunner:

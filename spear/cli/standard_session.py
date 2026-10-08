@@ -109,7 +109,7 @@ def announce_carried_spec(question):
 
 
 def is_write_request_text(question):
-    from runtime.agent_runtime import is_write_request
+    from runtime.agent_notes import is_write_request
 
     return is_write_request(question or "")
 

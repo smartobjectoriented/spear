@@ -4,7 +4,7 @@ import os
 import re
 import json
 from models.model_backend import ConversationMessage, TextBlock
-from harness.tool_runtime import PathPolicyError
+from harness.tool_primitives import PathPolicyError
 from runtime.agent_runtime import AgentRuntime
 from cli.session_workspace import find_file, is_excluded_path, resolve_path
 from cli.terminal_ui import Spinner

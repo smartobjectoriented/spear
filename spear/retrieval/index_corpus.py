@@ -8,6 +8,7 @@ import os
 import sys
 import hashlib
 import chromadb
+
 # Run as a file, the script's own directory is first on the path; the
 # packages it imports live one level up.
 

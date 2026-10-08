@@ -2,10 +2,11 @@
 
 import os
 import subprocess
-from harness.tool_runtime import (
-    BubblewrapSandbox, CommandRunner, ExecutionProfile, Capability,
-    PathPolicyError, Workspace, shell_argv,
-)
+from harness.resource_control import ExecutionProfile
+from harness.sandbox import BubblewrapSandbox
+from harness.tool_primitives import Capability, PathPolicyError, shell_argv
+from harness.tool_runtime import CommandRunner
+from harness.workspace import Workspace
 from runtime.tracing import EventStatus, EventType, new_action_id, new_task_id
 from runtime.agent_runtime import AgentRuntime
 from evidence import project_build

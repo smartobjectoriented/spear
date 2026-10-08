@@ -186,7 +186,7 @@ class TheOrganisationIsNamedOnlyWhereItMustBe(unittest.TestCase):
             "the same repository set, as a fixture",
         "spear/tests/test_indexing.py":
             "quotes the measured incident it was written for",
-        "spear/tests/test_tool_runtime.py":
+        "spear/tests/test_command_policy.py":
             "quotes the measured incident it was written for",
         "spear/tests/test_public_boundary.py":
             "this file: the needles and the reasons",

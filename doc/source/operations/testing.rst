@@ -73,11 +73,11 @@ Opt-in suites
 
 .. code-block:: console
 
-   $ SPEAR_TEST_NETWORK=1     ./bin/python -m unittest tests.test_tool_runtime.Slirp4netnsNetworkTests
+   $ SPEAR_TEST_NETWORK=1     ./bin/python -m unittest tests.test_sandbox_network.Slirp4netnsNetworkTests
    Ran 29 tests — OK
-   $ SPEAR_TEST_CGROUP=1      ./bin/python -m unittest tests.test_tool_runtime.OptInRealCgroupTests
+   $ SPEAR_TEST_CGROUP=1      ./bin/python -m unittest tests.test_resource_control.OptInRealCgroupTests
    Ran 6 tests — OK
-   $ SPEAR_TEST_NETWORK_RACE=1 ./bin/python -m unittest tests.test_tool_runtime.OptInNetworkRaceTests
+   $ SPEAR_TEST_NETWORK_RACE=1 ./bin/python -m unittest tests.test_sandbox_network.OptInNetworkRaceTests
    Ran 4 tests — OK
 
 What the suites assert

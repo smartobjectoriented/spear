@@ -17,7 +17,7 @@ Health check
    host   $ ~/spear/scripts/bootstrap-runtime.sh --root ~/spear-runtime --verify
 
    client $ curl -s http://127.0.0.1:8082/v1/models | head -c 200   # through the tunnel
-   client $ cd ~/spear/spear && ./bin/python -m unittest tests.test_tool_runtime
+   client $ cd ~/spear/spear && ./bin/python -m unittest tests.test_tool_runtime tests.test_command_policy tests.test_sandbox
 
 The server's side is :ref:`inference_host`; its step 9 is the full check.
 

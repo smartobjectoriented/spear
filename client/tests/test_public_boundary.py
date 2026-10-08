@@ -140,7 +140,7 @@ class NoRetiredPlatformName(unittest.TestCase):
     #: token: a token allowlist says "this word is fine anywhere", which is
     #: how a word comes back somewhere it is not fine.
     JUSTIFIED = {
-        "spear/tests/test_client_server_boundary.py":
+        "client/tests/test_client_server_boundary.py":
             "asserts the retired launcher and the retired remote path are gone; "
             "it has to name them to check for their absence",
     }
@@ -175,20 +175,20 @@ class TheOrganisationIsNamedOnlyWhereItMustBe(unittest.TestCase):
                "infra" + "base")
 
     JUSTIFIED = {
-        "spear/harness/command_policy.py":
+        "client/harness/command_policy.py":
             "a measured incident: the entry points a path check refused",
-        "spear/retrieval/index_dir.py":
+        "client/retrieval/index_dir.py":
             "measured incidents -- the snapshot suffixes a real build system "
             "leaves, and an index that came out 99.8% vendored",
-        "spear/benchmarks/runner.py":
+        "client/benchmarks/runner.py":
             "names the repositories the benchmark was actually run against",
-        "spear/tests/test_benchmarks.py":
+        "client/tests/test_benchmarks.py":
             "the same repository set, as a fixture",
-        "spear/tests/test_indexing.py":
+        "client/tests/test_indexing.py":
             "quotes the measured incident it was written for",
-        "spear/tests/test_command_policy.py":
+        "client/tests/test_command_policy.py":
             "quotes the measured incident it was written for",
-        "spear/tests/test_public_boundary.py":
+        "client/tests/test_public_boundary.py":
             "this file: the needles and the reasons",
     }
 
@@ -261,9 +261,9 @@ class NoStaleProductPrefixEscapes(unittest.TestCase):
             "renaming the rule without moving the directory exposes it",
 
         # --- historical evidence: transcripts and measured incidents ---
-        "spear/TRAINING_DATA.md":
+        "client/TRAINING_DATA.md":
             "narrates a run against a path that was actually tried",
-        "spear/doc/source/training_host_setup.rst":
+        "client/doc/source/training_host_setup.rst":
             "the same narrative: the path Axolotl was not usable at",
         "doc/source/model_serving.rst":
             "a recorded backend probe and its literal reply",
@@ -271,19 +271,19 @@ class NoStaleProductPrefixEscapes(unittest.TestCase):
             "a download log from one run; evidence, not source",
 
         # --- checks that must name what they forbid ---
-        "spear/tests/test_public_boundary.py":
+        "client/tests/test_public_boundary.py":
             "this file: the pattern, the exemptions and the reasons",
         "server/tests/test_server_public_surface.py":
             "the server tree's own scan, needles assembled from fragments",
-        "spear/tests/test_remote_embedding_policy.py":
+        "client/tests/test_remote_embedding_policy.py":
             "asserts no retired remote path is named in the runtime",
-        "spear/tests/test_environment_namespace.py":
+        "client/tests/test_environment_namespace.py":
             "asserts the retired environment namespace is gone",
-        "spear/tests/test_client_server_boundary.py":
+        "client/tests/test_client_server_boundary.py":
             "asserts the retired launcher and remote path are gone",
-        "spear/tests/test_normative_binding_reaches_every_corpus.py":
+        "client/tests/test_normative_binding_reaches_every_corpus.py":
             "names the retired corpus kind in an absence assertion",
-        "spear/tests/test_normative_contract.py":
+        "client/tests/test_normative_contract.py":
             "asserts the contract names no particular project",
     }
 

@@ -38,7 +38,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && locale-gen en_US.UTF-8 \
     && rm -rf /var/lib/apt/lists/*
 
-ARG APP=/opt/spear/spear
+ARG APP=/opt/spear/client
 WORKDIR $APP
 
 # Dependencies first: they change far less often than the harness code, so an
@@ -109,7 +109,7 @@ COPY --from=repo docker/projects.docker.json $APP/projects.json
 # The cross-cutting parts of the spear repo, baked so the image is useful to
 # someone who has not cloned it: the shared notes corpus, and `corpora/`, which
 # holds the API references. They come from NAMED BUILD CONTEXTS rather than the
-# main one, which keeps the build context at spear/ and therefore keeps the
+# main one, which keeps the build context at client/ and therefore keeps the
 # expensive layers above cached.
 #
 # The notes corpus is a deployment's own writing and is not in this repository;

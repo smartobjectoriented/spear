@@ -16,7 +16,7 @@ tests/                          runs without a GPU
 
 ## One repository, one commit
 
-`spear/` and `server/` version together, on purpose. The two halves talk over
+`client/` and `server/` version together, on purpose. The two halves talk over
 a wire protocol, and a protocol change that is one commit on one side and
 another commit on the other is a protocol that can be half-deployed. Here,
 "client commit X is tested against server commit X" is a statement about a
@@ -32,7 +32,7 @@ of the remote host.
 The server owns what the machine does: starting the inference process,
 loading weights, choosing a GPU, encoding.
 
-`spear/` must never import `server/`. A test enforces it. Tests may look at
+`client/` must never import `server/`. A test enforces it. Tests may look at
 both sides — that is what validating a contract means — but nothing in the
 client runtime may depend on the server tree being present.
 

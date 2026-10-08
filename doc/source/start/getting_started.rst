@@ -60,11 +60,11 @@ natively:
 
    $ git clone https://github.com/smartobjectoriented/spear ~/spear
    $ cd ~/spear
-   $ spear/deploy/install.sh        # the virtualenv, under spear/
-   $ spear/deploy/preflight.sh      # what the harness needs, checked
-   $ spear/spear-chat.sh --help     # every flag and setting
+   $ client/deploy/install.sh        # the virtualenv, under client/
+   $ client/deploy/preflight.sh      # what the harness needs, checked
+   $ client/spear-chat.sh --help     # every flag and setting
 
-``spear/spear-chat.sh`` is the launcher; linking it onto your ``PATH`` as
+``client/spear-chat.sh`` is the launcher; linking it onto your ``PATH`` as
 ``spear-chat`` is the usual arrangement, and the rest of this page assumes it.
 See :ref:`installation` for the details.
 

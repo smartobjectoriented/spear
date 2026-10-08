@@ -138,7 +138,7 @@ Runtime components
           v
        CommandRunner -- Bubblewrap
 
-The coding core (``spear/agent/``) imports nothing of SPEAR: it calls a
+The coding core (``client/agent/``) imports nothing of SPEAR: it calls a
 ``Host`` interface for every read, write and command, and ``SpearHost``
 implements that interface with SPEAR's policy. Its evidence is turned into the
 implementation verdict by ``completion.py``. In front of every mutation,

@@ -481,7 +481,7 @@ class RagChatCompatibilityTests(unittest.TestCase):
         self.assertIn('f"{APP_DIR}/chromadb"', client)
         if not os.environ.get("SPEAR_DB_PATH"):
             self.assertFalse(self.chat_settings.DB_PATH.startswith(app_dir))
-        self.assertNotIn("/opt/llm/spear/spear", client)
+        self.assertNotIn("/opt/llm/spear/client", client)
         self.assertEqual(self.corpus_search.TOP_K, 12)
         self.assertEqual(self.corpus_search.MAX_CONTEXT_CHARS, 12000)
         self.assertEqual(self.session_history.MAX_HISTORY, 80)

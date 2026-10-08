@@ -24,36 +24,36 @@ Files
    * - File
      - Tracked
      - Holds
-   * - ``spear/projects.json``
+   * - ``client/projects.json``
      - no
      - the corpus registry for this machine
-   * - ``spear/projects.example.json``
+   * - ``client/projects.example.json``
      - yes
      - the template for the above
-   * - ``spear/machine.env``
+   * - ``client/machine.env``
      - no
      - machine-specific environment: the one file that names what this
        deployment keeps outside the checkout. Read by the launcher, by
        ``spear-corpus`` and by ``scripts/docker/build.sh``. Written by
        ``scripts/spear-configure``
-   * - ``spear/machine.env.example``
+   * - ``client/machine.env.example``
      - yes
      - its shape, for reading; ``spear-configure`` writes the real one
-   * - ``spear/active-backend.conf``
+   * - ``client/active-backend.conf``
      - no
      - the backend chosen last
-   * - ``spear/active-model.conf``
+   * - ``client/active-model.conf``
      - no
      - the served model
-   * - ``spear/capabilities.json``
+   * - ``client/capabilities.json``
      - no
      - the external capability providers (:ref:`capabilities`);
        ``SPEAR_CAPABILITIES_FILE`` names another file
-   * - ``spear/rules.d/``
+   * - ``client/rules.d/``
      - yes (a README)
      - the rules, each applied where its header scopes it
        (:ref:`context_selection`); ``SPEAR_RULES_DIR`` relocates it
-   * - ``spear/skills/``
+   * - ``client/skills/``
      - yes (a README)
      - the skill library; ``SPEAR_SKILLS_DIR`` relocates it
    * - ``server/runtime/manifest.json``
@@ -185,7 +185,7 @@ Session state and audit
    * - ``--state-dir`` · ``SPEAR_STATE_DIR``
      - where the session accumulates; ``machine.env`` sets it
        (``~/.local/state/spear`` in the example). Unset, the chat keeps its
-       state in the ``spear/`` directory itself
+       state in the ``client/`` directory itself
    * - ``SPEAR_COMMON_STATE_DIR``
      - common state, read under the user's own and never written; unset by
        default, set by the image (:ref:`common-state`)

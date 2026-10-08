@@ -17,7 +17,7 @@ Everything uses the application's own virtualenv:
 
 .. code-block:: console
 
-   $ cd ~/spear/spear
+   $ cd ~/spear/client
 
    $ ./bin/python -m compileall -q agent cli context evidence harness models normative retrieval runtime standard training
    $ PYTHONPATH=. ./bin/python -m unittest discover -s tests -p "test_*.py"

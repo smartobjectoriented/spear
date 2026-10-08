@@ -19,7 +19,7 @@ Prerequisites
      - the execution harness places each tool call in a transient user scope;
        without a user manager it cannot apply resource control
    * - Python 3.12 or later
-     - the client runs from its own virtualenv under ``spear/``
+     - the client runs from its own virtualenv under ``client/``
    * - An inference endpoint
      - local, remote or hosted — see :ref:`Model backends <backends>`
    * - ``bubblewrap``
@@ -41,22 +41,22 @@ register a project.
 
    $ git clone https://github.com/smartobjectoriented/spear ~/spear
    $ cd ~/spear
-   $ spear/deploy/install.sh
+   $ client/deploy/install.sh
 
-The installer creates the virtualenv under ``spear/``, installs PyTorch and the
-client requirements from ``spear/deploy/requirements.txt``, and caches the
+The installer creates the virtualenv under ``client/``, installs PyTorch and the
+client requirements from ``client/deploy/requirements.txt``, and caches the
 active embedding model. It is idempotent. Check what the :term:`harness` needs before
 first use:
 
 .. code-block:: console
 
-   $ spear/deploy/preflight.sh
+   $ client/deploy/preflight.sh
 
 On Ubuntu 24.04 and later, unprivileged user namespaces are restricted by
-AppArmor and ``bwrap`` cannot start; ``sudo spear/deploy/enable-sandbox.sh``
+AppArmor and ``bwrap`` cannot start; ``sudo client/deploy/enable-sandbox.sh``
 installs the profile that allows it.
 
-The launcher is ``spear/spear-chat.sh``; putting it on your ``PATH`` as
+The launcher is ``client/spear-chat.sh``; putting it on your ``PATH`` as
 ``spear-chat`` is the usual arrangement.
 
 .. note::
@@ -109,7 +109,7 @@ What ends up where
 
    * - Path
      - Holds
-   * - ``spear/``
+   * - ``client/``
      - the client: chat, agent runtime, retrieval, execution harness
    * - ``server/``
      - the inference server component
@@ -121,18 +121,18 @@ What ends up where
      - the operator scripts: ``spear-configure``, ``spear-image``, the
        container build and launcher under ``scripts/docker/``, the version
        helper
-   * - ``spear/projects.json``
+   * - ``client/projects.json``
      - the corpus registry for **this** machine (untracked)
-   * - ``spear/machine.env``
+   * - ``client/machine.env``
      - machine-specific settings (untracked), written by ``spear-configure``
-   * - ``spear/capabilities.json``
+   * - ``client/capabilities.json``
      - the external capabilities (MCP providers) of **this** machine
        (untracked, optional; ``SPEAR_CAPABILITIES_FILE`` moves it)
    * - ``$SPEAR_STATE_DIR``
      - everything a session accumulates — history, audit trail, workspace
        knowledge (``knowledge.sqlite3``), ingested standards;
        ``spear-configure`` sets it to ``~/.local/state/spear``, and without
-       it the harness falls back to ``spear/``
+       it the harness falls back to ``client/``
 
 The untracked files are the boundary between the platform and the machine.
 Nothing machine-specific belongs in a tracked file — see
@@ -143,7 +143,7 @@ Nothing machine-specific belongs in a tracked file — see
 .. code-block:: console
 
    $ . ./env.sh                 # puts scripts/ on PATH
-   $ spear-configure            # writes spear/machine.env
+   $ spear-configure            # writes client/machine.env
    $ spear-configure --check    # does it still match this machine?
 
 It finds the state directory, a ``spear-private/`` tree beside the checkout,
@@ -157,7 +157,7 @@ Checking the installation
 
 .. code-block:: console
 
-   $ spear/spear-chat.sh --help          # the CLI, its flags and its settings
+   $ client/spear-chat.sh --help          # the CLI, its flags and its settings
    $ cd spear && PYTHONPATH=. ./bin/python -m unittest discover -s tests
 
 The suite runs offline and takes a few minutes (:ref:`testing`).

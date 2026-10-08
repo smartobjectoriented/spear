@@ -11,7 +11,7 @@ Retrieval is what closes that gap.
 Corpus
 ======
 
-The vector store lives in ``spear/chromadb/``.  It is entirely
+The vector store lives in ``client/chromadb/``.  It is entirely
 rebuildable: nothing in it is authoritative, it is a derived index of source
 trees that live elsewhere.
 
@@ -76,7 +76,7 @@ Projects
                    "collection": "bsp_a", "indexer": "buildsystem",
                    "autoindex": true, "prompt_file": "bsp-prompt.md" },
      "lvgl":     { "path": "/srv/src/lvgl", "kind": "generic" },
-     "spear":    { "path": "spear", "kind": "generic" }
+     "spear":    { "path": "client", "kind": "generic" }
    }
 
 ``kind`` is a label: it prints in the listing and selects no behaviour; rules
@@ -184,7 +184,7 @@ so once and does nothing:
 
    > generate a simple ping.c to run in so3
      ⎿  'so3' is a registered corpus (/srv/src/so3/so3), but your
-        tools run in /home/me/spear/spear. To work there:
+        tools run in /home/me/spear/client. To work there:
         cd /srv/src/so3/so3 && spear-chat
 
 Matching is on whole words, longest registered name first (so ``micropython-so3``
@@ -423,7 +423,7 @@ load the same weights and do not produce the same vectors, so a collection
 half-filled from each is quietly inconsistent.  ``RemoteEmbeddingError`` is
 raised and never swallowed.
 
-Before a deployment switches workers, ``spear/tests/test_embed_equivalence.py``
+Before a deployment switches workers, ``client/tests/test_embed_equivalence.py``
 runs both on real weights and requires the vectors to be **bit-identical** —
 not merely close.  Measured on ``BAAI/bge-m3``, max absolute difference **0.0**
 for documents and for queries, on CPU/fp32 and on CUDA/fp16 alike.
@@ -465,7 +465,7 @@ most easily wrong: a stale path in it sent the model looking for a build
 script deleted months earlier, while a stale *chunk* would merely have been
 outranked.
 
-They live in ``spear/rules.d/corpora/<corpus>.md``, **not** in the tree
+They live in ``client/rules.d/corpora/<corpus>.md``, **not** in the tree
 they describe.  Two reasons:
 
 * they say how the *assistant* should work, which is this repository's concern,

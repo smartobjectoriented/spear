@@ -145,12 +145,12 @@ class TheCodeDoesNotKnowWhereTheWorkerLives(unittest.TestCase):
     RETIRED = ("edgem" + "-ai-rag", "/home/re" + "ds-ml", "~/edg" + "em-ai")
 
     def sources(self):
-        out = subprocess.run(["git", "ls-files", "spear"], cwd=REPO,
+        out = subprocess.run(["git", "ls-files", "client"], cwd=REPO,
                              capture_output=True, text=True).stdout.split()
 
         return [REPO / name for name in out
                 if name.endswith((".py", ".sh"))
-                and not name.startswith("spear/tests/")]
+                and not name.startswith("client/tests/")]
 
     def test_no_module_names_a_remote_worker_path(self):
         """Whatever a deployment's layout is, the code must not have an

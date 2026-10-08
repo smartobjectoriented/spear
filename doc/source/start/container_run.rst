@@ -78,7 +78,7 @@ To see the list an image expects, ask it:
 .. code-block:: console
 
    $ docker run --rm --entrypoint cat ghcr.io/smartobjectoriented/spear:<version>-public \
-         /opt/spear/spear/projects.json
+         /opt/spear/client/projects.json
 
 Running it
 ==========

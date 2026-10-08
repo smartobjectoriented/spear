@@ -36,7 +36,7 @@ Selecting a backend
 Launched without a backend flag, an interactive session lists the configured
 choices and preselects the one used last — remembered in
 ``active-backend.conf`` in the state directory (``SPEAR_STATE_DIR``, else
-``spear/``). A flag skips the picker; off a terminal, the
+``client/``). A flag skips the picker; off a terminal, the
 last choice is reused silently.
 
 .. code-block:: console
@@ -62,11 +62,11 @@ Any endpoint can be addressed without touching a configuration file:
                 --model qwen3 \
                 --ctx 32768
 
-or through the environment, which is what ``spear/machine.env`` is for:
+or through the environment, which is what ``client/machine.env`` is for:
 
 .. code-block:: bash
 
-   # spear/machine.env — untracked, this machine only
+   # client/machine.env — untracked, this machine only
    export SPEAR_API_BASE="http://localhost:8080/v1"
    export SPEAR_MODEL_NAME="qwen3"
    export SPEAR_CTX=32768
@@ -173,7 +173,7 @@ ends.
 .. warning::
 
    Credentials belong in the environment or in an untracked
-   ``spear/machine.env``, never in a tracked file.
+   ``client/machine.env``, never in a tracked file.
 
 .. seealso::
 

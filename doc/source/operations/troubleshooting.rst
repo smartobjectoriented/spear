@@ -160,10 +160,10 @@ Where to look next
 
 .. code-block:: console
 
-   $ ls "${SPEAR_STATE_DIR:-$HOME/spear/spear}/audit/sessions"
+   $ ls "${SPEAR_STATE_DIR:-$HOME/spear/client}/audit/sessions"
 
 Without ``SPEAR_STATE_DIR``, the session state lives in the application
-directory, ``spear/`` of the checkout.
+directory, ``client/`` of the checkout.
 
 The newest session directory holds ``events.jsonl`` — every tool call in order,
 and whether a :term:`standard binding` was set — and ``snapshot.json``, the

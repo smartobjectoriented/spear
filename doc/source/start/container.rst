@@ -193,7 +193,7 @@ Two build contexts
 
 ``build.sh`` passes two, and the reason is size:
 
-``.`` (default) → ``spear/``
+``.`` (default) → ``client/``
    Harness code and the prebuilt index.  Narrow on purpose: a wider context
    would be re-transferred on every build and would invalidate the 4.5 GB
    embedder layer.
@@ -231,16 +231,16 @@ directory**.
      - In-tree default
    * - ``index``
      - ``SPEAR_INDEX_DIR``
-     - ``spear/chromadb``
+     - ``client/chromadb``
    * - ``rules``
      - ``SPEAR_RULES_DIR``
-     - ``spear/rules.d``
+     - ``client/rules.d``
    * - ``skills``
      - ``SPEAR_SKILLS_DIR``
-     - ``spear/skills``
+     - ``client/skills``
    * - ``benches``
      - ``SPEAR_BENCH_DIR``
-     - ``spear/benches``
+     - ``client/benches``
    * - ``notes``
      - ``SPEAR_NOTES_DIR``
      - ``claude/``
@@ -408,7 +408,7 @@ A deployment's own content, and how it gets in
 
 A deployment keeps what is specific to it **outside the checkout**: its rules,
 its skills, its benches, the trees it works on and the normative documents it
-answers from. ``spear/machine.env`` is the one untracked file that says where
+answers from. ``client/machine.env`` is the one untracked file that says where
 those live, and it is read by the launcher, by ``spear-corpus`` and — since it
 decides what an image carries — by ``scripts/docker/build.sh``.
 
@@ -463,7 +463,7 @@ What the build reports is what the image carries:
 
 .. code-block:: text
 
-   settings  …/spear/machine.env
+   settings  …/client/machine.env
    rules     …/rules.d
    skills    …/skills
    benches   …/benches
@@ -522,7 +522,7 @@ federations and the collection hash of each — and stale the moment a corpus wa
 added.  A clone with no ``projects.json`` gets an empty registry and an image
 that registers nothing, which is the honest answer: the operator registers
 their own trees.  The one registry the repository carries by hand is
-``spear/projects.example.json``, and it is a template.
+``client/projects.example.json``, and it is a template.
 
 It registers every corpus **relative** to ``SPEAR_CORPUS_ROOT`` (``/corpora``
 in the image), where a workstation registry uses absolute paths under the

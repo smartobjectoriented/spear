@@ -1,7 +1,7 @@
 """The embedding wire: both readers, held to the same bytes.
 
 The protocol is defined once in `server/embed/protocol.py` and implemented
-twice -- there and in `spear/embedding.py`. That is not an oversight. The
+twice -- there and in `client/retrieval/embedding.py`. That is not an oversight. The
 worker is installed on a different machine, with only `server/embed/` copied
 to it and none of the client tree, so neither side can import the other even
 if the boundary allowed it (`test_client_server_boundary`).

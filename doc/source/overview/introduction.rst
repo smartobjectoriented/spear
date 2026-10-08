@@ -59,7 +59,7 @@ illustrate, compare and contradict, never establish.
 
 It is **workspace-aware**. A turn starts from its workspace — a registered
 project, or an unregistered tree on its own — and is given only what belongs to
-it or is explicitly generic: rules, skills, workspace knowledge, project
+it or is explicitly generic: rules, skills, :term:`workspace knowledge`, project
 metadata and external capabilities, selected deterministically by workspace and
 task class, never by resemblance to the request (:ref:`context_selection`).
 
@@ -74,10 +74,10 @@ Every request is read for its class, and each class runs where its evidence
 can be kept (:doc:`/overview/architecture`):
 
 **GENERAL** and **IMPLEMENTATION**
-   no standard engaged. The coding core behind SpearHost; the turn ends with
-   implementation evidence — ``VERIFIED``, ``UNVERIFIED`` or ``NO_CHANGE``.
-   A change asked for in a standard-bound session that is not MIXED runs on
-   the normative runtime's guarded workflow instead (:ref:`workflow`).
+   no standard engaged. The :term:`coding core` behind :term:`SpearHost`; the turn ends with
+   :term:`implementation evidence` — ``VERIFIED``, ``UNVERIFIED`` or ``NO_CHANGE``.
+   A change asked for in a standard-bound session that is not :term:`MIXED` runs on
+   the :term:`normative runtime`'s guarded workflow instead (:ref:`workflow`).
 
 **NORMATIVE**
    a question about a bound standard. The normative runtime answers from the
@@ -86,10 +86,10 @@ can be kept (:doc:`/overview/architecture`):
 
 **MIXED**
    a change that must satisfy the bound standard. A normative pre-pass builds a
-   constraint packet, the coding core makes the change, and a post-check judges
+   :term:`constraint packet`, the coding core makes the change, and a post-check judges
    the final source against the packet on authoritative evidence alone. The
    verdict keeps both dimensions: the implementation evidence, and a normative
-   status. Compliance is reported only when normative evidence establishes it
+   status. Compliance is reported only when :term:`normative evidence` establishes it
    — otherwise ``NOT_DEMONSTRATED``, never compliant on a passing build.
 
 The parts
@@ -144,7 +144,7 @@ What SPEAR does
 
 **Controlled code modification**
     Changes are made by the coding core inside a contained workspace: every
-    read, write and command crosses the control plane, and a shell command
+    read, write and command crosses the :term:`control plane`, and a shell command
     cannot write where the file tools may not.  A file refused to one tool —
     generated output, a snapshot copy — is refused to every tool, deletion and
     shell redirection included; a turn that keeps repeating a refused
@@ -181,7 +181,7 @@ Why the harness is the interesting part
 =======================================
 
 A model that can only talk is safe and not very useful.  A model that can run
-arbitrary commands is useful and not at all safe.  The harness is the entire
+arbitrary commands is useful and not at all safe.  The :term:`harness` is the entire
 answer to "how do we get the second without the first".
 
 Its design rests on one rule, applied without exception:

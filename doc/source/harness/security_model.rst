@@ -40,9 +40,9 @@ that line is the only place most users will ever read them.
 The control plane in front of the coding core
 =============================================
 
-The coding core (:doc:`/reasoning/implementation`) never touches the host
+The :term:`coding core` (:doc:`/reasoning/implementation`) never touches the host
 itself: every read, write, deletion and command it asks for is a call on
-SpearHost, and SpearHost applies the same rules this page describes to all of
+:term:`SpearHost`, and SpearHost applies the same rules this page describes to all of
 them, whichever tool asked.
 
 **Workspace containment.** Every path — and every command's working directory
@@ -264,7 +264,7 @@ checks the class and its required capabilities against the mode:
    ``shell:complex``, and is executed as an explicit ``bash -lc <script>``
    argv inside the sandbox (``/bin/sh`` where there is no bash), behind a
    ``set -o pipefail`` prelude so a failed stage is not masked by the last
-   one.  The harness never uses ``shell=True``.
+   one.  The :term:`harness` never uses ``shell=True``.
 
 ``DANGEROUS``
    Refused.

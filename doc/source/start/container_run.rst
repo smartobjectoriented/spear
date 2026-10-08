@@ -19,7 +19,7 @@ What you need
 * **A model endpoint**: any OpenAI-compatible server (``llama-server``, vLLM…)
   reachable from your machine.  The image does not contain a model.  The
   Anthropic API can answer questions and normative requests, but changes run
-  on the coding core, which needs an OpenAI-compatible endpoint.
+  on the :term:`coding core`, which needs an OpenAI-compatible endpoint.
 
 Getting the image
 =================
@@ -114,7 +114,7 @@ Each line has a reason:
    so a server — or an SSH tunnel to one — listening locally is reachable as is.
 
 ``--user`` and the state volume
-   Conversations, workspace knowledge, the audit trail and — through
+   Conversations, :term:`workspace knowledge`, the audit trail and — through
    ``SPEAR_DB_PATH`` — the retrieval index you build are written to
    ``~/.spear/state`` as you, and survive the container.  Without the volume
    they are lost when it exits.
@@ -123,7 +123,7 @@ Each line has a reason:
    Your checkouts, read-write: the assistant edits files when you ask it to.
    The working directory picks the corpus the session opens on.
 
-Anything after the image name goes to the harness unchanged, as it would to
+Anything after the image name goes to the :term:`harness` unchanged, as it would to
 ``spear-chat``, e.g. ``--auto``, ``--fresh`` or ``--temp 0.1`` (:ref:`usage`).
 The launcher's own backend flags — ``--reds``, ``--local`` — do not apply: the
 endpoint is ``SPEAR_API_BASE``.

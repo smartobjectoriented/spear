@@ -3,11 +3,11 @@
 The bound-session change workflow
 #################################
 
-Most changes run on the coding core (:ref:`implementation_mode`), and a change
-that has to satisfy the bound standard runs as a MIXED request
+Most changes run on the :term:`coding core` (:ref:`implementation_mode`), and a change
+that has to satisfy the bound standard runs as a :term:`MIXED` request
 (:ref:`mixed_mode`). One case remains: a change asked for in a session where a
 standard is engaged, in words that do not make it MIXED. It runs on the
-normative runtime, which holds every write to a five-stage workflow. Each stage
+:term:`normative runtime`, which holds every write to a five-stage workflow. Each stage
 opens on a condition the runtime can check, and a stage that cannot open says
 so rather than proceeding on an assumption. External capabilities are not
 available on this path; the turn says so when its workspace has any.

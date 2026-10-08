@@ -40,10 +40,10 @@ Overview
 ********
 
 SPEAR is an engineering agent for specified systems. It keeps apart the agent
-that changes code, the control plane that confines it, the evidence of what it
+that changes code, the :term:`control plane` that confines it, the evidence of what it
 did, the normative reasoning about a bound standard, and the compliance
 evidence that judges a change — and computes its verdicts from that evidence on
-the final source state. Each turn is given the context of its own workspace —
+the :term:`final source state`. Each turn is given the context of its own workspace —
 rules, skills, knowledge, project metadata and external capabilities — selected
 deterministically by workspace and task class.
 

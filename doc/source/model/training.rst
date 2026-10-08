@@ -4,7 +4,7 @@
 Training and fine-tuning
 ========================
 
-The harness produces its own training data.  Every task it runs leaves a
+The :term:`harness` produces its own training data.  Every task it runs leaves a
 trajectory behind, and this subsystem is what turns that exhaust into a
 governed dataset, freezes it into an auditable bundle, decides whether the
 hardware can hold the run, and — only on an explicit operator command — starts

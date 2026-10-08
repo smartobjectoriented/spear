@@ -5,7 +5,7 @@ Normative mode: authoritative standards
 
 A request about what a bound document requires — "what does Rule 7.1-3
 require?", "how are the descriptor words parsed?" — is a **NORMATIVE**
-request. It is answered by the normative runtime, from the document first, and
+request. It is answered by the :term:`normative runtime`, from the document first, and
 every normative claim in the answer carries the provision it rests on. This is
 the part of SPEAR that is not a coding assistant feature.
 
@@ -537,7 +537,7 @@ the document requires, this is what the implementation does, and here is where
 they differ. Nothing merges them for you; the distinction is the product.
 
 A request to *change* the code so that it satisfies the standard is a different
-thing, and runs differently: it is a MIXED request, with its own pipeline and
+thing, and runs differently: it is a :term:`MIXED` request, with its own pipeline and
 its own verdict. See :ref:`mixed_mode`.
 
 .. seealso::

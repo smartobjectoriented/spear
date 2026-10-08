@@ -155,7 +155,7 @@ flags and the variable live together in one launcher.
 The supervisor environment
 --------------------------
 
-The harness historically launched bwrap with ``env={}``.  ``systemd-run --user``
+The :term:`harness` historically launched bwrap with ``env={}``.  ``systemd-run --user``
 cannot reach the user bus that way:
 
 .. code-block:: text
@@ -373,7 +373,7 @@ applies **none** — it is a mechanism, and keeping it that way is what lets
 preflight and the test suite run without a systemd user bus.  The production
 path is ``rag_chat`` → ``CommandRunner.run_sandboxed()`` → ``sandbox.run(…,
 cgroup_limits=self.cgroup_limits)`` — for the coding core's ``terminal`` calls
-too, which reach it through SpearHost.
+too, which reach it through :term:`SpearHost`.
 
 Observed on the live cgroup of a scoped production command:
 

@@ -54,7 +54,7 @@ The flags that matter
    are added by ``serve.sh`` only when the window exceeds the trained length,
    since YaRN is static and would otherwise touch every short prompt too.
    Measured: a fact 40 % into a 311 744-token prompt was recalled exactly, and
-   generation speed did not change.  The harness still truncates long tool
+   generation speed did not change.  The :term:`harness` still truncates long tool
    outputs at ``max_output_chars`` (10 000 by default) so a single verbose
    build log cannot evict the conversation.
 
@@ -99,7 +99,7 @@ temperature (``--temp``, ``SPEAR_TEMP``, default 0.25), ``top_p`` 0.8,
 ``top_k`` 20 and a repetition penalty of 1.05, and disables the model's
 thinking mode; ``SPEAR_SAMPLING=server`` sends none of them. A model that
 falls into repetition at a low temperature wants it raised, and a stream
-circuit-breaker truncates a loop when it happens anyway. The coding core sends
+circuit-breaker truncates a loop when it happens anyway. The :term:`coding core` sends
 no sampling parameters of its own: the server's defaults apply, and one of its
 responses is capped at ``SPEAR_RESPONSE_MAX_TOKENS`` (16384) tokens
 (:ref:`backends`).

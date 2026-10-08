@@ -4,7 +4,7 @@
 Container
 =========
 
-The container exists to hand the assistant to someone else: the harness, its
+The container exists to hand the assistant to someone else: the :term:`harness`, its
 dependencies, the embedder and a prebuilt retrieval index, in one image.  They
 mount their own checkouts and point it at a model endpoint.
 
@@ -109,7 +109,7 @@ workstation mode; a colleague without the repository mounts under ``/corpora``
 instead (:ref:`container_run`).
 
 **Session state is written outside the image**, as the host user.  History,
-workspace knowledge, trajectories and the audit trail accumulate; ``docker run --rm``
+:term:`workspace knowledge`, trajectories and the audit trail accumulate; ``docker run --rm``
 would throw them away, and a container running as root would leave them
 owned by root and unreadable to the harness running natively.  The default is
 ``~/.spear/state``, overridable with ``--state DIR`` or

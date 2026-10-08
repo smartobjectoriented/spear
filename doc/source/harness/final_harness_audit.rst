@@ -29,15 +29,15 @@ Production maturity
 CORE / DEFAULT ON
 
 * request classification and routing (``TaskController``, ``answer_scope``)
-* the coding core and ``SpearHost``, its control plane
+* the :term:`coding core` and ``SpearHost``, its :term:`control plane`
 * the evidence plane: canonical evidence, source epochs, the implementation
   verdict and project validation
-* the MIXED orchestration: constraint packet, structural coverage,
+* the :term:`MIXED` orchestration: :term:`constraint packet`, :term:`structural coverage`,
   applicability, source predicates and bound conformance checks
 * ``AgentRuntime`` (the normative and general runtime)
 * ``WorkingState`` and ``ContextEngine``
 * transactional semantic compaction
-* selected ``MarkdownMemoryStore`` memories and workspace knowledge
+* selected ``MarkdownMemoryStore`` memories and :term:`workspace knowledge`
   (``KnowledgeStore``)
 * ``ToolRegistry`` / ``ToolRouter`` / ``ResultStore``
 * ``SessionStore`` and cancellation
@@ -100,7 +100,7 @@ Security and provider boundary
 
 All command execution still passes ``ToolRouter``'s authorization and the
 CommandPolicy/CommandRunner/Bubblewrap boundary — the coding core's included,
-through SpearHost. The two host commands, ``spear-capability`` and
+through :term:`SpearHost`. The two host commands, ``spear-capability`` and
 ``spear-knowledge``, are answered by SpearHost and never reach a shell; the MCP
 providers behind the first run on the host, outside the sandbox, under the
 gateway's read/write policy. Read-only child roles receive

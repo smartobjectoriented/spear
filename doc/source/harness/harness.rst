@@ -11,7 +11,7 @@ socket on the machine you are reading this on.
 
 One rule governs all of it, and it is worth stating before any of the
 mechanisms: **fail-closed**. A confinement that cannot be applied is an
-error, never a silent downgrade. A model that asks for something the harness
+error, never a silent downgrade. A model that asks for something the :term:`harness`
 cannot confine gets a refusal, not a shortcut. Every page below is, in the
 end, an account of how one mechanism holds that line and what it costs when
 it cannot.

@@ -148,7 +148,7 @@ Session commands:
    Change backend or model without leaving the session.
 
 ``/clear`` (or ``/new``)
-   Start a fresh conversation. The corpus, its workspace knowledge and its index
+   Start a fresh conversation. The corpus, its :term:`workspace knowledge` and its index
    are unaffected; only the conversation is dropped, from the store as well. To
    start one session without it and keep it for later, launch with ``--fresh``.
 
@@ -196,7 +196,7 @@ fine-tuning machinery.
    :doc:`/reasoning/standards`.
 
 ``/finetune``
-   The fine-tuning control plane. See :doc:`/model/training`.
+   The fine-tuning :term:`control plane`. See :doc:`/model/training`.
 
 Multi-line paste is supported; ``ctrl+c`` interrupts generation; ``Enter``
 confirms tool prompts; arrows, ``Home``/``End`` and ``ctrl+r`` come from
@@ -223,7 +223,7 @@ to sit on.  A long PDF comes back in slices, and the result names the ``pages``
 range that continues it.  ``save_as=<path>`` downloads the file itself, never a
 truncated one, and is a mutation — so it obeys the permission mode like any
 write.  That is the route to a document you mean to ingest as a standard.  The
-pair is described from the harness side in :ref:`the-web-pair`.
+pair is described from the :term:`harness` side in :ref:`the-web-pair`.
 
 Knowledge layers, on different clocks
 =====================================
@@ -271,11 +271,11 @@ harness by them:
 What a turn is allowed to do
 ============================
 
-Which request class a turn falls into decides which path runs it
-(:doc:`/reasoning/index`): an implementation request runs on the coding core
-behind SpearHost (in a standard-bound session, on SPEAR's earlier runtime), a
-question about a bound standard on the normative runtime,
-and a change that must satisfy the standard through the MIXED orchestration.
+Which :term:`request class` a turn falls into decides which path runs it
+(:doc:`/reasoning/index`): an implementation request runs on the :term:`coding core`
+behind :term:`SpearHost` (in a standard-bound session, on SPEAR's earlier runtime), a
+question about a bound standard on the :term:`normative runtime`,
+and a change that must satisfy the standard through the :term:`MIXED` orchestration.
 On every path:
 
 * the permission mode decides whether anything is written or run at all, and

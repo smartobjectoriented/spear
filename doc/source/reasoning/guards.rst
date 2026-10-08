@@ -126,11 +126,11 @@ of the conversation it was generated from:
    checkpoints  runtime-trace.jsonl  sessions  tool-actions.jsonl  tool-results
 
 The per-session ``events.jsonl`` carries the turn-by-turn event stream —
-including which tools ran, in which order, and whether a standard binding was
+including which tools ran, in which order, and whether a :term:`standard binding` was
 set for the turn. That is the record to read when an answer surprises you.
 ``runtime-trace.jsonl`` holds the runtime's own decisions across sessions:
 what context each turn was selected, which turns were stopped and why, and on
-a MIXED turn every step from the pre-pass to the final verdict.
+a :term:`MIXED` turn every step from the pre-pass to the final verdict.
 
 .. seealso::
 

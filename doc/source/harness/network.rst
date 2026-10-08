@@ -13,7 +13,7 @@ The capability is granted by the session's mode — confirmed per command in
 ``ASK``, granted in ``AUTO``, never in ``SAFE`` — and ``--no-network`` takes it
 out of every mode (:doc:`security_model`).  This page covers sandboxed
 commands only: the web pair runs in the chat process under its own boundary
-(``web_fetch.py``), and an external capability provider is a host process
+(``web_fetch.py``), and an :term:`external capability` provider is a host process
 reached through the capability gateway, not through this backend.
 
 .. figure:: /img/SPEAR-Network.drawio.png

@@ -13,12 +13,12 @@ constraint on evidence the model cannot supply. :doc:`/overview/introduction`
 explains why it is built that way.
 
 This page goes from nothing to a first change, a first normative answer and a
-first MIXED task.
+first :term:`MIXED` task.
 
 Prerequisites
 =============
 
-* Linux with systemd and ``bubblewrap`` — the execution harness confines every
+* Linux with systemd and ``bubblewrap`` — the execution :term:`harness` confines every
   command in a sandbox and refuses to run without one;
 * Python 3.12 for a native installation, or Docker for the container;
 * a model endpoint: an OpenAI-compatible server, local or remote
@@ -81,7 +81,7 @@ which backend to use and remembers the answer:
    $ spear-chat --provider anthropic --model <model-id>    # the Anthropic API
 
 The Anthropic backend serves questions and normative answers; changes run on
-the coding core, which needs an OpenAI-compatible endpoint. Serving a model
+the :term:`coding core`, which needs an OpenAI-compatible endpoint. Serving a model
 yourself is covered in :doc:`/model/model`.
 
 Use a project
@@ -125,7 +125,7 @@ A request about the tree runs on the coding core (:ref:`implementation_mode`):
    > Fix the off-by-one in ring_next() in src/ring.c, then run make.
 
 The core reads, edits and runs ``make`` inside the workspace; every call
-crosses the control plane, and in ``--ask`` you confirm each one. The answer
+crosses the :term:`control plane`, and in ``--ask`` you confirm each one. The answer
 ends with SPEAR's own verdict on what was shown — ``VERIFIED`` if a build ran
 and passed on the final source, ``UNVERIFIED`` (with the reason) if not. A
 command sent to the background (``make &``), or a Makefile that only prints its
@@ -179,7 +179,7 @@ Ask for a change in the standard's terms:
      the way the standard requires.
 
 That is a MIXED request (:ref:`mixed_mode`). SPEAR identifies the governing
-provisions first, read-only; turns them into a compact constraint packet; lets
+provisions first, read-only; turns them into a compact :term:`constraint packet`; lets
 the coding core make the change; and judges the final source against the
 packet.
 

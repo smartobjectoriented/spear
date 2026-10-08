@@ -24,7 +24,7 @@ The server's side is :ref:`inference_host`; its step 9 is the full check.
 Reading a failure
 =================
 
-Every harness failure surfaces as a ``ToolResult`` whose ``summary`` names the
+Every :term:`harness` failure surfaces as a ``ToolResult`` whose ``summary`` names the
 mechanism that refused.  The vocabulary is deliberately narrow.
 
 .. list-table::

@@ -47,7 +47,7 @@ is refused with a pointer to ``rules.d``, while "the validation command is
 ``make test``" is a fact. Knowledge never reaches a question about the bound
 standard, the normative pre-pass or the compliance check, so a record can never
 establish a provision, its applicability or a verdict. It grants no permission
-and no external capability.
+and no :term:`external capability`.
 
 ``/remember <fact>`` is a shorthand for recording one: the same record, in the
 same store, with the same checks -- an instruction, or something true only for
@@ -124,7 +124,7 @@ What a turn is shown
 ********************
 
 A turn that changes code, a general question, and the implementation pass of a
-MIXED change are shown the workspace's active records under *Workspace
+:term:`MIXED` change are shown the workspace's active records under *Workspace
 knowledge*, each with its provenance. Up to ten short records are shown whole.
 A larger set is shown as an index -- one line a record, grouped by kind --
 with the records the request names (by subject, tag or path) in full, and the
@@ -143,7 +143,7 @@ every conflict is in the audit trail (``knowledge_proposed``,
 Legacy remembered notes
 ***********************
 
-Before workspace knowledge, ``/remember`` and the ``remember`` tool appended
+Before :term:`workspace knowledge`, ``/remember`` and the ``remember`` tool appended
 notes to a ``memories-*.md`` file per corpus. Those notes are no longer shown to
 a turn, and SPEAR says so at start-up while a file is unmigrated. Nothing moves
 them automatically:

@@ -52,7 +52,8 @@ sentence; a function docstring says what it guarantees, not how.
 Typing
 ******
 
-``from __future__ import annotations`` at the top of every module, and return
+``from __future__ import annotations`` at the top of every module (a few
+older entry points such as ``rag_chat.py`` predate the rule), and return
 annotations wherever the return type is not obvious from the name. The point is not type checking, which
 nothing in CI runs; it is that a signature should answer "what comes back"
 without the reader opening the body.
@@ -78,6 +79,15 @@ Modules are nouns for what they hold (``tool_registry``, ``answer_scope``,
 ``evidence_handles``). A predicate returns a boolean and reads as one at the
 call site — ``retains_raw_pdf(root)``, ``withholds_local_tools(scope)`` — so
 that a condition can be read aloud.
+
+Vendored code
+*************
+
+``agent/hermes/`` is code copied from Hermes Agent under its MIT licence. It
+keeps its upstream form — each module names its upstream path in its header,
+and nothing is changed unless that header says so — and
+``THIRD_PARTY_NOTICES.md`` records the provenance. These conventions do not
+apply to it.
 
 Fail-closed, in code
 ********************

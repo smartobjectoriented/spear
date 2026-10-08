@@ -71,7 +71,8 @@ and a shell that has also sourced another tree's ``env.sh`` with a
 
 A profile names the tag ``build.sh`` gives by default,
 ``spear:<version>-<profile>``, where the version is the release the tree is
-(``scripts/spearversion.sh``: the latest ``v*`` tag, else the release line);
+(``scripts/spearversion.sh``: the latest ``v*`` tag, else the fallback the
+release sets, such as ``0.3.0-rc1``);
 anything containing a ``:`` is taken as a tag.  ``spear-image`` decides nothing the scripts under it
 would not: ``build.sh`` still decides what a profile may carry and ``push.sh``
 still refuses a ``private`` image without ``--allow-push``.
@@ -108,17 +109,16 @@ workstation mode; a colleague without the repository mounts under ``/corpora``
 instead (:ref:`container_run`).
 
 **Session state is written outside the image**, as the host user.  History,
-memories, trajectories and the audit trail accumulate; ``docker run --rm``
+workspace knowledge, trajectories and the audit trail accumulate; ``docker run --rm``
 would throw them away, and a container running as root would leave them
 owned by root and unreadable to the harness running natively.  The default is
 ``~/.spear/state``, overridable with ``--state DIR`` or
 ``SPEAR_STATE_DIR``.
 
-That separation is also a change in the harness itself: ``STATE_DIR`` covers
+That separation is also a property of the harness itself: ``STATE_DIR`` covers
 every path that accumulates and defaults to the application directory, so a
-workstation launch is unaffected.  Since the agent rework it covers thirteen,
-and the five that were added are the ones that make a session reconstructible
-rather than merely readable:
+workstation launch is unaffected.  The paths that matter most are the ones that
+make a session reconstructible rather than merely readable:
 
 .. list-table::
    :header-rows: 1
@@ -137,13 +137,20 @@ rather than merely readable:
      - the spans: which tool ran, how long, with what outcome
    * - ``audit/tool-actions.jsonl``
      - the metadata-only record of every mutating attempt
-   * - ``history*.json``, ``history-archive.jsonl``, ``memories-*.md``,
-       ``trajectories.jsonl``, ``.input_history``
-     - conversation, durable knowledge, and the trajectories a future
-       fine-tune would train on
+   * - ``knowledge.sqlite3``
+     - the workspace knowledge: every recorded fact, its provenance and its
+       state
+   * - ``history*.json``, ``history-archive.jsonl``, ``trajectories.jsonl``,
+       ``.input_history``
+     - conversation, and the trajectories a future fine-tune would train on
 
 Evidence inside the image is evidence lost with the container that produced
 it, which is precisely the case it exists for.
+
+External capabilities are not baked: ``capabilities.json`` is a machine's own
+file, and the MCP servers it starts must exist where the harness runs. A
+container that needs them is given the file through a mount and
+``SPEAR_CAPABILITIES_FILE`` (:ref:`capabilities`).
 
 What is baked, and what is not
 ==============================

@@ -9,7 +9,8 @@ that has to satisfy the bound standard runs as a MIXED request
 standard is engaged, in words that do not make it MIXED. It runs on the
 normative runtime, which holds every write to a five-stage workflow. Each stage
 opens on a condition the runtime can check, and a stage that cannot open says
-so rather than proceeding on an assumption.
+so rather than proceeding on an assumption. External capabilities are not
+available on this path; the turn says so when its workspace has any.
 
 .. figure:: /img/SPEAR-Workflow.drawio.png
    :width: 100%

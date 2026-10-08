@@ -150,6 +150,11 @@ trail and the verdict refer to.
 The coding core receives the objective and this packet, compactly, and nothing
 else of the standard — no surrounding sections, no normative tools.
 
+The workspace's knowledge and its external capabilities reach this pass and
+no other. The pre-pass answers from the standard alone, and the post-check
+reads only the packet and the final source: what someone once noted about a
+project is not evidence of what a standard requires.
+
 3. Implementation, then the final source
 ========================================
 
@@ -306,10 +311,10 @@ field shall contain exactly four entries (Rule 4.2.1-2), and that the
    applicability unresolved 0, evidence conflicts 0.
    - C1 Rule 4.2.1-1 (SHALL, when flag X is set; applicability APPLICABLE):
      SATISFIED — CONDITIONAL_VALUE: the provision states 2, the final source
-     gives 2 (record.py:2 mode = 2 if flag_x else 1)
+     gives 2 (record.py:2 `mode = 2 if flag_x else 1`) [record.py:2]
    - C2 Rule 4.2.1-2 (SHALL; applicability APPLICABLE): SATISFIED —
      EXACT_COUNT: the provision states 4, the final source gives 4
-     (record.py:3 count = [0, 0, 0, 0])
+     (record.py:3 `count = [0, 0, 0, 0]`) [record.py:3]
    - C3 Permission 4.2.1-3 (MAY; applicability APPLICABLE): NOT_DEMONSTRATED
    Implementation evidence: VERIFIED. Normative: SATISFIED.
 

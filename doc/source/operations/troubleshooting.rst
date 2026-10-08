@@ -39,8 +39,8 @@ Check the endpoint directly:
    $ curl -s http://localhost:8080/v1/models
 
 The banner names the backend the session is talking to. If it names one you did
-not expect, a remembered choice in ``spear/active-backend.conf`` is being
-reused — pass the backend flag explicitly.
+not expect, a remembered choice in ``active-backend.conf`` is being reused —
+pass the backend flag explicitly.
 
 Where the backend is reached over an SSH tunnel, the flag opens the tunnel but
 does not start the server on the far side.
@@ -160,7 +160,10 @@ Where to look next
 
 .. code-block:: console
 
-   $ ls "${SPEAR_STATE_DIR:-$HOME/.local/state/spear}/audit/sessions"
+   $ ls "${SPEAR_STATE_DIR:-$HOME/spear/spear}/audit/sessions"
+
+Without ``SPEAR_STATE_DIR``, the session state lives in the application
+directory, ``spear/`` of the checkout.
 
 The newest session directory holds ``events.jsonl`` — every tool call in order,
 and whether a standard binding was set — and ``snapshot.json``, the

@@ -38,7 +38,15 @@ Glossary
    Implementation evidence
       The structured record of what a turn's tools did and what its checks
       showed, and the verdict computed from it: ``VERIFIED``,
-      ``UNVERIFIED`` or ``NO_CHANGE``.
+      ``UNVERIFIED`` or ``NO_CHANGE``. ``VERIFIED`` requires a build or test
+      that ran and passed after the last change to the source; a command sent
+      to the background, or a Makefile that only prints its help, is no check.
+
+   Declared and probed commands
+      A project's build and test commands, either declared in
+      ``projects.json`` (``build_commands``, ``test_commands``) or probed from
+      the files in the tree. Both may verify a change; a declared kind wins,
+      and a probe only fills a kind the project left undeclared.
 
    Final source state
       The tree as it stands after a turn's last change. Only a check that ran
@@ -52,6 +60,13 @@ Glossary
       Evidence that a constraint taken from the bound standard holds in the
       final source: a source predicate, or a conformance check bound to the
       provision. A model's reading is never normative evidence.
+
+   Compliance not demonstrated
+      The normative status of a MIXED change when the bound standard's own
+      evidence does not establish that each applicable constraint holds.
+      Compliance is reported only from normative evidence — never from a
+      passing build — so ``NOT_DEMONSTRATED`` is the honest default, not a
+      finding of non-compliance.
 
    Constraint packet
       The ``NormativeConstraintSet`` a MIXED request is implemented and judged
@@ -76,6 +91,44 @@ Glossary
       A deterministic reading of a constraint off the final source —
       ``EXACT_COUNT``, ``VALUE_EQUALS``, ``CONDITIONAL_VALUE`` — that decides
       only when nothing has to be interpreted.
+
+   Workspace
+      What a turn starts from: a registered project, or an unregistered tree on
+      its own. It decides which rules, skills, knowledge, metadata and
+      capabilities the turn may be given, and nothing scoped to another
+      workspace reaches it.
+
+   Context selection
+      The deterministic choice of what a turn is shown, made per workspace and
+      per task class or MIXED pass, never by resemblance to the request. Every
+      eligible skill is offered, up to a bound per turn; every decision is
+      audited and none is shown to the model.
+
+   Workspace knowledge
+      Typed, persistent facts about one workspace, each with its provenance,
+      its verification and a lifecycle — proposed, active, stale, revoked —
+      kept in ``knowledge.sqlite3`` under the state directory. ``/remember``
+      and ``/knowledge`` record it as the operator's; what a model offers stays
+      a proposal until the operator accepts it. It describes; it never grants a
+      permission or outranks the request, the rules or the configuration.
+
+   External capability
+      An operation of an external provider — a tool of an MCP server over
+      stdio — registered in ``capabilities.json`` for the workspaces and task
+      classes it applies to. It is reached only through the capability
+      gateway, which applies the read/write policy; a small family is listed
+      whole, a large one as an index read with ``spear-capability``.
+
+   Target policy
+      The rule that a refusal attaches to the file, not to the tool: generated
+      output and snapshot copies refused to ``write_file`` and ``patch`` are
+      refused to every other mutation as well, ``delete_file`` and shell
+      redirection included.
+
+   Refusal breaker
+      The guard that stops a turn which keeps asking for an operation already
+      refused — five identical refusals by default
+      (``SPEAR_REFUSAL_REPEATS``).
 
    Corpus
       A source tree registered for retrieval, declared in ``projects.json``

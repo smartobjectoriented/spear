@@ -20,7 +20,7 @@ not an authorization substitute: every selected command and path still passes
 through the capability, workspace, ``CommandRunner`` and Bubblewrap checks
 described below.
 
-``SAFE`` — ``spear-chat`` (no flag)
+``SAFE`` — ``spear-chat`` (no flag, or ``--safe``)
    The default.  Read-only work.  Nothing mutates, nothing reaches the
    network.  A write is refused outright; it is not proposed.
 
@@ -51,17 +51,31 @@ A link cannot carry a write outside it, and ``delete_file`` removes a link, not
 what it points at.
 
 **Source and write scope.** A request that names its target confines writes to
-that target and what belongs to it. The same judgement is applied to what a
-shell command writes — a redirection, the destination of ``cp``, ``mv`` or
-``install``, the operands of ``rm``, ``touch``, ``mkdir``, ``tee`` or
-``sed -i``, and any path an inline interpreter program names. **A terminal
-command cannot make a change the file tools would refuse.**
+that target and what belongs to it: a sibling of the same family (another
+board, another driver) is refused unless the request widened to the whole
+family, and the coding core has no argument that lets a write past it. The
+same judgement is applied to what a shell command writes — a redirection, the
+destination of ``cp``, ``mv``, ``install``, ``ln`` or ``rsync``, the ``of=``
+of ``dd``, the operands of ``rm``, ``touch``, ``mkdir``, ``tee``,
+``truncate`` or ``sed -i``, and any path an inline interpreter program names —
+with relative operands read from the directory the command runs in
+(``request_scope.py``). **A terminal command cannot make a change the file
+tools would refuse.**
+
+**Project scope.** A command that searches outside the project (``find`` or
+a recursive ``grep`` rooted elsewhere, ``locate``), or names a path of the
+home directory outside it, is refused unless the operator named that path:
+another checkout is another project, not a source of this one's build.
 
 **Generated and protected trees.** Build outputs (``/generated/``,
-``/build/tmp/``, files marked *DO NOT MODIFY* or *auto-generated*) and
-snapshot or third-party copies (``.back``, ``.pristine``, ``.0`` trees,
-vendored ``u-boot``, ``atf``, ``qemu``) are never written; the refusal points
-at the source to change instead.
+``/build/tmp/``, files whose head says *DO NOT MODIFY*, *DO NOT EDIT*,
+*auto-generated* or ``@generated``) and snapshot or third-party copies
+(``.back``, ``.pristine``, ``.0`` trees, vendored ``u-boot``, ``atf``,
+``qemu``) are never written; the refusal points at the source to change
+instead. The rule belongs to the target, not to the tool
+(``target_policy.py``): ``write_file``, ``patch``, ``delete_file`` and every
+shell write listed above ask the same question, about the path as written and
+about its ``realpath``, so a link or a ``..`` does not change the answer.
 
 **Read-only and advisory turns.** A turn that only asks to be told something,
 or is told not to change anything, keeps its reading tools and runs its
@@ -70,6 +84,23 @@ through the terminal.
 
 **Network.** A command reaches the network only if the session's mode grants
 it (below), through the sandbox's own network stack.
+
+**Repeated refusals.** A refusal is deterministic, so a turn that asks for the
+same refused operation five times is stopped and the stop audited
+(``repeated_refusal_stopped``, :doc:`tool_harness`).
+
+**External capabilities.** ``spear-capability`` and ``spear-knowledge`` are
+host commands: SpearHost recognises them in a ``terminal`` call and answers
+them itself, and no shell ever runs them. Each must stand alone on one line —
+not in a pipeline, a list, a redirection or a substitution. A capability runs
+through the gateway (``capability_gateway.py``) only if its provider is
+admitted for the workspace and task class and the arguments fit its declared
+schema; a ``WRITE`` capability also needs a deployment that does not refuse
+it, a turn allowed to change things, and the session's confirmation (refused
+in ``SAFE``, asked in ``ASK``, accepted in ``AUTO``). Providers are MCP
+servers started by SPEAR on the host with only the environment their
+registration names; they are outside the Bubblewrap sandbox, which is why
+what a registration may do is the deployment's decision.
 
 **Audit and evidence.** Every call is audited, every mutation checkpointed for
 ``/undo``, and every call recorded as canonical evidence — what it changed,
@@ -134,7 +165,8 @@ workspace``, a refusal the model could not act on — while buying no
 containment, because looking at a file is not changing it.
 
 The grant is read-only *by construction*: the vetted paths are exposed
-``--ro-bind`` and bound **before** the workspace mounts, so a declared tree
+read-only (``--ro-bind-try``, so a file gone in between reports ``ENOENT``)
+and bound **before** the workspace mounts, so a declared tree
 nested under one of them keeps the write access the workspace gives it.  A
 command that writes there meets ``EROFS``, which is the truthful error.
 
@@ -142,11 +174,13 @@ Three things stay refused, and each is checked against both the literal
 spelling and the resolved one, so a symlink is not a way round:
 
 * **credential stores** — ``.ssh``, ``.gnupg``, ``.aws``, ``.docker``,
-  ``.kube``, ``.netrc``, ``.git-credentials``, ``id_*``, ``shadow``,
-  ``sudoers``.  The model is served over the network: a file read here is a
+  ``.kube``, ``.netrc``, ``.pgpass``, ``.git-credentials``, ``id_*``,
+  ``shadow``, ``gshadow``, ``sudoers``.  The model is served over the network: a file read here is a
   file sent there.
-* **the sandbox's own mount points** and any ancestor of one — binding
-  ``/home`` would land on top of the sandbox's ``$HOME``.
+* **the sandbox's own mount points** (``/proc``, ``/dev``, ``/usr``,
+  ``/etc``, the sandbox ``$HOME`` and ``/tmp``, ``/workspace``) and any
+  ancestor of one — binding ``/home`` would land on top of the sandbox's
+  ``$HOME``.
 * **relative ``..`` traversal** — the classifier cannot know which directory a
   shell stage resolved against, so the same string may denote two files.  The
   refusal now says to name the path absolutely instead.
@@ -214,7 +248,10 @@ sandbox that does not actually grant it.
 Command classification
 ======================
 
-``CommandPolicy.assess()`` maps an argv to one of:
+``CommandPolicy.classify()`` maps a command to one of the classes below
+(``classify_script()`` judges a coding-core ``terminal`` command, which always
+runs as a bash script, as that script); ``CommandPolicy.authorize()`` then
+checks the class and its required capabilities against the mode:
 
 ``READ_ONLY``
    Inspection only.  Available in every mode.
@@ -224,8 +261,10 @@ Command classification
 
 ``SHELL_COMPLEX``
    Needs shell syntax — pipes, redirections, substitutions.  Needs
-   ``shell:complex``, and is executed as an explicit ``/bin/sh -lc <script>``
-   argv inside the sandbox.  The harness never uses ``shell=True``.
+   ``shell:complex``, and is executed as an explicit ``bash -lc <script>``
+   argv inside the sandbox (``/bin/sh`` where there is no bash), behind a
+   ``set -o pipefail`` prelude so a failed stage is not masked by the last
+   one.  The harness never uses ``shell=True``.
 
 ``DANGEROUS``
    Refused.
@@ -257,21 +296,28 @@ The boundary is a **set of roots**, not a single directory.
 *Primary root* — the launch directory.  Relative paths resolve there and
 nowhere else, so one string never denotes two files depending on the root list.
 
-*Extra roots* — the corpora registered in ``projects.json``.  They are declared
-so a file in another tree can be edited without relaunching; ``--single-root``
-drops them and restores the launch-directory-only boundary.  Because widening
+*Extra roots* — the corpora registered in ``projects.json``, and the build
+tree that encloses the launch directory when there is one (recognised by its
+``env.sh`` and ``scripts/build.sh``).  They are declared so a file in another
+tree can be edited, or a component built from its umbrella, without
+relaunching; ``--single-root`` drops them and restores the
+launch-directory-only boundary.  Because widening
 the write boundary must never be silent, the startup banner names the count.
 
-Each root is bind-mounted in the sandbox: the primary at ``/workspace``, the
-others at ``/workspaces/<name>``, with the same access as the primary (read
-only in ``SAFE``, read-write otherwise).  Roots are canonicalised,
+Each root is bind-mounted in the sandbox at its own host path, so an
+absolute path means the same file inside and outside (:doc:`sandbox`); where
+that path is unsafe to mirror, or with ``SPEAR_SANDBOX_IDENTITY_MOUNT=0``, the
+primary falls back to ``/workspace`` and the others to ``/workspaces/<name>``.
+Every root has the same access as the primary (read only in ``SAFE``,
+read-write otherwise).  Roots are canonicalised,
 deduplicated, and never nested — a nested root would be mounted twice and make
 a path's label ambiguous.  A registry entry whose tree has disappeared is
 dropped rather than fatal.
 
-**One addressing scheme.**  ``/workspaces/<name>/…`` is accepted by ``bash``
-*and* by ``edit_file`` / ``write_file``, which act on the host: the mount path
-is translated back to its host root before containment is checked.  Two schemes
+**One addressing scheme.**  A mount path — the host path itself, or the
+``/workspace`` and ``/workspaces/<name>/…`` names — is accepted by the shell
+*and* by the file tools, which act on the host: the mount path is translated
+back to its host root before containment is checked.  Two schemes
 that silently disagree would be a guaranteed source of wrong paths.  Host
 absolute paths into the launch directory remain gated by
 ``--allow-absolute-paths``; declaring extra roots does not widen what the
@@ -324,7 +370,9 @@ The fail-closed rule in practice
    * ``bwrap`` absent or not executable;
    * ``bwrap`` refused by the kernel at preflight;
    * ``prlimit`` absent while resource limits are active;
-   * ``systemd-run`` or ``systemctl`` absent while cgroup limits are active;
+   * ``systemd-run`` or ``systemctl`` absent while cgroup limits are active
+     (unless an outer container runtime owns the cgroup,
+     :doc:`resource_control`);
    * the systemd user bus unavailable;
    * a required cgroup controller not delegated;
    * ``slirp4netns`` absent, or unable to attach through pinned namespaces;

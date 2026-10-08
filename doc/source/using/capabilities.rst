@@ -54,6 +54,8 @@ deployment's own file: commands and server names are not public material.
    * - ``tasks``
      - the request classes it serves: ``implementation``, ``mixed``,
        ``general`` (default: implementation and mixed)
+   * - ``env``
+     - extra environment variables for the server, as an object
    * - ``read``
      - the tools that only read. Every other tool is a WRITE, whatever the
        server says about it
@@ -98,7 +100,8 @@ How much it is shown depends on the size of the family:
 * a larger family is shown as an index -- one line per capability, with its
   READ or WRITE class -- and a capability's arguments are shown when the turn
   asks for them with ``spear-capability describe <id>``. One that has not been
-  described cannot be invoked.
+  described cannot be invoked. ``spear-capability list`` prints the index
+  again.
 
 A call is checked before it reaches the provider: the capability must be one
 this turn admits, its arguments must be ones its schema declares, and a WRITE

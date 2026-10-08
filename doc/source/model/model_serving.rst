@@ -65,8 +65,8 @@ The flags that matter
 The launcher holds no flag values
 =================================
 
-``serve.sh`` contains no context size, no model path, no port and no thread
-count.  Those come from ``<runtime>/config/server.conf``, or from
+``serve.sh`` contains no context size, no model path and no thread count,
+and its port fallback (8080) is not the profile's.  Those come from ``<runtime>/config/server.conf``, or from
 ``SPEAR_SERVER_*`` in the environment; ``server/config/server.conf.example``
 documents every key.  The script itself contributes only what is a property of
 the *build* rather than of a deployment:
@@ -95,11 +95,14 @@ Sampling
 ========
 
 Sampling is a client-side decision. The normative and general runtime sends a
-temperature (``--temp``, ``SPEAR_TEMP``, default 0.25) and leaves every other
-parameter to the server; a model that falls into repetition at a low
-temperature wants it raised, and a stream circuit-breaker truncates a loop when
-it happens anyway. The coding core sends no sampling parameters of its own:
-the server's defaults apply.
+temperature (``--temp``, ``SPEAR_TEMP``, default 0.25), ``top_p`` 0.8,
+``top_k`` 20 and a repetition penalty of 1.05, and disables the model's
+thinking mode; ``SPEAR_SAMPLING=server`` sends none of them. A model that
+falls into repetition at a low temperature wants it raised, and a stream
+circuit-breaker truncates a loop when it happens anyway. The coding core sends
+no sampling parameters of its own: the server's defaults apply, and one of its
+responses is capped at ``SPEAR_RESPONSE_MAX_TOKENS`` (16384) tokens
+(:ref:`backends`).
 
 Changing the model or the adapter
 =================================
@@ -183,11 +186,13 @@ quirks), the remote port (``SPEAR_SERVER_PORT`` on that host; the profile uses
 
 ``AnthropicBackend``
    Optional, selected with ``--provider anthropic``.  Thinking is explicitly
-   disabled.  See `Authenticating against Anthropic`_ below.
+   disabled.  It serves the normative and general runtime only: the coding
+   core needs an OpenAI-compatible endpoint.  See `Authenticating against
+   Anthropic`_ below.
 
 For the normative and general runtime, both produce a ``ModelTurn`` (the
 coding core reads the OpenAI-compatible reply directly, with its
-``finish_reason``, through ``complete_raw_messages``):
+``finish_reason``, as a ``RawTurn`` from ``complete_messages``):
 
 .. code-block:: python
 

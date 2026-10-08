@@ -67,24 +67,35 @@ The final-state principle
 
 Consequences that follow directly:
 
-* **A failed project build verifies nothing.** When the project declares its
-  own build and test commands (:ref:`projects`), SPEAR runs them on the final
-  tree. A failure there makes the turn ``UNVERIFIED`` whatever else passed; a
-  build that could not run proves nothing either way.
+* **A failed project build verifies nothing.** SPEAR runs the project's own
+  build and test commands on the final tree. A failure there makes the turn
+  ``UNVERIFIED`` whatever else passed; a build that could not run proves
+  nothing either way.
+* **Declared commands win over probed ones.** A project needs no configuration
+  to be checked: its build and test commands are probed from the files it has
+  (a CMake tree, a Makefile, cargo, go, npm, a Python package). What the
+  project declares (:ref:`projects`) takes precedence kind by kind — a declared
+  build is the build, and a failing one is never replaced by an easier guess;
+  a probe only fills a kind the project left undeclared. Each run is recorded
+  with its origin, ``configured`` or ``probed``.
+* **A Makefile that only prints its help is not a build.** When a bare
+  ``make`` would print the help (as a generated Sphinx Makefile does), it is
+  not probed as the build: it would have "passed" every change.
 * **Evidence is claim-specific.** "It builds" needs a build; "the tests pass"
   needs a test run; "the link survives a clean and a rebuild" needs a clean, a
   build and a look at the result, in that order, all in the final epoch. A
   build alone does not show persistence across a clean.
-* **An individual BitBake task is not a full build.** ``bitbake -c compile x``
-  validates that task; it is not the ``bitbake x`` a build claim needs.
+* **An individual BitBake task is not a full build.** ``bitbake -c configure
+  x`` validates that task; it is not the ``bitbake x`` (or ``-c compile``) a
+  build claim needs, and ``bitbake -n``, ``-e`` or ``-g`` run nothing at all.
 * **A failure behind a filter is still a failure.** ``make | tail`` returns the
   exit status of ``tail``; without ``pipefail``, what the output says decides.
 * **A command sent to the background shows nothing.** ``make &`` returns at
   once with the shell's 0, before ``make`` has done anything, so it is not a
   check -- nor is any command of a list that ends with ``&``.
 * **Compiling loose files is not the project's verification.** When the
-  project declares how it is verified, a turn whose only check was compiling
-  the files it touched is ``UNVERIFIED``.
+  project has its own build or test command, declared or probed, a turn whose
+  only check was compiling the files it touched is ``UNVERIFIED``.
 * **Build outputs are not source changes.** What a build writes into its own
   output areas (``build/tmp``, ``generated/``, git-ignored files) does not open
   a new epoch, so a build that writes its artefacts still counts.
@@ -223,9 +234,10 @@ a timing rule nothing deterministic can check.
    ncs-… (3 constraint(s); compliance is judged against these only).
    - C1 Rule 4.2.1-1 (SHALL, when flag X is set; applicability APPLICABLE):
      SATISFIED — CONDITIONAL_VALUE: the provision states 2, the final source
-     gives 2 (record.py:2)
+     gives 2 (record.py:2 `mode = 2 if flag_x else 1`) [record.py:2]
    - C2 Rule 4.2.1-2 (SHALL; applicability APPLICABLE): SATISFIED —
      EXACT_COUNT: the provision states 4, the final source gives 4
+     (record.py:3 `count = [0, 0, 0, 0]`) [record.py:3]
    - C3 Rule 4.3-1 (SHALL; applicability APPLICABLE): NOT_DEMONSTRATED —
      not independently established (the model check found a possible
      satisfaction: …)
@@ -237,7 +249,9 @@ a timing rule nothing deterministic can check.
 
    - C2 Rule 4.2.1-2 (SHALL; applicability APPLICABLE): EVIDENCE_CONFLICT —
      authoritative evidence disagrees: EXACT_COUNT: the provision states 4,
-     the final source gives 4; project check count-four failed (exit 1)
+     the final source gives 4 (record.py:3 `count = [0, 0, 0, 0]`); project
+     check count-four (`python3 -B tests/check_count.py`) failed (exit 1);
+     its binding makes a failure decisive [record.py:3]
 
 .. seealso::
 

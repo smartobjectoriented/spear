@@ -79,8 +79,8 @@ Projects
      "spear":    { "path": "spear", "kind": "generic" }
    }
 
-``kind`` is a label: it scopes skills and prints in the listing, and selects
-no behaviour. What a corpus *does* is declared key by key — ``indexer``
+``kind`` is a label: it prints in the listing and selects no behaviour; rules
+and skills are scoped by project name, not by kind. What a corpus *does* is declared key by key — ``indexer``
 (``buildsystem`` for the curated BitBake/Yocto walk, else ``generic``),
 ``autoindex``, ``prompt_file`` and ``collection``. The ``spear`` entry is
 relative, so it resolves inside the checkout wherever that is.
@@ -162,8 +162,8 @@ Corpus and workspace are two roots, not one
 safety story:
 
 ``CORPUS_ROOT``
-   The registered tree the RAG index, history and memories belong to — an
-   *identity*.  Selected by the cwd, or forced with ``--corpus``.
+   The registered tree the RAG index and the conversation history belong to —
+   an *identity*.  Selected by the cwd, or forced with ``--corpus``.
 
 ``PROJECT_ROOT``
    Where the **tools** run: the real current directory, always.  It is the
@@ -204,12 +204,12 @@ Prompt assembly
 
 On the normative runtime, a turn's context is composed by ``ContextEngine``
 from explicit layers (an implementation turn on the coding core builds its own
-request from the project's rules, memories and skills, and reads the tree
-through its tools instead of from retrieved chunks):
+request from the project's rules, workspace knowledge, skills and admitted
+external capabilities, and reads the tree through its tools instead of from
+retrieved chunks):
 
 #. system and tool-use guidance;
 #. matching project rules;
-#. selected active durable memories;
 #. the current ``WorkingState`` projection;
 #. compacted and recent conversation;
 #. the skills the workspace's scope admits, and retrieved corpus chunks;
@@ -325,8 +325,9 @@ Three levels exist, and choosing between them is the whole question:
      - Scope
      - Use it for
    * - ``/remember``
-     - one corpus
-     - ``memories-<corpus>.md`` — a fact about *this* tree.
+     - one workspace
+     - workspace knowledge (:ref:`knowledge`) — a fact about *this* tree, not
+       a rule.
    * - ``rules.d/corpora/<name>.md``
      - one corpus
      - The orientation map: where things live, what to never edit.
@@ -458,8 +459,8 @@ Orientation maps
 ================
 
 Each corpus may have a short prose map — where user apps live, which build
-command to run, what never to edit — injected into the system prompt on every
-request.  It is the highest-leverage context the assistant has, and the one
+command to run, what never to edit — injected into the system prompt of every
+request that changes or asks about that corpus's code.  It is the highest-leverage context the assistant has, and the one
 most easily wrong: a stale path in it sent the model looking for a build
 script deleted months earlier, while a stale *chunk* would merely have been
 outranked.

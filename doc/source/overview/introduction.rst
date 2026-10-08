@@ -7,12 +7,15 @@ Introduction
 What SPEAR is
 =============
 
-.. figure:: /img/SPEAR-Overview.drawio.png
+.. figure:: /img/261008_SPEAR_Overview.png
    :width: 100%
-   :alt: SPEAR overall architecture
+   :alt: SPEAR general architecture
 
-   Overall architecture: entry points, the Python core, model serving and the
-   confined tool execution path.
+   General architecture: the control plane routes each task to its lane --
+   general, coding, normative or MIXED -- with the context selected for its
+   workspace; changes run on the coding core's six tools, external
+   capabilities go through the gateway, and the project's own validation
+   decides what is shown.
 
 **SPEAR — Specification-driven Platform for Embedded Agentic Reasoning** — is
 a platform for engineering work where an agent must reason from an
@@ -54,6 +57,12 @@ says what the code does — and they are not interchangeable. A claim about what
 is *required* may rest only on the authoritative source; the code may
 illustrate, compare and contradict, never establish.
 
+It is **workspace-aware**. A turn starts from its workspace — a registered
+project, or an unregistered tree on its own — and is given only what belongs to
+it or is explicitly generic: rules, skills, workspace knowledge, project
+metadata and external capabilities, selected deterministically by workspace and
+task class, never by resemblance to the request (:ref:`context_selection`).
+
 It is **self-hosted**. No prompt, no source file and no command output leaves
 the machine unless a tool call is granted the ``network`` capability and routed
 through the sandbox's own network stack.
@@ -67,6 +76,8 @@ can be kept (:doc:`/overview/architecture`):
 **GENERAL** and **IMPLEMENTATION**
    no standard engaged. The coding core behind SpearHost; the turn ends with
    implementation evidence — ``VERIFIED``, ``UNVERIFIED`` or ``NO_CHANGE``.
+   A change asked for in a standard-bound session that is not MIXED runs on
+   the normative runtime's guarded workflow instead (:ref:`workflow`).
 
 **NORMATIVE**
    a question about a bound standard. The normative runtime answers from the
@@ -75,16 +86,20 @@ can be kept (:doc:`/overview/architecture`):
 
 **MIXED**
    a change that must satisfy the bound standard. A normative pre-pass builds a
-   constraint packet, the coding core makes the change, and the final source is
-   judged against the packet on authoritative evidence alone.
+   constraint packet, the coding core makes the change, and a post-check judges
+   the final source against the packet on authoritative evidence alone. The
+   verdict keeps both dimensions: the implementation evidence, and a normative
+   status. Compliance is reported only when normative evidence establishes it
+   — otherwise ``NOT_DEMONSTRATED``, never compliant on a passing build.
 
 The parts
 =========
 
 **A served model.**
    Any OpenAI-compatible endpoint — ``llama-server`` from ``llama.cpp-next``
-   on ``127.0.0.1:8080`` by default — or the Anthropic API.  See
-   :doc:`/model/model_serving`.
+   on ``127.0.0.1:8080`` by default — or the Anthropic API.  The coding core
+   needs the OpenAI-compatible interface; the Anthropic backend serves the
+   general and normative paths only.  See :doc:`/model/model_serving`.
 
 **A retrieval corpus.**
    A vector store indexed from the source trees SPEAR is expected to reason
@@ -95,6 +110,20 @@ The parts
    provisions rather than as pages: each with its kind, its ordinal, its
    section and its page, so a claim can cite one and be checked against it.
    See :doc:`/reasoning/standards`.
+
+**A workspace context.**
+   What a turn is told about its workspace: the rules and skills that apply
+   to it, its declared build and test commands, and its *workspace knowledge*
+   — typed, provenance-aware facts kept in ``knowledge.sqlite3`` under the
+   state directory, recorded by the operator with ``/remember`` or
+   ``/knowledge``; what a model offers stays a proposal until the operator
+   accepts it.  See :doc:`/using/context` and :doc:`/using/knowledge`.
+
+**External capabilities.**
+   Tools of MCP servers over stdio, registered per workspace in
+   ``capabilities.json`` and reached only through SPEAR's gateway, which
+   applies scope and a read/write policy.  A provider that cannot start is
+   reported, not hidden.  See :doc:`/using/capabilities`.
 
 **An execution harness.**
    The part that lets the model actually *do* things: read files, run builds,
@@ -116,11 +145,17 @@ What SPEAR does
 **Controlled code modification**
     Changes are made by the coding core inside a contained workspace: every
     read, write and command crosses the control plane, and a shell command
-    cannot write where the file tools may not.
+    cannot write where the file tools may not.  A file refused to one tool —
+    generated output, a snapshot copy — is refused to every tool, deletion and
+    shell redirection included; a turn that keeps repeating a refused
+    operation is stopped.
 
 **Final-state verification**
     A change is ``VERIFIED`` only if the checks that show what the answer
     claims ran and passed on the final source — not on an earlier state of it.
+    A command sent to the background, or a Makefile that only prints its help,
+    is no check.  The project's declared build and test commands take
+    precedence; where it declares none, probed ones fill in.
 
 **Evidence-based compliance**
     A change that must satisfy a standard is judged constraint by constraint,
@@ -128,8 +163,15 @@ What SPEAR does
     Where that evidence is missing, the verdict says *compliance not
     demonstrated* — never a guess in either direction.
 
+**Workspace knowledge and external capabilities**
+    What is known about a workspace persists across sessions with its
+    provenance, and goes stale when the source it was bound to changes.
+    External tools are offered only to the workspaces and task classes they
+    are registered for, and never to a normative pass.
+
 **Multiple model backends**
-    Any OpenAI-compatible endpoint, local or remote, and the Anthropic API.
+    Any OpenAI-compatible endpoint, local or remote, and the Anthropic API
+    for the general and normative paths.
 
 **Confined execution**
     One rule governs the whole execution path: **fail-closed** — a confinement

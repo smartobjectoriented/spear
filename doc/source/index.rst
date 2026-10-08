@@ -43,7 +43,9 @@ SPEAR is an engineering agent for specified systems. It keeps apart the agent
 that changes code, the control plane that confines it, the evidence of what it
 did, the normative reasoning about a bound standard, and the compliance
 evidence that judges a change — and computes its verdicts from that evidence on
-the final source state.
+the final source state. Each turn is given the context of its own workspace —
+rules, skills, knowledge, project metadata and external capabilities — selected
+deterministically by workspace and task class.
 
 - :ref:`Overview <part_overview>`: :ref:`Introduction <introduction>`, :ref:`Architecture <architecture>`, :ref:`Glossary <glossary>`
 
@@ -52,14 +54,14 @@ the final source state.
 Getting started
 ***************
 
-- :ref:`Getting started <part_start>`: :ref:`Quick start <getting_started>`, :ref:`Installation <installation>`, :ref:`Containerised environment <container>`
+- :ref:`Getting started <part_start>`: :ref:`Quick start <getting_started>`, :ref:`Running the public image <container_run>`, :ref:`Installation <installation>`, :ref:`Containerised environment <container>`
 
 .. rst-class:: left
 
 Using SPEAR
 ***********
 
-- :ref:`Using SPEAR <part_using>`: :ref:`spear-chat <usage>`, :ref:`Projects and corpora <projects>`, :ref:`Retrieval <retrieval>`, :ref:`Configuration reference <configuration>`
+- :ref:`Using SPEAR <part_using>`: :ref:`spear-chat <usage>`, :ref:`Projects and corpora <projects>`, :ref:`Retrieval <retrieval>`, :ref:`Context <context>`, :ref:`Workspace knowledge <knowledge>`, :ref:`External capabilities <capabilities>`, :ref:`Configuration reference <configuration>`
 
 .. rst-class:: left
 
@@ -87,7 +89,7 @@ The model and its weights
 Operations and reference
 ************************
 
-- :ref:`Operations and reference <part_operations>`: :ref:`Operations <operations>`, :ref:`Troubleshooting <troubleshooting>`, :ref:`Testing <testing>`
+- :ref:`Operations and reference <part_operations>`: :ref:`Operations <operations>`, :ref:`Troubleshooting <troubleshooting>`, :ref:`Testing <testing>`, :ref:`Directory layout <directory_layout>`
 
 .. rst-class:: left
 

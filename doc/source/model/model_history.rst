@@ -32,10 +32,12 @@ frozen into a small adapter served with ``--lora`` on top of the frozen base.
 Only about 0.1 % of the weights are trained, which is why a run costs a few
 dollars (:doc:`/model/training`).
 
-**Memory and skills** are immediate, local context that the model writes
-itself, with confirmation, and recalls across sessions (:doc:`/using/retrieval`).
+**Workspace knowledge and skills** are immediate, local context recalled
+across sessions: ``/remember`` records a fact about the workspace, and what the
+model offers stays a proposal until the operator accepts it
+(:doc:`/using/retrieval`).
 
-The contextual-learning loop — skills plus memory — is comparable to what Nous
+The contextual-learning loop — skills plus knowledge — is comparable to what Nous
 Research's Hermes Agent does.  What is unusual here is that the same system
 also learns in the weights, and runs entirely offline.
 

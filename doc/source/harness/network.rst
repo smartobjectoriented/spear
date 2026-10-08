@@ -9,6 +9,13 @@ at all.  When the ``network`` capability is granted, connectivity is provided
 by attaching ``slirp4netns`` to that private namespace — a user-mode network
 stack, no root, no bridge, no host interface exposed.
 
+The capability is granted by the session's mode — confirmed per command in
+``ASK``, granted in ``AUTO``, never in ``SAFE`` — and ``--no-network`` takes it
+out of every mode (:doc:`security_model`).  This page covers sandboxed
+commands only: the web pair runs in the chat process under its own boundary
+(``web_fetch.py``), and an external capability provider is a host process
+reached through the capability gateway, not through this backend.
+
 .. figure:: /img/SPEAR-Network.drawio.png
    :width: 100%
    :alt: Timing-independent slirp4netns attachment

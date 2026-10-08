@@ -49,8 +49,13 @@ Top level
        builders and the load preflight.  The *governed* training path lives in
        the application instead (:doc:`/model/training`).
    * - ``corpora/``
-     - Small vendored trees indexed as their own corpora (``musl-headers``,
-       ``posix-api``) — they answer questions no product tree contains.
+     - Small trees indexed as their own corpora (``musl-headers``,
+       ``posix-api``) — they answer questions no product tree contains.  Only
+       ``refresh-musl-headers.sh``, which snapshots a toolchain's headers into
+       ``musl-headers/``, is tracked; the trees themselves are not.
+   * - ``env.sh``
+     - ``. ./env.sh`` from the tree's root puts ``scripts/`` on ``PATH``
+       (``spear-configure``, ``spear-image``).
    * - ``doc/``
      - This documentation.
 
@@ -95,8 +100,13 @@ The application
        source predicates, and conformance-check bindings.
    * - ``working_state.py`` / ``context_engine.py`` / ``compaction.py``
      - Grounded task truth and bounded layered model context.
-   * - ``memory_store.py``
-     - Structured selection and metadata over compatible Markdown memories.
+   * - ``workspace_knowledge.py`` / ``knowledge_migration.py``
+     - Typed, provenance-aware workspace knowledge, and the on-request
+       migration of legacy Markdown memories into it (``memory_store.py``
+       still reads those).
+   * - ``capabilities.py`` / ``capability_gateway.py`` / ``mcp_provider.py``
+     - External capabilities: the registry, the gateway the coding core
+       reaches them through, and the MCP stdio provider.
    * - ``tool_registry.py`` / ``tool_router.py`` / ``result_store.py``
      - Declarative tool exposure, structured lifecycle and retained evidence.
    * - ``tool_runtime.py``
@@ -152,6 +162,9 @@ Configuration
    * - ``projects.json``
      - Named workspaces the chat can open, mapping a short name to an absolute
        path and a project kind.
+   * - ``capabilities.json``
+     - External capability providers registered per workspace (MCP servers
+       over stdio).  ``SPEAR_CAPABILITIES_FILE`` overrides the path.
    * - ``tool-guide.md``
      - The tool usage guide handed to the model.
    * - ``rules.d/``
@@ -203,6 +216,10 @@ variables are read by ``scripts/docker/build.sh`` when it bakes an image
 Persistent state
 ================
 
+These live in the state directory: ``SPEAR_STATE_DIR``, or ``spear/`` when it
+is not set.  The knowledge store and the standard store are the exception:
+without ``SPEAR_STATE_DIR`` they default to ``~/.local/state/spear``.
+
 .. list-table::
    :header-rows: 1
    :widths: 30 70
@@ -225,12 +242,18 @@ Persistent state
    * - ``rules-learned.md``
      - Rules taught at runtime with ``/recall``.  Injected into every session,
        under a token budget.
+   * - ``knowledge.sqlite3``
+     - Workspace knowledge (``/remember``, ``/knowledge``).
+       ``SPEAR_KNOWLEDGE_DB`` overrides the path.
+   * - ``standards/``
+     - The normative-standard store.  ``SPEAR_STANDARDS_ROOT`` moves it alone.
    * - ``memories-*.md`` / ``memories-*.md.metadata.json``
-     - Human-readable durable knowledge and optional structured enrichment.
+     - Legacy remembered notes.  No longer shown to a turn; their content
+       reaches one only once migrated into workspace knowledge.
    * - ``history*.json`` / ``history-archive.jsonl``
      - Conversation transcripts, including per-project ones.
    * - ``llama-server.log``
-     - Server log for the currently running unit.
+     - Log of the local ``llama-server`` that ``spear-chat --local`` starts.
 
 .. _entry-points:
 
@@ -297,24 +320,29 @@ This documentation
        img/
          spear.drawio               every diagram, one page each (source)
          SPEAR-<Page>.drawio.png    the pages exported for the HTML build
+         261008_SPEAR_Overview.png  the overview figure, a standalone image
 
-Diagrams follow the convention of the sibling projects.  ``spear.drawio`` is the only source
-and is edited directly in draw.io or the VS Code extension.  Each page the
-documentation uses is exported to ``SPEAR-<Page>.drawio.png`` (one file per
-page, named after the page), and the exported PNG is committed next to the
-``.drawio`` in the same change.  From the command line, with the drawio snap:
+Diagrams follow the convention of the sibling projects.  ``spear.drawio`` is
+the source of every diagram but the overview, and is edited directly in
+draw.io or the VS Code extension.  Each page the documentation uses is
+exported to ``SPEAR-<Page>.drawio.png`` (one file per page, named after the
+page), and the exported PNG is committed next to the ``.drawio`` in the same
+change.  The overview figure of the introduction is a standalone raster
+image, not exported from ``spear.drawio``, and is replaced as a whole.  From
+the command line, with the drawio snap:
 
 .. code-block:: console
 
    $ cd doc/source/img
    $ mkdir -p ~/snap/drawio/common/x && cp spear.drawio ~/snap/drawio/common/x/
-   $ xvfb-run -a drawio -x -f png --scale 1.5 --border 10 -p 1 \
-         -o ~/snap/drawio/common/x/SPEAR-Overview.drawio.png \
+   $ xvfb-run -a drawio -x -f png --scale 1.5 --border 10 -p 6 \
+         -o ~/snap/drawio/common/x/SPEAR-Layout.drawio.png \
          ~/snap/drawio/common/x/spear.drawio --no-sandbox --disable-gpu
 
-``-p`` is the 1-based page index.  The snap is confined: it cannot read
-``/opt`` nor any hidden directory in ``$HOME`` (``~/.cache`` included), which
-is why the file is staged under ``~/snap/drawio/common``.
+``-p`` is the 1-based page index (7 is the *Layout* page).  The snap is
+confined: it cannot read ``/opt`` nor any hidden directory in ``$HOME``
+(``~/.cache`` included), which is why the file is staged under
+``~/snap/drawio/common``.
 
 Building
 ========

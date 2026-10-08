@@ -9,8 +9,7 @@ every SPEAR client: ``llama-server`` with the profile's model, supervised by
 systemd, reachable through SSH, with the embedding worker beside it.  Follow
 it in order; each step ends with a check, and the next one assumes it passed.
 
-The figures quoted are those of the reference deployment, measured on
-2026-09-30.  :ref:`runtime_bootstrap` explains *why* the runtime is built the
+The figures quoted are those of the reference deployment.  :ref:`runtime_bootstrap` explains *why* the runtime is built the
 way it is; this page is the procedure.
 
 .. contents:: Steps

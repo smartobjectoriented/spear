@@ -1,6 +1,7 @@
 import json
 import tempfile
 import unittest
+from runtime import agent_notes
 from unittest.mock import patch
 from pathlib import Path
 from types import SimpleNamespace
@@ -700,7 +701,7 @@ class AnthropicBackendTests(unittest.TestCase):
                 session_workspace.EXECUTION_MODE = ExecutionMode.AUTO
                 valid = FakeModelBackend([ModelTurn("", (sentinel,), StopReason.TOOL_USE)])
                 turn = valid.complete(system="s", conversation=(), tools=(), use_tools=True)
-                self.assertEqual(rag_chat.validate_agent_turn(turn), "tool_use")
+                self.assertEqual(agent_notes.validate_agent_turn(turn), "tool_use")
                 tool_routing.execute_tool(sentinel.name, dict(sentinel.arguments), {})
                 self.assertTrue((root / "sentinel.txt").is_file())
                 (root / "sentinel.txt").unlink()
@@ -711,7 +712,7 @@ class AnthropicBackendTests(unittest.TestCase):
                         invalid = FakeModelBackend([ModelTurn("", (sentinel,), status, error="provider failure")])
                         turn = invalid.complete(system="s", conversation=(), tools=(), use_tools=True)
                         with self.assertRaisesRegex(RuntimeError, "tool_calls"):
-                            rag_chat.validate_agent_turn(turn)
+                            agent_notes.validate_agent_turn(turn)
                         self.assertFalse((root / "sentinel.txt").exists())
             finally:
                 session_workspace.WORKSPACE, session_workspace.PROJECT_ROOT, session_workspace.EXECUTION_MODE = (

@@ -1,7 +1,7 @@
 """The startup banner and the help text."""
 
 import os
-from harness.tool_runtime import ExecutionMode
+from harness.tool_primitives import ExecutionMode
 from standard.standard_commands import StandardCommandError, retrieval_summary
 from cli import session_workspace
 from cli.chat_settings import (

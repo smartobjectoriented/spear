@@ -4,7 +4,7 @@ import os
 from pathlib import Path
 from models.model_backend import ToolResultBlock
 from runtime.cancellation import NEVER_CANCELLED
-from harness.tool_runtime import ExecutionMode
+from harness.tool_primitives import ExecutionMode
 from runtime.tracing import new_action_id, new_task_id
 from runtime.agent_runtime import AgentRuntime
 from runtime.session_store import SessionEventType
@@ -159,7 +159,7 @@ def coding_host(agent_context, cache, record):
         print()
         record(item)
 
-    from harness.tool_runtime import SandboxSpec
+    from harness.workspace import SandboxSpec
 
     gateway = getattr(agent_context, "capability_gateway", None)
 

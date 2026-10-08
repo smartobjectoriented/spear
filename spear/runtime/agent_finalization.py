@@ -18,7 +18,7 @@ from runtime.agent_context import AgentContext, AgentResult, RuntimeTerminalReas
 from runtime.agent_notes import unsupported_change_claim
 from runtime.agent_verification import (
     _record_project_verification, project_build_runs, requirement_matrix_note,
-    turn_changed_files, unverified_write_note, work_order_gap, write_note,
+    turn_changed_files, unverified_write_note, work_order_gap,
 )
 
 

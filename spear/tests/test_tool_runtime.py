@@ -19,6 +19,7 @@ from unittest.mock import ANY, MagicMock, patch
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 import harness.sandbox
+from runtime import agent_notes, agent_verification
 
 from harness.command_policy import AuthorizationResult, CommandPolicy, ToolPolicy
 from harness.resource_control import (
@@ -4896,15 +4897,15 @@ class TurnEvidenceTests(unittest.TestCase):
         cls.rag_chat = rag_chat
 
     def test_no_tool_activity_adds_nothing(self):
-        self.assertEqual(self.rag_chat.turn_evidence([]), "")
+        self.assertEqual(agent_notes.turn_evidence([]), "")
 
     def test_a_turn_that_changed_no_file_says_so(self):
         """The fabricated-repair case: a claimed fix, an untouched file."""
-        note = self.rag_chat.turn_evidence(['bash {"command": "cat x"}\nsome output'])
+        note = agent_notes.turn_evidence(['bash {"command": "cat x"}\nsome output'])
         self.assertIn("files changed: none", note)
 
     def test_failed_commands_are_counted(self):
-        note = self.rag_chat.turn_evidence([
+        note = agent_notes.turn_evidence([
             'bash {"command": "make"}\nbuilt',
             'bash {"command": "make bad"}\nError 2\n(exit 2)',
         ])
@@ -4912,7 +4913,7 @@ class TurnEvidenceTests(unittest.TestCase):
         self.assertIn("1 of them exited non-zero", note)
 
     def test_applied_edits_are_named_and_rejected_ones_are_not(self):
-        note = self.rag_chat.turn_evidence([
+        note = agent_notes.turn_evidence([
             'edit_file {"path": "a.c"}\nOK: a.c updated',
             'edit_file {"path": "b.c"}\nERROR: file not found: b.c',
         ])
@@ -4932,29 +4933,29 @@ class UnverifiedChangeTests(unittest.TestCase):
     RUN = 'bash {"command": "make"}\nbuilt'
 
     def test_running_after_the_change_clears_it(self):
-        self.assertFalse(self.rag_chat.unverified_change([self.EDIT, self.RUN]))
+        self.assertFalse(agent_verification.unverified_change([self.EDIT, self.RUN]))
 
     def test_running_BEFORE_the_change_does_not(self):
         """Order is the whole point: a build before the edit tested the edit
         that was not yet made."""
-        self.assertTrue(self.rag_chat.unverified_change([self.RUN, self.EDIT]))
+        self.assertTrue(agent_verification.unverified_change([self.RUN, self.EDIT]))
 
     def test_a_second_change_reopens_it(self):
-        self.assertTrue(self.rag_chat.unverified_change(
+        self.assertTrue(agent_verification.unverified_change(
             [self.EDIT, self.RUN, self.EDIT]))
 
     def test_a_question_answered_from_reads_is_not_caught(self):
         # Nothing was changed, so there is nothing to verify and the gate must
         # stay out of the way of informational turns.
-        self.assertFalse(self.rag_chat.unverified_change(
+        self.assertFalse(agent_verification.unverified_change(
             ['bash {"command": "cat a.c"}\nsome text']))
 
     def test_a_rejected_edit_is_not_a_change(self):
-        self.assertFalse(self.rag_chat.unverified_change(
+        self.assertFalse(agent_verification.unverified_change(
             ['edit_file {"path": "a.c"}\nERROR: file not found: a.c']))
 
     def test_the_demand_names_the_files_and_asks_for_failing_cases(self):
-        demand = self.rag_chat.verify_demand([self.EDIT])
+        demand = agent_verification.verify_demand([self.EDIT])
         self.assertIn("a.c", demand)
         self.assertIn("could reasonably fail", demand)
 

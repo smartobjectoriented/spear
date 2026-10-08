@@ -41,22 +41,19 @@ from runtime.agent_finalization import (
 from runtime.agent_model_turn import ModelTurnMixin
 from runtime.agent_recording import RecordingMixin
 
-# is_write_request and unverified_change are not used here: cli/rag_chat.py
-# imports them from this module.
-
 from runtime.agent_notes import (
     _PLAN_TOOL, _REPEAT_NOTICE, _WRITE_TOOLS, _asked, _investigation_ceiling,
     _past_wall_fraction, _repeated_result, _round_was_all_refused,
     _tool_activity, _with_repeat_note, _write_round_tools,
     announced_but_unmade_change, carried_obligations, conclude_demand,
-    is_write_request, looks_like_preamble, make_it_demand, may_demand_write,
+    looks_like_preamble, make_it_demand, may_demand_write,
     standard_policy_for, strip_fabrications, turn_evidence,
     validate_agent_turn, wants_write, write_demand,
 )
 from runtime.agent_verification import (
     _NEEDS_VERIFICATION, _record_project_verification,
     asked_to_write_and_did_not, changed_files, project_build_gap,
-    project_build_runs, unverified_change, verify_demand, work_order_gap,
+    project_build_runs, verify_demand, work_order_gap,
 )
 
 

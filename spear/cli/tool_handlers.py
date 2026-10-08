@@ -8,9 +8,7 @@ import hashlib
 from pathlib import Path
 from runtime import progress_monitor, work_phase
 from harness import tool_router, web_fetch
-from harness.tool_runtime import (
-    CommandClassification, ExecutionMode, PathPolicyError,
-)
+from harness.tool_primitives import CommandClassification, ExecutionMode, PathPolicyError
 from runtime.tracing import EventStatus, EventType
 from harness.tool_router import (
     ToolHandlerResult, ToolResultStatus, invalidates_reads,

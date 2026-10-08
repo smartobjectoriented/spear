@@ -21,7 +21,7 @@ from unittest.mock import patch
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-from cli import rag_chat
+from cli import session_workspace, turn_context
 
 
 class RuleScope(unittest.TestCase):
@@ -49,12 +49,12 @@ class RuleScope(unittest.TestCase):
         (self.rules / name).write_text(text)
 
     def rules_for(self, project, root, corpora=()):
-        with patch.multiple(rag_chat, RULES_DIR=str(self.rules),
-                            LEARNED_RULES_FILE=str(self.rules / "absent"),
-                            PROJECT=project, PROJECT_ROOT=str(root),
-                            CORPUS_ROOT=str(root),
-                            PROJECT_SPEC={"corpora": list(corpora)}):
-            return rag_chat.load_rules()
+        with patch.multiple(turn_context, RULES_DIR=str(self.rules),
+                            LEARNED_RULES_FILE=str(self.rules / "absent")), \
+                patch.multiple(session_workspace, PROJECT=project,
+                               PROJECT_ROOT=str(root), CORPUS_ROOT=str(root),
+                               PROJECT_SPEC={"corpora": list(corpora)}):
+            return turn_context.load_rules()
 
     def test_a_a_workspace_receives_its_own_project_rule(self):
         self.assertIn("alpha-build.sh", self.rules_for("alpha", self.tree_a))
@@ -101,20 +101,20 @@ class RuleScope(unittest.TestCase):
 
 class ScopeHeaderSyntax(unittest.TestCase):
     def test_forms(self):
-        self.assertEqual(rag_chat.rule_scope("plain")[0], ("global",))
-        self.assertEqual(rag_chat.rule_scope("---\nscope: global\n---\nx")[0], ("global",))
-        self.assertEqual(rag_chat.rule_scope("---\nscope: corpus a, b\n---\nx")[0],
+        self.assertEqual(turn_context.rule_scope("plain")[0], ("global",))
+        self.assertEqual(turn_context.rule_scope("---\nscope: global\n---\nx")[0], ("global",))
+        self.assertEqual(turn_context.rule_scope("---\nscope: corpus a, b\n---\nx")[0],
                          ("corpus", "a", "b"))
-        self.assertEqual(rag_chat.rule_scope("---\nscope: path /x/y\n---\nx")[0],
+        self.assertEqual(turn_context.rule_scope("---\nscope: path /x/y\n---\nx")[0],
                          ("path", "/x/y"))
 
     def test_unreadable_forms_fail_closed(self):
         for header in ("scope: corpus", "scope: tree x", "scope: global extra",
                        "other: value"):
             with self.subTest(header=header):
-                self.assertIsNone(rag_chat.rule_scope(f"---\n{header}\n---\nx")[0])
-                self.assertFalse(rag_chat.rule_applies(
-                    rag_chat.rule_scope(f"---\n{header}\n---\nx")[0]))
+                self.assertIsNone(turn_context.rule_scope(f"---\n{header}\n---\nx")[0])
+                self.assertFalse(turn_context.rule_applies(
+                    turn_context.rule_scope(f"---\n{header}\n---\nx")[0]))
 
 
 class TheShippedRulesStayGeneric(unittest.TestCase):

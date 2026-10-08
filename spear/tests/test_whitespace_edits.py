@@ -11,10 +11,10 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from cli import rag_chat
 from harness.command_policy import CommandPolicy
 from harness.tool_primitives import CommandClassification, ExecutionMode
 from harness.workspace import Workspace
+from cli import session_workspace, terminal_ui, tool_handlers
 
 
 TABLE = """   * - MicroPython
@@ -32,8 +32,9 @@ class WhitespaceOnlyEditTests(unittest.TestCase):
                             ("PROJECT_ROOT", str(root)),
                             ("EXECUTION_MODE", ExecutionMode.AUTO),
                             ("BYPASS_PERMISSIONS", True)):
-            self.addCleanup(setattr, rag_chat, attr, getattr(rag_chat, attr))
-            setattr(rag_chat, attr, value)
+            self.addCleanup(setattr, session_workspace, attr,
+                            getattr(session_workspace, attr))
+            setattr(session_workspace, attr, value)
         self.target = root / "user_space.rst"
         self.target.write_text(TABLE)
         self.previous_cwd = os.getcwd()
@@ -41,7 +42,7 @@ class WhitespaceOnlyEditTests(unittest.TestCase):
         self.addCleanup(lambda: os.chdir(self.previous_cwd))
 
     def test_inserting_a_blank_line_is_a_real_edit(self):
-        out = rag_chat.edit_file(
+        out = session_workspace.edit_file(
             "user_space.rst",
             "     - the MicroPython interpreter (ARM64)\nUser-space libraries",
             "     - the MicroPython interpreter (ARM64)\n\nUser-space libraries")
@@ -50,12 +51,12 @@ class WhitespaceOnlyEditTests(unittest.TestCase):
 
     def test_an_indentation_only_change_is_a_real_edit(self):
         self.target.write_text("def f():\n  return 1\n")
-        out = rag_chat.edit_file("user_space.rst", "  return 1", "    return 1")
+        out = session_workspace.edit_file("user_space.rst", "  return 1", "    return 1")
         self.assertTrue(out.startswith("OK"), out)
         self.assertEqual("def f():\n    return 1\n", self.target.read_text())
 
     def test_a_truly_identical_edit_is_still_refused_and_says_how_to_insert(self):
-        out = rag_chat.edit_file("user_space.rst", "User-space", "User-space")
+        out = session_workspace.edit_file("user_space.rst", "User-space", "User-space")
         self.assertTrue(out.startswith("ERROR"), out)
         self.assertIn("identical", out)
         # The refusal has to teach the insertion idiom, or the model retries
@@ -118,21 +119,21 @@ class StaleReadCacheTests(unittest.TestCase):
     def test_a_mutation_drops_the_cached_command_output(self):
         ctx = self.context()
         ctx.cache["cat f.rst"] = "old contents"
-        ctx.cache[rag_chat.READ_PATHS] = {"f.rst"}
-        ctx.cache[rag_chat.SANDBOX_DOWN] = True
-        rag_chat._record_mutation(ctx, "f.rst")
+        ctx.cache[tool_handlers.READ_PATHS] = {"f.rst"}
+        ctx.cache[tool_handlers.SANDBOX_DOWN] = True
+        session_workspace._record_mutation(ctx, "f.rst")
         self.assertNotIn("cat f.rst", ctx.cache)
         # The sentinels are not command output and must survive: the sandbox
         # does not come back, and the read-path set is cumulative.
-        self.assertTrue(ctx.cache[rag_chat.SANDBOX_DOWN])
-        self.assertEqual({"f.rst"}, ctx.cache[rag_chat.READ_PATHS])
+        self.assertTrue(ctx.cache[tool_handlers.SANDBOX_DOWN])
+        self.assertEqual({"f.rst"}, ctx.cache[tool_handlers.READ_PATHS])
 
     def test_the_command_that_wrote_stays_cached(self):
         ctx = self.context()
         ctx.cache["cat f.rst"] = "old contents"
-        rag_chat._forget_cached_reads(ctx, keep="printf x > f.rst")
+        session_workspace._forget_cached_reads(ctx, keep="printf x > f.rst")
         ctx.cache["printf x > f.rst"] = "(empty)"
-        rag_chat._forget_cached_reads(ctx, keep="printf x > f.rst")
+        session_workspace._forget_cached_reads(ctx, keep="printf x > f.rst")
         self.assertIn("printf x > f.rst", ctx.cache)
         self.assertNotIn("cat f.rst", ctx.cache)
 
@@ -184,7 +185,7 @@ class TerminalOutputTests(unittest.TestCase):
     """
     def test_the_printers_and_the_spinner_share_one_lock(self):
         import inspect
-        for function in (rag_chat.tool_result, rag_chat.tool_use):
+        for function in (terminal_ui.tool_result, terminal_ui.tool_use):
             with self.subTest(function=function.__name__):
                 self.assertIn("terminal_output", inspect.getsource(function))
         # The spinner no longer takes the lock itself: it paints through
@@ -192,9 +193,9 @@ class TerminalOutputTests(unittest.TestCase):
         # place the lock has to be held. The invariant is unchanged -- one
         # lock, shared with the printers -- and this follows it to where it
         # lives rather than pinning the line of code it used to be on.
-        self.assertIn("STATUS.show", inspect.getsource(rag_chat.Spinner._run))
+        self.assertIn("STATUS.show", inspect.getsource(terminal_ui.Spinner._run))
 
-        for method in (rag_chat.StatusLine.show, rag_chat.StatusLine.clear):
+        for method in (terminal_ui.StatusLine.show, terminal_ui.StatusLine.clear):
             with self.subTest(method=method.__name__):
                 self.assertIn("TERMINAL_LOCK", inspect.getsource(method))
 
@@ -203,7 +204,7 @@ class TerminalOutputTests(unittest.TestCase):
         from contextlib import redirect_stdout
         stream = io.StringIO()
         with redirect_stdout(stream):
-            rag_chat.tool_result("")
+            terminal_ui.tool_result("")
         self.assertIn("(empty)", stream.getvalue())
 
 

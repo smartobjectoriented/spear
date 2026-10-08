@@ -26,7 +26,7 @@ from unittest.mock import patch
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-from cli import rag_chat
+from cli import session_workspace, tool_routing
 from agent import dispatch, tools
 from runtime.cancellation import NEVER_CANCELLED
 from harness.tool_primitives import ExecutionMode, decode_command_output
@@ -48,7 +48,7 @@ class DecodeCommandOutput(unittest.TestCase):
 @unittest.skipUnless(shutil.which("bwrap"), "needs the bubblewrap sandbox")
 class TerminalParity(unittest.TestCase):
     def setUp(self):
-        self.root = tempfile.mkdtemp(dir=str(rag_chat.WORKSPACE.root))
+        self.root = tempfile.mkdtemp(dir=str(session_workspace.WORKSPACE.root))
         for name, data in FIXTURE["files"].items():
             Path(self.root, name).write_bytes(bytes.fromhex(data))
         context = SimpleNamespace(
@@ -57,7 +57,7 @@ class TerminalParity(unittest.TestCase):
             advisory=False, standard_binding=None, execution_core="coding",
             conversation=[], dropped_tool_results=frozenset(),
             working_state=SimpleNamespace(objective="read files"))
-        self.host = rag_chat.coding_host(context, {}, lambda record: None)
+        self.host = tool_routing.coding_host(context, {}, lambda record: None)
         self.state = tools.new_state()
         self.run_command(f"cd {self.root} && pwd")   # Hermes ran in that directory
 
@@ -65,7 +65,7 @@ class TerminalParity(unittest.TestCase):
         shutil.rmtree(self.root, ignore_errors=True)
 
     def run_command(self, command):
-        with patch.object(rag_chat, "EXECUTION_MODE", ExecutionMode.AUTO), \
+        with patch.object(session_workspace, "EXECUTION_MODE", ExecutionMode.AUTO), \
                 redirect_stdout(io.StringIO()):
             text, _ = dispatch.execute(self.host, self.state, "c", "terminal",
                                        {"command": command}, ("terminal",))

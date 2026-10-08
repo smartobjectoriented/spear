@@ -1838,8 +1838,9 @@ class ContextOwnershipTests(unittest.TestCase):
 class ProductionWiringTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        from cli import rag_chat
-        cls.rag_chat = rag_chat
+        from cli import session_workspace, tool_routing
+        cls.session_workspace = session_workspace
+        cls.tool_routing = tool_routing
 
     def test_real_transitional_tool_boundary_runs_without_cli_or_globals(self):
         from harness.tool_primitives import ExecutionMode
@@ -1855,17 +1856,17 @@ class ProductionWiringTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             old = {
-                "WORKSPACE": self.rag_chat.WORKSPACE,
-                "PROJECT_ROOT": self.rag_chat.PROJECT_ROOT,
-                "EXECUTION_MODE": self.rag_chat.EXECUTION_MODE,
-                "AUDIT_LOGGER": self.rag_chat.AUDIT_LOGGER,
+                "WORKSPACE": self.session_workspace.WORKSPACE,
+                "PROJECT_ROOT": self.session_workspace.PROJECT_ROOT,
+                "EXECUTION_MODE": self.session_workspace.EXECUTION_MODE,
+                "AUDIT_LOGGER": self.session_workspace.AUDIT_LOGGER,
             }
-            self.rag_chat.WORKSPACE = Workspace.from_path(root)
-            self.rag_chat.PROJECT_ROOT = str(root)
-            self.rag_chat.EXECUTION_MODE = ExecutionMode.AUTO
-            self.rag_chat.AUDIT_LOGGER = AuditLogger(root / "audit.jsonl")
+            self.session_workspace.WORKSPACE = Workspace.from_path(root)
+            self.session_workspace.PROJECT_ROOT = str(root)
+            self.session_workspace.EXECUTION_MODE = ExecutionMode.AUTO
+            self.session_workspace.AUDIT_LOGGER = AuditLogger(root / "audit.jsonl")
             context = make_context(backend, task_id="production_adapter")
-            context.tool_executor = lambda ctx, call_id, name, args, cache: self.rag_chat.route_tool_envelope(
+            context.tool_executor = lambda ctx, call_id, name, args, cache: self.tool_routing.route_tool_envelope(
                 name, dict(args), cache, task_id=ctx.task_id,
                 trace=ctx.trace, tool_call_id=call_id,
             )
@@ -1873,7 +1874,7 @@ class ProductionWiringTests(unittest.TestCase):
                 result = AgentRuntime().run(context)
             finally:
                 for name, value in old.items():
-                    setattr(self.rag_chat, name, value)
+                    setattr(self.session_workspace, name, value)
             # The turn wrote a file and ran nothing after it, so the
             # answer carries the unverified-write note. What this test
             # pins is the model's own text reaching the result.

@@ -234,36 +234,38 @@ class OfflineSessionTests(unittest.TestCase):
     modes would have read as offline without being it.
     """
 
-    def _rag_chat(self, argv):
+    def _tool_modules(self, argv):
+        """The handlers and the registry, loaded again under this command line."""
         import importlib
-        from cli import rag_chat
+        from cli import tool_handlers, tool_routing
 
         saved = sys.argv
         sys.argv = ["rag_chat.py", *argv]
         try:
-            return importlib.reload(rag_chat)
+            return (importlib.reload(tool_handlers),
+                    importlib.reload(tool_routing))
         finally:
             sys.argv = saved
 
     def tearDown(self):
-        self._rag_chat([])                       # leave the module as found
+        self._tool_modules([])                   # leave the modules as found
 
     def test_no_network_hides_both_web_tools(self):
-        rag_chat = self._rag_chat(["--no-network"])
-        names = [tool["function"]["name"] for tool in rag_chat.TOOLS]
+        _, tool_routing = self._tool_modules(["--no-network"])
+        names = [tool["function"]["name"] for tool in tool_routing.TOOLS]
         self.assertNotIn("search_internet", names)
         self.assertNotIn("fetch_url", names)
         self.assertIn("search_corpus", names)    # retrieval is local, kept
 
     def test_the_handler_refuses_even_if_the_name_arrives_anyway(self):
-        rag_chat = self._rag_chat(["--no-network"])
-        result = rag_chat._registered_fetch_url(
+        tool_handlers, _ = self._tool_modules(["--no-network"])
+        result = tool_handlers._registered_fetch_url(
             None, {"url": "https://example.com/"})
         self.assertIn("--no-network", str(result.text))
 
     def test_without_the_flag_both_are_exposed(self):
-        rag_chat = self._rag_chat([])
-        names = [tool["function"]["name"] for tool in rag_chat.TOOLS]
+        _, tool_routing = self._tool_modules([])
+        names = [tool["function"]["name"] for tool in tool_routing.TOOLS]
         self.assertIn("search_internet", names)
         self.assertIn("fetch_url", names)
 

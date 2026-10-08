@@ -813,33 +813,33 @@ class ToolRouterRuntimeIntegrationTests(unittest.TestCase):
 class ProductionCommandBoundaryTests(unittest.TestCase):
     def test_registered_bash_still_crosses_command_runner_and_sandbox_preflight(self):
         from unittest.mock import patch
-        from cli import rag_chat
         from harness.tool_primitives import ExecutionMode, ToolResult
         from harness.workspace import Workspace
+        from cli import session_workspace, tool_routing
 
         with tempfile.TemporaryDirectory() as temporary:
-            old_workspace = rag_chat.WORKSPACE
-            old_root = rag_chat.PROJECT_ROOT
-            old_mode = rag_chat.EXECUTION_MODE
+            old_workspace = session_workspace.WORKSPACE
+            old_root = session_workspace.PROJECT_ROOT
+            old_mode = session_workspace.EXECUTION_MODE
             try:
-                rag_chat.WORKSPACE = Workspace.from_path(temporary)
-                rag_chat.PROJECT_ROOT = temporary
-                rag_chat.EXECUTION_MODE = ExecutionMode.SAFE
+                session_workspace.WORKSPACE = Workspace.from_path(temporary)
+                session_workspace.PROJECT_ROOT = temporary
+                session_workspace.EXECUTION_MODE = ExecutionMode.SAFE
                 with patch.object(
-                    rag_chat.COMMAND_RUNNER, "ensure_sandbox",
+                    session_workspace.COMMAND_RUNNER, "ensure_sandbox",
                     return_value=ToolResult("ok", "sandbox available"),
                 ) as preflight, patch.object(
-                    rag_chat.COMMAND_RUNNER, "run_sandboxed",
+                    session_workspace.COMMAND_RUNNER, "run_sandboxed",
                     return_value=ToolResult("ok", "done", stdout="secured\n"),
                 ) as run:
-                    envelope = rag_chat.route_tool_envelope(
+                    envelope = tool_routing.route_tool_envelope(
                         "bash", {"command": "pwd"}, {}, task_id="security",
                         trace=TraceEmitter(), tool_call_id="call",
                     )
             finally:
-                rag_chat.WORKSPACE = old_workspace
-                rag_chat.PROJECT_ROOT = old_root
-                rag_chat.EXECUTION_MODE = old_mode
+                session_workspace.WORKSPACE = old_workspace
+                session_workspace.PROJECT_ROOT = old_root
+                session_workspace.EXECUTION_MODE = old_mode
         self.assertTrue(envelope.success)
         self.assertEqual(envelope.text, "secured\n")
         self.assertEqual(envelope.stdout, "secured\n")

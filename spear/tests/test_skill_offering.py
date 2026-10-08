@@ -21,7 +21,10 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
 from context import context_selection as cs
-from cli import rag_chat
+from cli import (
+    corpus_search, knowledge_commands, model_io, session_workspace,
+    turn_context,
+)
 
 SKILLS = {
     "c-readability": ("[any]", "Improve the readability of a C function."),
@@ -52,14 +55,17 @@ class Offering(unittest.TestCase):
         projects = {project: {"path": self.root}} if registered else {}
 
         with mock.patch.multiple(
-                rag_chat, PROJECT=project or f"workspace:{self.root}", PROJECT_ROOT=self.root,
-                CORPUS_ROOT=self.root, SKILLS_DIR=self.skills, RULES_DIR=tempfile.mkdtemp(),
-                LEARNED_RULES_FILE="/nonexistent", CTX_LIMIT=200_000), \
-                mock.patch.object(rag_chat, "load_projects", lambda: projects):
-            _, selections, rendered = rag_chat.select_turn_context(
+                session_workspace, PROJECT=project or f"workspace:{self.root}",
+                PROJECT_ROOT=self.root, CORPUS_ROOT=self.root), \
+                mock.patch.multiple(
+                    turn_context, RULES_DIR=tempfile.mkdtemp(),
+                    LEARNED_RULES_FILE="/nonexistent", load_projects=lambda: projects), \
+                mock.patch.object(knowledge_commands, "SKILLS_DIR", self.skills), \
+                mock.patch.object(model_io, "CTX_LIMIT", 200_000):
+            _, selections, rendered = turn_context.select_turn_context(
                 user_input=request, turn_scope=scope, binding=binding, write=write,
                 project_spec=projects.get(project, {}), project_commands=None,
-                history_text="", memories="", skills=rag_chat.library_skills(), retrieval="",
+                history_text="", memories="", skills=knowledge_commands.library_skills(), retrieval="",
                 system_instructions="", system_source="", tool_guide="",
                 working_directory="")
 
@@ -90,7 +96,7 @@ class Offering(unittest.TestCase):
                          ["skill:c-readability", "skill:compile-failure"])
 
     def test_a_skill_whose_command_is_missing_is_not_offered(self):
-        self.assertNotIn("needs-tool", [name for name, _, _ in rag_chat.library_skills()])
+        self.assertNotIn("needs-tool", [name for name, _, _ in knowledge_commands.library_skills()])
 
     def test_normative_and_general_turns_are_offered_none(self):
         binding = {"standard_id": "SYNTH-1", "revision": "1"}
@@ -119,18 +125,18 @@ class Offering(unittest.TestCase):
 
     def test_a_library_past_the_limit_says_what_it_left_out(self):
         extra = [(f"extra-{index:02d}", ("[any]", f"Procedure {index}."))
-                 for index in range(rag_chat.MAX_SKILLS)]
+                 for index in range(turn_context.MAX_SKILLS)]
         library(self.skills, extra)
         offered, _, selections = self.offered("Rename cnt to count.")
         left_out = [decision for decision in selections[cs.IMPLEMENTATION].decisions
                     if decision.reason.startswith("skill limit")]
 
-        self.assertEqual(len(offered[cs.IMPLEMENTATION]), rag_chat.MAX_SKILLS)
+        self.assertEqual(len(offered[cs.IMPLEMENTATION]), turn_context.MAX_SKILLS)
         self.assertTrue(left_out)
 
     def test_offering_skills_needs_no_index(self):
-        with mock.patch.object(rag_chat, "_db", side_effect=AssertionError("index opened")):
-            self.assertTrue(rag_chat.library_skills())
+        with mock.patch.object(corpus_search, "_db", side_effect=AssertionError("index opened")):
+            self.assertTrue(knowledge_commands.library_skills())
 
 
 if __name__ == "__main__":

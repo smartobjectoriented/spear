@@ -202,20 +202,20 @@ class OpenAICompatibleBackendTests(unittest.TestCase):
         ))
 
     def test_fake_backend_four_turn_scenario_uses_spear_tools_and_policy(self):
-        from cli import rag_chat
         from harness.tool_primitives import ExecutionMode
         from harness.workspace import Workspace
+        from cli import session_workspace, tool_routing
 
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             (root / "README.md").write_text("TODO: write result\n", encoding="utf-8")
-            old_workspace = rag_chat.WORKSPACE
-            old_root = rag_chat.PROJECT_ROOT
-            old_mode = rag_chat.EXECUTION_MODE
+            old_workspace = session_workspace.WORKSPACE
+            old_root = session_workspace.PROJECT_ROOT
+            old_mode = session_workspace.EXECUTION_MODE
             try:
-                rag_chat.WORKSPACE = Workspace.from_path(root)
-                rag_chat.PROJECT_ROOT = str(root)
-                rag_chat.EXECUTION_MODE = ExecutionMode.AUTO
+                session_workspace.WORKSPACE = Workspace.from_path(root)
+                session_workspace.PROJECT_ROOT = str(root)
+                session_workspace.EXECUTION_MODE = ExecutionMode.AUTO
                 backend = FakeModelBackend([
                     # read README, search TODO, create result, then answer
                     SimpleNamespace(tool_calls=(ModelToolCall(
@@ -238,13 +238,13 @@ class OpenAICompatibleBackendTests(unittest.TestCase):
                     )))
                     results = []
                     for call in turn.tool_calls:
-                        result = rag_chat.execute_tool(call.name, dict(call.arguments), {})
+                        result = tool_routing.execute_tool(call.name, dict(call.arguments), {})
                         results.append(ToolResultBlock(call.id, result, result.startswith("ERROR:")))
                     conversation.append(ConversationMessage("user", tuple(results)))
             finally:
-                rag_chat.WORKSPACE = old_workspace
-                rag_chat.PROJECT_ROOT = old_root
-                rag_chat.EXECUTION_MODE = old_mode
+                session_workspace.WORKSPACE = old_workspace
+                session_workspace.PROJECT_ROOT = old_root
+                session_workspace.EXECUTION_MODE = old_mode
             self.assertEqual(final, "Created result.txt from the TODO.")
             self.assertEqual((root / "result.txt").read_text(encoding="utf-8"), "TODO found\n")
             self.assertEqual(len(backend.conversations), 4)
@@ -616,75 +616,75 @@ class AnthropicBackendTests(unittest.TestCase):
         self.assertEqual(built, {"api_key": "controlled-secret"})
 
     def test_login_is_offered_never_automatic_and_fails_closed(self):
-        from cli import rag_chat
+        from cli import model_io
 
         # Already authenticated: no prompt, no subprocess.
-        with patch.object(rag_chat, "anthropic_credentials_available", return_value=True), \
-             patch.object(rag_chat.subprocess, "run",
+        with patch.object(model_io, "anthropic_credentials_available", return_value=True), \
+             patch.object(model_io.subprocess, "run",
                           side_effect=AssertionError("must not spawn")):
-            rag_chat.offer_anthropic_login()
+            model_io.offer_anthropic_login()
 
         # No terminal: fail closed with instructions rather than hang on input().
-        with patch.object(rag_chat, "anthropic_credentials_available", return_value=False), \
-             patch.object(rag_chat.sys.stdin, "isatty", return_value=False), \
-             patch.object(rag_chat.subprocess, "run",
+        with patch.object(model_io, "anthropic_credentials_available", return_value=False), \
+             patch.object(model_io.sys.stdin, "isatty", return_value=False), \
+             patch.object(model_io.subprocess, "run",
                           side_effect=AssertionError("must not spawn")):
             with self.assertRaisesRegex(ModelBackendConfigurationError, "no terminal"):
-                rag_chat.offer_anthropic_login()
+                model_io.offer_anthropic_login()
 
         # Declined at the prompt: nothing is spawned.
-        with patch.object(rag_chat, "anthropic_credentials_available", return_value=False), \
-             patch.object(rag_chat.sys.stdin, "isatty", return_value=True), \
+        with patch.object(model_io, "anthropic_credentials_available", return_value=False), \
+             patch.object(model_io.sys.stdin, "isatty", return_value=True), \
              patch("builtins.input", return_value="2"), \
-             patch.object(rag_chat.subprocess, "run",
+             patch.object(model_io.subprocess, "run",
                           side_effect=AssertionError("must not spawn")):
             with self.assertRaisesRegex(ModelBackendConfigurationError, "declined"):
-                rag_chat.offer_anthropic_login()
+                model_io.offer_anthropic_login()
 
         # Accepted but the CLI is absent: the message carries the install hint.
-        with patch.object(rag_chat, "anthropic_credentials_available", return_value=False), \
-             patch.object(rag_chat.sys.stdin, "isatty", return_value=True), \
+        with patch.object(model_io, "anthropic_credentials_available", return_value=False), \
+             patch.object(model_io.sys.stdin, "isatty", return_value=True), \
              patch("builtins.input", return_value=""), \
-             patch.object(rag_chat.shutil, "which", return_value=None):
+             patch.object(model_io.shutil, "which", return_value=None):
             with self.assertRaisesRegex(ModelBackendConfigurationError, "releases"):
-                rag_chat.offer_anthropic_login()
+                model_io.offer_anthropic_login()
 
         # Accepted, CLI ran, but no credential resulted: still fail closed.
-        with patch.object(rag_chat, "anthropic_credentials_available", return_value=False), \
-             patch.object(rag_chat.sys.stdin, "isatty", return_value=True), \
+        with patch.object(model_io, "anthropic_credentials_available", return_value=False), \
+             patch.object(model_io.sys.stdin, "isatty", return_value=True), \
              patch("builtins.input", return_value=""), \
-             patch.object(rag_chat.shutil, "which", return_value="/usr/bin/ant"), \
-             patch.object(rag_chat.subprocess, "run") as run:
+             patch.object(model_io.shutil, "which", return_value="/usr/bin/ant"), \
+             patch.object(model_io.subprocess, "run") as run:
             with self.assertRaisesRegex(ModelBackendConfigurationError, "did not complete"):
-                rag_chat.offer_anthropic_login()
+                model_io.offer_anthropic_login()
         self.assertEqual(run.call_args.args[0], ["/usr/bin/ant", "auth", "login"])
 
         # Happy path: the login runs unsandboxed and the offer returns.
         answers = iter([False, True])
-        with patch.object(rag_chat, "anthropic_credentials_available",
+        with patch.object(model_io, "anthropic_credentials_available",
                           side_effect=lambda: next(answers)), \
-             patch.object(rag_chat.sys.stdin, "isatty", return_value=True), \
+             patch.object(model_io.sys.stdin, "isatty", return_value=True), \
              patch("builtins.input", return_value=""), \
-             patch.object(rag_chat.shutil, "which", return_value="/usr/bin/ant"), \
-             patch.object(rag_chat.subprocess, "run") as run:
-            rag_chat.offer_anthropic_login()
+             patch.object(model_io.shutil, "which", return_value="/usr/bin/ant"), \
+             patch.object(model_io.subprocess, "run") as run:
+            model_io.offer_anthropic_login()
         self.assertEqual(run.call_args.args[0], ["/usr/bin/ant", "auth", "login"])
         self.assertNotIn("bwrap", str(run.call_args))
 
     def test_rag_cli_keeps_qwen_default_and_selects_anthropic_explicitly(self):
-        from cli import rag_chat
+        from cli import model_io
 
-        self.assertEqual(rag_chat.model_provider_from_argv([]), ("openai-compatible", None))
-        self.assertEqual(rag_chat.model_provider_from_argv(
+        self.assertEqual(model_io.model_provider_from_argv([]), ("openai-compatible", None))
+        self.assertEqual(model_io.model_provider_from_argv(
             ["--provider", "anthropic", "--model", "claude-sonnet-5"]
         ), ("anthropic", "claude-sonnet-5"))
         with self.assertRaisesRegex(ModelBackendConfigurationError, "--provider"):
-            rag_chat.model_provider_from_argv(["--provider", "unsupported"])
+            model_io.model_provider_from_argv(["--provider", "unsupported"])
 
     def test_agent_loop_gate_executes_only_valid_tool_use_turns(self):
-        from cli import rag_chat
         from harness.tool_primitives import ExecutionMode
         from harness.workspace import Workspace
+        from cli import rag_chat, session_workspace, tool_routing
 
         sentinel = ModelToolCall("write", "write_file", {
             "path": "sentinel.txt", "content": "must not exist",
@@ -692,16 +692,16 @@ class AnthropicBackendTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             old_workspace, old_root, old_mode = (
-                rag_chat.WORKSPACE, rag_chat.PROJECT_ROOT, rag_chat.EXECUTION_MODE,
+                session_workspace.WORKSPACE, session_workspace.PROJECT_ROOT, session_workspace.EXECUTION_MODE,
             )
             try:
-                rag_chat.WORKSPACE = Workspace.from_path(root)
-                rag_chat.PROJECT_ROOT = str(root)
-                rag_chat.EXECUTION_MODE = ExecutionMode.AUTO
+                session_workspace.WORKSPACE = Workspace.from_path(root)
+                session_workspace.PROJECT_ROOT = str(root)
+                session_workspace.EXECUTION_MODE = ExecutionMode.AUTO
                 valid = FakeModelBackend([ModelTurn("", (sentinel,), StopReason.TOOL_USE)])
                 turn = valid.complete(system="s", conversation=(), tools=(), use_tools=True)
                 self.assertEqual(rag_chat.validate_agent_turn(turn), "tool_use")
-                rag_chat.execute_tool(sentinel.name, dict(sentinel.arguments), {})
+                tool_routing.execute_tool(sentinel.name, dict(sentinel.arguments), {})
                 self.assertTrue((root / "sentinel.txt").is_file())
                 (root / "sentinel.txt").unlink()
 
@@ -714,7 +714,7 @@ class AnthropicBackendTests(unittest.TestCase):
                             rag_chat.validate_agent_turn(turn)
                         self.assertFalse((root / "sentinel.txt").exists())
             finally:
-                rag_chat.WORKSPACE, rag_chat.PROJECT_ROOT, rag_chat.EXECUTION_MODE = (
+                session_workspace.WORKSPACE, session_workspace.PROJECT_ROOT, session_workspace.EXECUTION_MODE = (
                     old_workspace, old_root, old_mode,
                 )
 

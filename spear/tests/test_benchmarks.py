@@ -690,21 +690,22 @@ class ProjectVerifierConfinementTests(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        from cli import rag_chat
+        from cli import project_checks, session_workspace
 
-        cls.rag_chat = rag_chat
+        cls.project_checks = project_checks
+        cls.session_workspace = session_workspace
 
     def setUp(self):
-        self.saved = (self.rag_chat.WORKSPACE, self.rag_chat.PROJECT_ROOT,
-                      self.rag_chat.PROJECT_VERIFY_ON_HOST)
+        self.saved = (self.session_workspace.WORKSPACE, self.session_workspace.PROJECT_ROOT,
+                      self.project_checks.PROJECT_VERIFY_ON_HOST)
 
     def tearDown(self):
-        (self.rag_chat.WORKSPACE, self.rag_chat.PROJECT_ROOT,
-         self.rag_chat.PROJECT_VERIFY_ON_HOST) = self.saved
+        (self.session_workspace.WORKSPACE, self.session_workspace.PROJECT_ROOT,
+         self.project_checks.PROJECT_VERIFY_ON_HOST) = self.saved
 
     def test_no_workspace_means_not_run_never_the_host(self):
-        self.rag_chat.WORKSPACE = None
-        status, detail = self.rag_chat.verify_project_command("echo never")
+        self.session_workspace.WORKSPACE = None
+        status, detail = self.project_checks.verify_project_command("echo never")
         self.assertEqual(status, "not_run")
         self.assertIn("SPEAR_PROJECT_VERIFY_ON_HOST", detail)
 
@@ -717,22 +718,22 @@ class ProjectVerifierConfinementTests(unittest.TestCase):
                 raise AssertionError("must not run without a sandbox")
 
         with tempfile.TemporaryDirectory() as directory, patch.object(
-                self.rag_chat, "PROJECT_VERIFY_RUNNER", Refusing()):
-            self.rag_chat.WORKSPACE = Workspace.from_path(directory)
-            status, detail = self.rag_chat.verify_project_command("echo never")
+                self.project_checks, "PROJECT_VERIFY_RUNNER", Refusing()):
+            self.session_workspace.WORKSPACE = Workspace.from_path(directory)
+            status, detail = self.project_checks.verify_project_command("echo never")
 
         self.assertEqual(status, "not_run")
         self.assertIn("bubblewrap sandbox unavailable", detail)
 
     def test_the_host_is_reachable_only_by_explicit_choice(self):
         with tempfile.TemporaryDirectory() as directory:
-            self.rag_chat.WORKSPACE = None
-            self.rag_chat.PROJECT_ROOT = directory
-            self.rag_chat.PROJECT_VERIFY_ON_HOST = True
+            self.session_workspace.WORKSPACE = None
+            self.session_workspace.PROJECT_ROOT = directory
+            self.project_checks.PROJECT_VERIFY_ON_HOST = True
             self.assertEqual(
-                self.rag_chat.verify_project_command("true")[0], "passed")
+                self.project_checks.verify_project_command("true")[0], "passed")
             self.assertEqual(
-                self.rag_chat.verify_project_command("false")[0], "failed")
+                self.project_checks.verify_project_command("false")[0], "failed")
 
     def test_a_confined_run_reports_pass_and_fail(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -745,15 +746,15 @@ class ProjectVerifierConfinementTests(unittest.TestCase):
                 "import unittest\nfrom main import add\n\n\n"
                 "class T(unittest.TestCase):\n    def test_add(self):\n"
                 "        self.assertEqual(add(2, 3), 5)\n", encoding="utf-8")
-            self.rag_chat.WORKSPACE = Workspace.from_path(root)
-            self.rag_chat.PROJECT_ROOT = str(root)
+            self.session_workspace.WORKSPACE = Workspace.from_path(root)
+            self.session_workspace.PROJECT_ROOT = str(root)
             command = project_build.probe(str(root), infer_unittest=True).test
-            self.assertEqual(self.rag_chat.verify_project_command(command),
+            self.assertEqual(self.project_checks.verify_project_command(command),
                              ("passed", ""))
 
             (root / "main.py").write_text(
                 "def add(a, b):\n    return a - b   # broken\n", encoding="utf-8")
-            status, detail = self.rag_chat.verify_project_command(command)
+            status, detail = self.project_checks.verify_project_command(command)
             self.assertEqual(status, "failed")
             self.assertIn("FAIL", detail)
 
@@ -772,22 +773,22 @@ class SingleRootBoundaryTests(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        from cli import rag_chat
+        from cli import session_workspace
 
-        cls.rag_chat = rag_chat
+        cls.session_workspace = session_workspace
 
     def setUp(self):
-        self.saved = {name: getattr(self.rag_chat, name, None)
+        self.saved = {name: getattr(self.session_workspace, name, None)
                       for name in self._GLOBALS}
         self.temp = tempfile.TemporaryDirectory()
         self.cwd = os.getcwd()
 
     def tearDown(self):
         for name, value in self.saved.items():
-            setattr(self.rag_chat, name, value)
+            setattr(self.session_workspace, name, value)
 
         if self.saved["WORKSPACE"] is not None:
-            self.rag_chat.COMMAND_POLICY.bind_workspace(self.saved["WORKSPACE"])
+            self.session_workspace.COMMAND_POLICY.bind_workspace(self.saved["WORKSPACE"])
 
         os.chdir(self.cwd)
         self.temp.cleanup()
@@ -805,21 +806,21 @@ class SingleRootBoundaryTests(unittest.TestCase):
         os.chdir(root)
 
         with patch.object(sys, "argv", ["rag_chat.py", *argv]), patch.object(
-                self.rag_chat, "load_projects", lambda: registry):
-            self.rag_chat.set_project({"name": "fixture", "path": str(root),
-                                       "kind": "generic"})
+                self.session_workspace, "load_projects", lambda: registry):
+            self.session_workspace.set_project({"name": "fixture", "path": str(root),
+                                                "kind": "generic"})
 
-        return self.rag_chat.WORKSPACE
+        return self.session_workspace.WORKSPACE
 
     def test_the_registry_is_writable_without_the_flag(self):
         workspace = self._bind(["--auto", "--here"])
         self.assertEqual(len(workspace.extra_roots), 4)
-        self.assertIn("writable", self.rag_chat.extra_roots_note())
+        self.assertIn("writable", self.session_workspace.extra_roots_note())
 
     def test_the_registry_contributes_nothing_with_the_flag(self):
         workspace = self._bind(["--auto", "--here", "--single-root"])
         self.assertEqual(workspace.extra_roots, ())
-        self.assertEqual(self.rag_chat.extra_roots_note(), "")
+        self.assertEqual(self.session_workspace.extra_roots_note(), "")
         self.assertFalse(workspace.allow_absolute_paths)
 
         # And the boundary, not only the prompt: a declared corpus is no
@@ -828,7 +829,7 @@ class SingleRootBoundaryTests(unittest.TestCase):
         outside = Path(self.temp.name) / "so3" / "kernel.c"
         outside.write_text("int main(void) { return 0; }\n", encoding="utf-8")
         self.assertIn("path escapes the workspace",
-                      self.rag_chat.read_file(str(outside)))
+                      self.session_workspace.read_file(str(outside)))
 
 
 if __name__ == "__main__":

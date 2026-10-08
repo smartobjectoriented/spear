@@ -167,12 +167,12 @@ class TheOperatorFlags(unittest.TestCase):
         from unittest.mock import patch
 
         sys.argv = ["rag_chat", "--safe"]
-        from cli import rag_chat
+        from cli import chat_settings
 
         with patch.dict(os.environ, {}, clear=False):
             os.environ.pop(session_replay.RECORD_ENV, None)
             os.environ.pop(session_replay.REPLAY_ENV, None)
-            rest = rag_chat.apply_env_options(list(argv))
+            rest = chat_settings.apply_env_options(list(argv))
 
             return (os.environ.get(session_replay.RECORD_ENV),
                     os.environ.get(session_replay.REPLAY_ENV), rest)
@@ -189,11 +189,11 @@ class TheOperatorFlags(unittest.TestCase):
         import sys
 
         sys.argv = ["rag_chat", "--safe"]
-        from cli import rag_chat
+        from cli import startup_banner
 
         for flag in ("--record", "--replay"):
             with self.subTest(flag=flag):
-                self.assertIn(flag, rag_chat.HELP_TEXT)
+                self.assertIn(flag, startup_banner.HELP_TEXT)
 
 
 if __name__ == "__main__":

@@ -60,9 +60,9 @@ class PublicImageRegistry(unittest.TestCase):
                          ["closed", "lib", "open"])
 
     def test_the_corpus_cli_can_mark_one_public(self):
-        from cli import rag_chat
+        from cli import corpus_registry
 
-        self.assertIn("--public", rag_chat.CORPUS_USAGE)
+        self.assertIn("--public", corpus_registry.CORPUS_USAGE)
 
 
 if __name__ == "__main__":

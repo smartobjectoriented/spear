@@ -24,7 +24,7 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
 from runtime import progress_monitor
-from cli import rag_chat
+from cli import tool_handlers
 from harness import tool_router
 from runtime import work_phase
 
@@ -44,13 +44,13 @@ def wrote(ctx, times=1):
 class LinesAlreadyShownAreNotShownAgain(unittest.TestCase):
     def test_the_first_read_of_a_window_runs(self):
         self.assertEqual(
-            rag_chat._already_in_evidence(context(), f"sed -n '1,200p' {SOURCE}"),
+            tool_handlers._already_in_evidence(context(), f"sed -n '1,200p' {SOURCE}"),
             "")
 
     def test_the_same_window_again_is_answered_from_evidence(self):
         ctx = context()
-        rag_chat._already_in_evidence(ctx, f"sed -n '1,200p' {SOURCE}")
-        note = rag_chat._already_in_evidence(ctx, f"sed -n '1,200p' {SOURCE}")
+        tool_handlers._already_in_evidence(ctx, f"sed -n '1,200p' {SOURCE}")
+        note = tool_handlers._already_in_evidence(ctx, f"sed -n '1,200p' {SOURCE}")
 
         self.assertIn("ALREADY IN EVIDENCE", note)
         self.assertIn(SOURCE, note)
@@ -58,66 +58,66 @@ class LinesAlreadyShownAreNotShownAgain(unittest.TestCase):
     def test_a_narrower_window_inside_one_already_read_is_too(self):
         """This is the case the router's argument cache cannot see."""
         ctx = context()
-        rag_chat._already_in_evidence(ctx, f"sed -n '1,200p' {SOURCE}")
+        tool_handlers._already_in_evidence(ctx, f"sed -n '1,200p' {SOURCE}")
 
         self.assertIn("ALREADY IN EVIDENCE",
-                      rag_chat._already_in_evidence(ctx, f"sed -n '50,150p' {SOURCE}"))
+                      tool_handlers._already_in_evidence(ctx, f"sed -n '50,150p' {SOURCE}"))
 
     def test_a_window_that_extends_past_it_runs(self):
         ctx = context()
-        rag_chat._already_in_evidence(ctx, f"sed -n '1,200p' {SOURCE}")
+        tool_handlers._already_in_evidence(ctx, f"sed -n '1,200p' {SOURCE}")
 
         self.assertEqual(
-            rag_chat._already_in_evidence(ctx, f"sed -n '200,400p' {SOURCE}"), "")
+            tool_handlers._already_in_evidence(ctx, f"sed -n '200,400p' {SOURCE}"), "")
 
     def test_another_file_runs(self):
         ctx = context()
-        rag_chat._already_in_evidence(ctx, f"sed -n '1,200p' {SOURCE}")
+        tool_handlers._already_in_evidence(ctx, f"sed -n '1,200p' {SOURCE}")
 
         self.assertEqual(
-            rag_chat._already_in_evidence(ctx, "sed -n '1,200p' src/link/frame.c"),
+            tool_handlers._already_in_evidence(ctx, "sed -n '1,200p' src/link/frame.c"),
             "")
 
     def test_a_grep_is_never_suppressed(self):
         """Searching the same file for a different pattern is a new question."""
         ctx = context()
-        rag_chat._already_in_evidence(ctx, f"sed -n '1,200p' {SOURCE}")
+        tool_handlers._already_in_evidence(ctx, f"sed -n '1,200p' {SOURCE}")
 
         for command in (f"grep -n answer {SOURCE}", f"grep -rn answer src/",
                         f"cat {SOURCE}"):
             with self.subTest(command=command):
-                self.assertEqual(rag_chat._already_in_evidence(ctx, command), "")
+                self.assertEqual(tool_handlers._already_in_evidence(ctx, command), "")
 
     def test_a_write_puts_every_region_back_in_play(self):
         ctx = context()
-        rag_chat._already_in_evidence(ctx, f"sed -n '1,200p' {SOURCE}")
+        tool_handlers._already_in_evidence(ctx, f"sed -n '1,200p' {SOURCE}")
         wrote(ctx)
 
         self.assertEqual(
-            rag_chat._already_in_evidence(ctx, f"sed -n '1,200p' {SOURCE}"), "")
+            tool_handlers._already_in_evidence(ctx, f"sed -n '1,200p' {SOURCE}"), "")
 
     def test_and_the_region_settles_again_afterwards(self):
         ctx = context()
-        rag_chat._already_in_evidence(ctx, f"sed -n '1,200p' {SOURCE}")
+        tool_handlers._already_in_evidence(ctx, f"sed -n '1,200p' {SOURCE}")
         wrote(ctx)
-        rag_chat._already_in_evidence(ctx, f"sed -n '1,200p' {SOURCE}")
+        tool_handlers._already_in_evidence(ctx, f"sed -n '1,200p' {SOURCE}")
 
         self.assertIn("ALREADY IN EVIDENCE",
-                      rag_chat._already_in_evidence(ctx, f"sed -n '1,200p' {SOURCE}"))
+                      tool_handlers._already_in_evidence(ctx, f"sed -n '1,200p' {SOURCE}"))
 
     def test_the_note_says_what_to_do_instead(self):
         ctx = context()
-        rag_chat._already_in_evidence(ctx, f"head -n 100 {SOURCE}")
-        note = rag_chat._already_in_evidence(ctx, f"head -n 100 {SOURCE}")
+        tool_handlers._already_in_evidence(ctx, f"head -n 100 {SOURCE}")
+        note = tool_handlers._already_in_evidence(ctx, f"head -n 100 {SOURCE}")
 
         self.assertIn("Widen the range", note)
 
     def test_head_and_sed_over_the_same_lines_are_one_region(self):
         ctx = context()
-        rag_chat._already_in_evidence(ctx, f"sed -n '1,100p' {SOURCE}")
+        tool_handlers._already_in_evidence(ctx, f"sed -n '1,100p' {SOURCE}")
 
         self.assertIn("ALREADY IN EVIDENCE",
-                      rag_chat._already_in_evidence(ctx, f"head -n 100 {SOURCE}"))
+                      tool_handlers._already_in_evidence(ctx, f"head -n 100 {SOURCE}"))
 
 
 class TheEvidenceModelBacksIt(unittest.TestCase):

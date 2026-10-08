@@ -419,9 +419,15 @@ class Selection(unittest.TestCase):
     """Through rag_chat's own selection, with a capabilities file."""
 
     def setUp(self):
-        from cli import rag_chat
+        from cli import (
+            knowledge_commands, model_io, session_workspace,
+            turn_context,
+        )
 
-        self.rag_chat = rag_chat
+        self.knowledge_commands = knowledge_commands
+        self.model_io = model_io
+        self.session_workspace = session_workspace
+        self.turn_context = turn_context
         self.root = tempfile.mkdtemp()
         self._knowledge = mock.patch.dict(os.environ, {"SPEAR_KNOWLEDGE_DB": os.path.join(
             tempfile.mkdtemp(), "knowledge.sqlite3")})
@@ -435,23 +441,27 @@ class Selection(unittest.TestCase):
              "scope": "corpus app-b", "read": ["get_project_status"]}]}))
 
     def tearDown(self):
-        for registry in self.rag_chat._CAPABILITY_REGISTRY:
+        for registry in self.turn_context._CAPABILITY_REGISTRY:
             if registry is not None:
                 registry.close()
 
-        self.rag_chat._CAPABILITY_REGISTRY.clear()
+        self.turn_context._CAPABILITY_REGISTRY.clear()
 
     def turn(self, project, *, scope="IMPLEMENTATION", binding=None, registered=True):
         projects = {project: {"path": self.root}} if registered else {}
-        self.rag_chat._CAPABILITY_REGISTRY.clear()
+        self.turn_context._CAPABILITY_REGISTRY.clear()
 
         with mock.patch.multiple(
-                self.rag_chat, PROJECT=project if registered else f"workspace:{self.root}",
-                PROJECT_ROOT=self.root, CORPUS_ROOT=self.root, SKILLS_DIR=tempfile.mkdtemp(),
-                RULES_DIR=tempfile.mkdtemp(), LEARNED_RULES_FILE="/nonexistent",
-                CTX_LIMIT=200_000, CAPABILITIES_FILE=str(self.file)), \
-                mock.patch.object(self.rag_chat, "load_projects", lambda: projects):
-            _, _, rendered = self.rag_chat.select_turn_context(
+                self.session_workspace,
+                PROJECT=project if registered else f"workspace:{self.root}",
+                PROJECT_ROOT=self.root, CORPUS_ROOT=self.root), \
+                mock.patch.multiple(
+                    self.turn_context, RULES_DIR=tempfile.mkdtemp(),
+                    LEARNED_RULES_FILE="/nonexistent", CAPABILITIES_FILE=str(self.file),
+                    load_projects=lambda: projects), \
+                mock.patch.object(self.knowledge_commands, "SKILLS_DIR", tempfile.mkdtemp()), \
+                mock.patch.object(self.model_io, "CTX_LIMIT", 200_000):
+            _, _, rendered = self.turn_context.select_turn_context(
                 user_input="Check the pipeline.", turn_scope=scope, binding=binding,
                 write=True, project_spec=projects.get(project, {}), project_commands=None,
                 history_text="", memories="", skills=[], retrieval="",

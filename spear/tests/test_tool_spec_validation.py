@@ -141,9 +141,9 @@ class TheRealRegistryPasses(unittest.TestCase):
     """
 
     def specs(self):
-        from cli import rag_chat
+        from cli import tool_routing
 
-        return list(rag_chat.TOOL_REGISTRY.list_specs())
+        return list(tool_routing.TOOL_REGISTRY.list_specs())
 
     def test_every_native_spec_constructs(self):
         self.assertTrue(native_tool_specs())

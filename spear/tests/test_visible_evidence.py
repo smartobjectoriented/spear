@@ -20,7 +20,7 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
 from runtime import agent_model_turn, agent_notes
-from cli import rag_chat
+from cli import tool_handlers, tool_routing
 from runtime.agent_runtime import AgentRuntime
 from runtime.compaction import CompactionPolicy
 from models.model_backend import ConversationMessage, TextBlock, ToolResultBlock
@@ -82,7 +82,7 @@ class WindowedReads(unittest.TestCase):
         self.cache = {}
 
     def read(self, call_id, dropped=()):
-        return rag_chat._already_in_evidence(
+        return tool_handlers._already_in_evidence(
             self.context(call_id, set(dropped)), f"sed -n '1,200p' {SOURCE}")
 
     def test_a_a_second_read_is_stubbed_while_the_first_is_visible(self):
@@ -131,7 +131,7 @@ class TheRuntimeRecordsWhatWasNotSent(unittest.TestCase):
                             and block.tool_call_id == "k0"
                             for message in agent_context.conversation
                             for block in message.content))
-        self.assertFalse(rag_chat._evidence_in_context(agent_context, "k0"))
+        self.assertFalse(tool_routing._evidence_in_context(agent_context, "k0"))
 
     def test_without_compaction_nothing_is_dropped(self):
         backend = ScriptedBackend([
@@ -143,7 +143,7 @@ class TheRuntimeRecordsWhatWasNotSent(unittest.TestCase):
         AgentRuntime().run(agent_context)
 
         self.assertEqual(agent_context.dropped_tool_results, frozenset())
-        self.assertTrue(rag_chat._evidence_in_context(agent_context, "one"))
+        self.assertTrue(tool_routing._evidence_in_context(agent_context, "one"))
 
     def test_the_ids_are_read_from_result_blocks(self):
         messages = (

@@ -246,8 +246,8 @@ class MemoryRecorder:
 class ContextRuntimeIntegrationTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        from cli import rag_chat
-        cls.rag_chat = rag_chat
+        from cli import turn_context
+        cls.turn_context = turn_context
 
     def test_simple_provider_neutral_turn_preserves_layers_and_message_types(self):
         from models.model_backend import ConversationMessage, ModelTurn, StopReason, TextBlock
@@ -278,7 +278,7 @@ class ContextRuntimeIntegrationTests(unittest.TestCase):
             "retrieval": "|RAG",
             "retrieval_source": "test_retrieval",
         }
-        items = self.rag_chat.build_task_context_items(**fragments)
+        items = self.turn_context.build_task_context_items(**fragments)
         state.apply(StateEvent.create(
             StateEventType.CONSTRAINT_RECORDED, state.task_id, StateSource.USER,
             constraint="Added after initial context collection",
@@ -301,7 +301,7 @@ class ContextRuntimeIntegrationTests(unittest.TestCase):
         # the other system rules: after the tool guide, before the memories.
 
         expected_prefix = ("SYSTEM|GLOBAL|PROJECT|TOOLS"
-                           + self.rag_chat.ANSWER_SCOPE_RULE
+                           + self.turn_context.ANSWER_SCOPE_RULE
                            + "|MEMORY|SKILL|WORKSPACE")
         self.assertTrue(rendered.startswith(expected_prefix))
         self.assertIn("## Current task state", rendered)
@@ -373,17 +373,19 @@ class AnswerScopeRuleTests(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        from cli import rag_chat
+        from cli import model_io, rag_chat, turn_context
 
         cls.rag_chat = rag_chat
+        cls.model_io = model_io
+        cls.turn_context = turn_context
 
     def items(self, base):
         from runtime.working_state import WorkingState
 
-        return self.rag_chat.build_task_context_items(
+        return self.turn_context.build_task_context_items(
             system_instructions=base, system_source="probe",
             global_rules="rules", project_rules="project",
-            tool_guide=self.rag_chat.TOOL_GUIDE, tool_guide_source="probe",
+            tool_guide=self.model_io.TOOL_GUIDE, tool_guide_source="probe",
             memories="m" * 4000, skills="s" * 4000, working_directory="cwd",
             working_state=WorkingState.start("task_probe", "probe"),
             retrieval="r" * 40000, retrieval_source="probe")
@@ -398,7 +400,7 @@ class AnswerScopeRuleTests(unittest.TestCase):
         return {"generic": self.rag_chat.ADHOC_PROMPT}
 
     def test_the_rule_says_the_thing_and_names_nothing(self):
-        rule = self.rag_chat.ANSWER_SCOPE_RULE
+        rule = self.turn_context.ANSWER_SCOPE_RULE
 
         self.assertIn(self.SENTENCE, rule)
         self.assertIn("Do not name them to explain their exclusion", rule)

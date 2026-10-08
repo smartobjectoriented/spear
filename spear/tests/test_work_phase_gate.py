@@ -25,7 +25,7 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
 from runtime import agent_notes
-from cli import rag_chat
+from cli import chat_settings, session_workspace, tool_handlers, tool_routing
 from runtime import work_phase
 from runtime.agent_roles import AgentRole
 from harness.tool_exposure import ToolExposurePolicy
@@ -70,15 +70,15 @@ def call(name, arguments, *, phase=None, mode=ExecutionMode.AUTO, cache=None):
     """One tool call through the production routing path."""
     context = SimpleNamespace(
         read_only=False, role="main", task_id="task_gate",
-        trace=rag_chat.TRACE, checkpoint_manager=None, checkpoint=None,
+        trace=chat_settings.TRACE, checkpoint_manager=None, checkpoint=None,
         standard_binding={"standard_id": "SYNTHETIC-1"}, work_phase=phase,
         standard_source_ids_used=set(), session=None)
     screen = io.StringIO()
 
-    with patch.object(rag_chat, "EXECUTION_MODE", mode), redirect_stdout(screen):
-        envelope = rag_chat.route_tool_envelope(
+    with patch.object(session_workspace, "EXECUTION_MODE", mode), redirect_stdout(screen):
+        envelope = tool_routing.route_tool_envelope(
             name, arguments, {} if cache is None else cache,
-            trace=rag_chat.TRACE, agent_context=context)
+            trace=chat_settings.TRACE, agent_context=context)
 
     return envelope, screen.getvalue()
 
@@ -218,7 +218,7 @@ class TheGateOpensOnAnAcceptedPlan(unittest.TestCase):
 
 class ThePlanToolIsOfferedOnTheShapeThatNeedsIt(unittest.TestCase):
     def setUp(self):
-        self.registry = rag_chat.TOOL_REGISTRY
+        self.registry = tool_routing.TOOL_REGISTRY
         self.policy = ToolExposurePolicy()
 
     def view(self, objective, **kwargs):
@@ -294,7 +294,7 @@ class ThePlanHandlerReportsWhatItRefused(unittest.TestCase):
 
     def test_an_accepted_item_says_the_gate_is_open(self):
         found = ledger(investigated=True)
-        cache = {rag_chat.WORK_PHASE: found}
+        cache = {tool_handlers.WORK_PHASE: found}
         envelope, _ = call("plan_change", {
             "requirement": "r", "requirement_evidence": f"§{CLAUSE}",
             "current_behaviour": "b", "implementation_evidence": SOURCE,
@@ -308,7 +308,7 @@ class ThePlanHandlerReportsWhatItRefused(unittest.TestCase):
 
     def test_a_refused_item_comes_back_with_its_reason(self):
         found = ledger(investigated=True)
-        cache = {rag_chat.WORK_PHASE: found}
+        cache = {tool_handlers.WORK_PHASE: found}
         envelope, _ = call("plan_change", {
             "requirement": "r", "requirement_evidence": "§9.9.9",
             "current_behaviour": "b", "implementation_evidence": SOURCE,
@@ -323,7 +323,7 @@ class ThePlanHandlerReportsWhatItRefused(unittest.TestCase):
 
     def test_a_vague_item_is_refused_by_field(self):
         found = ledger(investigated=True)
-        cache = {rag_chat.WORK_PHASE: found}
+        cache = {tool_handlers.WORK_PHASE: found}
         envelope, _ = call(
             "plan_change",
             {"requirement": "be compliant", "requirement_evidence": "",
@@ -337,7 +337,7 @@ class ThePlanHandlerReportsWhatItRefused(unittest.TestCase):
 
     def test_the_schema_asks_for_nothing_nested(self):
         """What a model can reliably produce, not what the data looks like."""
-        spec = rag_chat.TOOL_REGISTRY.get("plan_change")
+        spec = tool_routing.TOOL_REGISTRY.get("plan_change")
 
         for name, field in spec.input_schema["properties"].items():
             with self.subTest(field=name):

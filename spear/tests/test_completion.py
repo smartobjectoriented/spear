@@ -14,7 +14,7 @@ sys.path.insert(0, str(ROOT))
 
 from evidence import completion
 from evidence import project_build
-from cli import rag_chat
+from cli import tool_routing
 from runtime import session_replay
 from agent.host import ToolRecord
 from runtime.agent_roles import AgentRole
@@ -160,7 +160,7 @@ class TheToolsetFollowsTheTaskType(unittest.TestCase):
                "sure it's always there after a clean and build")
 
     def select(self, objective, **kwargs):
-        return ToolExposurePolicy().select(rag_chat.TOOL_REGISTRY, AgentRole.MAIN,
+        return ToolExposurePolicy().select(tool_routing.TOOL_REGISTRY, AgentRole.MAIN,
                                            objective=objective, **kwargs).names
 
     def test_implementation_gets_the_coding_vocabulary(self):

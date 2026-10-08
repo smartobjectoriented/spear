@@ -170,18 +170,20 @@ class CheckpointTests(unittest.TestCase):
 
 class ProductionMutationCheckpointTests(unittest.TestCase):
     def setUp(self):
-        from cli import rag_chat
         from harness.workspace import Workspace
-        self.rag_chat = rag_chat
+        from cli import session_workspace, tool_handlers, tool_routing
+        self.session_workspace = session_workspace
+        self.tool_handlers = tool_handlers
+        self.tool_routing = tool_routing
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
         self.workspace = Path(self.temp.name) / "workspace"
         self.workspace.mkdir()
-        self.old_workspace, self.old_root = rag_chat.WORKSPACE, rag_chat.PROJECT_ROOT
-        self.addCleanup(setattr, rag_chat, "WORKSPACE", self.old_workspace)
-        self.addCleanup(setattr, rag_chat, "PROJECT_ROOT", self.old_root)
-        rag_chat.WORKSPACE = Workspace.from_path(self.workspace)
-        rag_chat.PROJECT_ROOT = str(self.workspace)
+        self.old_workspace, self.old_root = session_workspace.WORKSPACE, session_workspace.PROJECT_ROOT
+        self.addCleanup(setattr, session_workspace, "WORKSPACE", self.old_workspace)
+        self.addCleanup(setattr, session_workspace, "PROJECT_ROOT", self.old_root)
+        session_workspace.WORKSPACE = Workspace.from_path(self.workspace)
+        session_workspace.PROJECT_ROOT = str(self.workspace)
         self.manager = CheckpointManager(Path(self.temp.name) / "checkpoints",
                                          self.workspace)
         self.checkpoint = self.manager.begin_checkpoint(
@@ -201,9 +203,11 @@ class ProductionMutationCheckpointTests(unittest.TestCase):
 
         from harness.tool_primitives import ExecutionMode
 
-        with patch.object(self.rag_chat, "EXECUTION_MODE", ExecutionMode.AUTO), \
-                patch.object(self.rag_chat, "authorize_mutation", return_value=None):
-            return self.rag_chat.route_tool_envelope(
+        with patch.object(self.session_workspace, "EXECUTION_MODE", ExecutionMode.AUTO), \
+                patch.object(self.session_workspace, "authorize_mutation", return_value=None), \
+                patch.object(self.tool_handlers, "authorize_mutation", return_value=None), \
+                patch.object(self.tool_routing, "authorize_mutation", return_value=None):
+            return self.tool_routing.route_tool_envelope(
                 name, arguments, cache or {}, task_id=self.context.task_id,
                 trace=self.context.trace, cancellation=self.context.cancellation,
                 agent_context=self.context,
@@ -213,7 +217,7 @@ class ProductionMutationCheckpointTests(unittest.TestCase):
         created = self.route("write_file", {"path": "new.txt", "content": "one"})
         self.assertTrue(created.success)
         cache = {}
-        self.rag_chat._note_files_read(cache, "cat new.txt")
+        self.tool_handlers._note_files_read(cache, "cat new.txt")
         edited = self.route("edit_file", {
             "path": "new.txt", "old_text": "one", "new_text": "two",
         }, cache)

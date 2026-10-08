@@ -53,7 +53,8 @@ Typing
 ******
 
 ``from __future__ import annotations`` at the top of every module (a few
-older entry points such as ``rag_chat.py`` predate the rule), and return
+older entry points such as ``rag_chat.py``, and the ``cli/`` modules split
+from it, predate the rule), and return
 annotations wherever the return type is not obvious from the name. The point is not type checking, which
 nothing in CI runs; it is that a signature should answer "what comes back"
 without the reader opening the body.

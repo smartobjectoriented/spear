@@ -10,7 +10,7 @@ import unittest
 from pathlib import Path
 from types import SimpleNamespace
 
-from cli import rag_chat
+from cli import session_workspace, tool_handlers
 from runtime.progress_monitor import action_fingerprint
 from harness.tool_registry import native_tool_specs
 from harness.tool_primitives import ExecutionMode
@@ -55,8 +55,9 @@ class DeleteFileTests(unittest.TestCase):
                             ("PROJECT_ROOT", str(root)),
                             ("EXECUTION_MODE", ExecutionMode.AUTO),
                             ("BYPASS_PERMISSIONS", True)):
-            self.addCleanup(setattr, rag_chat, attr, getattr(rag_chat, attr))
-            setattr(rag_chat, attr, value)
+            self.addCleanup(setattr, session_workspace, attr,
+                            getattr(session_workspace, attr))
+            setattr(session_workspace, attr, value)
         self.previous_cwd = os.getcwd()
         os.chdir(root)
         self.addCleanup(lambda: os.chdir(self.previous_cwd))
@@ -75,7 +76,7 @@ class DeleteFileTests(unittest.TestCase):
         self.assertIn("reason", spec.input_schema["required"])
 
     def test_a_file_is_removed(self):
-        out = rag_chat._registered_delete_file(
+        out = tool_handlers._registered_delete_file(
             self.context(), {"path": "ls.rst", "reason": "content moved"})
         self.assertTrue(out.text.startswith("OK"), out.text)
         self.assertFalse(self.target.exists())
@@ -83,7 +84,7 @@ class DeleteFileTests(unittest.TestCase):
     def test_a_missing_file_and_a_directory_are_both_refused(self):
         for path in ("nope.rst", "."):
             with self.subTest(path=path):
-                out = rag_chat._registered_delete_file(
+                out = tool_handlers._registered_delete_file(
                     self.context(), {"path": path, "reason": "x"})
                 self.assertTrue(out.text.startswith("ERROR"), out.text)
         self.assertTrue(self.target.exists())

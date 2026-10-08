@@ -2,7 +2,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from cli import rag_chat
+from cli import rag_chat, tool_routing
 from cli.finetune_commands import (
     FinetuneCommandError, handle_finetune_command, parse_finetune_command,
 )
@@ -45,10 +45,10 @@ class FinetuneCommandTests(unittest.TestCase):
             with self.assertRaises(Exception): parse_finetune_command("/finetune doctor nope")
 
     def test_finetune_is_not_a_model_tool(self):
-        names = {spec.name for spec in rag_chat.TOOL_REGISTRY.list_specs()}
+        names = {spec.name for spec in tool_routing.TOOL_REGISTRY.list_specs()}
         self.assertNotIn("finetune", names)
         self.assertFalse(any("finetune" in str(item).lower()
-                             for item in rag_chat.CANONICAL_TOOLS))
+                             for item in tool_routing.CANONICAL_TOOLS))
 
     def test_runtime_cannot_import_or_dispatch_training_control(self):
         root = Path(rag_chat.__file__).parent.parent

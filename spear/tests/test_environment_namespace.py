@@ -153,15 +153,15 @@ class TheNewNameIsTheOneThatWorks(unittest.TestCase):
                    "/tmp/spear-probe-state/active-backend.conf")
 
     def test_api_base(self):
-        self.check("cli.rag_chat", "LLAMA_SERVER_URL", "SPEAR_API_BASE",
+        self.check("cli.chat_settings", "LLAMA_SERVER_URL", "SPEAR_API_BASE",
                    "http://127.0.0.1:9/v1", "http://127.0.0.1:9/v1")
 
     def test_db_path(self):
-        self.check("cli.rag_chat", "DB_PATH", "SPEAR_DB_PATH",
+        self.check("cli.chat_settings", "DB_PATH", "SPEAR_DB_PATH",
                    "/tmp/spear-probe-db", "/tmp/spear-probe-db")
 
     def test_corpus_root(self):
-        self.check("cli.rag_chat", "CORPORA_ROOT", "SPEAR_CORPUS_ROOT",
+        self.check("cli.corpus_registry", "CORPORA_ROOT", "SPEAR_CORPUS_ROOT",
                    "/tmp/spear-probe-corpora", "/tmp/spear-probe-corpora")
 
     def test_a_runtime_limit(self):
@@ -170,7 +170,8 @@ class TheNewNameIsTheOneThatWorks(unittest.TestCase):
 
     def tearDown(self):
         # Leave every module as the rest of the suite expects to find it.
-        for module in ("backend_select", "rag_chat", "agent_runtime"):
+        for module in ("backend_select", "chat_settings", "corpus_registry",
+                       "agent_runtime"):
             if module in sys.modules:
                 importlib.reload(sys.modules[module])
 
@@ -179,7 +180,8 @@ class TheTraceSwitchMovedToo(unittest.TestCase):
     """SPEAR_TRACE and SPEAR_TRACE_FILE, read where tracing is set up."""
 
     def source(self):
-        return (ROOT / "cli/rag_chat.py").read_text(encoding="utf-8")
+        return "".join(path.read_text(encoding="utf-8")
+                       for path in sorted((ROOT / "cli").glob("*.py")))
 
     def test_the_switch_is_read_under_the_new_name(self):
         self.assertIn('"SPEAR_TRACE"', self.source())

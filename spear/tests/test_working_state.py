@@ -436,8 +436,14 @@ class MemoryRecorder:
 class WorkingStateRuntimeIntegrationTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        from cli import rag_chat
-        cls.rag_chat = rag_chat
+        from cli import (
+            session_history, session_workspace, tool_handlers,
+            tool_routing,
+        )
+        cls.session_history = session_history
+        cls.session_workspace = session_workspace
+        cls.tool_handlers = tool_handlers
+        cls.tool_routing = tool_routing
 
     def test_scripted_task_uses_grounded_runtime_facts_without_prose_parsing(self):
         from models.model_backend import ModelTurn, StopReason
@@ -457,20 +463,21 @@ class WorkingStateRuntimeIntegrationTests(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
+            workspace, history = self.session_workspace, self.session_history
             old_values = {
-                "WORKSPACE": self.rag_chat.WORKSPACE,
-                "PROJECT_ROOT": self.rag_chat.PROJECT_ROOT,
-                "EXECUTION_MODE": self.rag_chat.EXECUTION_MODE,
-                "AUDIT_LOGGER": self.rag_chat.AUDIT_LOGGER,
-                "TRAJECTORY_FILE": self.rag_chat.TRAJECTORY_FILE,
+                (workspace, "WORKSPACE"): workspace.WORKSPACE,
+                (workspace, "PROJECT_ROOT"): workspace.PROJECT_ROOT,
+                (workspace, "EXECUTION_MODE"): workspace.EXECUTION_MODE,
+                (workspace, "AUDIT_LOGGER"): workspace.AUDIT_LOGGER,
+                (history, "TRAJECTORY_FILE"): history.TRAJECTORY_FILE,
             }
             recorder = MemoryRecorder()
             state = WorkingState.start("task_runtime", "Create a grounded file")
-            self.rag_chat.WORKSPACE = Workspace.from_path(root)
-            self.rag_chat.PROJECT_ROOT = str(root)
-            self.rag_chat.EXECUTION_MODE = ExecutionMode.AUTO
-            self.rag_chat.AUDIT_LOGGER = AuditLogger(root / "audit.jsonl")
-            self.rag_chat.TRAJECTORY_FILE = str(root / "trajectory.jsonl")
+            self.session_workspace.WORKSPACE = Workspace.from_path(root)
+            self.session_workspace.PROJECT_ROOT = str(root)
+            self.session_workspace.EXECUTION_MODE = ExecutionMode.AUTO
+            self.session_workspace.AUDIT_LOGGER = AuditLogger(root / "audit.jsonl")
+            self.session_history.TRAJECTORY_FILE = str(root / "trajectory.jsonl")
             context = AgentContext(
                 state, FakeBackend(), ContextEngine(), TraceEmitter(recorder),
                 "system", (ContextItem(
@@ -485,10 +492,10 @@ class WorkingStateRuntimeIntegrationTests(unittest.TestCase):
                     StateEventType.ROUND_STARTED, round_number=1
                 )
                 AgentRuntime().complete_model_turn(context, use_tools=False)
-                with patch.object(self.rag_chat, "tool_use"), patch.object(
-                    self.rag_chat, "tool_result"
+                with patch.object(self.tool_handlers, "tool_use"), patch.object(
+                    self.tool_handlers, "tool_result"
                 ):
-                    result = self.rag_chat.execute_tool(
+                    result = self.tool_routing.execute_tool(
                         "write_file", {"path": "grounded.txt", "content": "value"}, {},
                         agent_context=context,
                     )
@@ -504,12 +511,12 @@ class WorkingStateRuntimeIntegrationTests(unittest.TestCase):
                 context.apply_state_event(
                     StateEventType.TASK_COMPLETED, summary="done"
                 )
-                self.rag_chat.save_trajectory(
+                self.session_history.save_trajectory(
                     "question", [], "answer", "pass", "bench", state.task_id
                 )
             finally:
-                for name, value in old_values.items():
-                    setattr(self.rag_chat, name, value)
+                for (module, name), value in old_values.items():
+                    setattr(module, name, value)
 
             sample = json.loads((root / "trajectory.jsonl").read_text())
             self.assertEqual(sample["task_id"], "task_runtime")
@@ -538,12 +545,12 @@ class WorkingStateRuntimeIntegrationTests(unittest.TestCase):
             compaction_policy=CompactionPolicy(minimum_compactable_tokens=10000),
         )
         with patch.object(
-            self.rag_chat, "run_cmd_result",
+            self.tool_handlers, "run_cmd_result",
             return_value=ToolResult(
                 "failed", "command failed", stdout="compiler output", exit_code=2,
             ),
         ):
-            result = self.rag_chat.execute_tool(
+            result = self.tool_routing.execute_tool(
                 "bash", {"command": "make"}, {}, agent_context=context,
             )
         self.assertIn("exit 2", result)

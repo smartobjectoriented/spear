@@ -31,7 +31,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-from cli import rag_chat
+from cli import corpus_registry, corpus_search, rag_chat, session_workspace
 
 
 class Registry(unittest.TestCase):
@@ -42,24 +42,28 @@ class Registry(unittest.TestCase):
         self.addCleanup(self.tmp.cleanup)
         self.root = os.path.realpath(self.tmp.name)
 
-        for name in ("PROJECTS_FILE", "PROJECT", "PROJECT_SPEC", "PROJECT_KIND",
-                     "PROJECT_ROOT", "CORPUS_ROOT", "COLLECTION_NAME"):
-            self.addCleanup(setattr, rag_chat, name, getattr(rag_chat, name))
+        self.addCleanup(setattr, corpus_registry, "PROJECTS_FILE",
+                        corpus_registry.PROJECTS_FILE)
 
-        rag_chat.PROJECTS_FILE = os.path.join(self.root, "projects.json")
+        for name in ("PROJECT", "PROJECT_SPEC", "PROJECT_KIND", "PROJECT_ROOT",
+                     "CORPUS_ROOT", "COLLECTION_NAME"):
+            self.addCleanup(setattr, session_workspace, name,
+                            getattr(session_workspace, name))
+
+        corpus_registry.PROJECTS_FILE = os.path.join(self.root, "projects.json")
         os.makedirs(f"{self.root}/tree", exist_ok=True)
 
     def register(self, **spec):
         spec.setdefault("path", f"{self.root}/tree")
-        with open(rag_chat.PROJECTS_FILE, "w") as f:
+        with open(corpus_registry.PROJECTS_FILE, "w") as f:
             json.dump({"c": spec}, f)
 
-        rag_chat.PROJECT = "c"
-        rag_chat.PROJECT_SPEC = dict(spec, name="c")
-        rag_chat.PROJECT_KIND = spec.get("kind", "generic")
-        rag_chat.CORPUS_ROOT = spec["path"]
-        rag_chat.PROJECT_ROOT = spec["path"]
-        rag_chat.COLLECTION_NAME = rag_chat.collection_name_for(spec)
+        session_workspace.PROJECT = "c"
+        session_workspace.PROJECT_SPEC = dict(spec, name="c")
+        session_workspace.PROJECT_KIND = spec.get("kind", "generic")
+        session_workspace.CORPUS_ROOT = spec["path"]
+        session_workspace.PROJECT_ROOT = spec["path"]
+        session_workspace.COLLECTION_NAME = corpus_search.collection_name_for(spec)
 
         return spec
 
@@ -68,20 +72,20 @@ class TheIndexerIsDeclared(Registry):
     def test_generic_by_default(self):
         self.register(kind="generic")
 
-        self.assertEqual(rag_chat.corpus_indexer(), "generic")
-        self.assertTrue(rag_chat.reindex_command()[1].endswith("retrieval/index_dir.py"))
+        self.assertEqual(corpus_search.corpus_indexer(), "generic")
+        self.assertTrue(corpus_search.reindex_command()[1].endswith("retrieval/index_dir.py"))
 
     def test_the_curated_walk_is_asked_for_by_name(self):
         self.register(kind="generic", indexer="buildsystem")
 
-        self.assertTrue(rag_chat.reindex_command()[1].endswith("retrieval/index_corpus.py"))
+        self.assertTrue(corpus_search.reindex_command()[1].endswith("retrieval/index_corpus.py"))
 
     def test_the_kind_does_not_choose_it(self):
         """The whole point: a label must not move the machinery."""
         self.register(kind="buildsystem")
 
-        self.assertEqual(rag_chat.corpus_indexer(), "generic")
-        self.assertTrue(rag_chat.reindex_command()[1].endswith("retrieval/index_dir.py"))
+        self.assertEqual(corpus_search.corpus_indexer(), "generic")
+        self.assertTrue(corpus_search.reindex_command()[1].endswith("retrieval/index_dir.py"))
 
     def test_both_indexers_are_told_the_collection(self):
         """Left to derive its own name, the curated walk indexed into one
@@ -89,9 +93,9 @@ class TheIndexerIsDeclared(Registry):
         for indexer in ("generic", "buildsystem"):
             with self.subTest(indexer=indexer):
                 self.register(indexer=indexer)
-                cmd = rag_chat.reindex_command()
+                cmd = corpus_search.reindex_command()
 
-                self.assertEqual(rag_chat.COLLECTION_NAME,
+                self.assertEqual(session_workspace.COLLECTION_NAME,
                                  cmd[cmd.index("--collection") + 1])
 
 
@@ -101,29 +105,29 @@ class AutoindexIsDeclared(Registry):
         opened it is a surprise."""
         self.register(kind="generic")
 
-        self.assertFalse(rag_chat.corpus_autoindexes())
+        self.assertFalse(corpus_search.corpus_autoindexes())
 
     def test_on_when_declared(self):
         self.register(kind="generic", autoindex=True)
 
-        self.assertTrue(rag_chat.corpus_autoindexes())
+        self.assertTrue(corpus_search.corpus_autoindexes())
 
     def test_the_kind_does_not_choose_it(self):
         self.register(kind="buildsystem")
 
-        self.assertFalse(rag_chat.corpus_autoindexes())
+        self.assertFalse(corpus_search.corpus_autoindexes())
 
 
 class ThePromptIsDeclared(Registry):
     def test_no_prompt_file_means_the_generic_prompt(self):
         self.register(kind="buildsystem")
 
-        self.assertIsNone(rag_chat.corpus_property("prompt_file"))
+        self.assertIsNone(corpus_search.corpus_property("prompt_file"))
 
     def test_a_corpus_names_its_own(self):
         self.register(kind="generic", prompt_file="system-prompt.md")
 
-        self.assertEqual(rag_chat.corpus_property("prompt_file"),
+        self.assertEqual(corpus_search.corpus_property("prompt_file"),
                          "system-prompt.md")
 
     def test_the_selection_is_not_a_kind_branch(self):
@@ -144,19 +148,19 @@ class TheCollectionIsPinnedOrDerived(Registry):
         spec = self.register(kind="generic")
         tag = hashlib.md5(os.path.realpath(spec["path"]).encode()).hexdigest()[:8]
 
-        self.assertEqual(rag_chat.collection_name_for(spec), f"adhoc_{tag}")
+        self.assertEqual(corpus_search.collection_name_for(spec), f"adhoc_{tag}")
 
     def test_an_existing_index_is_named(self):
         """How a corpus keeps an index built before its path -- or its kind --
         was what it is now. No rename, no rebuild."""
         spec = self.register(kind="buildsystem", collection="legacy_name")
 
-        self.assertEqual(rag_chat.collection_name_for(spec), "legacy_name")
+        self.assertEqual(corpus_search.collection_name_for(spec), "legacy_name")
 
     def test_the_kind_does_not_derive_a_name(self):
         spec = self.register(kind="buildsystem")
 
-        self.assertTrue(rag_chat.collection_name_for(spec).startswith("adhoc_"))
+        self.assertTrue(corpus_search.collection_name_for(spec).startswith("adhoc_"))
 
 
 class NoBehaviourHidesBehindTheKind(unittest.TestCase):
@@ -196,7 +200,7 @@ class NoBehaviourHidesBehindTheKind(unittest.TestCase):
         self.assertEqual(offenders, {})
 
     def test_the_registry_documents_the_keys(self):
-        body = (ROOT / "cli/rag_chat.py").read_text(encoding="utf-8")
+        body = (ROOT / "cli/corpus_registry.py").read_text(encoding="utf-8")
 
         for key in ("collection", "indexer", "autoindex", "prompt_file"):
             with self.subTest(key=key):
@@ -214,19 +218,19 @@ class NoBehaviourHidesBehindTheKind(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             tree = os.path.join(tmp, "tree")
             os.makedirs(tree)
-            previous = rag_chat.PROJECTS_FILE
-            rag_chat.PROJECTS_FILE = os.path.join(tmp, "projects.json")
-            self.addCleanup(setattr, rag_chat, "PROJECTS_FILE", previous)
-            open(rag_chat.PROJECTS_FILE, "w").write("{}")
+            previous = corpus_registry.PROJECTS_FILE
+            corpus_registry.PROJECTS_FILE = os.path.join(tmp, "projects.json")
+            self.addCleanup(setattr, corpus_registry, "PROJECTS_FILE", previous)
+            open(corpus_registry.PROJECTS_FILE, "w").write("{}")
 
             for spelling in (["--kind", "buildsystem", "--indexer", "buildsystem",
                               "--autoindex", "--prompt-file", "p.md"],
                              ["--kind=buildsystem", "--indexer=buildsystem",
                               "--autoindex", "--prompt-file=p.md"]):
                 with self.subTest(spelling=spelling[0]):
-                    rag_chat.handle_corpus_command(["rm", "c"])
-                    rag_chat.handle_corpus_command(["add", "c", tree] + spelling)
-                    spec = json.load(open(rag_chat.PROJECTS_FILE))["c"]
+                    corpus_registry.handle_corpus_command(["rm", "c"])
+                    corpus_registry.handle_corpus_command(["add", "c", tree] + spelling)
+                    spec = json.load(open(corpus_registry.PROJECTS_FILE))["c"]
 
                     self.assertEqual(spec["kind"], "buildsystem")
                     self.assertEqual(spec["indexer"], "buildsystem")
@@ -241,14 +245,14 @@ class NoBehaviourHidesBehindTheKind(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             tree = os.path.join(tmp, "tree")
             os.makedirs(tree)
-            previous = rag_chat.PROJECTS_FILE
-            rag_chat.PROJECTS_FILE = os.path.join(tmp, "projects.json")
-            self.addCleanup(setattr, rag_chat, "PROJECTS_FILE", previous)
-            open(rag_chat.PROJECTS_FILE, "w").write("{}")
+            previous = corpus_registry.PROJECTS_FILE
+            corpus_registry.PROJECTS_FILE = os.path.join(tmp, "projects.json")
+            self.addCleanup(setattr, corpus_registry, "PROJECTS_FILE", previous)
+            open(corpus_registry.PROJECTS_FILE, "w").write("{}")
 
-            rag_chat.handle_corpus_command(
+            corpus_registry.handle_corpus_command(
                 ["add", "c", tree, "--kind", "buildsystem"])
-            spec = json.load(open(rag_chat.PROJECTS_FILE))["c"]
+            spec = json.load(open(corpus_registry.PROJECTS_FILE))["c"]
 
             self.assertEqual(spec["path"], tree, "the value became the path")
             self.assertNotIn("buildsystem", spec["path"])
@@ -256,7 +260,7 @@ class NoBehaviourHidesBehindTheKind(unittest.TestCase):
     def test_the_cli_offers_each_behaviour_separately(self):
         """One flag that switched four things at once is how they became
         invisible."""
-        body = (ROOT / "cli/rag_chat.py").read_text(encoding="utf-8")
+        body = (ROOT / "cli/corpus_registry.py").read_text(encoding="utf-8")
         for flag in ("--kind", "--indexer", "--autoindex", "--prompt-file"):
             with self.subTest(flag=flag):
                 self.assertIn(flag, body)

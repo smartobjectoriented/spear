@@ -24,7 +24,7 @@ import urllib.request
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent.parent))
 
-from cli import rag_chat
+from cli import chat_settings
 from standard import standard_answer_policy
 from standard.standard_tools import STANDARD_TOOL_NAMES, StandardToolService
 from harness.tool_registry import ToolRegistry
@@ -45,7 +45,7 @@ MAX_ROUNDS = 14
 
 
 def build_registry():
-    store = rag_chat.STANDARD_STORE
+    store = chat_settings.STANDARD_STORE
     registry = ToolRegistry()
     StandardToolService(store).register(registry)
     binding = store.binding(SID, REV).to_dict()

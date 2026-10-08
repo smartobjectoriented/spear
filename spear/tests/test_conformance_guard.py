@@ -191,11 +191,11 @@ class BoundStandardUrls(unittest.TestCase):
     BOUND = "https://standards.example/doc/vita492-standard/"
 
     def setUp(self):
-        from cli import rag_chat
-        self.rag = rag_chat
-        self.addCleanup(setattr, rag_chat, "STANDARD_ENGAGED_BEFORE",
-                        rag_chat.STANDARD_ENGAGED_BEFORE)
-        rag_chat.STANDARD_ENGAGED_BEFORE = True
+        from cli import standard_session
+        self.standard_session = standard_session
+        self.addCleanup(setattr, standard_session, "STANDARD_ENGAGED_BEFORE",
+                        standard_session.STANDARD_ENGAGED_BEFORE)
+        standard_session.STANDARD_ENGAGED_BEFORE = True
 
         # The binding comes from the test, not from the operator's private
         # standards store. Reading that store made every assertion here depend
@@ -207,7 +207,7 @@ class BoundStandardUrls(unittest.TestCase):
                                   "a" * 64, "b" * 64, "c" * 64, "extractor-1"))
 
     def bind(self, binding):
-        patcher = patch.object(self.rag.STANDARD_OPERATOR, "active_binding",
+        patcher = patch.object(self.standard_session.STANDARD_OPERATOR, "active_binding",
                                return_value=binding)
         patcher.start()
         self.addCleanup(patcher.stop)
@@ -215,11 +215,11 @@ class BoundStandardUrls(unittest.TestCase):
     def test_the_two_urls_that_started_this(self):
         for url in (self.BOUND,
                     "file:///opt/llm/spear/claude/ref-vita492-standard.md"):
-            found = self.rag.standard_url_refusal(url)
+            found = self.standard_session.standard_url_refusal(url)
             self.assertIn("standard.search", found, url)
 
     def test_the_refusal_names_the_standard_it_is_bound_to(self):
-        found = self.rag.standard_url_refusal(self.BOUND)
+        found = self.standard_session.standard_url_refusal(self.BOUND)
 
         self.assertIn("ANSI-VITA-49.2 2017-R2024", found)
         self.assertIn("sha256", found)
@@ -227,17 +227,17 @@ class BoundStandardUrls(unittest.TestCase):
     def test_an_unrelated_url_is_untouched(self):
         for url in ("https://cmake.org/cmake/help/latest/",
                     "https://man7.org/linux/man-pages/man2/sendto.2.html"):
-            self.assertEqual(self.rag.standard_url_refusal(url), "", url)
+            self.assertEqual(self.standard_session.standard_url_refusal(url), "", url)
 
     def test_nothing_is_refused_before_the_session_engages(self):
-        self.rag.STANDARD_ENGAGED_BEFORE = False
-        self.assertEqual(self.rag.standard_url_refusal(self.BOUND), "")
+        self.standard_session.STANDARD_ENGAGED_BEFORE = False
+        self.assertEqual(self.standard_session.standard_url_refusal(self.BOUND), "")
 
     def test_an_unbound_session_refuses_nothing(self):
         """No standard pinned is the normal state of a fresh checkout."""
 
         self.bind(None)
-        self.assertEqual(self.rag.standard_url_refusal(self.BOUND), "")
+        self.assertEqual(self.standard_session.standard_url_refusal(self.BOUND), "")
 
 class TheClearanceThatPassed(unittest.TestCase):
     """Verbatim from a run that "verified" the implementation without ever

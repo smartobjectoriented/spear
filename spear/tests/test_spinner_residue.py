@@ -6,7 +6,7 @@ import unittest
 from contextlib import redirect_stdout
 
 sys.argv = ["rag_chat", "--safe"]
-from cli import rag_chat
+from cli import terminal_ui
 
 CLEAR = "\r\033[K"
 ANSI = re.compile(r"\033\[[0-9;]*m")
@@ -30,7 +30,7 @@ class TheLineIsNeverBlanked(unittest.TestCase):
         buffer = io.StringIO()
 
         with redirect_stdout(buffer):
-            with rag_chat.Spinner("Analyzing results…"):
+            with terminal_ui.Spinner("Analyzing results…"):
                 time.sleep(1.0)
 
         self.assertIn("Analyzing results…", visible(buffer.getvalue()))
@@ -39,7 +39,7 @@ class TheLineIsNeverBlanked(unittest.TestCase):
         buffer = io.StringIO()
 
         with redirect_stdout(buffer):
-            with rag_chat.Spinner("Compacting context…"):
+            with terminal_ui.Spinner("Compacting context…"):
                 time.sleep(0.2)
 
         self.assertIn("Compacting context…", visible(buffer.getvalue()))
@@ -48,14 +48,14 @@ class TheLineIsNeverBlanked(unittest.TestCase):
         buffer = io.StringIO()
 
         with redirect_stdout(buffer):
-            with rag_chat.Spinner("Thinking…"):
+            with terminal_ui.Spinner("Thinking…"):
                 time.sleep(0.3)
 
         last = visible(buffer.getvalue())
 
         self.assertNotIn("ctrl+c", last)
 
-        for frame in rag_chat.Spinner.FRAMES:
+        for frame in terminal_ui.Spinner.FRAMES:
             self.assertNotIn(frame, last)
 
 
@@ -68,7 +68,7 @@ class TheLineIsNeverStacked(unittest.TestCase):
 
         with redirect_stdout(buffer):
             for label in ("Thinking…", "Analyzing results…", "Compacting…"):
-                with rag_chat.Spinner(label):
+                with terminal_ui.Spinner(label):
                     time.sleep(0.2)
 
         self.assertNotIn("\n", buffer.getvalue())
@@ -77,9 +77,9 @@ class TheLineIsNeverStacked(unittest.TestCase):
         buffer = io.StringIO()
 
         with redirect_stdout(buffer):
-            with rag_chat.Spinner("Thinking…"):
+            with terminal_ui.Spinner("Thinking…"):
                 time.sleep(0.2)
-            with rag_chat.Spinner("Compacting context…"):
+            with terminal_ui.Spinner("Compacting context…"):
                 time.sleep(0.2)
 
         line = visible(buffer.getvalue())
@@ -112,17 +112,17 @@ class RealOutputTakesTheLineBack(unittest.TestCase):
         beside it tests a proxy nobody uses.
         """
         stream = self.Stream()
-        previous, previous_pending = sys.stdout, rag_chat.STATUS.pending
-        sys.stdout = rag_chat._StatusAwareStdout(stream)
-        rag_chat.STATUS.pending = pending
-        rag_chat.STATUS.writing = writing
+        previous, previous_pending = sys.stdout, terminal_ui.STATUS.pending
+        sys.stdout = terminal_ui._StatusAwareStdout(stream)
+        terminal_ui.STATUS.pending = pending
+        terminal_ui.STATUS.writing = writing
 
         try:
             sys.stdout.write(text)
         finally:
             sys.stdout = previous
-            rag_chat.STATUS.pending = previous_pending
-            rag_chat.STATUS.writing = False
+            terminal_ui.STATUS.pending = previous_pending
+            terminal_ui.STATUS.writing = False
 
         return stream.written
 
@@ -154,15 +154,15 @@ class OneClockForTheTurn(unittest.TestCase):
 
     def test_the_count_never_goes_backwards_across_activities(self):
         buffer = io.StringIO()
-        rag_chat.STATUS.begin_turn()
+        terminal_ui.STATUS.begin_turn()
 
         try:
             with redirect_stdout(buffer):
                 for label in ("Thinking…", "Analyzing results…", "Compacting…"):
-                    with rag_chat.Spinner(label):
+                    with terminal_ui.Spinner(label):
                         time.sleep(1.1)
         finally:
-            rag_chat.STATUS.end_turn()
+            terminal_ui.STATUS.end_turn()
 
         counts = self.seconds(buffer.getvalue())
 
@@ -171,21 +171,21 @@ class OneClockForTheTurn(unittest.TestCase):
 
     def test_outside_a_turn_each_activity_times_itself(self):
         """Startup work — loading the embedder — is not part of any turn."""
-        rag_chat.STATUS.end_turn()
+        terminal_ui.STATUS.end_turn()
         buffer = io.StringIO()
 
         with redirect_stdout(buffer):
-            with rag_chat.Spinner("Loading…"):
+            with terminal_ui.Spinner("Loading…"):
                 time.sleep(1.1)
-            with rag_chat.Spinner("Loading…"):
+            with terminal_ui.Spinner("Loading…"):
                 time.sleep(0.2)
 
         self.assertEqual(min(self.seconds(buffer.getvalue())), 0)
 
     def test_minutes_appear_once_seconds_stop_being_readable(self):
-        self.assertEqual(rag_chat.Spinner._fmt_elapsed(59), "59s")
-        self.assertEqual(rag_chat.Spinner._fmt_elapsed(60), "1m00s")
-        self.assertEqual(rag_chat.Spinner._fmt_elapsed(754), "12m34s")
+        self.assertEqual(terminal_ui.Spinner._fmt_elapsed(59), "59s")
+        self.assertEqual(terminal_ui.Spinner._fmt_elapsed(60), "1m00s")
+        self.assertEqual(terminal_ui.Spinner._fmt_elapsed(754), "12m34s")
 
 
 class AToolLooksLikeWorkNotLikeAFreeze(unittest.TestCase):
@@ -209,7 +209,7 @@ class AToolLooksLikeWorkNotLikeAFreeze(unittest.TestCase):
         buffer = io.StringIO()
 
         with redirect_stdout(buffer):
-            with rag_chat.Spinner(label) as spinner:
+            with terminal_ui.Spinner(label) as spinner:
                 spinner.tokens = tokens
                 time.sleep(0.4)
 
@@ -230,24 +230,24 @@ class AToolLooksLikeWorkNotLikeAFreeze(unittest.TestCase):
 
         frames = [line[0] for line in tool_shape[:-1]]
         self.assertEqual(frames, [line[0] for line in model_shape[:len(frames)]])
-        self.assertTrue(set(frames) <= set(rag_chat.Spinner.FRAMES))
+        self.assertTrue(set(frames) <= set(terminal_ui.Spinner.FRAMES))
         self.assertIn("ctrl+c to interrupt", ANSI.sub("", tool))
 
     def test_the_clock_carries_on_from_the_model_call_into_the_tool(self):
         """One turn, one clock: the handover is not a restart."""
 
         buffer = io.StringIO()
-        rag_chat.STATUS.begin_turn()
+        terminal_ui.STATUS.begin_turn()
 
         try:
             with redirect_stdout(buffer):
-                with rag_chat.Spinner("Analyzing results…"):
+                with terminal_ui.Spinner("Analyzing results…"):
                     time.sleep(1.1)
 
-                with rag_chat.Spinner("standard.fetch…"):
+                with terminal_ui.Spinner("standard.fetch…"):
                     time.sleep(1.1)
         finally:
-            rag_chat.STATUS.end_turn()
+            terminal_ui.STATUS.end_turn()
 
         counts = [int(n) for n in re.findall(r"\((\d+)s",
                                             ANSI.sub("", buffer.getvalue()))]

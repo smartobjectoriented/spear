@@ -352,12 +352,12 @@ class TheProductIdentifiesItself(unittest.TestCase):
         """
         import io, sys
         sys.path.insert(0, str(ROOT))
-        from cli import rag_chat
+        from cli import startup_banner
 
         out = io.StringIO()
         stdout, sys.stdout = sys.stdout, out
         try:
-            rag_chat.banner_art()
+            startup_banner.banner_art()
         finally:
             sys.stdout = stdout
 
@@ -369,7 +369,7 @@ class TheProductIdentifiesItself(unittest.TestCase):
 
     def test_the_help_names_the_current_commands(self):
         """The banner is not the only place a name is printed."""
-        source = (ROOT / "cli/rag_chat.py").read_text(encoding="utf-8")
+        source = (ROOT / "cli/startup_banner.py").read_text(encoding="utf-8")
 
         self.assertIn("spear-chat [options]", source)
         self.assertNotIn("edgem" + "-chat", source)

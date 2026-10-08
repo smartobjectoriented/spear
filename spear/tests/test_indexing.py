@@ -15,7 +15,6 @@ from pathlib import Path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from retrieval import embedding
 from retrieval import index_corpus
-from cli import rag_chat
 
 
 class ChunkCapTest(unittest.TestCase):
@@ -176,36 +175,38 @@ class ReindexOptionsTest(unittest.TestCase):
     the corpus re-pollutes itself."""
 
     def setUp(self):
-        from cli import rag_chat
-        self.rag_chat = rag_chat
+        from cli import corpus_registry, corpus_search, session_workspace
+        self.corpus_registry = corpus_registry
+        self.corpus_search = corpus_search
+        self.session_workspace = session_workspace
         self.tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
-        self._file, self._proj = rag_chat.PROJECTS_FILE, rag_chat.PROJECT
-        rag_chat.PROJECTS_FILE = os.path.join(self.tmp.name, "projects.json")
-        self.addCleanup(setattr, rag_chat, "PROJECTS_FILE", self._file)
-        self.addCleanup(setattr, rag_chat, "PROJECT", self._proj)
+        self._file, self._proj = corpus_registry.PROJECTS_FILE, session_workspace.PROJECT
+        corpus_registry.PROJECTS_FILE = os.path.join(self.tmp.name, "projects.json")
+        self.addCleanup(setattr, corpus_registry, "PROJECTS_FILE", self._file)
+        self.addCleanup(setattr, session_workspace, "PROJECT", self._proj)
 
     def _write(self, data):
         import json
-        with open(self.rag_chat.PROJECTS_FILE, "w") as f:
+        with open(self.corpus_registry.PROJECTS_FILE, "w") as f:
             json.dump(data, f)
 
     def test_exclusions_become_cli_flags(self):
         self._write({"so3": {"path": "/x", "kind": "generic",
                              "exclude": ["lvgl", "micropython"]}})
-        self.rag_chat.PROJECT = "so3"
+        self.session_workspace.PROJECT = "so3"
         self.assertEqual(["--exclude", "lvgl", "--exclude", "micropython"],
-                         self.rag_chat.reindex_options())
+                         self.corpus_search.reindex_options())
 
     def test_project_without_options_passes_nothing(self):
         self._write({"lvgl": {"path": "/x", "kind": "generic"}})
-        self.rag_chat.PROJECT = "lvgl"
-        self.assertEqual([], self.rag_chat.reindex_options())
+        self.session_workspace.PROJECT = "lvgl"
+        self.assertEqual([], self.corpus_search.reindex_options())
 
     def test_unregistered_adhoc_project_is_not_fatal(self):
         self._write({})
-        self.rag_chat.PROJECT = "adhoc:quelque-chose"
-        self.assertEqual([], self.rag_chat.reindex_options())
+        self.session_workspace.PROJECT = "adhoc:quelque-chose"
+        self.assertEqual([], self.corpus_search.reindex_options())
 
     def test_extra_keys_survive_a_load_save_round_trip(self):
         """save_projects() writes back what load_projects() returned. If load
@@ -213,17 +214,17 @@ class ReindexOptionsTest(unittest.TestCase):
         erase every exclusion."""
         self._write({"so3": {"path": "/x", "kind": "generic",
                              "exclude": ["lvgl"], "include_build": True}})
-        loaded = self.rag_chat.load_projects()
-        self.rag_chat.save_projects(loaded)
-        again = self.rag_chat.load_projects()
+        loaded = self.corpus_registry.load_projects()
+        self.corpus_registry.save_projects(loaded)
+        again = self.corpus_registry.load_projects()
         self.assertEqual(["lvgl"], again["so3"]["exclude"])
         self.assertTrue(again["so3"]["include_build"])
 
     def test_include_build_flag(self):
         self._write({"p": {"path": "/x", "kind": "generic",
                            "include_build": True}})
-        self.rag_chat.PROJECT = "p"
-        self.assertIn("--include-build", self.rag_chat.reindex_options())
+        self.session_workspace.PROJECT = "p"
+        self.assertIn("--include-build", self.corpus_search.reindex_options())
 
 
 class ReindexTargetsTheCorpusNotTheCwdTest(unittest.TestCase):
@@ -238,17 +239,23 @@ class ReindexTargetsTheCorpusNotTheCwdTest(unittest.TestCase):
     """
 
     def setUp(self):
-        from cli import rag_chat
-        self.rag_chat = rag_chat
+        from cli import corpus_registry, corpus_search, session_workspace
+        self.corpus_registry = corpus_registry
+        self.corpus_search = corpus_search
+        self.session_workspace = session_workspace
         self.tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
         self.root = os.path.realpath(self.tmp.name)
 
-        for name in ("PROJECTS_FILE", "PROJECT", "PROJECT_SPEC", "PROJECT_KIND",
-                     "PROJECT_ROOT", "CORPUS_ROOT", "COLLECTION_NAME"):
-            self.addCleanup(setattr, rag_chat, name, getattr(rag_chat, name))
+        self.addCleanup(setattr, corpus_registry, "PROJECTS_FILE",
+                        corpus_registry.PROJECTS_FILE)
 
-        rag_chat.PROJECTS_FILE = os.path.join(self.root, "projects.json")
+        for name in ("PROJECT", "PROJECT_SPEC", "PROJECT_KIND", "PROJECT_ROOT",
+                     "CORPUS_ROOT", "COLLECTION_NAME"):
+            self.addCleanup(setattr, session_workspace, name,
+                            getattr(session_workspace, name))
+
+        corpus_registry.PROJECTS_FILE = os.path.join(self.root, "projects.json")
 
         # the session the transcript showed: corpus `agency`, cwd one level up
 
@@ -257,28 +264,28 @@ class ReindexTargetsTheCorpusNotTheCwdTest(unittest.TestCase):
             "buildroot": {"path": f"{self.root}/buildroot", "kind": "generic"},
             "opencn-qemu": {"path": f"{self.root}/qemu", "kind": "generic"},
         })
-        rag_chat.PROJECT = "agency"
-        rag_chat.PROJECT_SPEC = {"name": "agency", "path": f"{self.root}/agency",
-                                 "kind": "generic"}
-        rag_chat.PROJECT_KIND = "generic"
-        rag_chat.PROJECT_ROOT = self.root                  # tools run here
-        rag_chat.CORPUS_ROOT = f"{self.root}/agency"       # the corpus is here
-        rag_chat.COLLECTION_NAME = "adhoc_deadbeef"
+        session_workspace.PROJECT = "agency"
+        session_workspace.PROJECT_SPEC = {"name": "agency", "path": f"{self.root}/agency",
+                                          "kind": "generic"}
+        session_workspace.PROJECT_KIND = "generic"
+        session_workspace.PROJECT_ROOT = self.root                  # tools run here
+        session_workspace.CORPUS_ROOT = f"{self.root}/agency"       # the corpus is here
+        session_workspace.COLLECTION_NAME = "adhoc_deadbeef"
 
     def _write(self, data):
         import json
-        with open(self.rag_chat.PROJECTS_FILE, "w") as f:
+        with open(self.corpus_registry.PROJECTS_FILE, "w") as f:
             json.dump(data, f)
 
     def test_it_indexes_the_corpus_tree(self):
-        cmd = self.rag_chat.reindex_command()
+        cmd = self.corpus_search.reindex_command()
         self.assertIn(f"{self.root}/agency", cmd)
         self.assertNotIn(self.root, cmd)
 
     def test_it_names_the_collection_the_session_reads(self):
         """Derived from the cwd, the name silently misses: the indexer would
         report `Done` into a collection nobody queries."""
-        cmd = self.rag_chat.reindex_command()
+        cmd = self.corpus_search.reindex_command()
         self.assertEqual("adhoc_deadbeef", cmd[cmd.index("--collection") + 1])
 
     def test_a_buildsystem_corpus_uses_the_curated_indexer(self):
@@ -294,14 +301,14 @@ class ReindexTargetsTheCorpusNotTheCwdTest(unittest.TestCase):
         self._write({"agency": {"path": f"{self.root}/agency",
                                 "kind": "buildsystem",
                                 "indexer": "buildsystem"}})
-        cmd = self.rag_chat.reindex_command()
+        cmd = self.corpus_search.reindex_command()
         self.assertTrue(cmd[1].endswith("retrieval/index_corpus.py"), cmd)
         self.assertIn(f"{self.root}/agency", cmd)
         # Told the collection the session queries, like the generic walk.
         self.assertIn("--collection", cmd)
 
     def test_the_generic_indexer_is_the_default(self):
-        cmd = self.rag_chat.reindex_command()
+        cmd = self.corpus_search.reindex_command()
         self.assertTrue(cmd[1].endswith("retrieval/index_dir.py"), cmd)
         self.assertIn("--collection", cmd)
 
@@ -309,11 +316,11 @@ class ReindexTargetsTheCorpusNotTheCwdTest(unittest.TestCase):
         """The umbrella case, where the cap actually fired: the components own
         their indexes and the session federates them, so re-walking them into
         one collection buys nothing but the runaway."""
-        self.rag_chat.PROJECT = "workspace:opencn"
-        self.rag_chat.PROJECT_SPEC = {"name": "workspace:opencn",
-                                      "path": self.root, "kind": "generic"}
-        self.rag_chat.CORPUS_ROOT = self.root
-        opts = self.rag_chat.reindex_options()
+        self.session_workspace.PROJECT = "workspace:opencn"
+        self.session_workspace.PROJECT_SPEC = {"name": "workspace:opencn",
+                                               "path": self.root, "kind": "generic"}
+        self.session_workspace.CORPUS_ROOT = self.root
+        opts = self.corpus_search.reindex_options()
         # Spelled as paths: a component named after a directory the umbrella
         # needs elsewhere (linux, qemu, u-boot) must not take it down with it.
         self.assertEqual(["--exclude", "./agency", "--exclude", "./buildroot",
@@ -324,7 +331,7 @@ class ReindexTargetsTheCorpusNotTheCwdTest(unittest.TestCase):
                                 "kind": "generic", "exclude": ["vendor"]},
                      "vendor": {"path": f"{self.root}/agency/vendor",
                                 "kind": "generic"}})
-        self.assertEqual(["--exclude", "vendor"], self.rag_chat.reindex_options())
+        self.assertEqual(["--exclude", "vendor"], self.corpus_search.reindex_options())
 
 
 class CorpusCommandTest(unittest.TestCase):
@@ -337,29 +344,29 @@ class CorpusCommandTest(unittest.TestCase):
     """
 
     def setUp(self):
-        from cli import rag_chat
-        self.rag_chat = rag_chat
+        from cli import corpus_registry
+        self.corpus_registry = corpus_registry
         self.tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
         self.root = os.path.realpath(self.tmp.name)
-        self.addCleanup(setattr, rag_chat, "PROJECTS_FILE",
-                        rag_chat.PROJECTS_FILE)
-        rag_chat.PROJECTS_FILE = os.path.join(self.root, "projects.json")
+        self.addCleanup(setattr, corpus_registry, "PROJECTS_FILE",
+                        corpus_registry.PROJECTS_FILE)
+        corpus_registry.PROJECTS_FILE = os.path.join(self.root, "projects.json")
         self._write({})
 
         for name in ("agency", "linux"):
             os.makedirs(os.path.join(self.root, "tree", name), exist_ok=True)
 
     def _write(self, data):
-        with open(self.rag_chat.PROJECTS_FILE, "w") as f:
+        with open(self.corpus_registry.PROJECTS_FILE, "w") as f:
             json.dump(data, f)
 
     def _registry(self):
-        with open(self.rag_chat.PROJECTS_FILE) as f:
+        with open(self.corpus_registry.PROJECTS_FILE) as f:
             return json.load(f)
 
     def _corpus(self, *args, current=None):
-        return self.rag_chat.handle_corpus_command(args, current=current)
+        return self.corpus_registry.handle_corpus_command(args, current=current)
 
     def test_add_registers_the_tree(self):
         out = self._corpus("add", "agency", f"{self.root}/tree/agency")
@@ -405,7 +412,7 @@ class CorpusCommandTest(unittest.TestCase):
         registry holds today has to keep working."""
         for name in ("so3", "sye_sol", "llama.cpp-next", "avz.back",
                      "opencn-u-boot", "spear", "virt64"):
-            self.assertTrue(self.rag_chat.CORPUS_NAME_RE.fullmatch(name), name)
+            self.assertTrue(self.corpus_registry.CORPUS_NAME_RE.fullmatch(name), name)
 
     def test_add_refuses_a_path_that_is_not_a_directory(self):
         self.assertIn("not a directory",
@@ -465,7 +472,7 @@ class CorpusCommandTest(unittest.TestCase):
     def test_a_read_only_registry_does_not_kill_the_session(self):
         """save_projects raises SystemExit there — right for a CLI, fatal in a
         chat loop, which would lose the conversation to a typo."""
-        os.chmod(self.rag_chat.PROJECTS_FILE, 0o444)
+        os.chmod(self.corpus_registry.PROJECTS_FILE, 0o444)
         os.chmod(self.root, 0o555)
         self.addCleanup(os.chmod, self.root, 0o755)
         out = self._corpus("add", "agency", f"{self.root}/tree/agency")
@@ -485,7 +492,7 @@ class CorpusCommandTest(unittest.TestCase):
         self.assertIn("agency", self._corpus())
 
     def test_an_unknown_subcommand_answers_with_the_usage(self):
-        self.assertEqual(self.rag_chat.CORPUS_USAGE, self._corpus("frobnicate"))
+        self.assertEqual(self.corpus_registry.CORPUS_USAGE, self._corpus("frobnicate"))
 
 
 class IndexTargetTest(unittest.TestCase):
@@ -594,8 +601,8 @@ class EnclosingCorpusTest(unittest.TestCase):
     """
 
     def setUp(self):
-        from cli import rag_chat
-        self.rag_chat = rag_chat
+        from cli import corpus_registry
+        self.corpus_registry = corpus_registry
         self.tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
         self.root = os.path.realpath(self.tmp.name)
@@ -608,7 +615,7 @@ class EnclosingCorpusTest(unittest.TestCase):
 
     def test_single_child_is_unambiguous(self):
         projects = self._mk("lvgl/lvgl")
-        pick, _ = self.rag_chat.enclosing_corpus(
+        pick, _ = self.corpus_registry.enclosing_corpus(
             projects, os.path.join(self.root, "lvgl"))
         self.assertEqual("lvgl", pick)
 
@@ -617,7 +624,7 @@ class EnclosingCorpusTest(unittest.TestCase):
         atf — six candidates, but only one carries the parent's name."""
         projects = self._mk("soo/so3/so3", "soo/so3/u-boot", "soo/so3/avz",
                             "soo/so3/qemu", "soo/so3/atf")
-        pick, cand = self.rag_chat.enclosing_corpus(
+        pick, cand = self.corpus_registry.enclosing_corpus(
             projects, os.path.join(self.root, "soo/so3"))
         self.assertEqual("so3", pick)
         self.assertEqual(5, len(cand))
@@ -626,14 +633,14 @@ class EnclosingCorpusTest(unittest.TestCase):
         """Two equally plausible children must NOT be picked by accident —
         the caller names them instead."""
         projects = self._mk("umbrella/target-a", "umbrella/target-b")
-        pick, cand = self.rag_chat.enclosing_corpus(
+        pick, cand = self.corpus_registry.enclosing_corpus(
             projects, os.path.join(self.root, "umbrella"))
         self.assertIsNone(pick)
         self.assertEqual(["target-a", "target-b"], cand)
 
     def test_a_corpus_is_not_its_own_child(self):
         projects = self._mk("so3")
-        pick, cand = self.rag_chat.enclosing_corpus(
+        pick, cand = self.corpus_registry.enclosing_corpus(
             projects, os.path.join(self.root, "so3"))
         self.assertIsNone(pick)
         self.assertEqual([], cand)
@@ -642,7 +649,7 @@ class EnclosingCorpusTest(unittest.TestCase):
         """Only a direct child is close enough to be meant. A corpus buried
         two levels down is a different tree, not this one."""
         projects = self._mk("top/a/deep")
-        pick, cand = self.rag_chat.enclosing_corpus(
+        pick, cand = self.corpus_registry.enclosing_corpus(
             projects, os.path.join(self.root, "top"))
         self.assertIsNone(pick)
         self.assertEqual(["deep"], cand)
@@ -650,7 +657,7 @@ class EnclosingCorpusTest(unittest.TestCase):
     def test_unrelated_corpora_are_ignored(self):
         projects = self._mk("elsewhere/thing")
         os.makedirs(os.path.join(self.root, "here"), exist_ok=True)
-        pick, cand = self.rag_chat.enclosing_corpus(
+        pick, cand = self.corpus_registry.enclosing_corpus(
             projects, os.path.join(self.root, "here"))
         self.assertIsNone(pick)
         self.assertEqual([], cand)
@@ -670,15 +677,15 @@ class EnclosingCorpusTest(unittest.TestCase):
         prev = os.getcwd()
         self.addCleanup(os.chdir, prev)
         os.chdir(parent)
-        argv, pf = sys.argv, self.rag_chat.PROJECTS_FILE
-        self.rag_chat.PROJECTS_FILE = os.path.join(self.tmp.name, "p.json")
-        with open(self.rag_chat.PROJECTS_FILE, "w") as f:
+        argv, pf = sys.argv, self.corpus_registry.PROJECTS_FILE
+        self.corpus_registry.PROJECTS_FILE = os.path.join(self.tmp.name, "p.json")
+        with open(self.corpus_registry.PROJECTS_FILE, "w") as f:
             json.dump(projects, f)
         sys.argv = ["spear-chat"]
         try:
-            spec = self.rag_chat.resolve_project_at_startup()
+            spec = self.corpus_registry.resolve_project_at_startup()
         finally:
-            sys.argv, self.rag_chat.PROJECTS_FILE = argv, pf
+            sys.argv, self.corpus_registry.PROJECTS_FILE = argv, pf
         self.assertEqual("workspace:so3", spec["name"])
         self.assertEqual(os.path.realpath(parent), os.path.realpath(os.getcwd()))
         self.assertEqual(["avz", "so3", "u-boot"], spec["corpora"])
@@ -687,7 +694,7 @@ class EnclosingCorpusTest(unittest.TestCase):
         """avz.back and friends are registered, indexed, and never the point."""
         projects = self._mk("soo/so3/so3", "soo/so3/avz.back")
         parent = os.path.join(self.root, "soo/so3")
-        found = self.rag_chat.corpora_below(projects, parent)
+        found = self.corpus_registry.corpora_below(projects, parent)
         self.assertEqual(["so3"], sorted(found))
 
     def test_here_pins_the_session_to_the_current_directory(self):
@@ -696,15 +703,15 @@ class EnclosingCorpusTest(unittest.TestCase):
         prev = os.getcwd()
         self.addCleanup(os.chdir, prev)
         os.chdir(parent)
-        argv, pf = sys.argv, self.rag_chat.PROJECTS_FILE
-        self.rag_chat.PROJECTS_FILE = os.path.join(self.tmp.name, "p2.json")
-        with open(self.rag_chat.PROJECTS_FILE, "w") as f:
+        argv, pf = sys.argv, self.corpus_registry.PROJECTS_FILE
+        self.corpus_registry.PROJECTS_FILE = os.path.join(self.tmp.name, "p2.json")
+        with open(self.corpus_registry.PROJECTS_FILE, "w") as f:
             json.dump(projects, f)
         sys.argv = ["spear-chat", "--here"]
         try:
-            spec = self.rag_chat.resolve_project_at_startup()
+            spec = self.corpus_registry.resolve_project_at_startup()
         finally:
-            sys.argv, self.rag_chat.PROJECTS_FILE = argv, pf
+            sys.argv, self.corpus_registry.PROJECTS_FILE = argv, pf
         self.assertTrue(spec["name"].startswith("adhoc:"))
         self.assertEqual(os.path.realpath(parent), os.path.realpath(os.getcwd()))
 
@@ -720,14 +727,16 @@ class WriteRequiresPriorReadTest(unittest.TestCase):
     """
 
     def setUp(self):
-        from cli import rag_chat
         from harness.workspace import Workspace
-        self.rag_chat = rag_chat
+        from cli import session_workspace, tool_handlers, tool_routing
+        self.session_workspace = session_workspace
+        self.tool_handlers = tool_handlers
+        self.tool_routing = tool_routing
         self.tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
-        self._ws = rag_chat.WORKSPACE
-        self.addCleanup(setattr, rag_chat, "WORKSPACE", self._ws)
-        rag_chat.WORKSPACE = Workspace.from_path(self.tmp.name)
+        self._ws = session_workspace.WORKSPACE
+        self.addCleanup(setattr, session_workspace, "WORKSPACE", self._ws)
+        session_workspace.WORKSPACE = Workspace.from_path(self.tmp.name)
         self.target = os.path.join(self.tmp.name, "ping.c")
         with open(self.target, "w") as f:
             f.write("int main(void)\n{\n\treturn 0;\n}\n")
@@ -741,8 +750,8 @@ class WriteRequiresPriorReadTest(unittest.TestCase):
         from unittest.mock import patch
         from harness.tool_primitives import ExecutionMode
 
-        with patch.object(self.rag_chat, "EXECUTION_MODE", ExecutionMode.AUTO):
-            return self.rag_chat.execute_tool(
+        with patch.object(self.session_workspace, "EXECUTION_MODE", ExecutionMode.AUTO):
+            return self.tool_routing.execute_tool(
                 "write_file", {"path": "ping.c", "content": content}, cache)
 
     def test_overwrite_without_reading_is_refused(self):
@@ -753,29 +762,29 @@ class WriteRequiresPriorReadTest(unittest.TestCase):
 
     def test_reading_it_first_unlocks_the_write(self):
         cache = {}
-        self.rag_chat._note_files_read(cache, "cat ping.c")
-        self.assertTrue(self.rag_chat._was_read_this_turn(cache, self.target))
+        self.tool_handlers._note_files_read(cache, "cat ping.c")
+        self.assertTrue(self.tool_handlers._was_read_this_turn(cache, self.target))
 
     def test_ls_is_not_reading(self):
         """Knowing a file exists is not knowing what is in it."""
         cache = {}
-        self.rag_chat._note_files_read(cache, "ls -la ping.c")
-        self.assertFalse(self.rag_chat._was_read_this_turn(cache, self.target))
+        self.tool_handlers._note_files_read(cache, "ls -la ping.c")
+        self.assertFalse(self.tool_handlers._was_read_this_turn(cache, self.target))
 
     def test_a_new_file_needs_no_prior_read(self):
-        out = self.rag_chat.execute_tool(
+        out = self.tool_routing.execute_tool(
             "write_file", {"path": "brand_new.c", "content": "int x;"}, {})
         self.assertNotIn("not read it this turn", out)
 
     def test_flags_are_not_mistaken_for_paths(self):
         cache = {}
-        self.rag_chat._note_files_read(cache, "grep -n --color=never main ping.c")
-        self.assertTrue(self.rag_chat._was_read_this_turn(cache, self.target))
+        self.tool_handlers._note_files_read(cache, "grep -n --color=never main ping.c")
+        self.assertTrue(self.tool_handlers._was_read_this_turn(cache, self.target))
 
     def test_a_malformed_command_is_not_fatal(self):
         cache = {}
-        self.rag_chat._note_files_read(cache, "cat 'unclosed")
-        self.assertEqual(set(), cache.get(self.rag_chat.READ_PATHS, set()))
+        self.tool_handlers._note_files_read(cache, "cat 'unclosed")
+        self.assertEqual(set(), cache.get(self.tool_handlers.READ_PATHS, set()))
 
 
 class QuietEmbedderLoadTest(unittest.TestCase):
@@ -842,17 +851,18 @@ class EditFileTest(unittest.TestCase):
     """
 
     def setUp(self):
-        from cli import rag_chat
         from harness.tool_primitives import ExecutionMode
         from harness.workspace import Workspace
-        self.rag_chat = rag_chat
+        from cli import session_workspace
+        self.session_workspace = session_workspace
         self.tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
         for attr, val in (("WORKSPACE", Workspace.from_path(self.tmp.name)),
                           ("EXECUTION_MODE", ExecutionMode.AUTO),
                           ("BYPASS_PERMISSIONS", True)):
-            self.addCleanup(setattr, rag_chat, attr, getattr(rag_chat, attr))
-            setattr(rag_chat, attr, val)
+            self.addCleanup(setattr, session_workspace, attr,
+                            getattr(session_workspace, attr))
+            setattr(session_workspace, attr, val)
 
     def _write(self, name, text):
         p = os.path.join(self.tmp.name, name)
@@ -862,20 +872,20 @@ class EditFileTest(unittest.TestCase):
 
     def test_an_ordinary_edit_applies(self):
         p = self._write("x.c", "int main(void)\n{\n\treturn 0;\n}\n")
-        out = self.rag_chat.edit_file("x.c", "return 0", "return 1")
+        out = self.session_workspace.edit_file("x.c", "return 0", "return 1")
         self.assertIn("OK", out)
         self.assertIn("return 1", open(p).read())
 
     def test_a_generated_file_is_still_refused(self):
         """The guard the crash was hiding must keep working."""
         self._write("gen.c", "/* automatically generated */\nint x;\n")
-        out = self.rag_chat.edit_file("gen.c", "int x", "int y")
+        out = self.session_workspace.edit_file("gen.c", "int x", "int y")
         self.assertIn("GENERATED", out)
 
     def test_a_path_under_generated_is_refused(self):
         os.makedirs(os.path.join(self.tmp.name, "generated"))
         self._write("generated/tbl.c", "int t;\n")
-        out = self.rag_chat.edit_file("generated/tbl.c", "int t", "int u")
+        out = self.session_workspace.edit_file("generated/tbl.c", "int t", "int u")
         self.assertIn("GENERATED", out)
 
 
@@ -1155,8 +1165,10 @@ class UmbrellaSessionTests(unittest.TestCase):
     """A session launched above the corpora keeps its map and its federation."""
 
     def setUp(self):
-        from cli import rag_chat
-        self.rag_chat = rag_chat
+        from cli import corpus_search, session_workspace, turn_context
+        self.corpus_search = corpus_search
+        self.session_workspace = session_workspace
+        self.turn_context = turn_context
 
     def test_the_federation_survives_a_spec_that_is_not_in_the_registry(self):
         """An umbrella spec is synthesised, so a lookup by name finds nothing.
@@ -1165,23 +1177,23 @@ class UmbrellaSessionTests(unittest.TestCase):
         umbrella is not in there, so the eight corpora it had just announced
         were silently never attached.
         """
-        previous = self.rag_chat.PROJECT_SPEC
-        self.addCleanup(setattr, self.rag_chat, "PROJECT_SPEC", previous)
-        self.rag_chat.PROJECT_SPEC = {"name": "workspace:x", "path": "/tmp",
-                                      "kind": "generic",
-                                      "corpora": ["a", "b"]}
-        spec = ({} or self.rag_chat.PROJECT_SPEC)
+        previous = self.session_workspace.PROJECT_SPEC
+        self.addCleanup(setattr, self.session_workspace, "PROJECT_SPEC", previous)
+        self.session_workspace.PROJECT_SPEC = {"name": "workspace:x", "path": "/tmp",
+                                               "kind": "generic",
+                                               "corpora": ["a", "b"]}
+        spec = ({} or self.session_workspace.PROJECT_SPEC)
         self.assertEqual(["a", "b"],
-                         self.rag_chat.attached_corpus_names(spec, {}))
+                         self.corpus_search.attached_corpus_names(spec, {}))
 
     def test_the_umbrella_uses_the_map_named_after_its_directory(self):
-        previous = (self.rag_chat.PROJECT, self.rag_chat.PROJECT_ROOT,
-                    self.rag_chat.CORPUS_ROOT, self.rag_chat.SHIPPED_CORPUS_RULES)
+        previous = (self.session_workspace.PROJECT, self.session_workspace.PROJECT_ROOT,
+                    self.session_workspace.CORPUS_ROOT, self.turn_context.SHIPPED_CORPUS_RULES)
 
         def restore():
-            (self.rag_chat.PROJECT, self.rag_chat.PROJECT_ROOT,
-             self.rag_chat.CORPUS_ROOT,
-             self.rag_chat.SHIPPED_CORPUS_RULES) = previous
+            (self.session_workspace.PROJECT, self.session_workspace.PROJECT_ROOT,
+             self.session_workspace.CORPUS_ROOT,
+             self.turn_context.SHIPPED_CORPUS_RULES) = previous
         self.addCleanup(restore)
 
         # A shipped map of this test's own. rules.d/corpora/ ships empty --
@@ -1194,8 +1206,8 @@ class UmbrellaSessionTests(unittest.TestCase):
             "The probe tree: sources in src/, tests in tests/.\n",
             encoding="utf-8")
 
-        self.rag_chat.SHIPPED_CORPUS_RULES = temp.name
-        self.rag_chat.PROJECT = "workspace:probe"
-        self.rag_chat.PROJECT_ROOT = self.rag_chat.CORPUS_ROOT = "/nonexistent"
-        rules = self.rag_chat.load_corpus_rules()
+        self.turn_context.SHIPPED_CORPUS_RULES = temp.name
+        self.session_workspace.PROJECT = "workspace:probe"
+        self.session_workspace.PROJECT_ROOT = self.session_workspace.CORPUS_ROOT = "/nonexistent"
+        rules = self.turn_context.load_corpus_rules()
         self.assertIn("The probe tree", rules)

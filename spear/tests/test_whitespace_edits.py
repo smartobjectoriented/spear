@@ -12,9 +12,9 @@ import unittest
 from pathlib import Path
 
 from cli import rag_chat
-from harness.tool_runtime import (
-    CommandClassification, CommandPolicy, ExecutionMode, Workspace,
-)
+from harness.command_policy import CommandPolicy
+from harness.tool_primitives import CommandClassification, ExecutionMode
+from harness.workspace import Workspace
 
 
 TABLE = """   * - MicroPython

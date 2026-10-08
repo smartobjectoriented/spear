@@ -23,9 +23,11 @@ from pathlib import Path
 import shutil
 import tempfile
 
-from harness.tool_runtime import (
-    BubblewrapSandbox, Capability, CommandRunner, ExecutionProfile, Workspace,
-)
+from harness.resource_control import ExecutionProfile
+from harness.sandbox import BubblewrapSandbox
+from harness.tool_primitives import Capability
+from harness.tool_runtime import CommandRunner
+from harness.workspace import Workspace
 
 #: Where the oracle lands inside the copy.  Nothing the model wrote shares the
 #: name, and whatever did is removed before the tests are written.

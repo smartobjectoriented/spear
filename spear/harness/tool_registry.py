@@ -41,7 +41,7 @@ class ToolResultPolicy:
 
 
 #: The execution modes a session can be in, and therefore the only values a
-#: spec may name. They are the values of tool_runtime.ExecutionMode, spelled
+#: spec may name. They are the values of tool_primitives.ExecutionMode, spelled
 #: here rather than imported: the registry describes tools and must not
 #: depend on the command runtime that runs them. `test_execution_mode_gate`
 #: holds the two lists together.

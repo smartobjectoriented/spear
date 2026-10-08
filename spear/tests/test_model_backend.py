@@ -203,7 +203,8 @@ class OpenAICompatibleBackendTests(unittest.TestCase):
 
     def test_fake_backend_four_turn_scenario_uses_spear_tools_and_policy(self):
         from cli import rag_chat
-        from harness.tool_runtime import ExecutionMode, Workspace
+        from harness.tool_primitives import ExecutionMode
+        from harness.workspace import Workspace
 
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
@@ -682,7 +683,8 @@ class AnthropicBackendTests(unittest.TestCase):
 
     def test_agent_loop_gate_executes_only_valid_tool_use_turns(self):
         from cli import rag_chat
-        from harness.tool_runtime import ExecutionMode, Workspace
+        from harness.tool_primitives import ExecutionMode
+        from harness.workspace import Workspace
 
         sentinel = ModelToolCall("write", "write_file", {
             "path": "sentinel.txt", "content": "must not exist",

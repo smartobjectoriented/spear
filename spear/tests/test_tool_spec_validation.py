@@ -69,7 +69,7 @@ class AnUnknownModeIsRefused(unittest.TestCase):
             build(mutability=ToolMutability.READ_ONLY, modes=("often",))
 
     def test_the_vocabulary_is_exactly_the_execution_modes(self):
-        from harness.tool_runtime import ExecutionMode
+        from harness.tool_primitives import ExecutionMode
 
         self.assertEqual(VALID_EXECUTION_MODES,
                          {str(mode) for mode in ExecutionMode})

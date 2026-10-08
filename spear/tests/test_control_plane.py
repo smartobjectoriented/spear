@@ -24,7 +24,7 @@ sys.path.insert(0, str(ROOT))
 from cli import rag_chat
 from agent import dispatch, tools
 from runtime.cancellation import NEVER_CANCELLED
-from harness.tool_runtime import ExecutionMode
+from harness.tool_primitives import ExecutionMode
 
 NAMES = ("read_file", "search_files", "patch", "write_file", "delete_file", "terminal")
 

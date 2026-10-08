@@ -440,7 +440,9 @@ class WorkingStateRuntimeIntegrationTests(unittest.TestCase):
 
     def test_scripted_task_uses_grounded_runtime_facts_without_prose_parsing(self):
         from models.model_backend import ModelTurn, StopReason
-        from harness.tool_runtime import AuditLogger, ExecutionMode, Workspace
+        from harness.tool_primitives import ExecutionMode
+        from harness.tool_runtime import AuditLogger
+        from harness.workspace import Workspace
 
         class FakeBackend:
             model = "scripted-local"
@@ -524,7 +526,7 @@ class WorkingStateRuntimeIntegrationTests(unittest.TestCase):
             self.assertNotIn("I changed claimed.py", encoded)
 
     def test_nonzero_command_result_is_a_grounded_failed_action(self):
-        from harness.tool_runtime import ToolResult
+        from harness.tool_primitives import ToolResult
 
         state = WorkingState.start("task_command", "Run a command")
         context = AgentContext(

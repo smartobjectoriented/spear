@@ -31,7 +31,7 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
 from cli import rag_chat
-from harness.tool_runtime import ExecutionMode
+from harness.tool_primitives import ExecutionMode
 from runtime.tracing import EventType, TraceEmitter
 
 # Nothing a refusal is allowed to suggest. A line that names one of these

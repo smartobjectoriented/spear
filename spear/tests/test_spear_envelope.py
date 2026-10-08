@@ -34,7 +34,8 @@ from cli import rag_chat
 from agent import dispatch, tools
 from agent.host import CommandOutcome
 from runtime.cancellation import NEVER_CANCELLED
-from harness.tool_runtime import ExecutionMode, Workspace, decode_command_output
+from harness.tool_primitives import ExecutionMode, decode_command_output
+from harness.workspace import Workspace
 
 NAMES = ("read_file", "search_files", "patch", "write_file", "delete_file", "terminal")
 SANDBOX = shutil.which("bwrap") is not None
@@ -510,7 +511,7 @@ class TheVocabularyTableMatchesItsSources(unittest.TestCase):
         from harness import control_plane
 
         sources = "".join(Path(ROOT, name).read_text()
-                          for name in ("context/request_scope.py", "harness/tool_runtime.py"))
+                          for name in ("context/request_scope.py", "harness/command_policy.py"))
         sources = sources.replace('"\n', "").replace('f"', "").replace('    "', "")
         sources = " ".join(sources.split())
 

@@ -29,7 +29,7 @@ sys.path.insert(0, str(ROOT))
 from cli import rag_chat
 from agent import dispatch, tools
 from runtime.cancellation import NEVER_CANCELLED
-from harness.tool_runtime import ExecutionMode, decode_command_output
+from harness.tool_primitives import ExecutionMode, decode_command_output
 
 FIXTURE = json.loads((ROOT / "tests/fixtures/hermes_terminal.json").read_text())
 

@@ -9,7 +9,9 @@ from runtime.cancellation import (
 from harness.tool_registry import ToolCategory, ToolMutability, ToolRegistry, ToolSpec
 from harness.tool_router import ToolExecutionContext, ToolResultStatus, ToolRouter
 from runtime.tracing import TraceEmitter
-from harness.tool_runtime import CommandRunner, ToolResult, Workspace
+from harness.tool_primitives import ToolResult
+from harness.tool_runtime import CommandRunner
+from harness.workspace import Workspace
 
 
 class CancellationTests(unittest.TestCase):

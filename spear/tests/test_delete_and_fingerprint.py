@@ -13,7 +13,8 @@ from types import SimpleNamespace
 from cli import rag_chat
 from runtime.progress_monitor import action_fingerprint
 from harness.tool_registry import native_tool_specs
-from harness.tool_runtime import ExecutionMode, Workspace
+from harness.tool_primitives import ExecutionMode
+from harness.workspace import Workspace
 
 
 FILE = "/home/operator/soo/so3/doc/source/user_space.rst"

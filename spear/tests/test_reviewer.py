@@ -27,7 +27,8 @@ from harness.tool_registry import ToolRegistry, ToolSpec, native_tool_specs
 from harness.tool_router import (
     ToolExecutionContext, ToolResultEnvelope, ToolResultStatus, ToolRouter,
 )
-from harness.tool_runtime import CommandPolicy, ExecutionMode
+from harness.command_policy import CommandPolicy
+from harness.tool_primitives import ExecutionMode
 from runtime.tracing import EventType, TraceEmitter
 from evidence.verification import VerificationPolicy
 from runtime.working_state import (

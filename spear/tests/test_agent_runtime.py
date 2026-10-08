@@ -1842,7 +1842,9 @@ class ProductionWiringTests(unittest.TestCase):
         cls.rag_chat = rag_chat
 
     def test_real_transitional_tool_boundary_runs_without_cli_or_globals(self):
-        from harness.tool_runtime import AuditLogger, ExecutionMode, Workspace
+        from harness.tool_primitives import ExecutionMode
+        from harness.tool_runtime import AuditLogger
+        from harness.workspace import Workspace
 
         backend = ScriptedBackend([
             tool_turn("write", "write_file", path="created.txt", content="value"),

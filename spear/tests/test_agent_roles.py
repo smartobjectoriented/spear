@@ -4,7 +4,8 @@ from runtime.agent_roles import AgentRole, AgentRoleSpec, explorer_role
 from harness.tool_registry import native_tool_specs, ToolRegistry, ToolSpec
 from harness.tool_router import ToolExecutionContext, ToolResultStatus, ToolRouter
 from runtime.tracing import TraceEmitter
-from harness.tool_runtime import CommandPolicy, ExecutionMode
+from harness.command_policy import CommandPolicy
+from harness.tool_primitives import ExecutionMode
 
 
 def registry():

@@ -4,10 +4,13 @@
 Tool execution harness
 ======================
 
-``tool_runtime.py`` is the security and command-execution substrate.  The
-provider-neutral lifecycle above it is split between ``ToolRegistry``,
-``ToolRouter``, ``AgentRuntime`` and ``TaskController``; none imports
-``rag_chat``.  The substrate remains independently testable.
+Six modules of ``harness/`` are the security and command-execution substrate:
+``tool_primitives.py`` (modes, capabilities, ``ToolResult``),
+``command_policy.py``, ``workspace.py``, ``sandbox.py``,
+``resource_control.py`` and ``tool_runtime.py`` (``CommandRunner``,
+``AuditLogger``).  The provider-neutral lifecycle above it is split between
+``ToolRegistry``, ``ToolRouter``, ``AgentRuntime`` and ``TaskController``;
+none imports ``rag_chat``.  The substrate remains independently testable.
 
 Two tool surfaces
 =================
@@ -58,13 +61,13 @@ tool the model cannot see is one it narrates instead of using.
    :width: 100%
    :alt: Tool execution harness architecture
 
-   The three layers of ``tool_runtime.py``: what may run, where it runs, how
-   it is confined.
+   The three layers of the substrate: what may run, where it runs, how it is
+   confined.
 
 Three layers
 ============
 
-The module is organised as three layers with a one-way dependency: the
+The substrate is organised as three layers with a one-way dependency: the
 decision layer never knows how confinement works, and the execution layer
 never knows why a command was allowed.
 

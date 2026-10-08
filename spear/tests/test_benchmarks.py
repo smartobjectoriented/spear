@@ -21,9 +21,9 @@ from context.memory_store import MarkdownMemoryStore
 from evidence import project_build
 from harness.tool_exposure import ToolExposurePolicy
 from harness.tool_registry import ToolRegistry, native_tool_specs
-from harness.tool_runtime import (
-    CommandClassification, CommandPolicy, ToolResult, Workspace,
-)
+from harness.command_policy import CommandPolicy
+from harness.tool_primitives import CommandClassification, ToolResult
+from harness.workspace import Workspace
 
 
 # What a run that tested its own change leaves in the trace. Tests asserting

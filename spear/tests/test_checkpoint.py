@@ -171,7 +171,7 @@ class CheckpointTests(unittest.TestCase):
 class ProductionMutationCheckpointTests(unittest.TestCase):
     def setUp(self):
         from cli import rag_chat
-        from harness.tool_runtime import Workspace
+        from harness.workspace import Workspace
         self.rag_chat = rag_chat
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
@@ -199,7 +199,7 @@ class ProductionMutationCheckpointTests(unittest.TestCase):
         # Patching only the approval left that premise implicit and, once a
         # categorical mode check was added ahead of it, untrue.
 
-        from harness.tool_runtime import ExecutionMode
+        from harness.tool_primitives import ExecutionMode
 
         with patch.object(self.rag_chat, "EXECUTION_MODE", ExecutionMode.AUTO), \
                 patch.object(self.rag_chat, "authorize_mutation", return_value=None):

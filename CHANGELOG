@@ -1,3 +1,71 @@
+v0.3.0-rc1 (8 oct 2026)
+
+First release candidate of the 0.3 line. SPEAR becomes a controlled coding
+agent with its own evidence, a workspace-aware context, external capabilities
+and a memory of the workspace that keeps its provenance.
+
+	•	Controlled coding execution: changes run on a standalone coding core
+		with six tools -- read_file, search_files, patch, write_file,
+		delete_file, terminal -- confined to the workspace and the sandbox.
+
+	•	Final-state evidence: a change is VERIFIED only when a build or test
+		ran and passed after the last change to the source; anything else is
+		UNVERIFIED, and the answer says so where it claims success. A command
+		sent to the background, or a Makefile that only prints its help, is no
+		check. Declared build and test commands take precedence over probed
+		ones; a project needs no configuration to be checked.
+
+	•	Normative and MIXED work against a bound standard: questions are
+		answered from the standard's provisions, and a change "the way the
+		standard requires" is checked against a constraint set built from
+		them. Compliance is reported only when the standard's own evidence
+		establishes it -- otherwise NOT_DEMONSTRATED, never COMPLIANT on a
+		passing build.
+
+	•	Deterministic, workspace-aware context: rules, skills, knowledge,
+		project metadata and capabilities are selected by workspace and task
+		class, never by resemblance to the request, and nothing scoped to
+		another project reaches a turn. Every eligible skill is offered.
+
+	•	External capabilities: tools of MCP servers over stdio, registered per
+		workspace, called through SPEAR's gateway with read/write policy. A
+		small family is shown whole, a large one as an index read on demand.
+		An unavailable provider is reported, not hidden.
+
+	•	Workspace knowledge: typed, persistent, provenance-aware facts about a
+		workspace, with states (proposed, active, stale, revoked), source
+		binding and conflict detection. /remember records into it; what a
+		model offers stays a proposal until the operator accepts it.
+
+	•	Hardening: a file refused to one tool is refused to every tool,
+		deletion and shell redirection included; a turn that repeats a
+		refused operation is stopped; one model response is bounded.
+		--fresh starts a session without its stored conversation.
+
+	•	Release work: an integrated benchmark across several real workspaces
+		and task classes, with objective oracles, gated this candidate.
+
+Known limitations
+
+	•	The model can still make ordinary coding mistakes; SPEAR reports what
+		was shown, and a wrong change is caught only as far as the project's
+		own validation reaches.
+
+	•	VERIFIED means the project's build or tests passed on the final
+		source, not that the change is proven correct.
+
+	•	Compliance with a bound standard can remain NOT_DEMONSTRATED when the
+		standard's evidence does not establish it.
+
+	•	MCP support covers tools over stdio: no resources, prompts or HTTP
+		transport.
+
+	•	The coding core needs an OpenAI-compatible endpoint; the Anthropic
+		backend serves normative and general questions only.
+
+	•	A fact the operator records as knowledge is taken as given; bind it to
+		a source file to have it checked.
+
 v0.2.0 (30 sep 2026)
 
 First release of SPEAR, and the first line with a release branch

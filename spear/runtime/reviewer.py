@@ -11,7 +11,8 @@ from enum import StrEnum
 from typing import Callable, Mapping, Sequence
 
 from runtime.agent_roles import AgentRoleSpec, reviewer_role
-from runtime.agent_runtime import AgentContext, AgentResult, AgentRuntime, RuntimeTerminalReason
+from runtime.agent_context import AgentContext, AgentResult, RuntimeTerminalReason
+from runtime.agent_runtime import AgentRuntime
 from runtime.cancellation import CancellationSource, linked_cancellation
 from runtime.compaction import CompactionPolicy
 from context.context_engine import ContextItem, ContextLayer, Freshness

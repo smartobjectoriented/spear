@@ -12,7 +12,8 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
 from harness import refusal_breaker
-from runtime.agent_runtime import AgentRuntime, RuntimeTerminalReason
+from runtime.agent_context import RuntimeTerminalReason
+from runtime.agent_runtime import AgentRuntime
 from tests.test_agent_loop import Host, call, turn
 from tests.test_agent_runtime import MemoryRecorder, make_context
 from tests.test_core_runtime import TOOLS, Backend, _Recording

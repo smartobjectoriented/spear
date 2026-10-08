@@ -12,8 +12,9 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-from runtime import agent_runtime
-from runtime.agent_runtime import AgentRuntime, RuntimeTerminalReason
+from runtime import agent_core_turn, agent_runtime
+from runtime.agent_context import RuntimeTerminalReason
+from runtime.agent_runtime import AgentRuntime
 from models.model_backend import ToolDefinition
 from tests.test_agent_loop import Host, call, turn
 from tests.test_agent_runtime import ScriptedBackend, make_context, text_turn
@@ -115,7 +116,7 @@ class OneCodingLoop(unittest.TestCase):
 
     def test_no_legacy_mechanism_is_reached(self):
         from unittest.mock import patch
-        from runtime import agent_runtime
+        from runtime import agent_core_turn, agent_runtime
 
         def tripped(name):
             def fail(*args, **kwargs):
@@ -177,8 +178,8 @@ class ASmallWindowStillRuns(unittest.TestCase):
 
         seen, _ = self.reservations(524_288)
 
-        self.assertEqual(seen, [agent_runtime.RESPONSE_MAX_TOKENS] * 2)
-        self.assertLess(agent_runtime.RESPONSE_MAX_TOKENS, loop.MAX_TOKENS)
+        self.assertEqual(seen, [agent_core_turn.RESPONSE_MAX_TOKENS] * 2)
+        self.assertLess(agent_core_turn.RESPONSE_MAX_TOKENS, loop.MAX_TOKENS)
 
     def test_a_response_cut_at_the_cap_is_reported_truncated(self):
         root = tempfile.mkdtemp()

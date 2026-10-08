@@ -12,7 +12,8 @@ from runtime.compaction import (
     StructuredCompactionState,
     validate_compaction,
 )
-from runtime.agent_runtime import AgentContext, AgentRuntime
+from runtime.agent_context import AgentContext
+from runtime.agent_runtime import AgentRuntime
 from context.context_engine import ContextEngine, ContextItem, ContextLayer, ContextRequest, Freshness
 from models.model_backend import ToolDefinition
 from runtime.tracing import EventType, TraceEmitter

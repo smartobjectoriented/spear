@@ -71,7 +71,7 @@ class TheFloorIsNeverLowered(unittest.TestCase):
 
 class InTheLoop(unittest.TestCase):
     def test_the_verb_list_being_silent_is_what_triggers_the_call(self):
-        from runtime import agent_runtime
+        from runtime import agent_notes
 
         context = SimpleNamespace(backend=Backend("WRITE"), judge_intent=True,
                                   budget_manager=None,
@@ -79,29 +79,29 @@ class InTheLoop(unittest.TestCase):
 
         # A phrase no verb list covers: the operator says what is wrong and
         # leaves the instruction implicit.
-        self.assertTrue(agent_runtime.wants_write(
+        self.assertTrue(agent_notes.wants_write(
             context, "the acknowledgement path does not match 8.4.1.1-3"))
         self.assertEqual(len(context.backend.calls), 1)
 
     def test_a_recognised_verb_costs_no_call_at_all(self):
-        from runtime import agent_runtime
+        from runtime import agent_notes
 
         context = SimpleNamespace(backend=Backend("ASK"), judge_intent=True,
                                   budget_manager=None,
                                   observer=SimpleNamespace(notice=lambda *a: None))
 
-        self.assertTrue(agent_runtime.wants_write(context, "implement it"))
+        self.assertTrue(agent_notes.wants_write(context, "implement it"))
         self.assertEqual(context.backend.calls, [])
 
     def test_the_answer_is_decided_once_per_turn(self):
-        from runtime import agent_runtime
+        from runtime import agent_notes
 
         context = SimpleNamespace(backend=Backend("WRITE"), judge_intent=True,
                                   budget_manager=None,
                                   observer=SimpleNamespace(notice=lambda *a: None))
 
         for _ in range(4):
-            agent_runtime.wants_write(context, "have a look at this")
+            agent_notes.wants_write(context, "have a look at this")
 
         self.assertEqual(len(context.backend.calls), 1)
 

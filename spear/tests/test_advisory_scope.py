@@ -18,8 +18,10 @@ from types import SimpleNamespace
 
 from context import request_intent
 from context import request_scope
-from runtime.agent_runtime import (_WRITE_REQUEST_RE, conclude_demand, is_write_request,
-                           unverified_write_note, wants_write)
+from runtime.agent_notes import (
+    _WRITE_REQUEST_RE, conclude_demand, is_write_request, wants_write,
+)
+from runtime.agent_verification import unverified_write_note
 from models.model_backend import ConversationMessage, TextBlock
 from runtime.agent_roles import AgentRole
 from harness.tool_exposure import ToolExposurePolicy

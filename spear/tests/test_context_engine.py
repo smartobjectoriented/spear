@@ -13,7 +13,8 @@ from context.context_engine import (
     working_state_context_item,
     working_state_projection,
 )
-from runtime.agent_runtime import AgentContext, AgentRuntime
+from runtime.agent_context import AgentContext
+from runtime.agent_runtime import AgentRuntime
 from runtime.compaction import CompactionPolicy
 from models.model_backend import ToolDefinition
 from runtime.tracing import EventType, TraceEmitter

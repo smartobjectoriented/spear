@@ -8,9 +8,10 @@ exist on disk.
 """
 import unittest
 
-from runtime.agent_runtime import (announced_but_unmade_change, conclude_demand,
-                           is_write_request, make_it_demand,
-                           unsupported_change_claim)
+from runtime.agent_notes import (
+    announced_but_unmade_change, conclude_demand, is_write_request, make_it_demand,
+    unsupported_change_claim,
+)
 
 
 REPLAYED = (

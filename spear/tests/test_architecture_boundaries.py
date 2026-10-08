@@ -22,7 +22,11 @@ def imported_modules(tree):
 class ArchitectureBoundaryTests(unittest.TestCase):
     def test_runtime_layers_do_not_import_cli(self):
         lower_layers = (
-            "runtime/agent_runtime.py", "runtime/task_controller.py",
+            "runtime/agent_runtime.py", "runtime/agent_context.py",
+            "runtime/agent_core_turn.py", "runtime/agent_finalization.py",
+            "runtime/agent_model_turn.py", "runtime/agent_notes.py",
+            "runtime/agent_recording.py", "runtime/agent_verification.py",
+            "runtime/task_controller.py",
             "context/context_engine.py", "runtime/compaction.py",
             "harness/tool_registry.py", "harness/tool_router.py",
             "runtime/session_store.py", "context/memory_store.py",

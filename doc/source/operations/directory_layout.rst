@@ -103,9 +103,15 @@ launchers and the image do that for you.
        ``mcp_provider.py``).
    * - ``runtime/``
      - The provider-neutral model/tool loop of the normative and general
-       runtime and the coding-core turn wrapper (``agent_runtime.py``), the
-       UI-free task orchestration (``task_controller.py``), grounded task truth
-       and compaction (``working_state.py``, ``compaction.py``), sessions,
+       runtime (``agent_runtime.py``) and the task it runs
+       (``agent_context.py``); the rest of ``AgentRuntime`` comes from one
+       mixin module each: the coding-core turn wrapper
+       (``agent_core_turn.py``), the model call (``agent_model_turn.py``), the
+       end of a turn (``agent_finalization.py``) and what it records
+       (``agent_recording.py``), with the loop's notes and demands in
+       ``agent_notes.py`` and its change verification in
+       ``agent_verification.py``.  Also the UI-free task orchestration
+       (``task_controller.py``), grounded task truth and compaction (``working_state.py``, ``compaction.py``), sessions,
        budgets and the runtime trace.
    * - ``evidence/``
      - The evidence plane: canonical evidence, source epochs and the

@@ -85,8 +85,9 @@ class StandardEndToEndTests(unittest.TestCase):
             self.assertNotIn("Implementations shall reject reserved value", system)
 
     def test_agent_runtime_has_no_standard_or_vita_orchestration_branch(self):
-        runtime = Path(__file__).parents[1] / "runtime/agent_runtime.py"
-        text = runtime.read_text("utf-8")
+        runtime = Path(__file__).parents[1] / "runtime"
+        text = "".join(path.read_text("utf-8")
+                       for path in sorted(runtime.glob("agent_*.py")))
         self.assertNotIn("VITA", text)
         self.assertNotIn("standard.search", text)
         self.assertNotIn("standard.fetch", text)

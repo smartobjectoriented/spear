@@ -182,7 +182,7 @@ class UnsupportedIsNotNonCompliant(unittest.TestCase):
         the code satisfy every clause retrieved. That is the bug the
         task-scope fix removed, and nothing here may bring it back.
         """
-        from runtime.agent_runtime import carried_obligations
+        from runtime.agent_notes import carried_obligations
 
         class Context:
             prior_clauses = (synthetic_standard.SECTION, "4.4.2", "4.1.1")

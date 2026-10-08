@@ -3,7 +3,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from runtime.agent_runtime import AgentContext, AgentRuntime
+from runtime.agent_context import AgentContext
+from runtime.agent_runtime import AgentRuntime
 from runtime.compaction import CompactionPolicy
 from context.context_engine import ContextEngine, ContextItem, ContextLayer
 from runtime.hooks import HookManager

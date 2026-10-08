@@ -17,8 +17,11 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
 from normative import mixed_orchestration as mo
-from runtime.agent_runtime import (DONE, FAILED, FINALIZATION_DEMAND, FINALIZATION_RETRY,
-                           AgentRuntime, RuntimeTerminalReason)
+from runtime.agent_context import RuntimeTerminalReason
+from runtime.agent_finalization import (
+    DONE, FAILED, FINALIZATION_DEMAND, FINALIZATION_RETRY,
+)
+from runtime.agent_runtime import AgentRuntime
 from models.model_backend import ModelToolCall, ModelTurn, StopReason, TextBlock
 from tests.test_agent_runtime import (GroundedToolExecutor, ScriptedBackend, make_context,
                                       text_turn, tool_turn)

@@ -3,7 +3,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from runtime.agent_runtime import AgentContext, AgentRuntime
+from runtime.agent_context import AgentContext
+from runtime.agent_runtime import AgentRuntime
 from runtime.budgets import BudgetKind, BudgetLimit, BudgetManager
 from harness.checkpoint import CheckpointManager, CheckpointStatus, MutationType
 from context.context_engine import ContextEngine

@@ -220,7 +220,7 @@ def timeline(log, generated=generated_path, root=""):
     `make && sed -i ...` does not.
     """
     from context import request_scope
-    from runtime.agent_runtime import _VERIFYING
+    from runtime.agent_verification import _VERIFYING
     from evidence.verification import VerificationPolicy
 
     policy = VerificationPolicy()
@@ -334,7 +334,7 @@ def _shown(checks, needs) -> bool:
 def verification_runs(log, policy=None) -> list[tuple[str, bool]]:
     """Every verifying command after the last change, and whether it passed:
     ran (not refused), finished (not timed out), and exited 0."""
-    from runtime.agent_runtime import _VERIFYING
+    from runtime.agent_verification import _VERIFYING
     from evidence.verification import VerificationPolicy
 
     policy = policy or VerificationPolicy()
@@ -466,7 +466,7 @@ def decide(log, *, project_runs=(), project_commands=None, answer="",
     delivered source. A check from before that change proves an earlier tree,
     and a failed project validation on the final tree is never outweighed.
     """
-    from runtime.agent_runtime import syntax_only_verification
+    from runtime.agent_verification import syntax_only_verification
 
     epoch, checks, changed = timeline(log, generated, root)
 

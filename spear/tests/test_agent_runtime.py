@@ -4,11 +4,12 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from runtime.agent_runtime import (
-    AgentContext, AgentRuntime, RuntimeTerminalReason, _asked,
-    _record_project_verification, conclude_demand, is_write_request,
-    may_demand_write, wants_write,
+from runtime.agent_context import AgentContext, RuntimeTerminalReason
+from runtime.agent_notes import (
+    _asked, conclude_demand, is_write_request, may_demand_write, wants_write,
 )
+from runtime.agent_verification import _record_project_verification
+from runtime.agent_runtime import AgentRuntime
 from runtime.compaction import (
     CompactionMode, CompactionPolicy, CompactionRequest, CompactionService,
 )
@@ -273,13 +274,13 @@ class RoomToWorkIsNotRoomToRead(unittest.TestCase):
     def test_the_reading_allowance_is_capped_not_merely_scaled(self):
         """Measured: the ceiling rose to 500, the nudge moved to a hundred
         rounds, and a master run read for thirty minutes and wrote nothing."""
-        from runtime import agent_runtime
+        from runtime import agent_notes
 
-        self.assertEqual(agent_runtime._investigation_ceiling(60), 12)
-        self.assertEqual(agent_runtime._investigation_ceiling(120), 24)
-        self.assertEqual(agent_runtime._investigation_ceiling(500),
-                         agent_runtime.INVESTIGATION_CEILING)
-        self.assertLess(agent_runtime._investigation_ceiling(5000), 100)
+        self.assertEqual(agent_notes._investigation_ceiling(60), 12)
+        self.assertEqual(agent_notes._investigation_ceiling(120), 24)
+        self.assertEqual(agent_notes._investigation_ceiling(500),
+                         agent_notes.INVESTIGATION_CEILING)
+        self.assertLess(agent_notes._investigation_ceiling(5000), 100)
 
 
 class ASpentBudgetIsNotAModelError(unittest.TestCase):
@@ -416,7 +417,7 @@ class ALoopThatAnnouncesItselfMustAlsoEnd(unittest.TestCase):
                       [kind for kind, _ in observer.notices])
 
     def test_the_third_identical_call_is_refused_outright(self):
-        from runtime import agent_runtime
+        from runtime import agent_notes
         from harness.tool_router import ToolResultEnvelope, ToolResultStatus
 
         envelope = ToolResultEnvelope(
@@ -424,10 +425,10 @@ class ALoopThatAnnouncesItselfMustAlsoEnd(unittest.TestCase):
             self.WALL, self.WALL, "command", 0.0, len(self.WALL))
         seen = {}
 
-        for _ in range(agent_runtime._REPEAT_REFUSE):
-            count = agent_runtime._repeated_result(seen, envelope)
+        for _ in range(agent_notes._REPEAT_REFUSE):
+            count = agent_notes._repeated_result(seen, envelope)
 
-        refused = agent_runtime._with_repeat_note(envelope, count)
+        refused = agent_notes._with_repeat_note(envelope, count)
 
         self.assertIn("REFUSED", refused.model_content)
 
@@ -1827,9 +1828,8 @@ class ContextOwnershipTests(unittest.TestCase):
         self.assertEqual(started.metadata["purpose"], "primary_agent")
 
     def test_runtime_has_no_transitional_global_dependency(self):
-        source = Path(__file__).resolve().parents[1].joinpath(
-            "runtime/agent_runtime.py"
-        ).read_text()
+        runtime = Path(__file__).resolve().parents[1] / "runtime"
+        source = "".join(path.read_text() for path in sorted(runtime.glob("agent_*.py")))
         self.assertNotIn("CURRENT_WORKING_STATE", source)
         self.assertNotIn("CURRENT_COMPACTION_ARTIFACT", source)
         self.assertNotIn("import rag_chat", source)

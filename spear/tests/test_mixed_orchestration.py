@@ -476,15 +476,15 @@ class NormativeAuthority(MixedTurn):
 
         def run_mixed(test, raw, **kwargs):
             from unittest.mock import patch
-            from runtime import agent_runtime
+            from runtime import agent_core_turn
 
-            real = agent_runtime.project_build_runs
+            real = agent_core_turn.project_build_runs
 
             def with_harness(context, tool_log):
                 build(context)
                 return real(context, tool_log)
 
-            with patch.object(agent_runtime, "project_build_runs", with_harness):
+            with patch.object(agent_core_turn, "project_build_runs", with_harness):
                 return original(test, raw, **kwargs)
 
         record = run_mixed(self, [

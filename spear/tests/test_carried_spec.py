@@ -16,7 +16,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-from runtime.agent_runtime import AgentContext, is_write_request
+from runtime.agent_context import AgentContext
+from runtime.agent_notes import is_write_request
 
 # Synthetic: what a previous turn concluded, in the words of a standard that
 # does not exist. The shape is what matters -- a rule cited, a second fact

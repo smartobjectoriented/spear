@@ -23,7 +23,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-from runtime import agent_runtime
+from runtime import agent_verification
 from runtime import work_phase
 from normative.requirement_set import Disposition, Requirement, RequirementSet
 from runtime.work_phase import WorkPhaseLedger
@@ -344,11 +344,11 @@ class TheContractStillDecidesDone(unittest.TestCase):
         self.assertFalse(self.one_done().contract_closed())
 
     def test_the_status_says_incomplete(self):
-        self.assertEqual(agent_runtime.requirement_status(self.one_done()),
+        self.assertEqual(agent_verification.requirement_status(self.one_done()),
                          "implementation work incomplete")
 
     def test_the_matrix_still_names_the_open_ones(self):
-        note = agent_runtime.requirement_matrix_note(self.one_done())
+        note = agent_verification.requirement_matrix_note(self.one_done())
 
         self.assertIn(R3.key, note)
         self.assertIn("not closed", note)
@@ -366,7 +366,7 @@ class TheContractStillDecidesDone(unittest.TestCase):
         self.assertTrue(found.contract_closed())
 
     def test_a_partial_result_never_reads_as_compliant(self):
-        note = agent_runtime.requirement_matrix_note(
+        note = agent_verification.requirement_matrix_note(
             self.one_done(), "The implementation is complete.")
 
         self.assertIn("take the matrix, not the claim", note)

@@ -52,7 +52,8 @@ class FinetuneCommandTests(unittest.TestCase):
 
     def test_runtime_cannot_import_or_dispatch_training_control(self):
         root = Path(rag_chat.__file__).parent.parent
-        runtime = (root / "runtime/agent_runtime.py").read_text()
+        runtime = "".join(path.read_text()
+                          for path in sorted((root / "runtime").glob("agent_*.py")))
         registry = (root / "harness/tool_registry.py").read_text()
         self.assertNotIn("training_controller", runtime)
         self.assertNotIn("finetune", runtime.lower())

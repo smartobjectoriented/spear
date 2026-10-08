@@ -479,23 +479,23 @@ class TheMatrixIsTheReview(unittest.TestCase):
         self.assertTrue(row["evidence"])
 
     def test_the_note_names_the_open_ones(self):
-        from runtime import agent_runtime
+        from runtime import agent_verification
 
         ledger = governed()
         ledger.record_plan([item_for(R1)])
-        note = agent_runtime.requirement_matrix_note(ledger)
+        note = agent_verification.requirement_matrix_note(ledger)
 
         self.assertIn("REQUIREMENT MATRIX", note)
         self.assertIn(R2.key, note)
         self.assertIn("not closed", note)
 
     def test_there_is_no_note_without_a_contract(self):
-        from runtime import agent_runtime
+        from runtime import agent_verification
 
         ledger = WorkPhaseLedger()
         ledger.engage(authority_bound=True, write_requested=True)
 
-        self.assertEqual(agent_runtime.requirement_matrix_note(ledger), "")
+        self.assertEqual(agent_verification.requirement_matrix_note(ledger), "")
 
 
 if __name__ == "__main__":

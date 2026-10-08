@@ -48,6 +48,10 @@ class ProjectCommands:
     build: str = ""
     test: str = ""
     source: str = "none"
+    # Where each command came from, when the two differ: a project may declare
+    # its build and leave its tests to be probed. Empty means `source`.
+    build_source: str = ""
+    test_source: str = ""
 
     def verifies(self):
         """The commands a writing turn must survive, in order."""
@@ -55,18 +59,36 @@ class ProjectCommands:
 
     @property
     def configured(self):
-        """True when this tree SAID how it is verified, rather than looking like it.
+        """True when the project declared how it is verified (projects.json).
 
-        Only a configured command is allowed to stand as the run's own
-        verification. A probed `make` is a good guess about how to build a
-        tree and a bad basis for telling a turn it has been verified: the
-        guess can be wrong, and the operator never asked for it to count.
+        Declared and probed commands verify alike when they genuinely run and
+        pass on the final source; what declaring changes is precedence. For a
+        kind the project declared, its command is the project's verification
+        and no probe stands in for it -- a declared build that fails is never
+        replaced by an easier guess. A probe only fills a kind left undeclared.
         """
         return self.source in _CONFIGURED_SOURCES
 
+    def origin(self, command):
+        """"configured" or "probed" for one of this tree's commands, else ""."""
+        if command and command == self.build:
+            source = self.build_source or self.source
+        elif command and command == self.test:
+            source = self.test_source or self.source
+        else:
+            return ""
+
+        return "configured" if source in _CONFIGURED_SOURCES else "probed"
+
     def to_dict(self):
-        return {"schema_version": SCHEMA_VERSION, "build": self.build,
-                "test": self.test, "source": self.source}
+        found = {"schema_version": SCHEMA_VERSION, "build": self.build,
+                 "test": self.test, "source": self.source}
+
+        for key in ("build_source", "test_source"):
+            if getattr(self, key):
+                found[key] = getattr(self, key)
+
+        return found
 
     @classmethod
     def from_dict(cls, raw):
@@ -74,7 +96,8 @@ class ProjectCommands:
             return None
 
         return cls(str(raw.get("build") or ""), str(raw.get("test") or ""),
-                   str(raw.get("source") or "cache"))
+                   str(raw.get("source") or "cache"), str(raw.get("build_source") or ""),
+                   str(raw.get("test_source") or ""))
 
 
 def _cmake_side(root):
@@ -221,12 +244,31 @@ def declared(spec):
 
 def commands(root, *, spec=None, cache_dir=None, refresh=False,
              infer_unittest=False):
-    """This tree's build and test commands: declared, cached, or probed once."""
+    """This tree's build and test commands: declared, else cached or probed.
+
+    Each kind on its own: what projects.json declares wins for that kind, and
+    a probe only fills the kind it leaves out.
+    """
     stated = declared(spec)
 
-    if stated is not None:
+    if stated is not None and stated.build and stated.test:
         return stated
 
+    found = _probed(root, cache_dir, refresh, infer_unittest)
+
+    if stated is None:
+        return found
+
+    build, build_source = ((stated.build, stated.source) if stated.build
+                           else (found.build, found.source))
+    test, test_source = ((stated.test, stated.source) if stated.test
+                         else (found.test, found.source))
+
+    return ProjectCommands(build, test, stated.source, build_source, test_source)
+
+
+def _probed(root, cache_dir, refresh, infer_unittest):
+    """The probed commands, cached per project once found."""
     path = os.path.join(cache_dir, CACHE_NAME) if cache_dir else ""
 
     if path and not refresh:

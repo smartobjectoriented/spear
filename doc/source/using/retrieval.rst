@@ -98,7 +98,7 @@ Federated and shared corpora
 A session retrieves from more than its own corpus when either applies:
 
 ``"corpora": ["a", "b"]`` on the project
-   A federation of one tree's parts — a kernel question, a userspace question
+   A :term:`federation` of one tree's parts — a kernel question, a userspace question
    and a bootloader question all belong to the same checkout.
 
 ``"shared": true`` on a corpus
@@ -167,7 +167,7 @@ safety story:
 
 ``PROJECT_ROOT``
    Where the **tools** run: the real current directory, always.  It is the
-   workspace root the execution harness validates every filesystem path
+   workspace root the execution :term:`harness` validates every filesystem path
    against (:doc:`/harness/security_model`).
 
 Only the cwd moves ``PROJECT_ROOT``.  Nothing in a question does — not a
@@ -202,9 +202,9 @@ edit.
 Prompt assembly
 ===============
 
-On the normative runtime, a turn's context is composed by ``ContextEngine``
-from explicit layers (an implementation turn on the coding core builds its own
-request from the project's rules, workspace knowledge, skills and admitted
+On the :term:`normative runtime`, a turn's context is composed by ``ContextEngine``
+from explicit layers (an implementation turn on the :term:`coding core` builds its own
+request from the project's rules, :term:`workspace knowledge`, skills and admitted
 external capabilities, and reads the tree through its tools instead of from
 retrieved chunks):
 

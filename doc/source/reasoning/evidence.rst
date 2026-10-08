@@ -18,13 +18,13 @@ allowed to stand in for each other:
    that provision. It says whether the change *does what the standard
    requires*.
 
-A passing build is not normative evidence, and a model's reading of a
+A passing build is not :term:`normative evidence`, and a model's reading of a
 provision is neither.
 
 Implementation evidence
 ***********************
 
-Every change-making turn on the coding core ends with one of three states:
+Every change-making turn on the :term:`coding core` ends with one of three states:
 
 .. list-table::
    :header-rows: 1
@@ -107,7 +107,7 @@ the operator can act on.
 Normative evidence
 ******************
 
-On a MIXED turn (:ref:`mixed_mode`), each constraint of the packet receives an
+On a :term:`MIXED` turn (:ref:`mixed_mode`), each constraint of the packet receives an
 authoritative status:
 
 .. list-table::
@@ -160,10 +160,10 @@ A MIXED turn reports both dimensions in one line:
    * - ``EVIDENCE CONFLICT``
      - authoritative evidence disagrees about a requirement
 
-``COMPLIANT`` needs all of the following at once: complete structural coverage,
+``COMPLIANT`` needs all of the following at once: complete :term:`structural coverage`,
 every applicable SHALL constraint established ``SATISFIED``, none ``VIOLATED``,
 no requirement whose applicability is unresolved, no evidence conflict, and all
-of that on the final source epoch. SHOULD and MAY constraints keep their force:
+of that on the final :term:`source epoch`. SHOULD and MAY constraints keep their force:
 they are reported, and they never block.
 
 .. _compliance_not_demonstrated:
@@ -196,7 +196,7 @@ The verdict comes with its counts, so it is clear what is missing:
 
 There are two ways to turn it into ``COMPLIANT``, and both are explicit project
 decisions: declare which provisions apply to the project, and bind a
-conformance check to each requirement that the source cannot show by itself
+:term:`conformance check` to each requirement that the source cannot show by itself
 (:ref:`projects`).
 
 .. _evidence_conflict:
@@ -205,7 +205,7 @@ Evidence conflict
 *****************
 
 When two authoritative providers disagree about the same final source — say a
-source predicate reads the count as four (``SATISFIED``) while a decisive bound
+:term:`source predicate` reads the count as four (``SATISFIED``) while a decisive bound
 check fails (``VIOLATED``) — the constraint is ``EVIDENCE_CONFLICT`` and the
 verdict is ``EVIDENCE CONFLICT``. Neither provider wins because it ran later,
 and no repair is attempted: one of the two is wrong about the project, and only

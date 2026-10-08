@@ -51,7 +51,7 @@ Every turn is classified from its own words:
 answered from the code. "What does the specification require here?" is a
 normative one and is answered from the document. "Does our parser comply?" asks
 about both and gets both. "Make our parser comply with Rule 7.4.1-2" asks for a
-change the standard governs, and runs as a MIXED change.
+change the standard governs, and runs as a :term:`MIXED` change.
 
 Self-contained and referring turns
 **********************************

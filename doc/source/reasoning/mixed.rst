@@ -7,7 +7,7 @@ A **MIXED** request asks for a change that has to satisfy a bound standard:
 "make the encoder emit one acknowledgement per requested type, as the standard
 requires". It needs both sides — what the document requires and what the code
 does — and a change. SPEAR does not answer it with one loop doing two jobs. It
-runs three passes around the coding core and judges the result on evidence the
+runs three passes around the :term:`coding core` and judges the result on evidence the
 model cannot supply.
 
 .. figure:: /img/SPEAR-Mixed.drawio.png
@@ -30,7 +30,7 @@ Three things must hold together:
 * it asks in the **standard's terms** — it names the document as its authority
   ("as the specification requires"), a provision, or compliance itself.
 
-A write in a session that merely has a standard bound is not MIXED because of
+A write in a session that merely has a standard bound is not :term:`MIXED` because of
 the binding: "rename this function" stays a change request, and a question
 about a provision stays a normative question. The class is read from the
 request's own words, by its syntax — a file name, a function call, a causative
@@ -42,7 +42,7 @@ The three passes
 1. The normative pre-pass
 =========================
 
-The established normative runtime (:ref:`standards`) runs first, read-only,
+The established :term:`normative runtime` (:ref:`standards`) runs first, read-only,
 with the standard's own tools and nothing else. It is asked to identify the
 provisions that govern the change and to state each one exactly — its force,
 its condition, its counts, the identifiers and values it names — citing every
@@ -159,10 +159,10 @@ project is not evidence of what a standard requires.
 ========================================
 
 The frozen coding core (:ref:`implementation_mode`) makes the change, with its
-six tools and SpearHost around it — exactly as for any implementation request.
+six tools and :term:`SpearHost` around it — exactly as for any implementation request.
 The constraints are guidance to it, not a policy it is held to. Then the
 **final source state** is fixed: its fingerprint is taken, and the
-implementation evidence of the turn is computed (:ref:`evidence_verdicts`).
+:term:`implementation evidence` of the turn is computed (:ref:`evidence_verdicts`).
 
 The normative authority model
 *****************************
@@ -248,7 +248,7 @@ meaning comes from the binding's semantics:
      - a pass establishes ``SATISFIED``; a failure establishes ``VIOLATED``
 
 ``ERROR`` (the command could not be started, could not be found, or timed out)
-and ``NOT_RUN`` establish nothing. A result counts only for the source epoch it
+and ``NOT_RUN`` establish nothing. A result counts only for the :term:`source epoch` it
 ran on: a check that changes the source it was run against, or any later edit,
 makes its result stale. A pass establishes the bound provisions and nothing
 else — not the section, not the standard, not the applicability of a provision
@@ -257,7 +257,7 @@ it is not bound to.
 When providers disagree
 =======================
 
-If a source predicate and a decisive bound check disagree about the same final
+If a :term:`source predicate` and a decisive bound check disagree about the same final
 source, the constraint is ``EVIDENCE_CONFLICT`` (:ref:`evidence_conflict`).
 Neither wins.
 

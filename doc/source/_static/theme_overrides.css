@@ -40,3 +40,10 @@ max-width: none;
 	padding: 8px;
 	border-radius: 8px;
 }
+
+/* The release under the project name, above the search box. */
+.wy-side-nav-search > div.version {
+	margin: -0.2em 0 0.8em;
+	font-weight: normal;
+	color: rgba(255, 255, 255, 0.75);
+}

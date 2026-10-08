@@ -108,7 +108,7 @@ Entry format
        ``[{"id": …, "revision": …}]``; with several, a request picks one by
        naming it (:ref:`context_selection`)
 
-The standard binding itself is **not** a project key: it is machine-wide, set
+The :term:`standard binding` itself is **not** a project key: it is machine-wide, set
 with ``/standard use`` (:ref:`standards`).
 
 .. important::
@@ -192,7 +192,7 @@ what carries normative meaning.
 
 A bound check runs on the final source, in the same sandbox as the project's
 own verification, and its result — ``PASSED``, ``FAILED``, ``NOT_RUN`` or
-``ERROR`` — counts only for the source epoch it ran on. A check that could not
+``ERROR`` — counts only for the :term:`source epoch` it ran on. A check that could not
 start, timed out, or modified the source it was run against establishes
 nothing. Binding a check to a provision also declares that the provision
 applies to the project.
@@ -214,7 +214,7 @@ applies to the project.
    * - ``standard``, ``revision``
      - optional; default to the bound standard
 
-A provision declared ``NOT_APPLICABLE`` leaves the constraint packet. A
+A provision declared ``NOT_APPLICABLE`` leaves the :term:`constraint packet`. A
 provision declared both ways is left unresolved.
 
 .. _context_selection:
@@ -227,12 +227,12 @@ A registered project is not context everywhere. Each turn starts from its
 tree alone, which inherits nothing from the project next to it or the one used
 before — and is given only:
 
-* what its request class calls for: the coding rules, workspace knowledge
+* what its :term:`request class` calls for: the coding rules, :term:`workspace knowledge`
   (:ref:`knowledge`), procedures and
   build commands for a change; the standard and its tools, and no
   implementation material, for a question about the standard; for a general
   question, the rules that name the ``general`` class, workspace knowledge and
-  read-only external capabilities. A MIXED change is selected once per pass;
+  read-only external capabilities. A :term:`MIXED` change is selected once per pass;
 * material of this workspace, or material explicitly declared generic;
 * a rule scoped to paths only when the request names such a path.
 
@@ -244,7 +244,7 @@ out by priority; the request, the runtime's own constraints and the constraint
 packet never are.
 
 The tool family follows the same decision, at the family level only: a change
-gets the coding core's six tools, a normative question the standard's tools,
+gets the :term:`coding core`'s six tools, a normative question the standard's tools,
 and the MIXED post-check none. A turn on the coding core may also be offered
 the external capabilities its workspace admits (:ref:`capabilities`).
 

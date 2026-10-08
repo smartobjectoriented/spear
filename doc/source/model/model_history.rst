@@ -97,7 +97,7 @@ Two adapters were trained on a rented B200 and served on the same Q8_0 base.
      - —
 
 Without retrieval the usage-shaped corpus helps a little and the descriptive
-one hurts.  With retrieval — the way the harness actually runs — the adapter
+one hurts.  With retrieval — the way the :term:`harness` actually runs — the adapter
 *costs* six complete answers out of 37.  It does not complement retrieval, it
 competes with it.
 

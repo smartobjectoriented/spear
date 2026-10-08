@@ -92,7 +92,7 @@ apply to it.
 Fail-closed, in code
 ********************
 
-The rule that governs the harness governs its source too. A branch that
+The rule that governs the :term:`harness` governs its source too. A branch that
 cannot apply a confinement raises; it does not log and continue. If you find
 yourself writing a fallback that is *almost* as safe, the fallback is the
 bug: see :ref:`the security model <security_model>` for what that costs when

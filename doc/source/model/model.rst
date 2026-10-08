@@ -5,7 +5,7 @@ The model and its weights
 =========================
 
 Where the answers come from: which model is served, how it is brought up,
-how it is trained on the harness's own usage, and — the page that exists
+how it is trained on the :term:`harness`'s own usage, and — the page that exists
 because the others would otherwise repeat its lessons — what the earlier
 attempts measured before this one was chosen.
 

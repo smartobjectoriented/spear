@@ -110,7 +110,7 @@ Two settings interact with it:
        (default 0.95)
 
 These two, and the sampling settings below, govern the normative and general
-runtime. The coding core (:doc:`/reasoning/implementation`) reserves its own
+runtime. The :term:`coding core` (:doc:`/reasoning/implementation`) reserves its own
 output budget, sends no sampling parameters of its own, and does not compact:
 it stops at half the window and asks for a summary. One coding-core response
 is capped at ``SPEAR_RESPONSE_MAX_TOKENS`` (default 16384), so a reply that

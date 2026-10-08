@@ -45,7 +45,7 @@ register a project.
 
 The installer creates the virtualenv under ``spear/``, installs PyTorch and the
 client requirements from ``spear/deploy/requirements.txt``, and caches the
-active embedding model. It is idempotent. Check what the harness needs before
+active embedding model. It is idempotent. Check what the :term:`harness` needs before
 first use:
 
 .. code-block:: console

@@ -16,11 +16,11 @@ The registry serves two vocabularies, and a turn sees exactly one of them:
 
 **The coding core's six tools** — ``read_file``, ``search_files``, ``patch``,
 ``write_file``, ``delete_file``, ``terminal`` — on every request with no
-standard engaged, and in the implementation pass of a MIXED request (it needs
-an OpenAI-compatible endpoint). The core reaches the harness through SpearHost
+standard engaged, and in the implementation pass of a :term:`MIXED` request (it needs
+an OpenAI-compatible endpoint). The core reaches the :term:`harness` through :term:`SpearHost`
 (``control_plane.py``, :doc:`/reasoning/implementation`), which calls the same
-router authorization, workspace resolution, target policy, command policy and
-sandbox described below. External capabilities and workspace knowledge add no
+router authorization, workspace resolution, :term:`target policy`, command policy and
+sandbox described below. External capabilities and :term:`workspace knowledge` add no
 tool: they are reached with the ``spear-capability`` and ``spear-knowledge``
 host commands, which SpearHost answers itself and never hands to a shell
 (:ref:`control_plane`).
@@ -31,7 +31,7 @@ session where a standard is engaged, filtered further by what the turn asks
 about: a purely normative question is offered no tool that reaches a working
 tree.
 
-Neither surface sees the other's tools, and the coding core never sees a
+Neither surface sees the other's tools, and the :term:`coding core` never sees a
 normative one.
 
 .. _the-web-pair:
@@ -197,7 +197,7 @@ Once the sandbox is known to be down
 
 The checks above decide one command at a time.  One conclusion outlives the
 command that reached it: when a command's output reports the sandbox missing,
-``_registered_command`` (the normative runtime's command handler) records it on
+``_registered_command`` (the :term:`normative runtime`'s command handler) records it on
 the turn's cache, and every later file write or deletion in that turn is
 refused explicitly instead of performed — the coding core's write and delete
 ports read the same mark.

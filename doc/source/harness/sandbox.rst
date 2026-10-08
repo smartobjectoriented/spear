@@ -212,7 +212,7 @@ Closed network
 ``run()`` builds the bwrap argv, wraps it in a scope if cgroup limits are
 active, spawns it with ``env={}`` (or the supervisor environment when scoped),
 and waits with a bounded ``communicate(timeout=...)``.  The sandbox's own
-defaults are 45 s and 10 000 characters per stream; the coding core's
+defaults are 45 s and 10 000 characters per stream; the :term:`coding core`'s
 ``terminal`` replaces them for its call (180 s by default, at most 600 s, and
 its own 50 000-character head/tail bound, :doc:`tool_harness`).  A cancelled
 turn stops the command the same way a timeout does.

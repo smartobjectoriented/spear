@@ -24,8 +24,8 @@ Everything uses the application's own virtualenv:
    Ran … tests — OK (skipped=…)
 
 The discovery command is authoritative: about 4400 tests, a few minutes.  It
-covers the coding core and its control plane, the evidence plane and its
-verdicts, the normative runtime and the MIXED orchestration, workspace context,
+covers the :term:`coding core` and its :term:`control plane`, the evidence plane and its
+verdicts, the :term:`normative runtime` and the :term:`MIXED` orchestration, workspace context,
 knowledge and capabilities, sessions, verification, checkpoints, the tool
 architecture and the security substrate — with scripted backends; it does not
 require a real model API.
@@ -90,7 +90,7 @@ Much of the value is in asserting that things **do not** happen.  These are
 easy to satisfy by accident with a test that only checks a return status, so
 they are checked at the mechanism level instead:
 
-* ``popen.assert_not_called()`` — a fail-closed decision spawned nothing;
+* ``popen.assert_not_called()`` — a :term:`fail-closed` decision spawned nothing;
 * ``self.assertEqual(writes, [])`` — no release write followed a setup
   failure, i.e. the sandboxed command never started;
 * the marker file the command would have created does not exist;

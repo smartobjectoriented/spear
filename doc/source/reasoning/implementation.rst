@@ -5,7 +5,7 @@ Implementation mode
 
 A request to change, build or inspect a working tree — with no standard
 engaged — is an **IMPLEMENTATION** request. It runs on the **coding core**, a
-standalone agentic loop, behind **SpearHost**, the control plane that decides
+standalone agentic loop, behind **SpearHost**, the :term:`control plane` that decides
 what each of its calls may do and records what each one did. Without a
 standard engaged, requests that name no subject at all (**GENERAL**) take the
 same path.
@@ -19,8 +19,8 @@ same path.
                                                ▼
                                 implementation evidence (the verdict)
 
-The split is the point. The coding core decides *what to try next*; it does not
-decide whether it may, and it does not decide whether it succeeded. SpearHost
+The split is the point. The :term:`coding core` decides *what to try next*; it does not
+decide whether it may, and it does not decide whether it succeeded. :term:`SpearHost`
 holds the first, and the evidence plane (:ref:`evidence_verdicts`) holds the
 second.
 
@@ -202,7 +202,7 @@ A synthetic project; the request names a target and how it will be proved.
    ring_next() wrapped at size + 1; it now wraps at size. `make` succeeds.
 
 The turn changed ``src/ring.c`` and ran a build *after* the change, so its
-implementation evidence is ``VERIFIED``. Had the turn edited the file again
+:term:`implementation evidence` is ``VERIFIED``. Had the turn edited the file again
 after ``make``, the same answer would be reported ``UNVERIFIED``: the build
 proved a tree that no longer exists. :ref:`evidence_verdicts` explains why.
 

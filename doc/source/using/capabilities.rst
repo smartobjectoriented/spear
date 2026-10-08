@@ -72,7 +72,7 @@ A provider is a candidate like a rule: its scope and task classes decide which
 turns it reaches, and the decision is audited with the others. A provider for
 one project never reaches another, and an unregistered tree inherits none.
 External capabilities reach implementation turns, general questions (read
-capabilities only) and the implementation pass of a MIXED change -- never a
+capabilities only) and the implementation pass of a :term:`MIXED` change -- never a
 question about a bound standard, the normative pre-pass or the compliance
 check.
 

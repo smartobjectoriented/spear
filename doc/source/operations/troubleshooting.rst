@@ -166,7 +166,7 @@ Without ``SPEAR_STATE_DIR``, the session state lives in the application
 directory, ``spear/`` of the checkout.
 
 The newest session directory holds ``events.jsonl`` — every tool call in order,
-and whether a standard binding was set — and ``snapshot.json``, the
+and whether a :term:`standard binding` was set — and ``snapshot.json``, the
 conversation the turn ran on. Between them they answer most "why did it do
 that?" questions without guesswork.
 

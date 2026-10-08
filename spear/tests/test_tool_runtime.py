@@ -18,32 +18,42 @@ from unittest.mock import ANY, MagicMock, patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from harness import tool_runtime
+import harness.sandbox
 
-from harness.tool_runtime import (
-    AuditLogger,
-    AuthorizationResult,
-    Capability,
-    CapabilityPolicy,
+from harness.command_policy import AuthorizationResult, CommandPolicy, ToolPolicy
+from harness.resource_control import (
     CgroupAvailability,
     CgroupLimits,
-    CommandClassification,
-    CommandPolicy,
-    CommandRunner,
-    DEFAULT_CAPABILITY_POLICY,
     DEFAULT_CGROUP_LIMITS,
     DEFAULT_RESOURCE_LIMITS,
-    ExecutionMode,
     ExecutionProfile,
+    ResourceLimits,
+    SystemdScopeRunner,
+)
+from harness.tool_primitives import (
+    Capability,
+    CapabilityPolicy,
+    CommandClassification,
+    DEFAULT_CAPABILITY_POLICY,
+    ExecutionMode,
     NetworkBackend,
     PathNotFoundError,
     PathPolicyError,
-    ResourceLimits,
-    SystemdScopeRunner,
+    PIPEFAIL_PRELUDE,
+    SHELL_BINARY,
     ToolResult,
-    ToolPolicy,
-    Workspace,
+    shell_argv,
 )
+from harness.sandbox import (
+    CLONE_NEWNET,
+    CLONE_NEWUSER,
+    NS_GET_NSTYPE,
+    NS_GET_USERNS,
+    BubblewrapSandbox,
+    SandboxAvailability,
+)
+from harness.tool_runtime import AuditLogger, CommandRunner
+from harness.workspace import SandboxSpec, Workspace
 
 
 class RagChatWorkspaceIntegrationTests(unittest.TestCase):
@@ -166,7 +176,7 @@ class RagChatWorkspaceIntegrationTests(unittest.TestCase):
         # and the bind must not be able to drift apart.
         self.assertEqual(
             self.rag_chat.sandbox_mount(),
-            tool_runtime.BubblewrapSandbox().mount_root(self.rag_chat.WORKSPACE))
+            BubblewrapSandbox().mount_root(self.rag_chat.WORKSPACE))
         self.assertNotIn('"/workspace"', note)
 
     def test_corpus_mention_is_reported_but_never_acted_on(self):
@@ -400,7 +410,7 @@ class RagChatWorkspaceIntegrationTests(unittest.TestCase):
     def test_ask_mode_fails_closed_for_complex_command_without_sandbox(self):
         self.rag_chat.EXECUTION_MODE = ExecutionMode.ASK
         old_sandbox = self.rag_chat.COMMAND_RUNNER.sandbox
-        self.rag_chat.COMMAND_RUNNER.sandbox = tool_runtime.BubblewrapSandbox(
+        self.rag_chat.COMMAND_RUNNER.sandbox = BubblewrapSandbox(
             binary="/definitely/missing/bwrap"
         )
         try:
@@ -417,7 +427,7 @@ class RagChatWorkspaceIntegrationTests(unittest.TestCase):
     def test_auto_mode_fails_closed_for_complex_commands_without_sandbox(self):
         self.rag_chat.EXECUTION_MODE = ExecutionMode.AUTO
         old_sandbox = self.rag_chat.COMMAND_RUNNER.sandbox
-        self.rag_chat.COMMAND_RUNNER.sandbox = tool_runtime.BubblewrapSandbox(
+        self.rag_chat.COMMAND_RUNNER.sandbox = BubblewrapSandbox(
             binary="/definitely/missing/bwrap"
         )
         try:
@@ -1114,7 +1124,7 @@ class SafeModeReadOnlyShellTests(unittest.TestCase):
         profile = ExecutionProfile.from_capabilities(
             DEFAULT_CAPABILITY_POLICY.for_mode(ExecutionMode.SAFE))
         self.assertFalse(profile.workspace_write)
-        sandbox = tool_runtime.BubblewrapSandbox()
+        sandbox = BubblewrapSandbox()
         workspace = Workspace.from_path(self.root)
         mount = sandbox.mount_root(workspace, profile)
         argv = sandbox.build_argv(workspace, ["true"], profile)
@@ -1133,7 +1143,7 @@ class MultiRootSandboxMountTests(unittest.TestCase):
         self.so3 = base / "so3"; self.so3.mkdir()
         self.lvgl = base / "lvgl"; self.lvgl.mkdir()
         self.ws = Workspace.from_path(self.primary, extra_roots=[self.so3, self.lvgl])
-        self.sandbox = tool_runtime.BubblewrapSandbox()
+        self.sandbox = BubblewrapSandbox()
 
     def tearDown(self):
         self.temp.cleanup()
@@ -1150,7 +1160,7 @@ class MultiRootSandboxMountTests(unittest.TestCase):
         """Host root → mount, as the sandbox resolves it for this profile."""
         mount = self.sandbox.mount_root(self.ws, profile)
         return self.ws.mount_map(
-            mount, identity=mount != tool_runtime.SandboxSpec().workspace_mount)
+            mount, identity=mount != SandboxSpec().workspace_mount)
 
     def test_write_profile_binds_every_root_read_write(self):
         profile = ExecutionProfile.from_capabilities(
@@ -1181,7 +1191,7 @@ class MultiRootSandboxMountTests(unittest.TestCase):
         # mounts are unique by construction, so this pins the legacy mount.
         other = Path(self.temp.name) / "nested"; (other / "so3").mkdir(parents=True)
         ws = Workspace.from_path(self.primary, extra_roots=[self.so3, other / "so3"])
-        sandbox = tool_runtime.BubblewrapSandbox()
+        sandbox = BubblewrapSandbox()
         profile = ExecutionProfile.from_capabilities(
             [Capability.FILESYSTEM_READ, Capability.WORKSPACE_WRITE])
         argv = sandbox.build_argv(ws, ["true"], profile)
@@ -1769,7 +1779,7 @@ class ResourceLimitsTests(unittest.TestCase):
         self.assertIsNone(DEFAULT_RESOURCE_LIMITS.file_size_bytes)
 
     def test_build_argv_wraps_command_with_prlimit(self):
-        sandbox = tool_runtime.BubblewrapSandbox()
+        sandbox = BubblewrapSandbox()
         argv = sandbox.build_argv(
             self.workspace,
             ["/bin/sh", "-lc", "echo constrained"],
@@ -1795,14 +1805,14 @@ class ResourceLimitsTests(unittest.TestCase):
         )
 
     def test_no_active_limit_omits_prlimit(self):
-        argv = tool_runtime.BubblewrapSandbox().build_argv(
+        argv = BubblewrapSandbox().build_argv(
             self.workspace, ["/bin/true"], resource_limits=ResourceLimits()
         )
         self.assertNotIn("/usr/bin/prlimit", argv)
 
     def test_active_limits_fail_closed_when_prlimit_is_unavailable(self):
-        sandbox = tool_runtime.BubblewrapSandbox(prlimit_binary="/definitely/missing/prlimit")
-        with patch("harness.tool_runtime.subprocess.run") as run:
+        sandbox = BubblewrapSandbox(prlimit_binary="/definitely/missing/prlimit")
+        with patch("harness.sandbox.subprocess.run") as run:
             result = sandbox.run(
                 self.workspace, ["/bin/true"], resource_limits=DEFAULT_RESOURCE_LIMITS
             )
@@ -1822,7 +1832,7 @@ class ResourceLimitsTests(unittest.TestCase):
             "'core': resource.getrlimit(resource.RLIMIT_CORE), 'child': json.loads(child), "
             "'raise_allowed': raised}))\n"
         )
-        result = tool_runtime.BubblewrapSandbox().run(
+        result = BubblewrapSandbox().run(
             self.workspace,
             ["/usr/bin/python3", "-c", script],
             resource_limits=DEFAULT_RESOURCE_LIMITS,
@@ -1856,7 +1866,7 @@ class WorkspaceMountProfileTests(unittest.TestCase):
         return ExecutionProfile.from_capabilities(capabilities)
 
     def run_shell(self, profile, script, *, backend=NetworkBackend.CLOSED):
-        return tool_runtime.BubblewrapSandbox().run(
+        return BubblewrapSandbox().run(
             self.workspace,
             ["/bin/sh", "-lc", script],
             profile=profile,
@@ -1866,7 +1876,7 @@ class WorkspaceMountProfileTests(unittest.TestCase):
 
     def test_profile_without_filesystem_access_gets_private_empty_workspace(self):
         profile = self.profile()
-        argv = tool_runtime.BubblewrapSandbox().build_argv(
+        argv = BubblewrapSandbox().build_argv(
             self.workspace, ["/bin/true"], profile=profile
         )
         self.assertNotIn(str(self.workspace_root), argv)
@@ -1880,7 +1890,7 @@ class WorkspaceMountProfileTests(unittest.TestCase):
 
     def test_filesystem_read_profile_is_real_read_only_workspace(self):
         profile = self.profile(Capability.FILESYSTEM_READ)
-        sandbox = tool_runtime.BubblewrapSandbox()
+        sandbox = BubblewrapSandbox()
         mount = sandbox.mount_root(self.workspace, profile)
         argv = sandbox.build_argv(self.workspace, ["/bin/true"], profile=profile)
         # Locate the workspace bind by destination: other read-only binds
@@ -1902,7 +1912,7 @@ class WorkspaceMountProfileTests(unittest.TestCase):
 
     def test_workspace_write_profile_keeps_real_read_write_workspace(self):
         profile = self.profile(Capability.FILESYSTEM_READ, Capability.WORKSPACE_WRITE)
-        sandbox = tool_runtime.BubblewrapSandbox()
+        sandbox = BubblewrapSandbox()
         mount = sandbox.mount_root(self.workspace, profile)
         argv = sandbox.build_argv(self.workspace, ["/bin/true"], profile=profile)
         bind_at = next(i for i, a in enumerate(argv)
@@ -1968,7 +1978,7 @@ class WorkspaceMountProfileTests(unittest.TestCase):
         self.assertEqual(self.marker.read_text(encoding="utf-8"), "network-rw")
 
     def test_profile_none_retains_legacy_read_write_mount_but_runner_uses_explicit_profile(self):
-        sandbox_argv = tool_runtime.BubblewrapSandbox()
+        sandbox_argv = BubblewrapSandbox()
         argv = sandbox_argv.build_argv(self.workspace, ["/bin/true"])
         mount = sandbox_argv.mount_root(self.workspace)
         bind_at = next(i for i, a in enumerate(argv)
@@ -2005,7 +2015,7 @@ class ReadOnlySandboxExecutionTests(unittest.TestCase):
         self.temp.cleanup()
 
     def run_read_only(self, argv):
-        return tool_runtime.BubblewrapSandbox().run(
+        return BubblewrapSandbox().run(
             self.workspace,
             argv,
             profile=self.profile,
@@ -2029,7 +2039,7 @@ class ReadOnlySandboxExecutionTests(unittest.TestCase):
                 outputs[name] = result.stdout
         self.assertEqual(
             outputs["pwd"].strip(),
-            tool_runtime.BubblewrapSandbox().mount_root(self.workspace, self.profile))
+            BubblewrapSandbox().mount_root(self.workspace, self.profile))
         self.assertIn("file.txt", outputs["ls"])
         self.assertIn("needle", outputs["cat"])
         self.assertIn("needle", outputs["grep"])
@@ -2134,7 +2144,7 @@ class Phase1bBubblewrapContractTests(unittest.TestCase):
         self.temp.cleanup()
 
     def sandbox(self, *, binary="bwrap"):
-        sandbox_type = getattr(tool_runtime, "BubblewrapSandbox", None)
+        sandbox_type = getattr(harness.sandbox, "BubblewrapSandbox", None)
         self.assertIsNotNone(
             sandbox_type,
             "BubblewrapSandbox is not implemented yet (expected Phase 1b)",
@@ -2205,7 +2215,7 @@ class Slirp4netnsNetworkTests(unittest.TestCase):
 
     def sandbox(self, **kwargs):
         kwargs.setdefault("network_ready_timeout_seconds", 2)
-        return tool_runtime.BubblewrapSandbox(**kwargs)
+        return BubblewrapSandbox(**kwargs)
 
     def assert_no_test_process(self, marker):
         processes = subprocess.check_output(["ps", "-eo", "args="], text=True)
@@ -2273,9 +2283,9 @@ class Slirp4netnsNetworkTests(unittest.TestCase):
                 bwrap_argvs.append(list(argv))
             return real_popen(argv, *args, **kwargs)
 
-        with patch.object(tool_runtime.os, "pipe", side_effect=tracked_pipe), \
-             patch.object(tool_runtime.os, "write", side_effect=tracked_write), \
-             patch.object(tool_runtime.subprocess, "Popen", side_effect=tracked_popen):
+        with patch.object(harness.sandbox.os, "pipe", side_effect=tracked_pipe), \
+             patch.object(harness.sandbox.os, "write", side_effect=tracked_write), \
+             patch.object(harness.sandbox.subprocess, "Popen", side_effect=tracked_popen):
             result = self.sandbox().run(
                 self.workspace, ["/bin/true"], profile=self.profile,
                 backend=NetworkBackend.SLIRP4NETNS,
@@ -2294,8 +2304,8 @@ class Slirp4netnsNetworkTests(unittest.TestCase):
         cases = (
             ("helper", {"slirp_binary": "/bin/false"}, None),
             ("ready-timeout", {"slirp_binary": "/bin/false"}, None),
-            ("pidfd-open", {}, patch.object(tool_runtime.os, "pidfd_open", side_effect=OSError("no"))),
-            ("json", {}, patch.object(tool_runtime.json, "loads", side_effect=RuntimeError("no"))),
+            ("pidfd-open", {}, patch.object(harness.sandbox.os, "pidfd_open", side_effect=OSError("no"))),
+            ("json", {}, patch.object(harness.sandbox.json, "loads", side_effect=RuntimeError("no"))),
         )
         for name, sandbox_kwargs, extra_patch in cases:
             with self.subTest(name=name):
@@ -2304,7 +2314,7 @@ class Slirp4netnsNetworkTests(unittest.TestCase):
                 def tracked_write(fd, data):
                     writes.append((fd, data))
                     return real_write(fd, data)
-                with patch.object(tool_runtime.os, "write", side_effect=tracked_write):
+                with patch.object(harness.sandbox.os, "write", side_effect=tracked_write):
                     if extra_patch is None:
                         result = self.sandbox(**sandbox_kwargs).run(
                             self.workspace,
@@ -2356,9 +2366,9 @@ class Slirp4netnsNetworkTests(unittest.TestCase):
         sandbox = self.sandbox()
         self.assertIsNone(sandbox._slirp_pinned_namespace_status())
 
-        with patch.object(tool_runtime.os, "pidfd_open", side_effect=tracked_open), \
-             patch.object(tool_runtime.os, "close", side_effect=tracked_close), \
-             patch.object(tool_runtime.subprocess, "Popen", side_effect=fail_before_slirp):
+        with patch.object(harness.sandbox.os, "pidfd_open", side_effect=tracked_open), \
+             patch.object(harness.sandbox.os, "close", side_effect=tracked_close), \
+             patch.object(harness.sandbox.subprocess, "Popen", side_effect=fail_before_slirp):
             result = sandbox.run(
                 self.workspace, ["/bin/true"], profile=self.profile,
                 backend=NetworkBackend.SLIRP4NETNS,
@@ -2370,7 +2380,7 @@ class Slirp4netnsNetworkTests(unittest.TestCase):
 
     def test_pidfd_open_failure_fails_closed_before_command_release(self):
         marker = self.workspace_root / "pidfd-open-marker"
-        with patch.object(tool_runtime.os, "pidfd_open", side_effect=OSError("blocked")):
+        with patch.object(harness.sandbox.os, "pidfd_open", side_effect=OSError("blocked")):
             result = self.sandbox().run(
                 self.workspace, ["/bin/sh", "-lc", "touch /workspace/pidfd-open-marker"],
                 profile=self.profile, backend=NetworkBackend.SLIRP4NETNS,
@@ -2380,8 +2390,8 @@ class Slirp4netnsNetworkTests(unittest.TestCase):
 
     def test_missing_pidfd_support_fails_closed_before_command_release(self):
         marker = self.workspace_root / "pidfd-support-marker"
-        with patch.object(tool_runtime.os, "pidfd_open", None), \
-             patch.object(tool_runtime.signal, "pidfd_send_signal", None):
+        with patch.object(harness.sandbox.os, "pidfd_open", None), \
+             patch.object(harness.sandbox.signal, "pidfd_send_signal", None):
             result = self.sandbox().run(
                 self.workspace, ["/bin/sh", "-lc", "touch /workspace/pidfd-support-marker"],
                 profile=self.profile, backend=NetworkBackend.SLIRP4NETNS,
@@ -2390,25 +2400,25 @@ class Slirp4netnsNetworkTests(unittest.TestCase):
         self.assertFalse(marker.exists())
 
     def test_network_preflight_requires_pidfd_support(self):
-        with patch.object(tool_runtime.os, "pidfd_open", None):
+        with patch.object(harness.sandbox.os, "pidfd_open", None):
             result = self.sandbox().preflight_network(self.workspace)
         self.assertFalse(result.ok)
         self.assertIn("pidfd", result.summary)
 
     def test_pidfd_stop_handles_immediate_transient_and_already_dead_results(self):
         sandbox = self.sandbox()
-        with patch.object(tool_runtime.signal, "pidfd_send_signal") as send:
+        with patch.object(harness.sandbox.signal, "pidfd_send_signal") as send:
             self.assertTrue(sandbox._stop_namespace_child(123))
         send.assert_called_once_with(123, signal.SIGKILL)
 
         with patch.object(
-            tool_runtime.signal, "pidfd_send_signal", side_effect=[OSError("once"), None]
+            harness.sandbox.signal, "pidfd_send_signal", side_effect=[OSError("once"), None]
         ) as send:
             self.assertTrue(sandbox._stop_namespace_child(123))
         self.assertEqual(send.call_count, 2)
 
         with patch.object(
-            tool_runtime.signal, "pidfd_send_signal", side_effect=ProcessLookupError
+            harness.sandbox.signal, "pidfd_send_signal", side_effect=ProcessLookupError
         ):
             self.assertTrue(sandbox._stop_namespace_child(123))
 
@@ -2416,9 +2426,9 @@ class Slirp4netnsNetworkTests(unittest.TestCase):
         process = subprocess.Popen(["/bin/sleep", "30"])
         pidfd = os.pidfd_open(process.pid)
         try:
-            self.assertFalse(tool_runtime.BubblewrapSandbox._wait_pidfd_exit(pidfd, 0.01))
+            self.assertFalse(BubblewrapSandbox._wait_pidfd_exit(pidfd, 0.01))
             signal.pidfd_send_signal(pidfd, signal.SIGKILL)
-            self.assertTrue(tool_runtime.BubblewrapSandbox._wait_pidfd_exit(pidfd, 1))
+            self.assertTrue(BubblewrapSandbox._wait_pidfd_exit(pidfd, 1))
         finally:
             process.wait()
             os.close(pidfd)
@@ -2461,9 +2471,9 @@ class Slirp4netnsNetworkTests(unittest.TestCase):
             pipes.append(pair)
             return pair
 
-        original_wait = tool_runtime.BubblewrapSandbox._wait_pidfd_exit
-        original_stop = tool_runtime.BubblewrapSandbox._stop_process
-        original_safe_close = tool_runtime.BubblewrapSandbox._safe_close
+        original_wait = BubblewrapSandbox._wait_pidfd_exit
+        original_stop = BubblewrapSandbox._stop_process
+        original_safe_close = BubblewrapSandbox._safe_close
 
         def tracked_wait(pidfd, timeout):
             wait_calls.append((pidfd, timeout))
@@ -2482,13 +2492,13 @@ class Slirp4netnsNetworkTests(unittest.TestCase):
             writes.append((fd, data))
             return real_write(fd, data)
 
-        with patch.object(tool_runtime.os, "pidfd_open", side_effect=tracked_open), \
-             patch.object(tool_runtime.signal, "pidfd_send_signal", side_effect=permanently_failing_signal), \
-             patch.object(tool_runtime.os, "pipe", side_effect=tracked_pipe), \
-             patch.object(tool_runtime.os, "write", side_effect=tracked_write), \
-             patch.object(tool_runtime.BubblewrapSandbox, "_safe_close", side_effect=tracked_safe_close), \
-             patch.object(tool_runtime.BubblewrapSandbox, "_wait_pidfd_exit", side_effect=tracked_wait), \
-             patch.object(tool_runtime.BubblewrapSandbox, "_stop_process", side_effect=tracked_stop):
+        with patch.object(harness.sandbox.os, "pidfd_open", side_effect=tracked_open), \
+             patch.object(harness.sandbox.signal, "pidfd_send_signal", side_effect=permanently_failing_signal), \
+             patch.object(harness.sandbox.os, "pipe", side_effect=tracked_pipe), \
+             patch.object(harness.sandbox.os, "write", side_effect=tracked_write), \
+             patch.object(BubblewrapSandbox, "_safe_close", side_effect=tracked_safe_close), \
+             patch.object(BubblewrapSandbox, "_wait_pidfd_exit", side_effect=tracked_wait), \
+             patch.object(BubblewrapSandbox, "_stop_process", side_effect=tracked_stop):
             sandbox = self.sandbox(
                 slirp_binary=str(stalled_helper), network_ready_timeout_seconds=0.1,
             )
@@ -2522,7 +2532,7 @@ class Slirp4netnsNetworkTests(unittest.TestCase):
         # its own pidfd; remove this explicitly identifiable blocked child.
         test_pidfd = test_pidfds[0]
         signal.pidfd_send_signal(test_pidfd, signal.SIGKILL)
-        self.assertTrue(tool_runtime.BubblewrapSandbox._wait_pidfd_exit(test_pidfd, 1))
+        self.assertTrue(BubblewrapSandbox._wait_pidfd_exit(test_pidfd, 1))
         os.close(test_pidfd)
         self.assert_no_test_process(stalled_helper)
 
@@ -2602,7 +2612,7 @@ class Slirp4netnsNetworkTests(unittest.TestCase):
 
     def test_python_orchestration_failure_cleans_bwrap_and_slirp(self):
         marker = self.workspace_root / "command-ran"
-        with patch.object(tool_runtime.json, "loads", side_effect=RuntimeError("test failure")):
+        with patch.object(harness.sandbox.json, "loads", side_effect=RuntimeError("test failure")):
             result = self.sandbox().run(
                 self.workspace, ["/bin/sh", "-lc", "touch /workspace/command-ran"],
                 profile=self.profile, backend=NetworkBackend.SLIRP4NETNS,
@@ -2800,7 +2810,7 @@ class Phase1bBubblewrapAdversarialTests(unittest.TestCase):
         self.workspace = Workspace.from_path(self.workspace_root)
         self.outside = Path(self.temp.name) / "host-outside"
         self.outside.mkdir()
-        self.sandbox = tool_runtime.BubblewrapSandbox()
+        self.sandbox = BubblewrapSandbox()
         # Where the tree answers inside: its own host path, or /workspace under
         # the legacy mount. Asked of the sandbox so the test tracks the code.
         self.mount = self.sandbox.mount_root(self.workspace)
@@ -2942,22 +2952,22 @@ class Phase1bBubblewrapAdversarialTests(unittest.TestCase):
         self.assertEqual(target.read_text(), "unchanged")
 
     def test_availability_states_and_cache_fail_closed_in_auto(self):
-        unavailable = tool_runtime.BubblewrapSandbox(binary="/definitely/missing/bwrap")
+        unavailable = BubblewrapSandbox(binary="/definitely/missing/bwrap")
         self.assertEqual(unavailable.ensure_available(self.workspace).status, "failed")
-        self.assertEqual(unavailable.availability, tool_runtime.SandboxAvailability.ABSENT)
+        self.assertEqual(unavailable.availability, SandboxAvailability.ABSENT)
         not_executable = self.outside / "not-executable-bwrap"
         not_executable.write_text("not executable")
         not_executable.chmod(0o644)
-        blocked = tool_runtime.BubblewrapSandbox(binary=str(not_executable))
+        blocked = BubblewrapSandbox(binary=str(not_executable))
         self.assertEqual(blocked.ensure_available(self.workspace).status, "failed")
-        self.assertEqual(blocked.availability, tool_runtime.SandboxAvailability.INEXECUTABLE)
+        self.assertEqual(blocked.availability, SandboxAvailability.INEXECUTABLE)
 
-        refused = tool_runtime.BubblewrapSandbox(binary="bwrap")
+        refused = BubblewrapSandbox(binary="bwrap")
         with patch.object(refused, "preflight", return_value=ToolResult("failed", "refused")) as preflight:
             self.assertEqual(refused.ensure_available(self.workspace).status, "failed")
             self.assertEqual(refused.ensure_available(self.workspace).status, "failed")
         self.assertEqual(preflight.call_count, 1)
-        self.assertEqual(refused.availability, tool_runtime.SandboxAvailability.REFUSED)
+        self.assertEqual(refused.availability, SandboxAvailability.REFUSED)
 
 
 class Phase1bRagChatRoutingTests(unittest.TestCase):
@@ -3065,7 +3075,7 @@ class Phase1bRagChatRoutingTests(unittest.TestCase):
         self.assertEqual(result, "sandboxed")
         sandbox.run.assert_called_once_with(
             self.rag_chat.WORKSPACE,
-            tool_runtime.shell_argv("printf sandboxed | cat"),
+            shell_argv("printf sandboxed | cat"),
             profile=ANY,
             resource_limits=DEFAULT_RESOURCE_LIMITS,
             cgroup_limits=DEFAULT_CGROUP_LIMITS,
@@ -3097,7 +3107,7 @@ class Phase1bRagChatRoutingTests(unittest.TestCase):
         confirm.assert_called_once()
         sandbox.run.assert_called_once_with(
             self.rag_chat.WORKSPACE,
-            tool_runtime.shell_argv("printf sandboxed | cat"),
+            shell_argv("printf sandboxed | cat"),
             profile=ANY,
             resource_limits=DEFAULT_RESOURCE_LIMITS,
             cgroup_limits=DEFAULT_CGROUP_LIMITS,
@@ -3190,11 +3200,11 @@ class Phase1bRagChatRoutingTests(unittest.TestCase):
         non_executable = Path(self.temp.name) / "not-executable-bwrap"
         non_executable.write_text("not executable")
         non_executable.chmod(0o644)
-        refused = tool_runtime.BubblewrapSandbox(binary="bwrap")
-        refused.availability = tool_runtime.SandboxAvailability.REFUSED
+        refused = BubblewrapSandbox(binary="bwrap")
+        refused.availability = SandboxAvailability.REFUSED
         sandboxes = (
-            tool_runtime.BubblewrapSandbox(binary="/definitely/missing/bwrap"),
-            tool_runtime.BubblewrapSandbox(binary=str(non_executable)),
+            BubblewrapSandbox(binary="/definitely/missing/bwrap"),
+            BubblewrapSandbox(binary=str(non_executable)),
             refused,
         )
         for sandbox in sandboxes:
@@ -3317,7 +3327,7 @@ class Phase1bRagChatRoutingTests(unittest.TestCase):
         confirm.assert_called_once()
         sandbox.run.assert_called_once_with(
             self.rag_chat.WORKSPACE,
-            tool_runtime.shell_argv("curl https://example.invalid | head"),
+            shell_argv("curl https://example.invalid | head"),
             profile=ANY, backend=NetworkBackend.SLIRP4NETNS,
             resource_limits=DEFAULT_RESOURCE_LIMITS,
             cgroup_limits=DEFAULT_CGROUP_LIMITS,
@@ -3344,7 +3354,7 @@ class Phase1bRagChatRoutingTests(unittest.TestCase):
                          "set SPEAR_TEST_NETWORK=1 for opt-in end-to-end routing")
     def test_opt_in_ask_network_routes_through_slirp(self):
         self.rag_chat.EXECUTION_MODE = ExecutionMode.ASK
-        self.rag_chat.COMMAND_RUNNER.sandbox = tool_runtime.BubblewrapSandbox()
+        self.rag_chat.COMMAND_RUNNER.sandbox = BubblewrapSandbox()
         with patch.object(self.rag_chat, "confirm", return_value=True):
             result = self.rag_chat.run_cmd(
                 "curl --fail --silent --show-error https://example.com/", need_confirm=False
@@ -3368,7 +3378,7 @@ class Phase1bRagChatRoutingTests(unittest.TestCase):
 
     def test_sandbox_preflight_is_cached_between_sandboxed_commands(self):
         self.rag_chat.EXECUTION_MODE = ExecutionMode.AUTO
-        sandbox = tool_runtime.BubblewrapSandbox(binary="bwrap")
+        sandbox = BubblewrapSandbox(binary="bwrap")
         self.rag_chat.COMMAND_RUNNER.sandbox = sandbox
         with patch.object(sandbox, "preflight",
                           return_value=ToolResult("ok", "sandbox preflight completed")) as preflight, \
@@ -3400,7 +3410,7 @@ class AlternativesMountTests(unittest.TestCase):
         self.addCleanup(self.temp.cleanup)
 
     def test_build_argv_binds_the_alternatives_directory_read_only(self):
-        argv = tool_runtime.BubblewrapSandbox().build_argv(
+        argv = BubblewrapSandbox().build_argv(
             self.workspace, ["/bin/true"])
         self.assertIn("--dir", argv)
         rendered = "\0".join(argv)
@@ -3410,14 +3420,14 @@ class AlternativesMountTests(unittest.TestCase):
         self.assertNotIn("--ro-bind\0/etc\0/etc", rendered)
 
     def test_missing_alternatives_directory_is_simply_not_bound(self):
-        spec = tool_runtime.SandboxSpec(alternatives="/definitely/missing/alternatives")
-        argv = tool_runtime.BubblewrapSandbox(spec=spec).build_argv(
+        spec = SandboxSpec(alternatives="/definitely/missing/alternatives")
+        argv = BubblewrapSandbox(spec=spec).build_argv(
             self.workspace, ["/bin/true"])
         self.assertNotIn("/definitely/missing/alternatives", argv)
         self.assertIn("/etc", argv)          # the mount point still exists
 
     def test_etc_is_sealed_read_only(self):
-        result = tool_runtime.BubblewrapSandbox().run(
+        result = BubblewrapSandbox().run(
             self.workspace,
             ["/bin/sh", "-lc", "touch /etc/escape 2>&1; echo rc=$?; "
                                "mkdir /etc/d 2>&1; echo rc2=$?"],
@@ -3428,7 +3438,7 @@ class AlternativesMountTests(unittest.TestCase):
         self.assertIn("rc2=1", result.stdout)
 
     def test_cc_resolves_inside_the_sandbox(self):
-        result = tool_runtime.BubblewrapSandbox().run(
+        result = BubblewrapSandbox().run(
             self.workspace, ["/bin/sh", "-lc", "command -v cc && cc --version | head -1"],
             profile=self.profile)
         self.assertTrue(result.ok, result.to_legacy_text())
@@ -3440,7 +3450,7 @@ class AlternativesMountTests(unittest.TestCase):
             encoding="utf-8")
         (self.workspace_root / "Makefile").write_text(
             "all: a\na: a.c\n\t$(CC) -O2 -o a a.c\n", encoding="utf-8")
-        result = tool_runtime.BubblewrapSandbox().run(
+        result = BubblewrapSandbox().run(
             self.workspace, ["/usr/bin/make"], profile=self.profile)
         self.assertTrue(result.ok, result.to_legacy_text())
         self.assertTrue((self.workspace_root / "a").exists())
@@ -3454,14 +3464,14 @@ class AlternativesMountTests(unittest.TestCase):
         uids -- bitbake's is_local_uid() opens /etc/passwd and dies without it.
         Anything else appearing here is a leak, and shadow above all.
         """
-        result = tool_runtime.BubblewrapSandbox().run(
+        result = BubblewrapSandbox().run(
             self.workspace, ["/bin/sh", "-lc", "ls -A /etc"], profile=self.profile)
         self.assertTrue(result.ok, result.to_legacy_text())
         self.assertEqual(sorted(result.stdout.split()),
                          ["alternatives", "group", "passwd"])
 
     def test_the_credential_half_of_etc_stays_out(self):
-        result = tool_runtime.BubblewrapSandbox().run(
+        result = BubblewrapSandbox().run(
             self.workspace,
             ["/bin/sh", "-lc", "cat /etc/shadow /etc/gshadow /etc/sudoers 2>&1; echo rc=$?"],
             profile=self.profile)
@@ -3470,7 +3480,7 @@ class AlternativesMountTests(unittest.TestCase):
         self.assertIn("rc=1", result.stdout)
 
     def test_the_alternatives_bind_is_not_writable(self):
-        result = tool_runtime.BubblewrapSandbox().run(
+        result = BubblewrapSandbox().run(
             self.workspace,
             ["/bin/sh", "-lc", "touch /etc/alternatives/x 2>&1; echo rc=$?"],
             profile=self.profile)
@@ -3478,7 +3488,7 @@ class AlternativesMountTests(unittest.TestCase):
         self.assertIn("rc=1", result.stdout)
 
     def test_network_profile_still_gets_its_resolver_files(self):
-        argv = tool_runtime.BubblewrapSandbox().build_argv(
+        argv = BubblewrapSandbox().build_argv(
             self.workspace, ["/bin/true"],
             profile=ExecutionProfile.from_capabilities({Capability.NETWORK}),
             backend=NetworkBackend.SLIRP4NETNS,
@@ -3513,7 +3523,7 @@ class PinnedNamespaceAttachmentTests(unittest.TestCase):
 
     def sandbox(self, **kwargs):
         kwargs.setdefault("network_ready_timeout_seconds", 2)
-        return tool_runtime.BubblewrapSandbox(**kwargs)
+        return BubblewrapSandbox(**kwargs)
 
     def spawn_and_capture(self, argv, **run_kwargs):
         spawned = []
@@ -3523,7 +3533,7 @@ class PinnedNamespaceAttachmentTests(unittest.TestCase):
             spawned.append((list(command), kwargs.get("pass_fds")))
             return real_popen(command, *args, **kwargs)
 
-        with patch.object(tool_runtime.subprocess, "Popen", side_effect=tracked):
+        with patch.object(harness.sandbox.subprocess, "Popen", side_effect=tracked):
             result = self.sandbox().run(self.workspace, argv, profile=self.profile,
                                         backend=NetworkBackend.SLIRP4NETNS, **run_kwargs)
         helper = [s for s in spawned
@@ -3588,7 +3598,7 @@ class PinnedNamespaceAttachmentTests(unittest.TestCase):
         self.assertLessEqual(open_count(), baseline)
 
         # Python-level exception in the middle of the orchestration.
-        with patch.object(tool_runtime.json, "loads", side_effect=RuntimeError("boom")):
+        with patch.object(harness.sandbox.json, "loads", side_effect=RuntimeError("boom")):
             self.sandbox().run(self.workspace, ["/bin/true"], profile=self.profile,
                                backend=NetworkBackend.SLIRP4NETNS)
         self.assertLessEqual(open_count(), baseline)
@@ -3606,7 +3616,7 @@ class PinnedNamespaceAttachmentTests(unittest.TestCase):
             writes.append((fd, data))
             return real_write(fd, data)
 
-        with patch.object(tool_runtime.os, "write", side_effect=tracked_write):
+        with patch.object(harness.sandbox.os, "write", side_effect=tracked_write):
             result = self.sandbox(slirp_binary=str(incapable)).run(
                 self.workspace, ["/bin/sh", "-lc", "touch /workspace/command-ran"],
                 profile=self.profile, backend=NetworkBackend.SLIRP4NETNS)
@@ -3631,8 +3641,8 @@ class PinnedNamespaceAttachmentTests(unittest.TestCase):
             writes.append((fd, data))
             return real_write(fd, data)
 
-        with patch.object(tool_runtime.json, "loads", side_effect=tampered), \
-             patch.object(tool_runtime.os, "write", side_effect=tracked_write):
+        with patch.object(harness.sandbox.json, "loads", side_effect=tampered), \
+             patch.object(harness.sandbox.os, "write", side_effect=tracked_write):
             result = self.sandbox().run(
                 self.workspace, ["/bin/sh", "-lc", "touch /workspace/command-ran"],
                 profile=self.profile, backend=NetworkBackend.SLIRP4NETNS)
@@ -3649,7 +3659,7 @@ class PinnedNamespaceAttachmentTests(unittest.TestCase):
         real_ioctl = fcntl.ioctl
 
         def wrong_type(fd, request, *args):
-            if request == tool_runtime.NS_GET_NSTYPE:
+            if request == NS_GET_NSTYPE:
                 return 0  # neither CLONE_NEWNET nor CLONE_NEWUSER
             return real_ioctl(fd, request, *args)
 
@@ -3657,8 +3667,8 @@ class PinnedNamespaceAttachmentTests(unittest.TestCase):
             writes.append((fd, data))
             return real_write(fd, data)
 
-        with patch.object(tool_runtime.fcntl, "ioctl", side_effect=wrong_type), \
-             patch.object(tool_runtime.os, "write", side_effect=tracked_write):
+        with patch.object(harness.sandbox.fcntl, "ioctl", side_effect=wrong_type), \
+             patch.object(harness.sandbox.os, "write", side_effect=tracked_write):
             result = self.sandbox().run(
                 self.workspace, ["/bin/sh", "-lc", "touch /workspace/command-ran"],
                 profile=self.profile, backend=NetworkBackend.SLIRP4NETNS)
@@ -3673,18 +3683,18 @@ class PinnedNamespaceAttachmentTests(unittest.TestCase):
 
         def watching(fd, request, *args):
             result = real_ioctl(fd, request, *args)
-            if request == tool_runtime.NS_GET_USERNS:
-                observed["net"] = real_ioctl(fd, tool_runtime.NS_GET_NSTYPE)
-                observed["user"] = real_ioctl(result, tool_runtime.NS_GET_NSTYPE)
+            if request == NS_GET_USERNS:
+                observed["net"] = real_ioctl(fd, NS_GET_NSTYPE)
+                observed["user"] = real_ioctl(result, NS_GET_NSTYPE)
             return result
 
-        with patch.object(tool_runtime.fcntl, "ioctl", side_effect=watching):
+        with patch.object(harness.sandbox.fcntl, "ioctl", side_effect=watching):
             result = self.sandbox().run(self.workspace, ["/bin/true"],
                                         profile=self.profile,
                                         backend=NetworkBackend.SLIRP4NETNS)
         self.assertTrue(result.ok, result.to_legacy_text())
-        self.assertEqual(observed.get("net"), tool_runtime.CLONE_NEWNET)
-        self.assertEqual(observed.get("user"), tool_runtime.CLONE_NEWUSER)
+        self.assertEqual(observed.get("net"), CLONE_NEWNET)
+        self.assertEqual(observed.get("user"), CLONE_NEWUSER)
 
     def test_pidfd_remains_the_process_identity_alongside_namespace_handles(self):
         opened = []
@@ -3694,7 +3704,7 @@ class PinnedNamespaceAttachmentTests(unittest.TestCase):
             opened.append(pid)
             return real_pidfd_open(pid, flags)
 
-        with patch.object(tool_runtime.os, "pidfd_open", side_effect=tracked):
+        with patch.object(harness.sandbox.os, "pidfd_open", side_effect=tracked):
             result = self.sandbox().run(self.workspace, ["/bin/true"],
                                         profile=self.profile,
                                         backend=NetworkBackend.SLIRP4NETNS)
@@ -3733,8 +3743,8 @@ class OptInNetworkRaceTests(unittest.TestCase):
 
         failures = []
         iterations = iterations or self.ITERATIONS
-        sandbox = tool_runtime.BubblewrapSandbox(network_ready_timeout_seconds=5)
-        with patch.object(tool_runtime.os, "pidfd_open", side_effect=delayed):
+        sandbox = BubblewrapSandbox(network_ready_timeout_seconds=5)
+        with patch.object(harness.sandbox.os, "pidfd_open", side_effect=delayed):
             for _ in range(iterations):
                 result = sandbox.run(self.workspace, ["/bin/true"],
                                      profile=self.profile,
@@ -3773,7 +3783,7 @@ class OptInNetworkRaceTests(unittest.TestCase):
         Exercises slirp4netns directly, not the runtime, which no longer offers
         the PID-based attachment.
         """
-        sandbox = tool_runtime.BubblewrapSandbox(network_ready_timeout_seconds=5)
+        sandbox = BubblewrapSandbox(network_ready_timeout_seconds=5)
         failures = 0
         attempts = 10
         for _ in range(attempts):
@@ -3991,7 +4001,7 @@ class SystemdScopeRunnerTests(unittest.TestCase):
         self.assertEqual(SystemdScopeRunner.UNIT_PREFIX, "spear-tool-")
         self.assertTrue(SystemdScopeRunner.unit_name().startswith("spear-tool-"))
 
-        source = Path(tool_runtime.__file__).read_text()
+        source = Path(harness.sandbox.__file__).read_text()
         self.assertIn('prefix="spear-slirp-"', source)
         self.assertIn('prefix="spear-sandbox-"', source)
 
@@ -4114,7 +4124,7 @@ class SystemdScopeRunnerTests(unittest.TestCase):
 
     def test_linger_is_never_enabled_automatically(self):
         runner = self.available_runner()
-        with patch("harness.tool_runtime.subprocess.run") as run:
+        with patch("harness.resource_control.subprocess.run") as run:
             runner.availability_for(CgroupLimits(tasks_max=8))
         for call in run.call_args_list:
             self.assertNotIn("loginctl", " ".join(call.args[0]))
@@ -4123,7 +4133,7 @@ class SystemdScopeRunnerTests(unittest.TestCase):
 
     def test_terminate_uses_systemctl_kill_with_a_bounded_timeout(self):
         runner = self.available_runner()
-        with patch("harness.tool_runtime.subprocess.run") as run:
+        with patch("harness.resource_control.subprocess.run") as run:
             run.return_value = subprocess.CompletedProcess([], 0, "", "")
             runner.terminate("spear-tool-abc.scope")
         run.assert_called_once()
@@ -4136,7 +4146,7 @@ class SystemdScopeRunnerTests(unittest.TestCase):
 
     def test_terminate_never_walks_pid_trees_or_writes_cgroup_kill(self):
         runner = self.available_runner()
-        with patch("harness.tool_runtime.subprocess.run") as run:
+        with patch("harness.resource_control.subprocess.run") as run:
             run.return_value = subprocess.CompletedProcess([], 0, "", "")
             runner.terminate("spear-tool-abc.scope")
         rendered = " ".join(run.call_args.args[0])
@@ -4149,7 +4159,7 @@ class SystemdScopeRunnerTests(unittest.TestCase):
                        OSError("boom"),
                        subprocess.CompletedProcess([], 1, "", "no such unit")):
             with self.subTest(effect=type(effect).__name__):
-                with patch("harness.tool_runtime.subprocess.run") as run:
+                with patch("harness.resource_control.subprocess.run") as run:
                     if isinstance(effect, subprocess.CompletedProcess):
                         run.return_value = effect
                     else:
@@ -4181,7 +4191,7 @@ class CgroupIntegrationContractTests(unittest.TestCase):
 
     def sandbox(self, **kwargs):
         kwargs.setdefault("scope_runner", self.scope_runner())
-        return tool_runtime.BubblewrapSandbox(**kwargs)
+        return BubblewrapSandbox(**kwargs)
 
     # -- ownership ----------------------------------------------------------
 
@@ -4197,7 +4207,7 @@ class CgroupIntegrationContractTests(unittest.TestCase):
         systemd user bus.
         """
         sandbox = self.sandbox()
-        with patch.object(tool_runtime.subprocess, "Popen") as popen:
+        with patch.object(harness.sandbox.subprocess, "Popen") as popen:
             popen.return_value.communicate.return_value = ("", "")
             popen.return_value.returncode = 0
             sandbox.run(self.workspace, ["/bin/true"])
@@ -4207,7 +4217,7 @@ class CgroupIntegrationContractTests(unittest.TestCase):
     def test_the_runner_path_is_scoped_with_the_production_values(self):
         sandbox = self.sandbox()
         runner = CommandRunner(sandbox=sandbox)
-        with patch.object(tool_runtime.subprocess, "Popen") as popen, \
+        with patch.object(harness.sandbox.subprocess, "Popen") as popen, \
              patch.object(sandbox, "ensure_available",
                           return_value=ToolResult("ok", "available")):
             popen.return_value.communicate.return_value = ("", "")
@@ -4236,7 +4246,7 @@ class CgroupIntegrationContractTests(unittest.TestCase):
 
     def test_closed_route_is_wrapped_when_limits_are_active(self):
         sandbox = self.sandbox()
-        with patch.object(tool_runtime.subprocess, "Popen") as popen:
+        with patch.object(harness.sandbox.subprocess, "Popen") as popen:
             popen.return_value.communicate.return_value = ("", "")
             popen.return_value.returncode = 0
             sandbox.run(self.workspace, ["/bin/true"], cgroup_limits=self.limits)
@@ -4249,7 +4259,7 @@ class CgroupIntegrationContractTests(unittest.TestCase):
 
     def test_closed_route_is_not_wrapped_when_limits_are_inactive(self):
         sandbox = self.sandbox()
-        with patch.object(tool_runtime.subprocess, "Popen") as popen:
+        with patch.object(harness.sandbox.subprocess, "Popen") as popen:
             popen.return_value.communicate.return_value = ("", "")
             popen.return_value.returncode = 0
             sandbox.run(self.workspace, ["/bin/true"], cgroup_limits=CgroupLimits())
@@ -4257,7 +4267,7 @@ class CgroupIntegrationContractTests(unittest.TestCase):
 
     def test_wrapper_order_is_systemd_run_then_bwrap_then_prlimit(self):
         sandbox = self.sandbox()
-        with patch.object(tool_runtime.subprocess, "Popen") as popen:
+        with patch.object(harness.sandbox.subprocess, "Popen") as popen:
             popen.return_value.communicate.return_value = ("", "")
             popen.return_value.returncode = 0
             sandbox.run(self.workspace, ["/bin/true"], cgroup_limits=self.limits,
@@ -4270,7 +4280,7 @@ class CgroupIntegrationContractTests(unittest.TestCase):
 
     def test_supervisor_env_is_used_for_systemd_run_but_never_for_bwrap(self):
         sandbox = self.sandbox()
-        with patch.object(tool_runtime.subprocess, "Popen") as popen:
+        with patch.object(harness.sandbox.subprocess, "Popen") as popen:
             popen.return_value.communicate.return_value = ("", "")
             popen.return_value.returncode = 0
             sandbox.run(self.workspace, ["/bin/true"], cgroup_limits=self.limits)
@@ -4279,7 +4289,7 @@ class CgroupIntegrationContractTests(unittest.TestCase):
         # --clearenv remains the boundary for the sandboxed command itself.
         self.assertIn("--clearenv", popen.call_args.args[0])
 
-        with patch.object(tool_runtime.subprocess, "Popen") as popen:
+        with patch.object(harness.sandbox.subprocess, "Popen") as popen:
             popen.return_value.communicate.return_value = ("", "")
             popen.return_value.returncode = 0
             sandbox.run(self.workspace, ["/bin/true"], cgroup_limits=CgroupLimits())
@@ -4290,8 +4300,8 @@ class CgroupIntegrationContractTests(unittest.TestCase):
     def test_active_limits_fail_closed_when_systemd_run_is_absent(self):
         sandbox = self.sandbox(
             scope_runner=self.scope_runner(systemd_run_binary="/definitely/missing"))
-        with patch.object(tool_runtime.subprocess, "Popen") as popen, \
-             patch.object(tool_runtime.subprocess, "run") as run:
+        with patch.object(harness.sandbox.subprocess, "Popen") as popen, \
+             patch.object(harness.sandbox.subprocess, "run") as run:
             result = sandbox.run(self.workspace, ["/bin/true"], cgroup_limits=self.limits)
         self.assertEqual(result.status, "failed")
         self.assertIn("resource control", result.summary.lower())
@@ -4301,7 +4311,7 @@ class CgroupIntegrationContractTests(unittest.TestCase):
     def test_active_limits_fail_closed_when_user_bus_is_absent(self):
         (self.runtime_dir / "bus").unlink()
         sandbox = self.sandbox()
-        with patch.object(tool_runtime.subprocess, "Popen") as popen:
+        with patch.object(harness.sandbox.subprocess, "Popen") as popen:
             result = sandbox.run(self.workspace, ["/bin/true"], cgroup_limits=self.limits)
         self.assertEqual(result.status, "failed")
         popen.assert_not_called()
@@ -4310,7 +4320,7 @@ class CgroupIntegrationContractTests(unittest.TestCase):
         runner = SystemdScopeRunner(runtime_dir=self.runtime_dir)
         runner._delegated_controllers = lambda: frozenset({"memory"})
         sandbox = self.sandbox(scope_runner=runner)
-        with patch.object(tool_runtime.subprocess, "Popen") as popen:
+        with patch.object(harness.sandbox.subprocess, "Popen") as popen:
             result = sandbox.run(self.workspace, ["/bin/true"], cgroup_limits=self.limits)
         self.assertEqual(result.status, "failed")
         popen.assert_not_called()
@@ -4319,8 +4329,8 @@ class CgroupIntegrationContractTests(unittest.TestCase):
         """A failed resource-control setup must never degrade to plain bwrap."""
         sandbox = self.sandbox(
             scope_runner=self.scope_runner(systemd_run_binary="/definitely/missing"))
-        with patch.object(tool_runtime.subprocess, "Popen") as popen, \
-             patch.object(tool_runtime.subprocess, "run") as run:
+        with patch.object(harness.sandbox.subprocess, "Popen") as popen, \
+             patch.object(harness.sandbox.subprocess, "run") as run:
             result = sandbox.run(self.workspace, ["/bin/true"], cgroup_limits=self.limits)
         self.assertFalse(result.ok)
         popen.assert_not_called()
@@ -4332,7 +4342,7 @@ class CgroupIntegrationContractTests(unittest.TestCase):
     def test_timeout_invokes_scope_tree_cleanup_for_the_unit_it_created(self):
         runner = self.scope_runner()
         sandbox = self.sandbox(scope_runner=runner, timeout_seconds=1)
-        with patch.object(tool_runtime.subprocess, "Popen") as popen, \
+        with patch.object(harness.sandbox.subprocess, "Popen") as popen, \
              patch.object(runner, "terminate", return_value=True) as terminate:
             popen.return_value.communicate.side_effect = [
                 subprocess.TimeoutExpired("bwrap", 1), ("", ""),
@@ -4350,7 +4360,7 @@ class CgroupIntegrationContractTests(unittest.TestCase):
     def test_timeout_without_limits_does_not_touch_systemd(self):
         runner = self.scope_runner()
         sandbox = self.sandbox(scope_runner=runner, timeout_seconds=1)
-        with patch.object(tool_runtime.subprocess, "Popen") as popen, \
+        with patch.object(harness.sandbox.subprocess, "Popen") as popen, \
              patch.object(runner, "terminate") as terminate:
             popen.return_value.communicate.side_effect = [
                 subprocess.TimeoutExpired("bwrap", 1), ("", ""),
@@ -4373,7 +4383,7 @@ class CgroupIntegrationContractTests(unittest.TestCase):
             spawned.append((list(argv), kwargs.get("pass_fds"), kwargs.get("env")))
             return real_popen(argv, *args, **kwargs)
 
-        with patch.object(tool_runtime.subprocess, "Popen", side_effect=tracked):
+        with patch.object(harness.sandbox.subprocess, "Popen", side_effect=tracked):
             sandbox.run(self.workspace, ["/bin/true"], profile=profile,
                         backend=NetworkBackend.SLIRP4NETNS, cgroup_limits=self.limits)
 
@@ -4413,7 +4423,7 @@ class CgroupIntegrationContractTests(unittest.TestCase):
         # A systemd-run that always refuses: bwrap therefore never starts.
         runner = self.scope_runner(systemd_run_binary="/bin/false")
         sandbox = self.sandbox(scope_runner=runner)
-        with patch.object(tool_runtime.os, "write", side_effect=tracked_write):
+        with patch.object(harness.sandbox.os, "write", side_effect=tracked_write):
             result = sandbox.run(
                 self.workspace, ["/bin/sh", "-lc", "touch /workspace/command-ran"],
                 profile=profile, backend=NetworkBackend.SLIRP4NETNS,
@@ -4426,7 +4436,7 @@ class CgroupIntegrationContractTests(unittest.TestCase):
         (self.runtime_dir / "bus").unlink()
         sandbox = self.sandbox()
         profile = ExecutionProfile.from_capabilities({Capability.NETWORK})
-        with patch.object(tool_runtime.subprocess, "Popen") as popen:
+        with patch.object(harness.sandbox.subprocess, "Popen") as popen:
             result = sandbox.run(self.workspace, ["/bin/true"], profile=profile,
                                  backend=NetworkBackend.SLIRP4NETNS,
                                  cgroup_limits=self.limits)
@@ -4455,7 +4465,7 @@ class OptInRealCgroupTests(unittest.TestCase):
                          "residual spear-tool-*.scope unit(s) left behind")
 
     def sandbox(self, **kwargs):
-        return tool_runtime.BubblewrapSandbox(**kwargs)
+        return BubblewrapSandbox(**kwargs)
 
     def observed_limits(self, limits):
         """Read the live cgroup files of the sandboxed process itself."""
@@ -4504,7 +4514,7 @@ class OptInRealCgroupTests(unittest.TestCase):
                     time.sleep(0.02)
             return proc
 
-        with patch.object(tool_runtime.subprocess, "Popen", side_effect=sampling_popen):
+        with patch.object(harness.sandbox.subprocess, "Popen", side_effect=sampling_popen):
             result = sandbox.run(self.workspace, ["/bin/sleep", "2"], cgroup_limits=limits)
         self.assertTrue(result.ok, result.to_legacy_text())
         self.assertEqual(observed.get("memory.max"), "134217728")       # A
@@ -4673,10 +4683,10 @@ class PipefailShellTests(unittest.TestCase):
     """The shell must make pipeline failures visible without breaking dash."""
 
     def test_prelude_enables_pipefail_where_the_shell_supports_it(self):
-        script = tool_runtime.PIPEFAIL_PRELUDE + "false | tail -1; echo EXIT=$?"
-        completed = subprocess.run([tool_runtime.SHELL_BINARY, "-c", script],
+        script = PIPEFAIL_PRELUDE + "false | tail -1; echo EXIT=$?"
+        completed = subprocess.run([SHELL_BINARY, "-c", script],
                                    capture_output=True, text=True)
-        expected = "EXIT=1" if tool_runtime.SHELL_BINARY == "/bin/bash" else "EXIT=0"
+        expected = "EXIT=1" if SHELL_BINARY == "/bin/bash" else "EXIT=0"
         self.assertIn(expected, completed.stdout)
 
     @unittest.skipUnless(Path("/bin/dash").is_file(), "dash is not installed")
@@ -4686,18 +4696,18 @@ class PipefailShellTests(unittest.TestCase):
         # a Debian-family server where /bin/sh is dash. The subshell probe is
         # what prevents that, so it is pinned here.
         completed = subprocess.run(
-            ["/bin/dash", "-c", tool_runtime.PIPEFAIL_PRELUDE + "echo alive"],
+            ["/bin/dash", "-c", PIPEFAIL_PRELUDE + "echo alive"],
             capture_output=True, text=True)
         self.assertEqual(completed.returncode, 0, completed.stderr)
         self.assertIn("alive", completed.stdout)
 
     def test_shell_argv_carries_the_prelude_and_the_command(self):
-        argv = tool_runtime.shell_argv("make | tail -3")
-        self.assertEqual(argv[0], tool_runtime.SHELL_BINARY)
+        argv = shell_argv("make | tail -3")
+        self.assertEqual(argv[0], SHELL_BINARY)
         self.assertEqual(argv[1], "-lc")
         self.assertTrue(argv[2].endswith("make | tail -3"))
         self.assertIn("pipefail", argv[2])
-        self.assertEqual(tool_runtime.shell_argv("x", login=False)[1], "-c")
+        self.assertEqual(shell_argv("x", login=False)[1], "-c")
 
 
 class SedCommandPolicyTests(unittest.TestCase):
@@ -5052,31 +5062,31 @@ class SessionTmpdirTests(unittest.TestCase):
         With a per-command tmpfs the binary was gone before it could be run,
         forcing every verification into one unwieldy command line.
         """
-        sandbox = tool_runtime.BubblewrapSandbox()
+        sandbox = BubblewrapSandbox()
         first = sandbox.run(self.workspace,
-                            tool_runtime.shell_argv("echo kept > /tmp/marker"))
+                            shell_argv("echo kept > /tmp/marker"))
         self.assertTrue(first.ok, first.to_legacy_text())
         second = sandbox.run(self.workspace,
-                             tool_runtime.shell_argv("cat /tmp/marker"))
+                             shell_argv("cat /tmp/marker"))
         self.assertIn("kept", second.stdout)
 
     def test_two_sessions_do_not_share_their_tmp(self):
-        tool_runtime.BubblewrapSandbox().run(
-            self.workspace, tool_runtime.shell_argv("echo x > /tmp/leak"))
-        other = tool_runtime.BubblewrapSandbox().run(
+        BubblewrapSandbox().run(
+            self.workspace, shell_argv("echo x > /tmp/leak"))
+        other = BubblewrapSandbox().run(
             self.workspace,
-            tool_runtime.shell_argv("test -e /tmp/leak && echo SHARED || echo private"))
+            shell_argv("test -e /tmp/leak && echo SHARED || echo private"))
         self.assertIn("private", other.stdout)
 
     def test_the_host_tmp_is_never_written_to_directly(self):
-        sandbox = tool_runtime.BubblewrapSandbox()
+        sandbox = BubblewrapSandbox()
         sandbox.run(self.workspace,
-                    tool_runtime.shell_argv("touch /tmp/spear-host-leak-marker"))
+                    shell_argv("touch /tmp/spear-host-leak-marker"))
         self.assertFalse(Path("/tmp/spear-host-leak-marker").exists())
 
     @patch.dict(os.environ, {"SPEAR_SANDBOX_EPHEMERAL_TMP": "1"})
     def test_the_per_command_tmpfs_can_be_restored(self):
-        argv = tool_runtime.BubblewrapSandbox().build_argv(
+        argv = BubblewrapSandbox().build_argv(
             self.workspace, ["/bin/true"])
         index = argv.index("--tmpfs")
         self.assertIn("/tmp", [argv[i + 1] for i, t in enumerate(argv)
@@ -5213,7 +5223,7 @@ class OutsideReadSandboxTests(unittest.TestCase):
         self.outside.mkdir()
         (self.outside / "memory.md").write_text("remembered\n")
         self.workspace = Workspace.from_path(self.root)
-        self.sandbox = tool_runtime.BubblewrapSandbox()
+        self.sandbox = BubblewrapSandbox()
         self.policy = CommandPolicy()
         self.policy.bind_workspace(self.workspace)
 
@@ -5231,13 +5241,13 @@ class OutsideReadSandboxTests(unittest.TestCase):
         command = f"cat {self.outside}/memory.md"
         _, profile = self.profile_for(command)
         result = self.sandbox.run(
-            self.workspace, tool_runtime.shell_argv(command), profile=profile)
+            self.workspace, shell_argv(command), profile=profile)
         self.assertTrue(result.ok, result.to_legacy_text())
         self.assertIn("remembered", result.stdout)
 
         overwrite = self.sandbox.run(
             self.workspace,
-            tool_runtime.shell_argv(f"printf pwned > {self.outside}/memory.md"),
+            shell_argv(f"printf pwned > {self.outside}/memory.md"),
             profile=profile)
         self.assertFalse(overwrite.ok)
         self.assertEqual((self.outside / "memory.md").read_text(), "remembered\n")
@@ -5249,7 +5259,7 @@ class OutsideReadSandboxTests(unittest.TestCase):
         _, profile = self.profile_for(f"cat {self.outside}/memory.md")
         result = self.sandbox.run(
             self.workspace,
-            tool_runtime.shell_argv(f"test ! -e {other}/secret.txt"),
+            shell_argv(f"test ! -e {other}/secret.txt"),
             profile=profile)
         self.assertTrue(result.ok, "an unnamed tree must not be exposed")
 
@@ -5263,7 +5273,7 @@ class OutsideReadSandboxTests(unittest.TestCase):
         mount = self.sandbox.mount_root(self.workspace, profile)
         result = self.sandbox.run(
             self.workspace,
-            tool_runtime.shell_argv(f"printf ok > {mount}/written.txt"),
+            shell_argv(f"printf ok > {mount}/written.txt"),
             profile=profile)
         self.assertTrue(result.ok, result.to_legacy_text())
         self.assertEqual((self.root / "written.txt").read_text(), "ok")
@@ -5305,7 +5315,7 @@ class SandboxDownStopsBlindEditsTests(unittest.TestCase):
         # around it. The claim under test is unchanged -- a command that
         # reports the sandbox missing makes the turn remember it.
         cache = {}
-        down = tool_runtime.ToolResult(
+        down = ToolResult(
             status="failed", summary="bubblewrap sandbox unavailable",
             stderr="bubblewrap sandbox unavailable", exit_code=1)
         with patch.object(self.rag_chat, "run_cmd_result", return_value=down):
@@ -5439,8 +5449,8 @@ class DelegatedResourceControlTests(unittest.TestCase):
     """
 
     def setUp(self):
-        self.runner = tool_runtime.SystemdScopeRunner()
-        self.limits = tool_runtime.DEFAULT_CGROUP_LIMITS
+        self.runner = SystemdScopeRunner()
+        self.limits = DEFAULT_CGROUP_LIMITS
 
     def test_delegation_allows_and_unwraps(self):
         with patch.dict(os.environ, {"SPEAR_RESOURCE_CONTROL": "delegated"}):
@@ -5458,7 +5468,7 @@ class DelegatedResourceControlTests(unittest.TestCase):
             self.assertIn("--scope", wrapped)
 
     def test_inactive_limits_are_never_wrapped(self):
-        empty = tool_runtime.CgroupLimits()
+        empty = CgroupLimits()
         self.assertEqual(["/bin/true"],
                          self.runner.wrap(["/bin/true"], empty, unit="u"))
 
@@ -5474,15 +5484,15 @@ class ToolchainReachableInsideTheSandboxTests(unittest.TestCase):
     """
 
     def test_usr_local_bin_is_on_the_sandbox_path(self):
-        self.assertIn("/usr/local/bin", tool_runtime.SandboxSpec().path.split(":"))
+        self.assertIn("/usr/local/bin", SandboxSpec().path.split(":"))
 
     def test_the_toolchain_root_is_bound_when_present(self):
-        spec = tool_runtime.SandboxSpec()
+        spec = SandboxSpec()
         self.assertIn("/opt/toolchains", spec.toolchain_dirs)
         if not Path("/opt/toolchains").is_dir():
             self.skipTest("no /opt/toolchains on this host")
         with tempfile.TemporaryDirectory() as tmp:
-            argv = tool_runtime.BubblewrapSandbox().build_argv(
+            argv = BubblewrapSandbox().build_argv(
                 Workspace.from_path(tmp), ["/bin/true"])
         pairs = [(argv[i + 1], argv[i + 2]) for i, a in enumerate(argv)
                  if a == "--ro-bind" and i + 2 < len(argv)]

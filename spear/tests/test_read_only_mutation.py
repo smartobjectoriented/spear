@@ -67,7 +67,7 @@ class safe_mode:
         self.mode = mode
 
     def __enter__(self):
-        from harness.tool_runtime import ExecutionMode
+        from harness.tool_primitives import ExecutionMode
 
         self.previous = rag_chat.EXECUTION_MODE
         rag_chat.EXECUTION_MODE = getattr(ExecutionMode, self.mode)
@@ -275,7 +275,7 @@ class ReadingStillWorks(unittest.TestCase):
         self.assertEqual(floor & set(MUTATING), set())
 
     def test_a_read_only_command_is_not_a_mutation(self):
-        from harness.tool_runtime import CommandClassification
+        from harness.tool_primitives import CommandClassification
 
         for command in ("cat foo.c", "grep -rn ack src/", "ls -la"):
             with self.subTest(command=command):
@@ -294,7 +294,7 @@ class TheCompileRefusalStaysAccurate(unittest.TestCase):
         self.assertIn("do not try another way", text)
 
     def test_a_compiler_is_not_classified_read_only(self):
-        from harness.tool_runtime import CommandClassification
+        from harness.tool_primitives import CommandClassification
 
         self.assertNotEqual(
             rag_chat.COMMAND_POLICY.classify("gcc -o probe probe.c").classification,

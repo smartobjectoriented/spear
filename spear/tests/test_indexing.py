@@ -721,7 +721,7 @@ class WriteRequiresPriorReadTest(unittest.TestCase):
 
     def setUp(self):
         from cli import rag_chat
-        from harness.tool_runtime import Workspace
+        from harness.workspace import Workspace
         self.rag_chat = rag_chat
         self.tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
@@ -739,7 +739,7 @@ class WriteRequiresPriorReadTest(unittest.TestCase):
         # asks whether the file was read.
 
         from unittest.mock import patch
-        from harness.tool_runtime import ExecutionMode
+        from harness.tool_primitives import ExecutionMode
 
         with patch.object(self.rag_chat, "EXECUTION_MODE", ExecutionMode.AUTO):
             return self.rag_chat.execute_tool(
@@ -843,7 +843,8 @@ class EditFileTest(unittest.TestCase):
 
     def setUp(self):
         from cli import rag_chat
-        from harness.tool_runtime import Workspace, ExecutionMode
+        from harness.tool_primitives import ExecutionMode
+        from harness.workspace import Workspace
         self.rag_chat = rag_chat
         self.tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)

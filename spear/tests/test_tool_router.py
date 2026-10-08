@@ -813,7 +813,8 @@ class ProductionCommandBoundaryTests(unittest.TestCase):
     def test_registered_bash_still_crosses_command_runner_and_sandbox_preflight(self):
         from unittest.mock import patch
         from cli import rag_chat
-        from harness.tool_runtime import ExecutionMode, ToolResult, Workspace
+        from harness.tool_primitives import ExecutionMode, ToolResult
+        from harness.workspace import Workspace
 
         with tempfile.TemporaryDirectory() as temporary:
             old_workspace = rag_chat.WORKSPACE

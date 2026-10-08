@@ -10,7 +10,8 @@ APP=/opt/spear/spear
 if ! /opt/spear/spear/bin/python - <<'PYBWRAP' 2>/dev/null; then
 import sys, tempfile
 sys.path.insert(0, "/opt/spear/spear")
-from harness.tool_runtime import BubblewrapSandbox, Workspace
+from harness.sandbox import BubblewrapSandbox
+from harness.workspace import Workspace
 # The harness's OWN sandbox, not a simpler bwrap invocation. A weaker probe
 # passed while the real thing failed: `bwrap --unshare-user true` needs no
 # /proc, so it said OK inside a container where mounting proc is forbidden,

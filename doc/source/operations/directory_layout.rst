@@ -92,8 +92,10 @@ launchers and the image do that for you.
        (:doc:`/reasoning/implementation`).
    * - ``harness/``
      - The execution harness: ``control_plane.py`` (``SpearHost``),
-       ``tool_runtime.py`` (policy, workspace, sandbox, resource control,
-       audit; imports nothing from ``rag_chat``, so it can be tested in
+       the tool-execution substrate (``tool_primitives.py``,
+       ``command_policy.py``, ``workspace.py``, ``sandbox.py``,
+       ``resource_control.py``, and ``tool_runtime.py`` for the runner and
+       the audit log; none imports ``rag_chat``, so they can be tested in
        isolation), ``tool_registry.py`` / ``tool_router.py`` (declarative
        exposure and structured lifecycle), ``target_policy.py``,
        ``refusal_breaker.py``, ``checkpoint.py``, and the external

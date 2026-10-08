@@ -175,7 +175,7 @@ class TheOrganisationIsNamedOnlyWhereItMustBe(unittest.TestCase):
                "infra" + "base")
 
     JUSTIFIED = {
-        "spear/harness/tool_runtime.py":
+        "spear/harness/command_policy.py":
             "a measured incident: the entry points a path check refused",
         "spear/retrieval/index_dir.py":
             "measured incidents -- the snapshot suffixes a real build system "

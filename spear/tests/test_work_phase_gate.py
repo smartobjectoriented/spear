@@ -29,7 +29,7 @@ from cli import rag_chat
 from runtime import work_phase
 from runtime.agent_roles import AgentRole
 from harness.tool_exposure import ToolExposurePolicy
-from harness.tool_runtime import ExecutionMode
+from harness.tool_primitives import ExecutionMode
 from runtime.work_phase import Phase, WorkPhaseLedger
 
 CLAUSE = "4.2.1"

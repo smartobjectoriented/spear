@@ -114,8 +114,8 @@ and the [Releases page](https://github.com/smartobjectoriented/spear/releases).
 
 | Line | Branch | Latest release | Status |
 |------|--------|----------------|--------|
-| 0.3  | [`release/v0.3`](https://github.com/smartobjectoriented/spear/tree/release/v0.3) | [v0.3.0-rc1](https://github.com/smartobjectoriented/spear/releases/tag/v0.3.0-rc1) | Release candidate |
-| 0.2  | [`release/v0.2`](https://github.com/smartobjectoriented/spear/tree/release/v0.2) | [v0.2.0](https://github.com/smartobjectoriented/spear/releases/tag/v0.2.0) | Current stable |
+| 0.3  | [`release/v0.3`](https://github.com/smartobjectoriented/spear/tree/release/v0.3) | [v0.3.0](https://github.com/smartobjectoriented/spear/releases/tag/v0.3.0) | Current stable |
+| 0.2  | not published here | v0.2.0 | Superseded |
 
 ## License and provenance
 

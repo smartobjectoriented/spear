@@ -17,7 +17,7 @@
 #
 # Usage: spearversion.sh
 
-SPEAR_VERSION_FALLBACK="0.3.0-rc1"
+SPEAR_VERSION_FALLBACK="0.3.0"
 
 _tree=$(cd "$(dirname "$(readlink -f "$0")")/.." && pwd)
 

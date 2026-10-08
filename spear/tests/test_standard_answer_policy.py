@@ -20,7 +20,9 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
 from standard import standard_answer_policy
-from runtime.agent_runtime import AgentContext, AgentRuntime, standard_policy_for
+from runtime.agent_context import AgentContext
+from runtime.agent_notes import standard_policy_for
+from runtime.agent_runtime import AgentRuntime
 from context.context_engine import ContextEngine, ContextItem, ContextLayer, Freshness
 from models.model_backend import (
     ConversationMessage, ModelToolCall, ModelTurn, StopReason, TextBlock,

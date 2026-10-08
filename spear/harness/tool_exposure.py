@@ -157,7 +157,7 @@ class ToolExposurePolicy:
     def advisory_intent(cls, objective: str) -> bool:
         """A question about a change that asks for none, and prohibits none."""
         from context import request_intent
-        from runtime.agent_runtime import _WRITE_REQUEST_RE
+        from runtime.agent_notes import _WRITE_REQUEST_RE
 
         if cls._READ_ONLY_INTENT.search(objective or ""):
             return False

@@ -24,7 +24,7 @@ from unittest.mock import patch
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-from runtime import agent_runtime
+from runtime import agent_notes
 from cli import rag_chat
 from runtime import work_phase
 from runtime.agent_roles import AgentRole
@@ -256,11 +256,11 @@ class ThePlanToolIsOfferedOnTheShapeThatNeedsIt(unittest.TestCase):
             "check the code base and do the necessary changes"))
 
     def test_the_write_request_floor_reads_an_adjective(self):
-        self.assertTrue(agent_runtime.is_write_request(
+        self.assertTrue(agent_notes.is_write_request(
             "check the code base and do the necessary changes to be compliant"))
 
     def test_an_ordinary_question_is_still_not_a_write_request(self):
-        self.assertFalse(agent_runtime.is_write_request(
+        self.assertFalse(agent_notes.is_write_request(
             "how should the handshake be managed?"))
 
 
@@ -270,18 +270,18 @@ class ANarrowedRoundCanStillPlan(unittest.TestCase):
     def test_the_plan_tool_joins_the_writing_tools_while_shut(self):
         context = SimpleNamespace(work_phase=ledger(investigated=True))
 
-        self.assertIn("plan_change", agent_runtime._write_round_tools(context))
+        self.assertIn("plan_change", agent_notes._write_round_tools(context))
 
     def test_it_drops_out_once_the_gate_is_open(self):
         context = SimpleNamespace(work_phase=ledger(planned=True))
 
-        self.assertEqual(agent_runtime._write_round_tools(context),
-                         agent_runtime._WRITE_TOOLS)
+        self.assertEqual(agent_notes._write_round_tools(context),
+                         agent_notes._WRITE_TOOLS)
 
     def test_an_ungoverned_turn_sees_exactly_what_it_always_did(self):
         self.assertEqual(
-            agent_runtime._write_round_tools(SimpleNamespace(work_phase=None)),
-            agent_runtime._WRITE_TOOLS)
+            agent_notes._write_round_tools(SimpleNamespace(work_phase=None)),
+            agent_notes._WRITE_TOOLS)
 
 
 class ThePlanHandlerReportsWhatItRefused(unittest.TestCase):

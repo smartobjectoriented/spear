@@ -1,7 +1,8 @@
 import tempfile
 import unittest
 
-from runtime.agent_runtime import AgentContext, AgentRuntime, RuntimeTerminalReason
+from runtime.agent_context import AgentContext, RuntimeTerminalReason
+from runtime.agent_runtime import AgentRuntime
 from runtime.cancellation import CancellationSource
 from context.context_engine import ContextEngine
 from runtime.failure_policy import FailureKind, RetryPolicy

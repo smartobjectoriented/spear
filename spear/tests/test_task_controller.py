@@ -293,7 +293,7 @@ class ReadOnlyScopeTests(unittest.TestCase):
         self.assertIn("READ_ONLY_RULE_ID", orchestration.read_text())
 
     def test_the_explorer_inherits_the_scope_rule(self):
-        from runtime.agent_runtime import AgentContext
+        from runtime.agent_context import AgentContext
         from context.context_engine import ContextItem, ContextLayer, Freshness
         from runtime.orchestration import ExplorationRequest, ExplorationService
         from harness.tool_exposure import READ_ONLY_RULE, READ_ONLY_RULE_ID

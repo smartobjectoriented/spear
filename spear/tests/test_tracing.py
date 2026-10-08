@@ -14,7 +14,8 @@ from runtime.tracing import (
     create_trace_emitter,
     new_task_id,
 )
-from runtime.agent_runtime import AgentContext, AgentRuntime
+from runtime.agent_context import AgentContext
+from runtime.agent_runtime import AgentRuntime
 from runtime.compaction import CompactionPolicy
 from context.context_engine import ContextEngine, ContextItem, ContextLayer
 from models.model_backend import ConversationMessage, TextBlock

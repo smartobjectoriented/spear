@@ -85,7 +85,8 @@ _GUARDS = ("guard_fired", "claims_fired", "precedence_fired", "conformance_fired
 def prepass_outcome(normative, prepass, packet):
     """(outcome, reason) of the normative pass; the reason is "" when the
     packet's own coverage reason already says it."""
-    from runtime.agent_runtime import FAILED, RuntimeTerminalReason
+    from runtime.agent_context import RuntimeTerminalReason
+    from runtime.agent_finalization import FAILED
 
     window = getattr(normative, "finalization", None)
     broken = (RuntimeTerminalReason.MODEL_FAILURE, RuntimeTerminalReason.RUNTIME_FAILURE,
@@ -137,7 +138,7 @@ class _Metered:
 def applies(controller, request, context, view) -> bool:
     """Whether this turn is MIXED: bound, about both sides, and asking for a change."""
     from context import answer_scope
-    from runtime.agent_runtime import wants_write
+    from runtime.agent_notes import wants_write
 
     if context.standard_binding is None or not request.coding_core or view.read_only:
         return False

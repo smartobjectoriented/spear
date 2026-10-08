@@ -28,7 +28,8 @@ sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from runtime import agent_runtime
-from runtime.agent_runtime import AgentRuntime, carried_obligations
+from runtime.agent_notes import carried_obligations
+from runtime.agent_runtime import AgentRuntime
 from models.model_backend import (
     ConversationMessage, TextBlock, ToolDefinition,
 )

@@ -16,7 +16,7 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
 from evidence import project_build
-from runtime.agent_runtime import project_build_gap, project_build_runs
+from runtime.agent_verification import project_build_gap, project_build_runs
 
 VITA_CMAKE = """cmake_minimum_required(VERSION 3.16)
 project(v492c LANGUAGES C)

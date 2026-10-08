@@ -14,7 +14,8 @@ from enum import StrEnum
 from typing import Callable, Mapping, Sequence
 
 from runtime.agent_roles import AgentRole, explorer_role, reviewer_role
-from runtime.agent_runtime import AgentContext, AgentResult, AgentRuntime, RuntimeTerminalReason
+from runtime.agent_context import AgentContext, AgentResult, RuntimeTerminalReason
+from runtime.agent_runtime import AgentRuntime
 from context.context_engine import ContextItem, ContextLayer, Freshness
 from evidence.diff_evidence import DiffEvidence
 from models.model_backend import ConversationMessage, TextBlock, ToolDefinition
@@ -229,7 +230,7 @@ class TaskController:
             # depend on the model honouring it.
 
             from evidence import conformance_mode
-            from runtime.agent_runtime import (
+            from runtime.agent_notes import (
                 _asked, carried_obligations, is_write_request)
 
             asked = _asked(context.conversation)

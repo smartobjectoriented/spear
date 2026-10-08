@@ -4,7 +4,8 @@ import unittest
 from pathlib import Path
 
 from runtime.agent_roles import AgentRole, AgentRoleSpec, reviewer_role
-from runtime.agent_runtime import AgentContext, AgentRuntime
+from runtime.agent_context import AgentContext
+from runtime.agent_runtime import AgentRuntime
 from runtime.cancellation import CancellationScope, CancellationSource
 from harness.checkpoint import CheckpointManager, RollbackStatus
 from runtime.compaction import CompactionPolicy
@@ -617,7 +618,7 @@ class ReviewerGenerationAndPersistenceTests(unittest.TestCase):
         add_verification(state)
         parent = parent_context(ScriptedBackend([]), state=state)
         parent.review_required = True
-        from runtime.agent_runtime import AgentResult, RuntimeTerminalReason
+        from runtime.agent_context import AgentResult, RuntimeTerminalReason
         result = AgentResult(
             state.task_id, TerminalStatus.RUNNING, RuntimeTerminalReason.COMPLETED,
             "done", state, 1, 1, 1, state.verification_outcome, (), (), (), (),

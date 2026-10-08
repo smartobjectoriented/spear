@@ -19,7 +19,7 @@ from types import SimpleNamespace
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-from runtime import agent_runtime
+from runtime import agent_model_turn, agent_notes
 from cli import rag_chat
 from runtime.agent_runtime import AgentRuntime
 from runtime.compaction import CompactionPolicy
@@ -42,29 +42,29 @@ def envelope(call_id, text=WALL):
 class IdenticalResults(unittest.TestCase):
     def test_a_without_compaction_the_third_is_refused_as_before(self):
         seen = {}
-        counts = [agent_runtime._repeated_result(seen, envelope(f"c{i}"))
+        counts = [agent_notes._repeated_result(seen, envelope(f"c{i}"))
                   for i in range(1, 5)]
 
         self.assertEqual(counts, [1, 2, 3, 3])
         self.assertIn("REFUSED",
-                      agent_runtime._with_repeat_note(envelope("c4"), counts[-1]).model_content)
+                      agent_notes._with_repeat_note(envelope("c4"), counts[-1]).model_content)
 
     def test_b_after_compaction_drops_them_the_result_is_new_again(self):
         seen, dropped = {}, set()
         visible = lambda call_id: call_id not in dropped
 
-        agent_runtime._repeated_result(seen, envelope("c1"), visible)
-        agent_runtime._repeated_result(seen, envelope("c2"), visible)
+        agent_notes._repeated_result(seen, envelope("c1"), visible)
+        agent_notes._repeated_result(seen, envelope("c2"), visible)
         dropped.update({"c1", "c2"})
 
-        self.assertEqual(agent_runtime._repeated_result(seen, envelope("c3"), visible), 1)
+        self.assertEqual(agent_notes._repeated_result(seen, envelope("c3"), visible), 1)
 
     def test_c_it_stays_bounded_after_a_compaction(self):
         seen, dropped = {}, {"c1"}
         visible = lambda call_id: call_id not in dropped
 
-        agent_runtime._repeated_result(seen, envelope("c1"), visible)
-        counts = [agent_runtime._repeated_result(seen, envelope(f"c{i}"), visible)
+        agent_notes._repeated_result(seen, envelope("c1"), visible)
+        counts = [agent_notes._repeated_result(seen, envelope(f"c{i}"), visible)
                   for i in range(2, 6)]
 
         self.assertEqual(counts, [1, 2, 3, 3])
@@ -152,7 +152,7 @@ class TheRuntimeRecordsWhatWasNotSent(unittest.TestCase):
                                          ToolResultBlock("k2", ""))),
         )
 
-        self.assertEqual(agent_runtime._tool_result_ids(messages), frozenset({"k1"}))
+        self.assertEqual(agent_model_turn._tool_result_ids(messages), frozenset({"k1"}))
 
 
 if __name__ == "__main__":

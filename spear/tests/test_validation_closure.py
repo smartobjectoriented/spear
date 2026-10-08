@@ -20,7 +20,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-from runtime import agent_runtime
+from runtime import agent_verification
 from normative.requirement_set import Disposition, Requirement, RequirementSet
 from runtime.work_phase import WorkPhaseLedger
 
@@ -119,7 +119,7 @@ class AChangedBehaviourNeedsATestThatReachesIt(unittest.TestCase):
 
     def test_the_closing_record_names_them(self):
         found = self.implemented(f"tests/test_handshake.c: {DESIGN}")
-        note = agent_runtime.requirement_matrix_note(found)
+        note = agent_verification.requirement_matrix_note(found)
 
         self.assertIn("NOT VALIDATED", note)
         self.assertIn("proves nothing about them", note)
@@ -149,7 +149,7 @@ class WhatWasLeftOutOfScopeIsInTheRecord(unittest.TestCase):
         found = WorkPhaseLedger()
         found.engage(authority_bound=True, write_requested=True,
                      requirements=self.published())
-        note = agent_runtime.requirement_matrix_note(found)
+        note = agent_verification.requirement_matrix_note(found)
 
         self.assertIn("NOT in scope for this turn", note)
         self.assertIn("Rule 4.2.2-1", note)
@@ -167,7 +167,7 @@ class TheLedgerHasTheLastWord(unittest.TestCase):
         return found
 
     def test_everything_closed_and_validated_reads_as_such(self):
-        self.assertEqual(agent_runtime.requirement_status(self.closed()),
+        self.assertEqual(agent_verification.requirement_status(self.closed()),
                          "reviewed requirements satisfied")
 
     def test_an_exclusion_is_named_in_the_status(self):
@@ -175,7 +175,7 @@ class TheLedgerHasTheLastWord(unittest.TestCase):
         found.record_plan([item(disposition="explicitly_out_of_scope",
                                 correction="this build does not support it")])
 
-        self.assertEqual(agent_runtime.requirement_status(found),
+        self.assertEqual(agent_verification.requirement_status(found),
                          "supported profile validated, with exclusions")
 
     def test_unfinished_work_reads_as_unfinished(self):
@@ -184,7 +184,7 @@ class TheLedgerHasTheLastWord(unittest.TestCase):
                                 gap="could not tell",
                                 correction="needs more reading")])
 
-        self.assertEqual(agent_runtime.requirement_status(found),
+        self.assertEqual(agent_verification.requirement_status(found),
                          "implementation work incomplete")
 
     def test_a_claim_of_completion_over_an_open_ledger_is_contradicted(self):
@@ -192,7 +192,7 @@ class TheLedgerHasTheLastWord(unittest.TestCase):
         found.record_plan([item(disposition="undetermined",
                                 gap="could not tell",
                                 correction="needs more reading")])
-        note = agent_runtime.requirement_matrix_note(
+        note = agent_verification.requirement_matrix_note(
             found, "The implementation is complete and satisfies all the "
                    "requirements. All 198 tests pass.")
 
@@ -200,18 +200,18 @@ class TheLedgerHasTheLastWord(unittest.TestCase):
         self.assertIn("take the matrix, not the claim", note)
 
     def test_a_claim_over_a_closed_ledger_is_left_alone(self):
-        note = agent_runtime.requirement_matrix_note(
+        note = agent_verification.requirement_matrix_note(
             self.closed(), "The implementation is complete.")
 
         self.assertNotIn("take the matrix, not the claim", note)
 
     def test_the_matrix_says_it_is_the_record(self):
-        note = agent_runtime.requirement_matrix_note(self.closed())
+        note = agent_verification.requirement_matrix_note(self.closed())
 
         self.assertIn("This is the record", note)
 
     def test_the_status_line_comes_from_the_ledger(self):
-        note = agent_runtime.requirement_matrix_note(self.closed())
+        note = agent_verification.requirement_matrix_note(self.closed())
 
         self.assertIn("STATUS (from the ledger): reviewed requirements "
                       "satisfied", note)
@@ -220,7 +220,7 @@ class TheLedgerHasTheLastWord(unittest.TestCase):
         found = WorkPhaseLedger()
         found.engage(authority_bound=True, write_requested=True)
 
-        self.assertEqual(agent_runtime.requirement_matrix_note(found), "")
+        self.assertEqual(agent_verification.requirement_matrix_note(found), "")
 
 
 if __name__ == "__main__":

@@ -2,7 +2,8 @@ import tempfile
 import unittest
 
 from runtime.budgets import BudgetExceeded, BudgetKind, BudgetLimit, BudgetManager
-from runtime.agent_runtime import AgentRuntime, RuntimeTerminalReason
+from runtime.agent_context import RuntimeTerminalReason
+from runtime.agent_runtime import AgentRuntime
 from runtime.compaction import ModelBackendSummarizer, StructuredCompactionState
 from models.model_backend import ModelTurn, StopReason
 from runtime.session_store import FileSessionStore, SessionConfiguration, SessionHandle, SessionSnapshot

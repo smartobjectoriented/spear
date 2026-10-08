@@ -79,12 +79,15 @@ Entry format
    * - ``shared``
      - attach this corpus to **every** session
    * - ``build_commands``, ``test_commands``
-     - how this tree is built and tested. They win over every probe, and they
-       are the **project's own verification**: SPEAR runs them on the final
-       tree of a change-making turn, and a failure there makes the turn
-       ``UNVERIFIED`` (:ref:`evidence_verdicts`). Without them SPEAR probes the
-       tree (CMake, a Makefile, cargo, ...); a Makefile whose bare ``make``
-       only prints help, as a Sphinx one does, is not taken for a build
+     - how this tree is built and tested: the **project's own verification**.
+       SPEAR runs them on the final tree of a change-making turn, and a failure
+       there makes the turn ``UNVERIFIED`` (:ref:`evidence_verdicts`). A kind
+       left undeclared is probed instead (CMake, a Makefile, cargo, ...), so a
+       tree needs no configuration to be checked; a declared command always
+       wins for its kind, and a declared build that fails is never replaced by
+       a probe. Either kind of command can verify a change when it really runs
+       and passes. A Makefile whose bare ``make`` only prints help, as a Sphinx
+       one does, is not taken for a build
    * - ``lint_commands``, ``acceptance_commands``
      - further commands recognised as verification when the agent runs them
    * - ``bench``

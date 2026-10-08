@@ -108,5 +108,54 @@ class ProjectValidation(unittest.TestCase):
         self.assertEqual(full.state, "UNVERIFIED")
 
 
+class ConfiguredAndProbed(unittest.TestCase):
+    """Declared and probed commands verify alike when they genuinely run; a
+    declared command is the project's verification for its kind."""
+
+    DECLARED = ProjectCommands(build="make firmware", source="projects.json")
+    PROBED = ProjectCommands(build="cmake -S . -B build/harness && cmake --build build/harness",
+                             source="cmake")
+
+    def verdict(self, commands, status, command=None):
+        return decide(edit("a.c"), commands=commands,
+                      project=[(command or commands.build, status, "")])
+
+    def test_a_declared_build_that_passes_verifies(self):
+        self.assertEqual(self.verdict(self.DECLARED, "passed").state, "VERIFIED")
+
+    def test_b_a_declared_build_that_fails_is_not_rescued(self):
+        verdict = decide(edit("a.c"), run("cmake --build build"), commands=self.DECLARED,
+                         project=[(self.DECLARED.build, "failed", "error: x")])
+
+        self.assertEqual(verdict.state, "UNVERIFIED")
+
+    def test_c_a_probed_cmake_build_that_passes_verifies(self):
+        self.assertEqual(self.verdict(self.PROBED, "passed").state, "VERIFIED")
+
+    def test_d_a_help_only_makefile_is_no_build_to_verify_with(self):
+        import tempfile
+
+        import project_build
+
+        root = tempfile.mkdtemp()
+        Path(root, "Makefile").write_text("help:\n\t@echo targets\nhtml:\n\tsphinx-build . b\n")
+        probed = project_build.commands(root)
+
+        self.assertEqual(probed.verifies(), ())
+        self.assertEqual(decide(edit("index.rst"), commands=probed).state, "UNVERIFIED")
+
+    def test_e_a_backgrounded_probed_build_proves_nothing(self):
+        background = ProjectCommands(build="make &", source="make")
+
+        self.assertEqual(self.verdict(background, "passed").state, "UNVERIFIED")
+
+    def test_the_evidence_says_where_the_command_came_from(self):
+        for commands, origin in ((self.DECLARED, "configured"), (self.PROBED, "probed")):
+            with self.subTest(origin=origin):
+                found = completion.project_evidence([(commands.build, "passed", "")], commands, 1)
+
+                self.assertEqual(found[0].origin, origin)
+
+
 if __name__ == "__main__":
     unittest.main()

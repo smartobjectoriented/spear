@@ -71,6 +71,18 @@ class Probe(unittest.TestCase):
 
         self.assertEqual(project_build.commands(root, cache_dir=cache).build, "")
 
+    def test_f_a_declared_kind_wins_and_a_probe_fills_only_the_other(self):
+        root = self.tree(Makefile="all:\n\tcc a.c\ntest:\n\t./t\n")
+        both = project_build.commands(root, spec={"build_commands": ["make firmware"],
+                                                  "test_commands": ["make check"]})
+        build_only = project_build.commands(root, spec={"build_commands": ["make firmware"]})
+
+        self.assertEqual((both.build, both.test), ("make firmware", "make check"))
+        self.assertEqual((build_only.build, build_only.test), ("make firmware", "make test"))
+        self.assertEqual(build_only.origin("make firmware"), "configured")
+        self.assertEqual(build_only.origin("make test"), "probed")
+        self.assertEqual(build_only.verifies()[0], "make firmware")
+
     def test_the_ordinary_shapes(self):
         for name, expected in (("Makefile", "make"), ("Cargo.toml", "cargo"),
                                ("go.mod", "go"), ("package.json", "npm"),

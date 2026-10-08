@@ -414,6 +414,7 @@ class ProjectValidationEvidence:
     command: str
     exit_code: int | None = None
     evidence: str = ""          # what the run printed, when it said anything
+    origin: str = ""            # configured | probed: where the command came from
 
 
 def project_evidence(project_runs, project_commands=None, epoch=0):
@@ -439,9 +440,10 @@ def project_evidence(project_runs, project_commands=None, epoch=0):
             status = FAILED if _FAILURE.search(output or "") else NOT_RUN
 
         kind = "test" if test and command == test else "build"
+        origin = project_commands.origin(command) if hasattr(project_commands, "origin") else ""
         found.append(ProjectValidationEvidence(
             status, kind, epoch, command, 0 if status == PASSED else None,
-            str(output or "")[-2000:]))
+            str(output or "")[-2000:], origin))
 
     return found
 

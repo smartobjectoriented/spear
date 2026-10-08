@@ -179,8 +179,10 @@ class TimingTests(unittest.TestCase):
 class RagChatTracingIntegrationTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        from cli import rag_chat
-        cls.rag_chat = rag_chat
+        from cli import session_history, tool_handlers, tool_routing
+        cls.session_history = session_history
+        cls.tool_handlers = tool_handlers
+        cls.tool_routing = tool_routing
 
     def setUp(self):
         self.recorder = MemoryRecorder()
@@ -227,8 +229,8 @@ class RagChatTracingIntegrationTests(unittest.TestCase):
 
     def test_tool_boundary_emits_timing_pair_without_recording_values(self):
         arguments = {"query": "api_key=do-not-record"}
-        with patch.object(self.rag_chat, "search_corpus", return_value="OK: done"):
-            self.rag_chat.execute_tool(
+        with patch.object(self.tool_handlers, "search_corpus", return_value="OK: done"):
+            self.tool_routing.execute_tool(
                 "search_corpus", arguments, {},
                 agent_context=self.context(object()),
             )
@@ -252,9 +254,9 @@ class RagChatTracingIntegrationTests(unittest.TestCase):
                 self.context(BrokenBackend()), use_tools=False,
             )
         with patch.object(
-            self.rag_chat, "search_corpus", side_effect=ValueError("tool bug")
+            self.tool_handlers, "search_corpus", side_effect=ValueError("tool bug")
         ):
-            result = self.rag_chat.execute_tool(
+            result = self.tool_routing.execute_tool(
                 "search_corpus", {"query": "x"}, {},
                 agent_context=self.context(object()),
             )
@@ -274,8 +276,8 @@ class RagChatTracingIntegrationTests(unittest.TestCase):
         turn = AgentRuntime().complete_model_turn(
             self.context(FakeBackend(), trace=failing), use_tools=False,
         )
-        with patch.object(self.rag_chat, "search_corpus", return_value="OK: unchanged"):
-            result = self.rag_chat.execute_tool(
+        with patch.object(self.tool_handlers, "search_corpus", return_value="OK: unchanged"):
+            result = self.tool_routing.execute_tool(
                 "search_corpus", {"query": "x"}, {},
                 agent_context=self.context(object(), trace=failing),
             )
@@ -284,15 +286,15 @@ class RagChatTracingIntegrationTests(unittest.TestCase):
 
     def test_task_id_is_correlated_with_existing_trajectory_record(self):
         with tempfile.TemporaryDirectory() as temporary:
-            old_path = self.rag_chat.TRAJECTORY_FILE
-            self.rag_chat.TRAJECTORY_FILE = str(Path(temporary) / "trajectory.jsonl")
+            old_path = self.session_history.TRAJECTORY_FILE
+            self.session_history.TRAJECTORY_FILE = str(Path(temporary) / "trajectory.jsonl")
             try:
-                self.rag_chat.save_trajectory(
+                self.session_history.save_trajectory(
                     "question", [], "answer", "pass", "bench", "task_integration"
                 )
-                sample = json.loads(Path(self.rag_chat.TRAJECTORY_FILE).read_text())
+                sample = json.loads(Path(self.session_history.TRAJECTORY_FILE).read_text())
             finally:
-                self.rag_chat.TRAJECTORY_FILE = old_path
+                self.session_history.TRAJECTORY_FILE = old_path
         self.assertEqual(sample["task_id"], "task_integration")
 
     def test_scripted_task_has_expected_end_to_end_event_sequence(self):
@@ -308,8 +310,8 @@ class RagChatTracingIntegrationTests(unittest.TestCase):
                           status=EventStatus.STARTED)
         context = self.context(FakeBackend())
         AgentRuntime().complete_model_turn(context, use_tools=False)
-        with patch.object(self.rag_chat, "search_corpus", return_value="OK: result"):
-            self.rag_chat.execute_tool(
+        with patch.object(self.tool_handlers, "search_corpus", return_value="OK: result"):
+            self.tool_routing.execute_tool(
                 "search_corpus", {"query": "identifier"}, {},
                 agent_context=context,
             )

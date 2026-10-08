@@ -249,9 +249,9 @@ serves.
 Dependency direction
 ====================
 
-Lower runtime modules do not import ``rag_chat``.  ``rag_chat`` owns backend
-construction, project selection, terminal commands, human confirmation and
-presentation.  ``TaskController`` depends on provider-neutral policies and
+Lower runtime modules do not import ``rag_chat`` or the ``cli/`` modules it is
+built from.  The client owns backend construction, project selection, terminal
+commands, human confirmation and presentation.  ``TaskController`` depends on provider-neutral policies and
 protocols; ``AgentRuntime`` does not depend on ``TaskController`` or on
 Explorer/Reviewer orchestration.
 

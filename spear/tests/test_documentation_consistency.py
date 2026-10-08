@@ -114,7 +114,7 @@ class MixedMode(unittest.TestCase):
 
 class CommandLine(unittest.TestCase):
     def test_every_permission_and_corpus_flag_is_documented(self):
-        source = (ROOT / "cli/rag_chat.py").read_text(encoding="utf-8")
+        source = (ROOT / "cli/startup_banner.py").read_text(encoding="utf-8")
         start, end = source.index("PERMISSIONS  ("), source.index("SESSION SETTINGS  (")
         flags = set(re.findall(r"(?<![\w-])(--[a-z][a-z-]+)", source[start:end]))
         text = page("using/usage.rst")

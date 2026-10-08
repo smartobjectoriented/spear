@@ -20,7 +20,7 @@ import collections
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import chromadb
-from cli import rag_chat
+from cli import chat_settings, corpus_search
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 
@@ -46,13 +46,13 @@ def main():
         out_json = argv[argv.index("--json") + 1]
 
     questions = json.load(open(questions_file))
-    col = chromadb.PersistentClient(path=rag_chat.DB_PATH).get_collection(coll_name)
+    col = chromadb.PersistentClient(path=chat_settings.DB_PATH).get_collection(coll_name)
 
     rows, timings = [], []
 
     for e in questions:
         t0 = time.perf_counter()
-        ctx, seen = rag_chat.retrieve_context(col, e["q"])
+        ctx, seen = corpus_search.retrieve_context(col, e["q"])
         dt = (time.perf_counter() - t0) * 1000
         timings.append(dt)
         hit = any(f in seen for f in e["expect"])
@@ -63,8 +63,8 @@ def main():
     for r in rows:
         by[r["kind"]].append(r["hit"])
 
-    print(f"\ncollection: {coll_name}   TOP_K={rag_chat.TOP_K}   "
-          f"MAX_CONTEXT_CHARS={rag_chat.MAX_CONTEXT_CHARS}")
+    print(f"\ncollection: {coll_name}   TOP_K={corpus_search.TOP_K}   "
+          f"MAX_CONTEXT_CHARS={corpus_search.MAX_CONTEXT_CHARS}")
     print(f"{'class':<12} {'recall@k':>9}   {'n':>3}")
     print("-" * 30)
 

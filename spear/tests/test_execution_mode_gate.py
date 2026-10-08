@@ -157,9 +157,9 @@ class AnAbsentDeclarationIsUnrestricted(unittest.TestCase):
     """CASE 8 -- the compatibility semantic, read off the registry."""
 
     def test_every_read_only_native_spec_relies_on_it(self):
-        from cli import rag_chat
+        from cli import tool_routing
 
-        unrestricted = [item.name for item in rag_chat.TOOL_REGISTRY.list_specs()
+        unrestricted = [item.name for item in tool_routing.TOOL_REGISTRY.list_specs()
                         if item.mutability == ToolMutability.READ_ONLY
                         and not item.execution_modes]
 
@@ -238,9 +238,9 @@ class EveryMutatingToolDeclaresItsModes(unittest.TestCase):
     """
 
     def test_no_mutating_tool_permits_safe_mode(self):
-        from cli import rag_chat
+        from cli import tool_routing
 
-        for item in rag_chat.TOOL_REGISTRY.list_specs():
+        for item in tool_routing.TOOL_REGISTRY.list_specs():
             if item.mutability != ToolMutability.MUTATING:
                 continue
 
@@ -252,15 +252,15 @@ class EveryMutatingToolDeclaresItsModes(unittest.TestCase):
     def test_the_session_carries_its_mode_to_the_router(self):
         import inspect
 
-        from cli import rag_chat
+        from cli import tool_routing
 
         # Every tool call's context, the router's and the agent core's, is
         # built in one place.
-        source = inspect.getsource(rag_chat._execution_context)
+        source = inspect.getsource(tool_routing._execution_context)
 
-        self.assertIn("execution_mode=str(EXECUTION_MODE)", source)
-        self.assertIn("_execution_context(", inspect.getsource(rag_chat.route_tool_envelope))
-        self.assertIn("_execution_context(", inspect.getsource(rag_chat.coding_host))
+        self.assertIn("execution_mode=str(session_workspace.EXECUTION_MODE)", source)
+        self.assertIn("_execution_context(", inspect.getsource(tool_routing.route_tool_envelope))
+        self.assertIn("_execution_context(", inspect.getsource(tool_routing.coding_host))
 
     def test_only_the_router_reaches_a_handler(self):
         """CASE 9 -- no production path dispatches around the gate."""

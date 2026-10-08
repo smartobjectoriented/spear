@@ -5,7 +5,7 @@ import unittest
 from unittest.mock import patch
 
 sys.argv = ["rag_chat", "--safe"]
-from cli import rag_chat
+from cli import terminal_ui
 from runtime.cancellation import CancellationSource
 
 
@@ -15,35 +15,35 @@ class TheHeartbeat(unittest.TestCase):
     for eleven hours inside an eight-minute budget."""
 
     def test_a_notice_counts_as_life(self):
-        rag_chat.LIVENESS.at = time.monotonic() - 60
-        rag_chat.CliRuntimeObserver().notice("verification_nudge", {})
+        terminal_ui.LIVENESS.at = time.monotonic() - 60
+        terminal_ui.CliRuntimeObserver().notice("verification_nudge", {})
 
-        self.assertLess(rag_chat.LIVENESS.silent_for(), 1)
+        self.assertLess(terminal_ui.LIVENESS.silent_for(), 1)
 
     def test_a_token_counts_as_life(self):
-        with rag_chat.CliRuntimeObserver().model_activity("Thinking…") as tick:
-            rag_chat.LIVENESS.at = time.monotonic() - 60
+        with terminal_ui.CliRuntimeObserver().model_activity("Thinking…") as tick:
+            terminal_ui.LIVENESS.at = time.monotonic() - 60
             tick()
 
-        self.assertLess(rag_chat.LIVENESS.silent_for(), 1)
+        self.assertLess(terminal_ui.LIVENESS.silent_for(), 1)
 
     def test_the_spinner_alone_is_not_life(self):
         """It animates whether or not the provider answers — which is
         precisely the case being watched for."""
-        with rag_chat.Spinner("Thinking…"):
-            rag_chat.LIVENESS.at = time.monotonic() - 60
+        with terminal_ui.Spinner("Thinking…"):
+            terminal_ui.LIVENESS.at = time.monotonic() - 60
             time.sleep(0.5)
 
-        self.assertGreater(rag_chat.LIVENESS.silent_for(), 30)
+        self.assertGreater(terminal_ui.LIVENESS.silent_for(), 30)
 
 
 class TheWatchdog(unittest.TestCase):
     def run_turn(self, *, silence, threshold, work=0.6):
         source = CancellationSource()
 
-        with patch.object(rag_chat, "TURN_LIVENESS_SECONDS", threshold):
-            with rag_chat.interruptible(source):
-                rag_chat.LIVENESS.at = time.monotonic() - silence
+        with patch.object(terminal_ui, "TURN_LIVENESS_SECONDS", threshold):
+            with terminal_ui.interruptible(source):
+                terminal_ui.LIVENESS.at = time.monotonic() - silence
                 time.sleep(work)
 
         return source.token

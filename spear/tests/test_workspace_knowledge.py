@@ -8,6 +8,7 @@ Every fixture is synthetic.
 
 from __future__ import annotations
 
+import contextlib
 import json
 import os
 import sys
@@ -528,40 +529,50 @@ class ThroughTheSession(unittest.TestCase):
     """rag_chat's selection and its /knowledge command, on synthetic workspaces."""
 
     def setUp(self):
-        from cli import rag_chat
+        from cli import (
+            knowledge_commands, model_io, session_workspace,
+            turn_context,
+        )
 
-        self.rag_chat = rag_chat
+        self.knowledge_commands = knowledge_commands
+        self.model_io = model_io
+        self.session_workspace = session_workspace
+        self.turn_context = turn_context
         self.state = tempfile.mkdtemp()
         self.roots = {name: tempfile.mkdtemp() for name in (A, B)}
         self.patch = mock.patch.dict(os.environ, {"SPEAR_KNOWLEDGE_DB": os.path.join(
             self.state, "knowledge.sqlite3")})
         self.patch.start()
         self.addCleanup(self.patch.stop)
-        rag_chat._KNOWLEDGE_STORE.clear()
-        self.addCleanup(rag_chat._KNOWLEDGE_STORE.clear)
-        self.addCleanup(lambda: [store.close() for store in rag_chat._KNOWLEDGE_STORE])
+        knowledge_commands._KNOWLEDGE_STORE.clear()
+        self.addCleanup(knowledge_commands._KNOWLEDGE_STORE.clear)
+        self.addCleanup(lambda: [store.close() for store in knowledge_commands._KNOWLEDGE_STORE])
 
+    @contextlib.contextmanager
     def session(self, project):
         projects = {name: {"path": root} for name, root in self.roots.items()}
-        return mock.patch.multiple(
-            self.rag_chat, PROJECT=project, PROJECT_ROOT=self.roots[project],
-            CORPUS_ROOT=self.roots[project], SKILLS_DIR=tempfile.mkdtemp(),
-            RULES_DIR=tempfile.mkdtemp(), LEARNED_RULES_FILE="/nonexistent", CTX_LIMIT=200_000,
-            CAPABILITIES_FILE="/nonexistent"), mock.patch.object(
-            self.rag_chat, "load_projects", lambda: projects)
+
+        with mock.patch.multiple(
+                self.session_workspace, PROJECT=project, PROJECT_ROOT=self.roots[project],
+                CORPUS_ROOT=self.roots[project]), \
+                mock.patch.multiple(
+                    self.turn_context, RULES_DIR=tempfile.mkdtemp(),
+                    LEARNED_RULES_FILE="/nonexistent", CAPABILITIES_FILE="/nonexistent",
+                    load_projects=lambda: projects), \
+                mock.patch.multiple(
+                    self.knowledge_commands, SKILLS_DIR=tempfile.mkdtemp(),
+                    load_projects=lambda: projects), \
+                mock.patch.object(self.model_io, "CTX_LIMIT", 200_000):
+            yield
 
     def command(self, project, text):
-        first, second = self.session(project)
-
-        with first, second:
-            return self.rag_chat.knowledge_command(text, approve=lambda prompt: True)
+        with self.session(project):
+            return self.knowledge_commands.knowledge_command(text, approve=lambda prompt: True)
 
     def turn(self, project, request="Fix the uart driver.", scope="IMPLEMENTATION",
              binding=None):
-        first, second = self.session(project)
-
-        with first, second:
-            _, _, rendered = self.rag_chat.select_turn_context(
+        with self.session(project):
+            _, _, rendered = self.turn_context.select_turn_context(
                 user_input=request, turn_scope=scope, binding=binding, write=True,
                 project_spec={"path": self.roots[project]}, project_commands=None,
                 history_text="", memories="", skills=[], retrieval="",

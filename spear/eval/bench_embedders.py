@@ -27,7 +27,7 @@ os.environ.setdefault("HF_HUB_DISABLE_XET", "1")   # xet hangs on this host
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import chromadb
-from cli import rag_chat
+from cli import chat_settings, corpus_search
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 SOURCE = os.environ.get("SPEAR_EVAL_COLLECTION", "")
@@ -54,7 +54,7 @@ def tag(model):
 
 
 def source_chunks():
-    col = chromadb.PersistentClient(path=rag_chat.DB_PATH).get_collection(SOURCE)
+    col = chromadb.PersistentClient(path=chat_settings.DB_PATH).get_collection(SOURCE)
     g = col.get(include=["documents", "metadatas"])
 
     return g["ids"], g["documents"], g["metadatas"]
@@ -64,7 +64,7 @@ def build(model):
     """Create bench_<tag> with the candidate's embeddings. Returns (name, seconds)."""
     doc_pfx, _, trust = MODELS[model]
     name = f"bench_{tag(model)}"
-    client = chromadb.PersistentClient(path=rag_chat.DB_PATH)
+    client = chromadb.PersistentClient(path=chat_settings.DB_PATH)
 
     if model == "chroma-default":
         return SOURCE, 0.0            # already indexed, this is the reference
@@ -103,9 +103,9 @@ def build(model):
 
 
 def retrieve(col, qvec, query, hybrid):
-    """Reproduces rag_chat.retrieve_context, but on a supplied query vector
+    """Reproduces corpus_search.retrieve_context, but on a supplied query vector
     (the candidate is not the collection's embedding function)."""
-    top_k = rag_chat.TOP_K
+    top_k = corpus_search.TOP_K
 
     if qvec is None:
         dense = col.query(query_texts=[query], n_results=top_k * 2,
@@ -119,33 +119,33 @@ def retrieve(col, qvec, query, hybrid):
     lists = [list(dense["ids"][0])]
 
     if hybrid:
-        for term in rag_chat._ident_terms(query):
+        for term in corpus_search._ident_terms(query):
             try:
                 hit = col.get(where_document={"$contains": term},
                               include=["documents", "metadatas"],
-                              limit=rag_chat.LEX_SATURATION)
+                              limit=corpus_search.LEX_SATURATION)
             except Exception:
                 continue
 
-            if not hit["ids"] or len(hit["ids"]) >= rag_chat.LEX_SATURATION:
+            if not hit["ids"] or len(hit["ids"]) >= corpus_search.LEX_SATURATION:
                 continue
 
             ranked = sorted(zip(hit["ids"], hit["documents"], hit["metadatas"]),
-                            key=lambda x: -rag_chat._definition_score(x[1], x[2], term))
-            ranked = ranked[:rag_chat.LEX_PER_TERM]
+                            key=lambda x: -corpus_search._definition_score(x[1], x[2], term))
+            ranked = ranked[:corpus_search.LEX_PER_TERM]
 
             for i, d, m in ranked:
                 pool.setdefault(i, (d, m))
 
             lists.append([i for i, _, _ in ranked])
 
-    order = rag_chat._rrf(lists) if len(lists) > 1 else lists[0]
+    order = corpus_search._rrf(lists) if len(lists) > 1 else lists[0]
     total, seen = 0, set()
 
     for doc_id in order[:top_k * 2]:
         doc, meta = pool[doc_id]
 
-        if total + len(doc) > rag_chat.MAX_CONTEXT_CHARS:
+        if total + len(doc) > corpus_search.MAX_CONTEXT_CHARS:
             continue
 
         total += len(doc)
@@ -157,7 +157,7 @@ def retrieve(col, qvec, query, hybrid):
 def score(model, coll_name):
     _, q_pfx, trust = MODELS[model]
     questions = json.load(open(QUESTIONS))
-    col = chromadb.PersistentClient(path=rag_chat.DB_PATH).get_collection(coll_name)
+    col = chromadb.PersistentClient(path=chat_settings.DB_PATH).get_collection(coll_name)
 
     qvecs = [None] * len(questions)
 

@@ -61,7 +61,7 @@ PROJECT_ROOT = os.path.abspath(_root or os.getcwd())
 
 DB_PATH = os.environ.get("SPEAR_DB_PATH") or os.path.join(APP_DIR, "chromadb")
 
-# The session names the collection it queries (rag_chat.reindex_command).
+# The session names the collection it queries (corpus_search.reindex_command).
 # Standalone, the name is derived exactly as the session derives it for an
 # unpinned corpus, so the two agree without being told.
 

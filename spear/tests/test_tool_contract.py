@@ -27,7 +27,7 @@ from tests.test_wrapper_parity import BashHost
 def production_views():
     """The coding views SPEAR builds, for every role and turn shape."""
     sys.argv = sys.argv[:1]
-    from cli import rag_chat
+    from cli import tool_routing
     from runtime.agent_roles import AgentRole
     from harness.tool_exposure import ToolExposurePolicy
 
@@ -37,7 +37,7 @@ def production_views():
         for objective in ("fix the build so the symlink survives a clean",
                           "which file defines add, without editing files"):
             for retrieval in (True, False):
-                yield policy.select(rag_chat.TOOL_REGISTRY, role, objective=objective,
+                yield policy.select(tool_routing.TOOL_REGISTRY, role, objective=objective,
                                     toolset="coding", retrieval_available=retrieval)
 
 

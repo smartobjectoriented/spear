@@ -21,7 +21,7 @@ from unittest.mock import patch
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-from cli import rag_chat
+from cli import session_workspace, tool_routing
 from agent import dispatch, tools
 from runtime.cancellation import NEVER_CANCELLED
 from harness.tool_primitives import ExecutionMode
@@ -31,8 +31,8 @@ NAMES = ("read_file", "search_files", "patch", "write_file", "delete_file", "ter
 
 class ControlPlane(unittest.TestCase):
     def setUp(self):
-        self.root = tempfile.mkdtemp(dir=str(rag_chat.WORKSPACE.root))
-        self.rel = os.path.relpath(self.root, rag_chat.WORKSPACE.root)
+        self.root = tempfile.mkdtemp(dir=str(session_workspace.WORKSPACE.root))
+        self.rel = os.path.relpath(self.root, session_workspace.WORKSPACE.root)
         Path(self.root, "a.txt").write_text("alpha\n")
         self.records = []
         self.state = tools.new_state()
@@ -49,10 +49,10 @@ class ControlPlane(unittest.TestCase):
             working_state=SimpleNamespace(objective="edit a.txt"))
         for key, value in overrides.items():
             setattr(context, key, value)
-        return rag_chat.coding_host(context, {}, self.records.append)
+        return tool_routing.coding_host(context, {}, self.records.append)
 
     def call(self, name, mode=ExecutionMode.AUTO, **arguments):
-        with patch.object(rag_chat, "EXECUTION_MODE", mode), redirect_stdout(io.StringIO()):
+        with patch.object(session_workspace, "EXECUTION_MODE", mode), redirect_stdout(io.StringIO()):
             text, record = dispatch.execute(self.host_, self.state, f"c{len(self.records)}",
                                             name, arguments, NAMES)
         return text, record

@@ -276,15 +276,18 @@ class LegacyRuntime(unittest.TestCase):
     legacy runtime, which has no gateway: kept as it is, and said so."""
 
     def test_no_shell_runs_a_gateway_command_there(self):
-        from cli import rag_chat
+        from cli import session_workspace
 
-        result = rag_chat.run_cmd_result("spear-capability list", need_confirm=False)
+        result = session_workspace.run_cmd_result("spear-capability list", need_confirm=False)
 
         self.assertEqual(result.status, "denied")
         self.assertIn("not available on this runtime", result.summary)
 
     def test_the_admission_is_recorded_not_dropped(self):
-        from cli import rag_chat
+        from cli import (
+            knowledge_commands, model_io, session_workspace,
+            turn_context,
+        )
         from tests.test_capabilities import Recorder
 
         root = tempfile.mkdtemp()
@@ -292,20 +295,23 @@ class LegacyRuntime(unittest.TestCase):
         file.write_text(json.dumps({"providers": [
             {"id": "tracker", "command": [sys.executable, SERVER], "scope": "global"}]}))
         trace = Recorder()
-        rag_chat._CAPABILITY_REGISTRY.clear()
+        turn_context._CAPABILITY_REGISTRY.clear()
         knowledge = mock.patch.dict(os.environ, {"SPEAR_KNOWLEDGE_DB": os.path.join(
             tempfile.mkdtemp(), "knowledge.sqlite3")})
         knowledge.start()
         self.addCleanup(knowledge.stop)
-        self.addCleanup(rag_chat._CAPABILITY_REGISTRY.clear)
+        self.addCleanup(turn_context._CAPABILITY_REGISTRY.clear)
 
         with mock.patch.multiple(
-                rag_chat, PROJECT=f"workspace:{root}", PROJECT_ROOT=root, CORPUS_ROOT=root,
-                SKILLS_DIR=tempfile.mkdtemp(), RULES_DIR=tempfile.mkdtemp(),
-                LEARNED_RULES_FILE="/nonexistent", CTX_LIMIT=200_000,
-                CAPABILITIES_FILE=str(file)), \
-                mock.patch.object(rag_chat, "load_projects", lambda: {}):
-            _, _, rendered = rag_chat.select_turn_context(
+                session_workspace, PROJECT=f"workspace:{root}", PROJECT_ROOT=root,
+                CORPUS_ROOT=root), \
+                mock.patch.multiple(
+                    turn_context, RULES_DIR=tempfile.mkdtemp(),
+                    LEARNED_RULES_FILE="/nonexistent", CAPABILITIES_FILE=str(file),
+                    load_projects=lambda: {}), \
+                mock.patch.object(knowledge_commands, "SKILLS_DIR", tempfile.mkdtemp()), \
+                mock.patch.object(model_io, "CTX_LIMIT", 200_000):
+            _, _, rendered = turn_context.select_turn_context(
                 user_input="Rename cnt to count in main.c.", turn_scope="IMPLEMENTATION",
                 binding={"standard_id": "SYNTH-1", "revision": "1"}, write=True,
                 project_spec={}, project_commands=None, history_text="", memories="",

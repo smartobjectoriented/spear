@@ -4,8 +4,8 @@
 Indexes ANY source tree (current directory by default) into a ChromaDB
 collection named adhoc_<md5(realpath)[:8]>, unless ``--collection`` names a
 registered collection explicitly. The default is the same tag scheme used by
-rag_chat.py for ad-hoc history/memories, so the chat picks the index up
-automatically on the next launch (or right after /reindex).
+cli/session_workspace.py for ad-hoc history/memories, so the chat picks the
+index up automatically on the next launch (or right after /reindex).
 
 Usage:
     spear-index [root] [--max-files N] [--exclude DIR]... [--collection NAME]

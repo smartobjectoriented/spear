@@ -84,9 +84,9 @@ mapfile -t TREES < <(
     "$APP/bin/python" - "$APP" "$PWD" <<'PYTREES'
 import os, sys
 sys.path.insert(0, sys.argv[1])
-from cli import rag_chat
-seen = {os.path.realpath(s["path"]) for s in rag_chat.load_projects().values()}
-seen.add(os.path.realpath(rag_chat.ROOT_DIR))          # the repository
+from cli import chat_settings, corpus_registry
+seen = {os.path.realpath(s["path"]) for s in corpus_registry.load_projects().values()}
+seen.add(os.path.realpath(chat_settings.ROOT_DIR))          # the repository
 # The WORKING TREE, which is not the same list as the corpora. Corpora are
 # components -- so3, u-boot, avz -- while the build system that drives them
 # sits in the umbrella above: env.sh, scripts/build.sh, build/tmp/toolchains.

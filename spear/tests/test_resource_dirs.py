@@ -24,7 +24,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-from cli import rag_chat
+from cli import chat_settings, project_checks, turn_context
 from context import skill_library
 
 DIRS = (("SPEAR_RULES_DIR", "rules.d"),
@@ -48,24 +48,24 @@ class TheDefaultIsTheCheckout(unittest.TestCase):
     def test_an_unset_variable_gives_the_in_tree_directory(self):
         for var, name in DIRS:
             with self.subTest(var=var):
-                self.assertEqual(rag_chat.resource_dir(var, name),
-                                 f"{rag_chat.APP_DIR}/{name}")
+                self.assertEqual(chat_settings.resource_dir(var, name),
+                                 f"{chat_settings.APP_DIR}/{name}")
 
     def test_an_empty_variable_is_not_a_request_for_the_filesystem_root(self):
         """`export SPEAR_RULES_DIR=` is a mistake, not an instruction."""
         for var, name in DIRS:
             with self.subTest(var=var):
                 os.environ[var] = ""
-                self.assertEqual(rag_chat.resource_dir(var, name),
-                                 f"{rag_chat.APP_DIR}/{name}")
+                self.assertEqual(chat_settings.resource_dir(var, name),
+                                 f"{chat_settings.APP_DIR}/{name}")
 
     def test_no_default_leaves_the_checkout(self):
         """A default that named a private directory would publish its path."""
         for var, name in DIRS:
             with self.subTest(var=var):
-                resolved = Path(rag_chat.resource_dir(var, name)).resolve()
+                resolved = Path(chat_settings.resource_dir(var, name)).resolve()
                 self.assertEqual(resolved.parent,
-                                 Path(rag_chat.APP_DIR).resolve())
+                                 Path(chat_settings.APP_DIR).resolve())
 
 
 class AnOverrideIsHonoured(unittest.TestCase):
@@ -80,7 +80,7 @@ class AnOverrideIsHonoured(unittest.TestCase):
         for var, name in DIRS:
             with self.subTest(var=var):
                 os.environ[var] = "/somewhere/else"
-                self.assertEqual(rag_chat.resource_dir(var, name),
+                self.assertEqual(chat_settings.resource_dir(var, name),
                                  "/somewhere/else")
 
 
@@ -93,9 +93,9 @@ class TheContentIsReadFromWhereItWasPointed(unittest.TestCase):
             Path(tmp, "20-second.md").write_text("comments in english\n")
             Path(tmp, "notes.txt").write_text("ignored: not markdown\n")
 
-            with _pointed_at(rag_chat, RULES_DIR=tmp,
+            with _pointed_at(turn_context, RULES_DIR=tmp,
                              LEARNED_RULES_FILE=os.path.join(tmp, "absent.md")):
-                rules = rag_chat.load_rules()
+                rules = turn_context.load_rules()
 
         self.assertIn("never rewrite a header", rules)
         self.assertIn("comments in english", rules)
@@ -117,16 +117,16 @@ class TheContentIsReadFromWhereItWasPointed(unittest.TestCase):
             bench = Path(tmp, "acceptance.sh")
             bench.write_text("#!/bin/sh\nexit 0\n")
 
-            with _pointed_at(rag_chat, BENCH_DIR=tmp,
+            with _pointed_at(project_checks, BENCH_DIR=tmp,
                              project_bench=lambda: "acceptance.sh"):
-                self.assertEqual(rag_chat.bench_command(), str(bench))
+                self.assertEqual(project_checks.bench_command(), str(bench))
 
     def test_an_unresolvable_bench_name_is_passed_through_unchanged(self):
         """A project may declare a command rather than a shipped script."""
         with tempfile.TemporaryDirectory() as tmp:
-            with _pointed_at(rag_chat, BENCH_DIR=tmp,
+            with _pointed_at(project_checks, BENCH_DIR=tmp,
                              project_bench=lambda: "make check"):
-                self.assertEqual(rag_chat.bench_command(), "make check")
+                self.assertEqual(project_checks.bench_command(), "make check")
 
 
 class TheOverrideSurvivesImport(unittest.TestCase):
@@ -145,9 +145,10 @@ class TheOverrideSurvivesImport(unittest.TestCase):
                        SPEAR_STATE_DIR=os.path.join(tmp, "state"))
             out = subprocess.run(
                 [sys.executable, "-c",
-                 "from cli import rag_chat as r; "
-                 "print(r.RULES_DIR, r.SKILLS_DIR, r.BENCH_DIR, "
-                 "r.SHIPPED_CORPUS_RULES)"],
+                 "from cli import chat_settings, knowledge_commands, "
+                 "project_checks, turn_context; "
+                 "print(chat_settings.RULES_DIR, knowledge_commands.SKILLS_DIR, "
+                 "project_checks.BENCH_DIR, turn_context.SHIPPED_CORPUS_RULES)"],
                 cwd=str(ROOT), env=env, capture_output=True, text=True)
 
             self.assertEqual(out.returncode, 0, out.stderr)

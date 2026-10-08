@@ -30,8 +30,8 @@ from unittest.mock import patch
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-from cli import rag_chat
 from harness.tool_primitives import ExecutionMode
+from cli import session_workspace, tool_routing
 from runtime.tracing import EventType, TraceEmitter
 
 # Nothing a refusal is allowed to suggest. A line that names one of these
@@ -67,8 +67,8 @@ def call(name, arguments, *, mode=ExecutionMode.SAFE, read_only=False,
         standard_binding=None)
     screen = io.StringIO()
 
-    with patch.object(rag_chat, "EXECUTION_MODE", mode), redirect_stdout(screen):
-        envelope = rag_chat.route_tool_envelope(
+    with patch.object(session_workspace, "EXECUTION_MODE", mode), redirect_stdout(screen):
+        envelope = tool_routing.route_tool_envelope(
             name, arguments, {} if cache is None else cache,
             trace=trace, agent_context=context)
 
@@ -160,7 +160,7 @@ class AHandlerFailureKeepsItsOwnOutput(unittest.TestCase):
     def test_its_category_is_the_generic_one(self):
         """Which is exactly why the notice keys on the router's own names."""
         self.assertNotIn(self.envelope.error_category,
-                         rag_chat._ROUTER_REFUSAL_NOTICES)
+                         session_workspace._ROUTER_REFUSAL_NOTICES)
 
 
 class SuccessIsUnchanged(unittest.TestCase):
@@ -184,7 +184,7 @@ class SuccessIsUnchanged(unittest.TestCase):
                 screen = io.StringIO()
 
                 with redirect_stdout(screen):
-                    printed = rag_chat.announce_router_refusal(
+                    printed = session_workspace.announce_router_refusal(
                         "probe", SimpleNamespace(error_category=category))
 
                 self.assertFalse(printed)
@@ -195,7 +195,7 @@ class ACancellationIsNotAModeRefusal(unittest.TestCase):
     """CASE 5 -- the operator declined; the mode permitted it."""
 
     def test_a_declined_mutation_is_reported_as_cancelled(self):
-        with patch.object(rag_chat, "confirm", return_value=False):
+        with patch.object(session_workspace, "confirm", return_value=False):
             envelope, screen, _ = call(
                 "write_file", {"path": "declined.txt", "content": "x"},
                 mode=ExecutionMode.ASK)
@@ -204,7 +204,7 @@ class ACancellationIsNotAModeRefusal(unittest.TestCase):
         self.assertEqual(refusal_lines(screen), [])
 
     def test_the_notice_has_no_entry_for_an_ordinary_cancellation(self):
-        self.assertNotIn("cancelled", rag_chat._ROUTER_REFUSAL_NOTICES)
+        self.assertNotIn("cancelled", session_workspace._ROUTER_REFUSAL_NOTICES)
 
 
 class TheTraceAlreadyCarriedTheCategory(unittest.TestCase):
@@ -243,7 +243,7 @@ class TheTraceAlreadyCarriedTheCategory(unittest.TestCase):
         for category in categories:
             with self.subTest(category=category):
                 self.assertTrue(
-                    category in rag_chat._ROUTER_REFUSAL_NOTICES
+                    category in session_workspace._ROUTER_REFUSAL_NOTICES
                     or category in self.NOT_REFUSALS,
                     f"{category} is neither announced nor deliberately silent")
 

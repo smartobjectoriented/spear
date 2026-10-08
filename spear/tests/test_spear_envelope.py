@@ -4,7 +4,7 @@ allows, firm when it refuses, and the only way through.
 Every case runs the core's own dispatcher against two hosts on the same
 disposable workspace, at the same path: a permissive reference host (the
 Phase-7 benchmark host: plain `bash -c`, no policy) and SpearHost as
-production builds it (rag_chat.coding_host: router, workspace policy, command
+production builds it (tool_routing.coding_host: router, workspace policy, command
 policy, sandbox, audit). An allowed call must read the same through both; a
 refused one must say so in the core's own vocabulary and leave nothing
 behind.
@@ -30,7 +30,7 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
 from evidence import completion
-from cli import rag_chat
+from cli import rag_chat, session_workspace, tool_routing
 from agent import dispatch, tools
 from agent.host import CommandOutcome
 from runtime.cancellation import NEVER_CANCELLED
@@ -116,16 +116,16 @@ class Envelope(unittest.TestCase):
         for key, value in overrides.items():
             setattr(context, key, value)
 
-        return rag_chat.coding_host(context, {}, self.records.append)
+        return tool_routing.coding_host(context, {}, self.records.append)
 
     def session(self, host):
         """A call function bound to `host` and a fresh core session."""
         state = tools.new_state()
 
         def call(name, **arguments):
-            with patch.object(rag_chat, "PROJECT_ROOT", self.root), \
-                    patch.object(rag_chat, "WORKSPACE", Workspace.from_path(self.root)), \
-                    patch.object(rag_chat, "EXECUTION_MODE", ExecutionMode.AUTO), \
+            with patch.object(session_workspace, "PROJECT_ROOT", self.root), \
+                    patch.object(session_workspace, "WORKSPACE", Workspace.from_path(self.root)), \
+                    patch.object(session_workspace, "EXECUTION_MODE", ExecutionMode.AUTO), \
                     redirect_stdout(io.StringIO()):
                 return dispatch.execute(host, state, f"c{len(self.records)}", name,
                                         arguments, NAMES)
@@ -133,8 +133,8 @@ class Envelope(unittest.TestCase):
         return call
 
     def spear_session(self, objective=None, **overrides):
-        with patch.object(rag_chat, "PROJECT_ROOT", self.root), \
-                patch.object(rag_chat, "WORKSPACE", Workspace.from_path(self.root)):
+        with patch.object(session_workspace, "PROJECT_ROOT", self.root), \
+                patch.object(session_workspace, "WORKSPACE", Workspace.from_path(self.root)):
             return self.session(self.spear(objective, **overrides))
 
     def assertRefused(self, outcome):

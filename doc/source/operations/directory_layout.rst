@@ -81,10 +81,20 @@ launchers and the image do that for you.
    * - Package
      - Role
    * - ``cli/``
-     - The commands: ``rag_chat.py`` (REPL startup, project selection,
-       retrieval helpers, tool handlers, the coding core's host ports, history
-       and rendering), ``backend_select.py`` (the startup backend picker),
-       ``machine_config.py`` (``spear-configure``) and
+     - The commands.  The chat client's entry point is ``rag_chat.py``
+       (startup, argument handling and the REPL loop); the rest of the client
+       is ``chat_settings.py`` (session flags and the paths derived from
+       them), ``corpus_registry.py`` (``projects.json`` and ``/corpus``),
+       ``session_workspace.py`` (the bound project, execution mode, command
+       policy and the file and command primitives), ``corpus_search.py``
+       (retrieval), ``tool_handlers.py`` and ``tool_routing.py`` (the tool
+       handlers, the registry and the coding core's host ports),
+       ``turn_context.py`` (rules and per-turn context selection),
+       ``knowledge_commands.py``, ``standard_session.py``,
+       ``session_history.py``, ``project_checks.py``, ``model_io.py``,
+       ``reply_edits.py``, ``operator_input.py``, ``startup_banner.py`` and
+       ``terminal_ui.py``.  Beside it: ``backend_select.py`` (the startup
+       backend picker), ``machine_config.py`` (``spear-configure``) and
        ``finetune_commands.py``.
    * - ``agent/``
      - The coding core: its loop, tool dispatch, tools and prompt.  It imports
@@ -314,10 +324,10 @@ sourcing ``bin/activate``: a virtualenv hardcodes its own absolute path, so a
 relocated tree activates into a directory that no longer exists and
 ``python3`` silently falls through to the system interpreter.
 
-``spear-corpus`` is a wrapper around ``rag_chat.handle_corpus_command``, which
-is also what ``/corpus`` calls inside the chat: one registry, one
-implementation, and one environment — it reads ``machine.env`` exactly as
-``spear-chat`` does.
+``spear-corpus`` is a wrapper around
+``corpus_registry.handle_corpus_command``, which is also what ``/corpus`` calls
+inside the chat: one registry, one implementation, and one environment — it
+reads ``machine.env`` exactly as ``spear-chat`` does.
 
 .. _doc-diagrams:
 

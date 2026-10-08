@@ -104,20 +104,20 @@ class MemoryStoreTests(unittest.TestCase):
         import os
         import tempfile
 
-        from cli import rag_chat
+        from cli import knowledge_commands, session_workspace, tool_handlers
         from context import workspace_knowledge as wk
 
         database = os.path.join(tempfile.mkdtemp(), "knowledge.sqlite3")
-        rag_chat._KNOWLEDGE_STORE.clear()
-        self.addCleanup(rag_chat._KNOWLEDGE_STORE.clear)
+        knowledge_commands._KNOWLEDGE_STORE.clear()
+        self.addCleanup(knowledge_commands._KNOWLEDGE_STORE.clear)
 
         with patch.dict(os.environ, {"SPEAR_KNOWLEDGE_DB": database}), \
-                patch.object(rag_chat, "MEMORIES_FILE", str(self.path)), \
-                patch.object(rag_chat, "authorize_mutation", return_value=None) as authorize, \
-                patch.object(rag_chat, "tool_use"), patch.object(rag_chat, "tool_result"):
-            result = rag_chat._registered_remember(None, {"note": "Kernel uses ninja"})
-            store = rag_chat.knowledge_store()
-            records = store.list(rag_chat.current_workspace().workspace_id)
+                patch.object(session_workspace, "MEMORIES_FILE", str(self.path)), \
+                patch.object(tool_handlers, "authorize_mutation", return_value=None) as authorize, \
+                patch.object(tool_handlers, "tool_use"), patch.object(tool_handlers, "tool_result"):
+            result = tool_handlers._registered_remember(None, {"note": "Kernel uses ninja"})
+            store = knowledge_commands.knowledge_store()
+            records = store.list(knowledge_commands.current_workspace().workspace_id)
 
         authorize.assert_called_once()
         self.assertTrue(result.text.startswith("OK: proposed"))

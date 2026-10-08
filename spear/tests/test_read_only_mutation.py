@@ -33,7 +33,9 @@ from types import SimpleNamespace
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-from cli import rag_chat
+from cli import (
+    rag_chat, reply_edits, session_workspace, tool_handlers, tool_routing,
+)
 from harness.tool_exposure import ToolExposurePolicy
 from harness.tool_registry import ToolMutability, native_tool_specs
 from harness.tool_router import ToolResultStatus
@@ -69,13 +71,13 @@ class safe_mode:
     def __enter__(self):
         from harness.tool_primitives import ExecutionMode
 
-        self.previous = rag_chat.EXECUTION_MODE
-        rag_chat.EXECUTION_MODE = getattr(ExecutionMode, self.mode)
+        self.previous = session_workspace.EXECUTION_MODE
+        session_workspace.EXECUTION_MODE = getattr(ExecutionMode, self.mode)
 
         return self
 
     def __exit__(self, *exc):
-        rag_chat.EXECUTION_MODE = self.previous
+        session_workspace.EXECUTION_MODE = self.previous
 
         return False
 
@@ -95,15 +97,15 @@ class BothPermissionsAreRequired(unittest.TestCase):
             with self.subTest(mode=mode, read_only=read_only):
                 with safe_mode(mode):
                     self.assertIs(
-                        rag_chat.mutation_permitted(context(read_only=read_only)),
+                        session_workspace.mutation_permitted(context(read_only=read_only)),
                         expected)
 
     def test_a_turn_with_no_context_still_obeys_the_mode(self):
         with safe_mode("SAFE"):
-            self.assertFalse(rag_chat.mutation_permitted(None))
+            self.assertFalse(session_workspace.mutation_permitted(None))
 
         with safe_mode("AUTO"):
-            self.assertTrue(rag_chat.mutation_permitted(None))
+            self.assertTrue(session_workspace.mutation_permitted(None))
 
 
 class NothingIsSynthesisedForAReadOnlyTurn(unittest.TestCase):
@@ -136,7 +138,7 @@ class NothingIsSynthesisedForAReadOnlyTurn(unittest.TestCase):
 
     def test_the_printed_file_is_the_kind_the_path_would_have_taken(self):
         """Otherwise the guard above would be proving nothing."""
-        block, language = rag_chat.extract_code_block_with_language(PRINTED_FILE)
+        block, language = reply_edits.extract_code_block_with_language(PRINTED_FILE)
 
         self.assertEqual(language, "c")
         self.assertGreater(len(block), 200)
@@ -152,7 +154,7 @@ class TheRouterRefusesWhoeverAsks(unittest.TestCase):
 
     def route(self, name, arguments, *, read_only):
         cache = {}
-        envelope = rag_chat.route_tool_envelope(
+        envelope = tool_routing.route_tool_envelope(
             name, arguments, cache,
             agent_context=SimpleNamespace(
                 read_only=read_only, role="main", task_id="t", trace=None,
@@ -183,7 +185,7 @@ class TheRouterRefusesWhoeverAsks(unittest.TestCase):
                 self.assertNotIn(mechanism, text)
 
     def test_nothing_is_written(self):
-        target = Path(rag_chat.PROJECT_ROOT) / "should-not-exist-read-only.c"
+        target = Path(session_workspace.PROJECT_ROOT) / "should-not-exist-read-only.c"
         self.assertFalse(target.exists())
         self.route("write_file", {"path": target.name, "content": "x" * 300},
                    read_only=True)
@@ -218,15 +220,15 @@ class SafeModeSaysSoFirst(unittest.TestCase):
 
     def test_it_refuses_in_safe_and_nowhere_else(self):
         with safe_mode("SAFE"):
-            self.assertIsNotNone(rag_chat.safe_mode_refusal("write_file"))
+            self.assertIsNotNone(session_workspace.safe_mode_refusal("write_file"))
 
         for mode in ("ASK", "AUTO"):
             with self.subTest(mode=mode), safe_mode(mode):
-                self.assertIsNone(rag_chat.safe_mode_refusal("write_file"))
+                self.assertIsNone(session_workspace.safe_mode_refusal("write_file"))
 
     def test_it_names_the_mode_not_the_content(self):
         with safe_mode("SAFE"):
-            text = rag_chat.safe_mode_refusal("write_file")
+            text = session_workspace.safe_mode_refusal("write_file")
 
         self.assertIn("safe mode", text)
         self.assertIn("write_file", text)
@@ -234,7 +236,7 @@ class SafeModeSaysSoFirst(unittest.TestCase):
 
     def test_it_recommends_no_way_around_the_mode(self):
         with safe_mode("SAFE"):
-            text = rag_chat.safe_mode_refusal("edit_file").lower()
+            text = session_workspace.safe_mode_refusal("edit_file").lower()
 
         for mechanism in OTHER_MECHANISMS:
             with self.subTest(mechanism=mechanism):
@@ -242,9 +244,9 @@ class SafeModeSaysSoFirst(unittest.TestCase):
 
     def test_every_mutating_handler_checks_it_before_the_heuristics(self):
         for handler, marker in (
-            (rag_chat._registered_write_file, "is much larger than"),
-            (rag_chat._registered_edit_file, None),
-            (rag_chat._registered_append_file, None),
+            (tool_handlers._registered_write_file, "is much larger than"),
+            (tool_handlers._registered_edit_file, None),
+            (tool_handlers._registered_append_file, None),
         ):
             with self.subTest(handler=handler.__name__):
                 source = inspect.getsource(handler)
@@ -280,7 +282,7 @@ class ReadingStillWorks(unittest.TestCase):
         for command in ("cat foo.c", "grep -rn ack src/", "ls -la"):
             with self.subTest(command=command):
                 self.assertEqual(
-                    rag_chat.COMMAND_POLICY.classify(command).classification,
+                    session_workspace.COMMAND_POLICY.classify(command).classification,
                     CommandClassification.READ_ONLY)
 
 
@@ -288,7 +290,7 @@ class TheCompileRefusalStaysAccurate(unittest.TestCase):
     """CASE 5 -- what a read-only turn is told when it reaches for a compiler."""
 
     def test_it_names_the_request_and_forbids_another_route(self):
-        text = rag_chat.READ_ONLY_REFUSAL.lower()
+        text = tool_handlers.READ_ONLY_REFUSAL.lower()
 
         self.assertIn("read-only", text)
         self.assertIn("do not try another way", text)
@@ -297,7 +299,7 @@ class TheCompileRefusalStaysAccurate(unittest.TestCase):
         from harness.tool_primitives import CommandClassification
 
         self.assertNotEqual(
-            rag_chat.COMMAND_POLICY.classify("gcc -o probe probe.c").classification,
+            session_workspace.COMMAND_POLICY.classify("gcc -o probe probe.c").classification,
             CommandClassification.READ_ONLY)
 
 

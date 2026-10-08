@@ -61,9 +61,16 @@ class RagChatWorkspaceIntegrationTests(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        from cli import rag_chat
+        from cli import (
+            operator_input, rag_chat, session_workspace,
+            tool_handlers, tool_routing,
+        )
 
         cls.rag_chat = rag_chat
+        cls.operator_input = operator_input
+        cls.session_workspace = session_workspace
+        cls.tool_handlers = tool_handlers
+        cls.tool_routing = tool_routing
 
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
@@ -73,22 +80,22 @@ class RagChatWorkspaceIntegrationTests(unittest.TestCase):
         self.outside.mkdir()
         (self.root / "inside.txt").write_text("inside")
         (self.outside / "secret.txt").write_text("outside")
-        self.old_project_root = self.rag_chat.PROJECT_ROOT
-        self.old_workspace = self.rag_chat.WORKSPACE
-        self.old_execution_mode = self.rag_chat.EXECUTION_MODE
-        self.old_audit_logger = getattr(self.rag_chat, "AUDIT_LOGGER", None)
+        self.old_project_root = self.session_workspace.PROJECT_ROOT
+        self.old_workspace = self.session_workspace.WORKSPACE
+        self.old_execution_mode = self.session_workspace.EXECUTION_MODE
+        self.old_audit_logger = getattr(self.session_workspace, "AUDIT_LOGGER", None)
         self.audit_log = Path(self.temp.name) / "audit.jsonl"
-        self.rag_chat.PROJECT_ROOT = str(self.root)
-        self.rag_chat.WORKSPACE = Workspace.from_path(self.root)
+        self.session_workspace.PROJECT_ROOT = str(self.root)
+        self.session_workspace.WORKSPACE = Workspace.from_path(self.root)
         if self.old_audit_logger is not None:
-            self.rag_chat.AUDIT_LOGGER = AuditLogger(self.audit_log)
+            self.session_workspace.AUDIT_LOGGER = AuditLogger(self.audit_log)
 
     def tearDown(self):
-        self.rag_chat.PROJECT_ROOT = self.old_project_root
-        self.rag_chat.WORKSPACE = self.old_workspace
-        self.rag_chat.EXECUTION_MODE = self.old_execution_mode
+        self.session_workspace.PROJECT_ROOT = self.old_project_root
+        self.session_workspace.WORKSPACE = self.old_workspace
+        self.session_workspace.EXECUTION_MODE = self.old_execution_mode
         if self.old_audit_logger is not None:
-            self.rag_chat.AUDIT_LOGGER = self.old_audit_logger
+            self.session_workspace.AUDIT_LOGGER = self.old_audit_logger
         self.temp.cleanup()
 
     def test_evidence_visibility_follows_the_conversation_not_the_turn(self):
@@ -109,22 +116,22 @@ class RagChatWorkspaceIntegrationTests(unittest.TestCase):
             ]
 
         context = Context()
-        self.assertTrue(self.rag_chat._evidence_in_context(context, "call-1"))
-        self.assertFalse(self.rag_chat._evidence_in_context(context, "call-2"))
+        self.assertTrue(self.tool_routing._evidence_in_context(context, "call-1"))
+        self.assertFalse(self.tool_routing._evidence_in_context(context, "call-2"))
 
         # Compaction replaces the exchange with a summary.
 
         context.conversation = [
             ConversationMessage("user", (TextBlock("[earlier work summarised]"),)),
         ]
-        self.assertFalse(self.rag_chat._evidence_in_context(context, "call-1"))
+        self.assertFalse(self.tool_routing._evidence_in_context(context, "call-1"))
 
         # An empty result block is not evidence either.
 
         context.conversation = [
             ConversationMessage("user", (ToolResultBlock("call-1", ""),)),
         ]
-        self.assertFalse(self.rag_chat._evidence_in_context(context, "call-1"))
+        self.assertFalse(self.tool_routing._evidence_in_context(context, "call-1"))
 
     def test_a_read_only_refusal_is_about_scope_not_permissions(self):
         """"Command denied" invites the next spelling of the same intent.
@@ -134,28 +141,28 @@ class RagChatWorkspaceIntegrationTests(unittest.TestCase):
         ways. The refusal has to say what it is FOR, and what to do instead.
         """
 
-        self.assertIn("read-only task", self.rag_chat.READ_ONLY_REFUSAL)
+        self.assertIn("read-only task", self.tool_handlers.READ_ONLY_REFUSAL)
         self.assertIn("Do not try another way to modify or test",
-                      self.rag_chat.READ_ONLY_REFUSAL)
+                      self.tool_handlers.READ_ONLY_REFUSAL)
         self.assertIn("Answer the original question",
-                      self.rag_chat.READ_ONLY_REFUSAL)
+                      self.tool_handlers.READ_ONLY_REFUSAL)
 
         # Counted by category, not by signature: every spelling is the same
         # violation of the same scope.
 
-        source = Path(self.rag_chat.__file__).read_text()
+        source = Path(self.tool_handlers.__file__).read_text()
         self.assertIn("READ_ONLY_VIOLATIONS", source)
         self.assertIn("EventType.READ_ONLY_VIOLATION", source)
         self.assertIn("read_only_violations", source)
 
     def test_read_rejects_traversal_and_symlink_escapes(self):
         (self.root / "outside-link").symlink_to(self.outside, target_is_directory=True)
-        self.assertIn("path escapes the workspace", self.rag_chat.read_file("../outside/secret.txt"))
+        self.assertIn("path escapes the workspace", self.session_workspace.read_file("../outside/secret.txt"))
         self.assertIn("path escapes the workspace",
-                      self.rag_chat.read_file("outside-link/secret.txt"))
+                      self.session_workspace.read_file("outside-link/secret.txt"))
 
     def test_file_lookup_does_not_fall_back_after_rejected_path(self):
-        self.assertIsNone(self.rag_chat.find_file("../outside/secret.txt"))
+        self.assertIsNone(self.session_workspace.find_file("../outside/secret.txt"))
 
     def test_working_directory_note_matches_what_bash_actually_sees(self):
         """The note must name the sandbox mount, not only the host path.
@@ -175,8 +182,8 @@ class RagChatWorkspaceIntegrationTests(unittest.TestCase):
         # The mount is asked of the sandbox, never restated by hand: the note
         # and the bind must not be able to drift apart.
         self.assertEqual(
-            self.rag_chat.sandbox_mount(),
-            BubblewrapSandbox().mount_root(self.rag_chat.WORKSPACE))
+            self.session_workspace.sandbox_mount(),
+            BubblewrapSandbox().mount_root(self.session_workspace.WORKSPACE))
         self.assertNotIn('"/workspace"', note)
 
     def test_corpus_mention_is_reported_but_never_acted_on(self):
@@ -190,10 +197,10 @@ class RagChatWorkspaceIntegrationTests(unittest.TestCase):
             "src": {"path": str(so3), "kind": "generic"},
             "gone": {"path": str(Path(self.temp.name) / "absent"), "kind": "generic"},
         }
-        hint = self.rag_chat.corpus_mention_hint
+        hint = self.operator_input.corpus_mention_hint
 
         try:
-            self.rag_chat._HINTED_CORPORA.clear()
+            self.operator_input._HINTED_CORPORA.clear()
             # The case that cost a turn: a registered name in the question
             # while the tools are elsewhere.
             message = hint("generate a ping.c to run in so3", projects, "spear")
@@ -205,12 +212,12 @@ class RagChatWorkspaceIntegrationTests(unittest.TestCase):
             self.assertIsNone(hint("still about so3", projects, "spear"))
 
             # The longest registered name wins over a substring of it.
-            self.rag_chat._HINTED_CORPORA.clear()
+            self.operator_input._HINTED_CORPORA.clear()
             message = hint("port micropython-so3 please", projects, "spear")
             self.assertIn("micropython-so3", message)
 
             # Never fires for the corpus already in use.
-            self.rag_chat._HINTED_CORPORA.clear()
+            self.operator_input._HINTED_CORPORA.clear()
             self.assertIsNone(hint("something about so3", projects, "so3"))
 
             # Ordinary directory words and path fragments are not mentions.
@@ -222,13 +229,13 @@ class RagChatWorkspaceIntegrationTests(unittest.TestCase):
             self.assertIsNone(hint("what about gone", projects, "spear"))
 
             # Above all: reporting must not move the workspace.
-            before = (self.rag_chat.PROJECT_ROOT, self.rag_chat.WORKSPACE.root)
-            self.rag_chat._HINTED_CORPORA.clear()
+            before = (self.session_workspace.PROJECT_ROOT, self.session_workspace.WORKSPACE.root)
+            self.operator_input._HINTED_CORPORA.clear()
             hint("build ping.c for so3", projects, "spear")
-            self.assertEqual((self.rag_chat.PROJECT_ROOT,
-                              self.rag_chat.WORKSPACE.root), before)
+            self.assertEqual((self.session_workspace.PROJECT_ROOT,
+                              self.session_workspace.WORKSPACE.root), before)
         finally:
-            self.rag_chat._HINTED_CORPORA.clear()
+            self.operator_input._HINTED_CORPORA.clear()
 
     def test_file_lookup_walks_the_workspace_for_a_bare_basename(self):
         # The rejected-path test above returns before the tree walk, which is
@@ -237,22 +244,22 @@ class RagChatWorkspaceIntegrationTests(unittest.TestCase):
         nested = self.root / "sub" / "deeper"
         nested.mkdir(parents=True)
         (nested / "ping.c").write_text("int main(void) { return 0; }")
-        found = self.rag_chat.find_file("ping.c")
+        found = self.session_workspace.find_file("ping.c")
         self.assertIsNotNone(found)
         self.assertEqual(Path(found).name, "ping.c")
         self.assertTrue(Path(found).is_file())
         # A basename that exists nowhere still resolves to None, not an error.
-        self.assertIsNone(self.rag_chat.find_file("absent-from-the-tree.c"))
+        self.assertIsNone(self.session_workspace.find_file("absent-from-the-tree.c"))
 
     def test_write_file_rejects_absolute_and_outside_paths_before_writing(self):
         # In a session that MAY write: the path diagnostic belongs to the
         # tool's own validation, and the execution-mode gate now runs ahead
         # of the handler, so in safe mode the mode is reported instead. The
         # file is not written either way -- the case below holds that.
-        self.rag_chat.EXECUTION_MODE = ExecutionMode.ASK
+        self.session_workspace.EXECUTION_MODE = ExecutionMode.ASK
 
-        with patch.object(self.rag_chat, "confirm", return_value=True):
-            result = self.rag_chat.execute_tool(
+        with patch.object(self.session_workspace, "confirm", return_value=True):
+            result = self.tool_routing.execute_tool(
                 "write_file", {"path": str(self.outside / "new.txt"), "content": "x"}, {}
             )
         # The reason is now the accurate one: this path is outside every
@@ -268,20 +275,20 @@ class RagChatWorkspaceIntegrationTests(unittest.TestCase):
         """The safety property, which does not depend on which gate spoke."""
         for mode in (ExecutionMode.SAFE, ExecutionMode.ASK, ExecutionMode.AUTO):
             with self.subTest(mode=mode):
-                self.rag_chat.EXECUTION_MODE = mode
+                self.session_workspace.EXECUTION_MODE = mode
                 target = self.outside / f"new-{mode}.txt"
 
-                with patch.object(self.rag_chat, "confirm", return_value=True):
-                    result = self.rag_chat.execute_tool(
+                with patch.object(self.session_workspace, "confirm", return_value=True):
+                    result = self.tool_routing.execute_tool(
                         "write_file", {"path": str(target), "content": "x"}, {})
 
                 self.assertTrue(result.startswith("ERROR"))
                 self.assertFalse(target.exists())
 
     def test_write_file_creates_missing_parent_directories(self):
-        self.rag_chat.EXECUTION_MODE = ExecutionMode.ASK
-        with patch.object(self.rag_chat, "confirm", return_value=True):
-            result = self.rag_chat.execute_tool(
+        self.session_workspace.EXECUTION_MODE = ExecutionMode.ASK
+        with patch.object(self.session_workspace, "confirm", return_value=True):
+            result = self.tool_routing.execute_tool(
                 "write_file", {"path": "usr/src/ping.c", "content": "int main(void){}"}, {})
         # Refusing `usr/src/` while allowing `usr/src/ping.c` was arbitrary:
         # the containment check already covers the resolved path.
@@ -289,46 +296,46 @@ class RagChatWorkspaceIntegrationTests(unittest.TestCase):
         self.assertTrue((self.root / "usr" / "src" / "ping.c").is_file())
 
     def test_write_file_creates_nothing_when_authorization_is_refused(self):
-        self.rag_chat.EXECUTION_MODE = ExecutionMode.ASK
-        with patch.object(self.rag_chat, "confirm", return_value=False):
-            self.rag_chat.execute_tool(
+        self.session_workspace.EXECUTION_MODE = ExecutionMode.ASK
+        with patch.object(self.session_workspace, "confirm", return_value=False):
+            self.tool_routing.execute_tool(
                 "write_file", {"path": "denied/deep/x.c", "content": "x"}, {})
         # Creating directories IS a mutation: it must happen after the gate,
         # never as a side effect of preparing the write.
         self.assertFalse((self.root / "denied").exists())
 
     def test_write_file_creates_no_directory_outside_a_root(self):
-        self.rag_chat.EXECUTION_MODE = ExecutionMode.ASK
-        with patch.object(self.rag_chat, "confirm", return_value=True):
-            result = self.rag_chat.execute_tool(
+        self.session_workspace.EXECUTION_MODE = ExecutionMode.ASK
+        with patch.object(self.session_workspace, "confirm", return_value=True):
+            result = self.tool_routing.execute_tool(
                 "write_file",
                 {"path": str(self.outside / "deep" / "x.c"), "content": "x"}, {})
         self.assertIn("escapes the workspace", result)
         self.assertFalse((self.outside / "deep").exists())
 
     def test_edit_and_append_still_require_an_existing_file(self):
-        self.rag_chat.EXECUTION_MODE = ExecutionMode.ASK
-        with patch.object(self.rag_chat, "confirm", return_value=True):
+        self.session_workspace.EXECUTION_MODE = ExecutionMode.ASK
+        with patch.object(self.session_workspace, "confirm", return_value=True):
             for tool in ("edit_file", "append_file"):
-                result = self.rag_chat.execute_tool(
+                result = self.tool_routing.execute_tool(
                     tool, {"path": "absent/deep/x.c", "content": "x",
                            "old_text": "a", "new_text": "b"}, {})
                 self.assertIn("ERROR", result, tool)
         self.assertFalse((self.root / "absent").exists())
 
     def test_write_file_stays_inside_workspace(self):
-        self.rag_chat.EXECUTION_MODE = ExecutionMode.ASK
-        with patch.object(self.rag_chat, "confirm", return_value=True):
-            result = self.rag_chat.execute_tool(
+        self.session_workspace.EXECUTION_MODE = ExecutionMode.ASK
+        with patch.object(self.session_workspace, "confirm", return_value=True):
+            result = self.tool_routing.execute_tool(
                 "write_file", {"path": "created.txt", "content": "inside"}, {}
             )
         self.assertTrue(result.startswith("OK:"))
         self.assertEqual((self.root / "created.txt").read_text(), "inside\n")
 
     def test_safe_mode_denies_mutation_before_confirmation(self):
-        self.rag_chat.EXECUTION_MODE = ExecutionMode.SAFE
-        with patch.object(self.rag_chat, "confirm") as confirm:
-            result = self.rag_chat.execute_tool(
+        self.session_workspace.EXECUTION_MODE = ExecutionMode.SAFE
+        with patch.object(self.session_workspace, "confirm") as confirm:
+            result = self.tool_routing.execute_tool(
                 "write_file", {"path": "blocked.txt", "content": "x"}, {}
             )
         # The refusal names the mode and offers no other way to write. It is
@@ -342,18 +349,18 @@ class RagChatWorkspaceIntegrationTests(unittest.TestCase):
         self.assertFalse((self.root / "blocked.txt").exists())
 
     def test_ask_mode_requires_confirmation_for_mutation(self):
-        self.rag_chat.EXECUTION_MODE = ExecutionMode.ASK
-        with patch.object(self.rag_chat, "confirm", return_value=False):
-            result = self.rag_chat.execute_tool(
+        self.session_workspace.EXECUTION_MODE = ExecutionMode.ASK
+        with patch.object(self.session_workspace, "confirm", return_value=False):
+            result = self.tool_routing.execute_tool(
                 "write_file", {"path": "not-approved.txt", "content": "x"}, {}
             )
         self.assertEqual(result, "CANCELLED")
         self.assertFalse((self.root / "not-approved.txt").exists())
 
     def test_auto_mode_allows_workspace_mutation(self):
-        self.rag_chat.EXECUTION_MODE = ExecutionMode.AUTO
-        with patch.object(self.rag_chat, "confirm") as confirm:
-            result = self.rag_chat.execute_tool(
+        self.session_workspace.EXECUTION_MODE = ExecutionMode.AUTO
+        with patch.object(self.session_workspace, "confirm") as confirm:
+            result = self.tool_routing.execute_tool(
                 "write_file", {"path": "auto.txt", "content": "x"}, {}
             )
         self.assertTrue(result.startswith("OK:"))
@@ -361,8 +368,8 @@ class RagChatWorkspaceIntegrationTests(unittest.TestCase):
         self.assertEqual((self.root / "auto.txt").read_text(), "x\n")
 
     def test_mutating_tool_actions_are_audited_without_file_contents(self):
-        self.rag_chat.EXECUTION_MODE = ExecutionMode.AUTO
-        result = self.rag_chat.execute_tool(
+        self.session_workspace.EXECUTION_MODE = ExecutionMode.AUTO
+        result = self.tool_routing.execute_tool(
             "write_file", {"path": "audited.txt", "content": "TOP SECRET CONTENT"}, {}
         )
         self.assertTrue(result.startswith("OK:"))
@@ -373,8 +380,8 @@ class RagChatWorkspaceIntegrationTests(unittest.TestCase):
         self.assertNotIn("TOP SECRET CONTENT", self.audit_log.read_text())
 
     def test_denied_mutation_attempt_is_audited(self):
-        self.rag_chat.EXECUTION_MODE = ExecutionMode.SAFE
-        self.rag_chat.execute_tool(
+        self.session_workspace.EXECUTION_MODE = ExecutionMode.SAFE
+        self.tool_routing.execute_tool(
             "write_file", {"path": "denied.txt", "content": "x"}, {}
         )
         event = json.loads(self.audit_log.read_text().strip())
@@ -383,69 +390,82 @@ class RagChatWorkspaceIntegrationTests(unittest.TestCase):
         self.assertFalse(event["approved"])
 
     def test_safe_mode_allows_simple_read_only_command_without_shell(self):
-        self.rag_chat.EXECUTION_MODE = ExecutionMode.SAFE
-        with patch.object(self.rag_chat.COMMAND_RUNNER, "run_simple",
+        self.session_workspace.EXECUTION_MODE = ExecutionMode.SAFE
+        with patch.object(self.session_workspace.COMMAND_RUNNER, "run_simple",
                           return_value=ToolResult("ok", "command completed", stdout="ok")) as run:
-            result = self.rag_chat.run_cmd("pwd", need_confirm=False)
+            result = self.session_workspace.run_cmd("pwd", need_confirm=False)
         # pwd really runs in the sandbox: it prints the mount, which is now the
         # workspace's own host path.
-        self.assertEqual(result, self.rag_chat.sandbox_mount() + "\n")
+        self.assertEqual(result, self.session_workspace.sandbox_mount() + "\n")
         run.assert_not_called()
 
     def test_safe_mode_rejects_mutation_but_allows_read_only_pipelines(self):
-        self.rag_chat.EXECUTION_MODE = ExecutionMode.SAFE
+        self.session_workspace.EXECUTION_MODE = ExecutionMode.SAFE
         self.assertIn("workspace_mutating commands are disabled in safe mode",
-                      self.rag_chat.run_cmd("make test", need_confirm=False))
+                      self.session_workspace.run_cmd("make test", need_confirm=False))
         # A pipeline that writes is refused on the capability, not the class.
         self.assertIn("required capabilities are not allowed",
-                      self.rag_chat.run_cmd("echo x > f", need_confirm=False))
+                      self.session_workspace.run_cmd("echo x > f", need_confirm=False))
         # A read-only pipeline is authorised: it reaches execution instead of
         # being turned away by the policy. Whether the sandbox is available in
         # this environment is a separate concern, so assert on the refusal
         # messages being gone rather than on the output.
-        outcome = self.rag_chat.run_cmd("ls | head", need_confirm=False)
+        outcome = self.session_workspace.run_cmd("ls | head", need_confirm=False)
         self.assertNotIn("disabled in safe mode", outcome)
         self.assertNotIn("required capabilities are not allowed", outcome)
 
     def test_ask_mode_fails_closed_for_complex_command_without_sandbox(self):
-        self.rag_chat.EXECUTION_MODE = ExecutionMode.ASK
-        old_sandbox = self.rag_chat.COMMAND_RUNNER.sandbox
-        self.rag_chat.COMMAND_RUNNER.sandbox = BubblewrapSandbox(
+        self.session_workspace.EXECUTION_MODE = ExecutionMode.ASK
+        old_sandbox = self.session_workspace.COMMAND_RUNNER.sandbox
+        self.session_workspace.COMMAND_RUNNER.sandbox = BubblewrapSandbox(
             binary="/definitely/missing/bwrap"
         )
         try:
-            with patch.object(self.rag_chat, "confirm", return_value=True), \
-                 patch.object(self.rag_chat.COMMAND_RUNNER, "run_simple") as simple, \
-                 patch.object(self.rag_chat.COMMAND_RUNNER, "run_complex_approved") as complex_run:
-                result = self.rag_chat.run_cmd("ls | head", need_confirm=False)
+            with patch.object(self.session_workspace, "confirm", return_value=True), \
+                 patch.object(self.session_workspace.COMMAND_RUNNER, "run_simple") as simple, \
+                 patch.object(self.session_workspace.COMMAND_RUNNER, "run_complex_approved") as complex_run:
+                result = self.session_workspace.run_cmd("ls | head", need_confirm=False)
             self.assertIn("sandbox unavailable", result)
             simple.assert_not_called()
             complex_run.assert_not_called()
         finally:
-            self.rag_chat.COMMAND_RUNNER.sandbox = old_sandbox
+            self.session_workspace.COMMAND_RUNNER.sandbox = old_sandbox
 
     def test_auto_mode_fails_closed_for_complex_commands_without_sandbox(self):
-        self.rag_chat.EXECUTION_MODE = ExecutionMode.AUTO
-        old_sandbox = self.rag_chat.COMMAND_RUNNER.sandbox
-        self.rag_chat.COMMAND_RUNNER.sandbox = BubblewrapSandbox(
+        self.session_workspace.EXECUTION_MODE = ExecutionMode.AUTO
+        old_sandbox = self.session_workspace.COMMAND_RUNNER.sandbox
+        self.session_workspace.COMMAND_RUNNER.sandbox = BubblewrapSandbox(
             binary="/definitely/missing/bwrap"
         )
         try:
             self.assertIn("sandbox unavailable",
-                          self.rag_chat.run_cmd("ls | head", need_confirm=False))
+                          self.session_workspace.run_cmd("ls | head", need_confirm=False))
         finally:
-            self.rag_chat.COMMAND_RUNNER.sandbox = old_sandbox
+            self.session_workspace.COMMAND_RUNNER.sandbox = old_sandbox
 
 
 class RagChatCompatibilityTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        from cli import rag_chat
+        from cli import (
+            chat_settings, corpus_search, model_io, operator_input,
+            rag_chat, session_history, session_workspace,
+            startup_banner, terminal_ui, tool_routing,
+        )
 
         cls.rag_chat = rag_chat
+        cls.chat_settings = chat_settings
+        cls.corpus_search = corpus_search
+        cls.model_io = model_io
+        cls.operator_input = operator_input
+        cls.session_history = session_history
+        cls.session_workspace = session_workspace
+        cls.startup_banner = startup_banner
+        cls.terminal_ui = terminal_ui
+        cls.tool_routing = tool_routing
 
     def test_openai_tool_schema_is_preserved(self):
-        tools = self.rag_chat.TOOLS
+        tools = self.tool_routing.TOOLS
         self.assertEqual([tool["function"]["name"] for tool in tools], [
             "bash", "edit_file", "write_file", "append_file", "delete_file",
             "remember", "plan_change", "search_corpus", "search_internet",
@@ -467,12 +487,12 @@ class RagChatCompatibilityTests(unittest.TestCase):
         client = type("Client", (), {
             "chat": type("Chat", (), {"completions": completions})()
         })()
-        text, calls = self.rag_chat.chat_once(
+        text, calls = self.model_io.chat_once(
             client, [{"role": "user", "content": "hello"}], use_tools=True
         )
         self.assertEqual((text, calls), ("", []))
         self.assertTrue(completions.kwargs["stream"])
-        self.assertEqual(completions.kwargs["tools"], self.rag_chat.TOOLS)
+        self.assertEqual(completions.kwargs["tools"], self.tool_routing.TOOLS)
         self.assertEqual(completions.kwargs["extra_body"]["chat_template_kwargs"],
                          {"enable_thinking": False})
         self.assertEqual(completions.kwargs["model"], "qwen3")
@@ -481,19 +501,20 @@ class RagChatCompatibilityTests(unittest.TestCase):
         # Anchored on the module's own location, not an absolute literal: the
         # literal went stale when the tree was relocated and startup broke.
         app_dir = os.path.dirname(os.path.dirname(os.path.realpath(self.rag_chat.__file__)))
-        self.assertEqual(self.rag_chat.APP_DIR, app_dir)
-        self.assertEqual(self.rag_chat.ROOT_DIR, os.path.dirname(app_dir))
+        self.assertEqual(self.chat_settings.APP_DIR, app_dir)
+        self.assertEqual(self.chat_settings.ROOT_DIR, os.path.dirname(app_dir))
         # The production default is the checkout's own index; a test run that
         # names none is given a temporary one instead, never the real index.
-        self.assertIn('f"{APP_DIR}/chromadb"', Path(self.rag_chat.__file__).read_text())
+        client = "".join(path.read_text() for path in
+                         sorted(Path(self.rag_chat.__file__).parent.glob("*.py")))
+        self.assertIn('f"{APP_DIR}/chromadb"', client)
         if not os.environ.get("SPEAR_DB_PATH"):
-            self.assertFalse(self.rag_chat.DB_PATH.startswith(app_dir))
-        self.assertNotIn("/opt/llm/spear/spear",
-                         Path(self.rag_chat.__file__).read_text())
-        self.assertEqual(self.rag_chat.TOP_K, 12)
-        self.assertEqual(self.rag_chat.MAX_CONTEXT_CHARS, 12000)
-        self.assertEqual(self.rag_chat.MAX_HISTORY, 80)
-        self.assertEqual(self.rag_chat.HISTORY_INJECT, 40)
+            self.assertFalse(self.chat_settings.DB_PATH.startswith(app_dir))
+        self.assertNotIn("/opt/llm/spear/spear", client)
+        self.assertEqual(self.corpus_search.TOP_K, 12)
+        self.assertEqual(self.corpus_search.MAX_CONTEXT_CHARS, 12000)
+        self.assertEqual(self.session_history.MAX_HISTORY, 80)
+        self.assertEqual(self.session_history.HISTORY_INJECT, 40)
         # The agent-loop budget is deliberately NOT pinned to a literal here.
         # It used to assert "MAX_TOOL_ROUNDS = 8", which froze a number without
         # testing anything: 8 rounds cut off legitimate investigation — finding
@@ -511,12 +532,12 @@ class RagChatCompatibilityTests(unittest.TestCase):
                                     f"{var} is too small to finish a real task")
 
     def test_absolute_path_flag_is_workspace_limited(self):
-        source = Path(self.rag_chat.__file__).read_text()
+        source = Path(self.session_workspace.__file__).read_text()
         self.assertIn('allow_absolute_paths="--allow-absolute-paths" in sys.argv[1:]',
                       source)
 
     def test_banner_names_the_backend_for_all_three(self):
-        label = self.rag_chat.backend_label
+        label = self.startup_banner.backend_label
         self.assertEqual(label("anthropic", "http://127.0.0.1:8080/v1"), "anthropic API")
         self.assertEqual(label("openai-compatible", "http://127.0.0.1:8081/v1"),
                          "remote/pod vLLM")
@@ -537,8 +558,8 @@ class RagChatCompatibilityTests(unittest.TestCase):
         os.environ["SPEAR_BACKEND_LABEL"] = "gpu-host.example (tunnel :8082)"
         try:
             self.assertEqual(
-                self.rag_chat.backend_label("openai-compatible",
-                                            "http://127.0.0.1:8082/v1"),
+                self.startup_banner.backend_label("openai-compatible",
+                                                  "http://127.0.0.1:8082/v1"),
                 "gpu-host.example (tunnel :8082)")
         finally:
             os.environ.pop("SPEAR_BACKEND_LABEL", None)
@@ -550,8 +571,8 @@ class RagChatCompatibilityTests(unittest.TestCase):
         os.environ["SPEAR_BACKEND_LABEL"] = "   "
         try:
             self.assertEqual(
-                self.rag_chat.backend_label("openai-compatible",
-                                            "http://127.0.0.1:8080/v1"),
+                self.startup_banner.backend_label("openai-compatible",
+                                                  "http://127.0.0.1:8080/v1"),
                 "local llama-server")
         finally:
             os.environ.pop("SPEAR_BACKEND_LABEL", None)
@@ -649,7 +670,7 @@ class RagChatCompatibilityTests(unittest.TestCase):
                 # Every backend must be reachable by a flag, listed by the
                 # picker, documented in --help, and given its own tunnel port —
                 # a new one that lands in only some of those is half-wired.
-                help_text = self.rag_chat.HELP_TEXT
+                help_text = self.startup_banner.HELP_TEXT
                 for name in backend_select.BACKENDS:
                     self.assertIn(name, help_text, f"{name} missing from --help")
                 launcher = Path(backend_select.APP_DIR, "spear-chat.sh").read_text()
@@ -668,14 +689,14 @@ class RagChatCompatibilityTests(unittest.TestCase):
         import inspect
         import re as _re
 
-        help_text = self.rag_chat.HELP_TEXT
+        help_text = self.startup_banner.HELP_TEXT
         # Derive the flags from the parsers themselves rather than restating a
         # list here: a hand-written help drifts silently, and the whole point
         # of adding it was that the flags were undiscoverable.
         parsed = set()
-        for fn in (self.rag_chat.execution_mode_from_argv,
-                   self.rag_chat.capability_policy_from_argv,
-                   self.rag_chat.model_provider_from_argv):
+        for fn in (self.session_workspace.execution_mode_from_argv,
+                   self.session_workspace.capability_policy_from_argv,
+                   self.model_io.model_provider_from_argv):
             parsed |= set(_re.findall(r'"(--?[a-z][a-z-]*)"', inspect.getsource(fn)))
         self.assertIn("--auto", parsed)  # the derivation itself must work
         undocumented = sorted(f for f in parsed if f not in help_text)
@@ -706,18 +727,18 @@ class RagChatCompatibilityTests(unittest.TestCase):
             (ExecutionMode.AUTO, "without asking", ("--ask", "--safe",
                                                     "--no-network")),
         ):
-            row = self.rag_chat.permissions_row(mode)
+            row = self.startup_banner.permissions_row(mode)
             self.assertIn(expected, row, f"{mode}: {row}")
             for flag in flags:
                 self.assertIn(flag, row, f"{mode} lacks {flag}: {row}")
         # SAFE must never claim it will ask; ASK must never claim it is silent.
         self.assertNotIn("ask before each",
-                         self.rag_chat.permissions_row(ExecutionMode.SAFE))
+                         self.startup_banner.permissions_row(ExecutionMode.SAFE))
         self.assertNotIn("(default)",
-                         self.rag_chat.permissions_row(ExecutionMode.AUTO))
+                         self.startup_banner.permissions_row(ExecutionMode.AUTO))
 
     def test_tab_completes_commands_and_nothing_else(self):
-        complete = self.rag_chat.completion_candidates
+        complete = self.operator_input.completion_candidates
         self.assertEqual(complete("/st", "/st"), ["/standard"])
         self.assertIn("/search", complete("/", "/"))
         # A question to the model is never completed.
@@ -734,7 +755,7 @@ class RagChatCompatibilityTests(unittest.TestCase):
             open(pdf, "w").close()
             typed = os.path.join(directory, "stan")
 
-            self.assertEqual(self.rag_chat.completion_candidates(
+            self.assertEqual(self.operator_input.completion_candidates(
                 "/standard ingest " + typed, typed), [pdf])
 
     def test_a_long_command_shows_its_phases_on_the_spinner(self):
@@ -750,7 +771,7 @@ class RagChatCompatibilityTests(unittest.TestCase):
         with mock.patch("sys.stdout", out), \
                 mock.patch.object(self.rag_chat.time, "time",
                                   side_effect=[0, 10, 20, 30]):
-            progress = self.rag_chat.SpinnerProgress(spinner)
+            progress = self.terminal_ui.SpinnerProgress(spinner)
             progress("extracting text")
             progress("writing corpus", 0, 100)
             progress("writing corpus", 25, 100)
@@ -768,10 +789,10 @@ class RagChatCompatibilityTests(unittest.TestCase):
         import os
         import tempfile
 
-        app_dir = self.rag_chat.APP_DIR
+        app_dir = self.chat_settings.APP_DIR
         in_tree = {name: os.path.join(app_dir, name)
                    for name in ("rules", "skills", "benches")}
-        row = self.rag_chat.content_row(in_tree)
+        row = self.startup_banner.content_row(in_tree)
         self.assertIn("in-tree", row)
         self.assertNotIn("missing", row)
 
@@ -781,14 +802,14 @@ class RagChatCompatibilityTests(unittest.TestCase):
             for path in external.values():
                 os.mkdir(path)
 
-            row = self.rag_chat.content_row(external)
+            row = self.startup_banner.content_row(external)
             self.assertIn(directory, row)
             self.assertIn("rules, skills, benches", row)
             self.assertNotIn("in-tree", row)
             self.assertNotIn("missing", row)
 
             os.rmdir(external["benches"])
-            self.assertIn("missing: benches", self.rag_chat.content_row(external))
+            self.assertIn("missing: benches", self.startup_banner.content_row(external))
 
     def test_session_settings_are_reachable_as_flags(self):
         """They were environment variables only. Nothing in --help mentioned
@@ -798,7 +819,7 @@ class RagChatCompatibilityTests(unittest.TestCase):
 
         environment = {}
         with unittest.mock.patch.dict(os.environ, environment, clear=False):
-            left = self.rag_chat.apply_env_options(
+            left = self.chat_settings.apply_env_options(
                 ["--safe", "--ctx", "65536", "--standard-embed-remote",
                  "gpu@example.invalid", "--trace", "--corpus", "so3"])
 
@@ -811,16 +832,16 @@ class RagChatCompatibilityTests(unittest.TestCase):
 
     def test_a_settings_flag_without_a_value_is_refused(self):
         with self.assertRaises(SystemExit) as raised:
-            self.rag_chat.apply_env_options(["--ctx"])
+            self.chat_settings.apply_env_options(["--ctx"])
 
         self.assertIn("--ctx", str(raised.exception))
 
     def test_every_settings_flag_is_documented_by_its_own_table(self):
         """The help text is rendered FROM the parser's table, so a flag added
         without a line in --help cannot happen."""
-        rendered = self.rag_chat._env_option_lines()
+        rendered = self.startup_banner._env_option_lines()
 
-        for flag, (variable, _) in self.rag_chat.ENV_OPTIONS.items():
+        for flag, (variable, _) in self.chat_settings.ENV_OPTIONS.items():
             self.assertIn(flag, rendered)
             self.assertIn(variable, rendered)
 
@@ -828,17 +849,17 @@ class RagChatCompatibilityTests(unittest.TestCase):
         for flag, mode in (("--safe", ExecutionMode.SAFE), ("--ask", ExecutionMode.ASK),
                            ("--confirm", ExecutionMode.ASK), ("--auto", ExecutionMode.AUTO),
                            ("--yolo", ExecutionMode.AUTO)):
-            self.assertEqual(self.rag_chat.execution_mode_from_argv([flag]), mode)
-        policy = self.rag_chat.capability_policy_from_argv(["--ask", "--no-network"])
+            self.assertEqual(self.session_workspace.execution_mode_from_argv([flag]), mode)
+        policy = self.session_workspace.capability_policy_from_argv(["--ask", "--no-network"])
         self.assertNotIn(Capability.NETWORK, policy.ask)
         # --no-network has to reach AUTO too, now that AUTO has the network:
         # stripping it from ASK alone would leave the flag doing nothing in
         # the one mode where it is not confirmed command by command.
         self.assertNotIn(Capability.NETWORK, policy.auto)
         self.assertIn(Capability.NETWORK,
-                      self.rag_chat.capability_policy_from_argv(["--ask"]).ask)
+                      self.session_workspace.capability_policy_from_argv(["--ask"]).ask)
         self.assertIn(Capability.NETWORK,
-                      self.rag_chat.capability_policy_from_argv([]).auto)
+                      self.session_workspace.capability_policy_from_argv([]).auto)
 
 
 class WorkspaceTests(unittest.TestCase):
@@ -2731,69 +2752,69 @@ class Slirp4netnsNetworkTests(unittest.TestCase):
 
     def test_auto_workspace_mutation_fails_closed_without_sandbox(self):
         sandbox = self.sandbox(binary="/definitely/missing/bwrap")
-        from cli import rag_chat
+        from cli import session_workspace
 
-        old_mode = rag_chat.EXECUTION_MODE
-        old_sandbox = getattr(rag_chat.COMMAND_RUNNER, "sandbox", None)
+        old_mode = session_workspace.EXECUTION_MODE
+        old_sandbox = getattr(session_workspace.COMMAND_RUNNER, "sandbox", None)
         try:
-            rag_chat.EXECUTION_MODE = ExecutionMode.AUTO
-            rag_chat.COMMAND_RUNNER.sandbox = sandbox
-            result = rag_chat.run_cmd("make test", need_confirm=False)
+            session_workspace.EXECUTION_MODE = ExecutionMode.AUTO
+            session_workspace.COMMAND_RUNNER.sandbox = sandbox
+            result = session_workspace.run_cmd("make test", need_confirm=False)
         finally:
-            rag_chat.EXECUTION_MODE = old_mode
-            rag_chat.COMMAND_RUNNER.sandbox = old_sandbox
+            session_workspace.EXECUTION_MODE = old_mode
+            session_workspace.COMMAND_RUNNER.sandbox = old_sandbox
         self.assertIn("sandbox", result.lower())
         self.assertIn("unavailable", result.lower())
 
     def test_auto_shell_complex_fails_closed_without_sandbox(self):
         sandbox = self.sandbox(binary="/definitely/missing/bwrap")
-        from cli import rag_chat
+        from cli import session_workspace
 
-        old_mode = rag_chat.EXECUTION_MODE
-        old_sandbox = getattr(rag_chat.COMMAND_RUNNER, "sandbox", None)
+        old_mode = session_workspace.EXECUTION_MODE
+        old_sandbox = getattr(session_workspace.COMMAND_RUNNER, "sandbox", None)
         try:
-            rag_chat.EXECUTION_MODE = ExecutionMode.AUTO
-            rag_chat.COMMAND_RUNNER.sandbox = sandbox
-            result = rag_chat.run_cmd("ls | head", need_confirm=False)
+            session_workspace.EXECUTION_MODE = ExecutionMode.AUTO
+            session_workspace.COMMAND_RUNNER.sandbox = sandbox
+            result = session_workspace.run_cmd("ls | head", need_confirm=False)
         finally:
-            rag_chat.EXECUTION_MODE = old_mode
-            rag_chat.COMMAND_RUNNER.sandbox = old_sandbox
+            session_workspace.EXECUTION_MODE = old_mode
+            session_workspace.COMMAND_RUNNER.sandbox = old_sandbox
         self.assertIn("sandbox", result.lower())
         self.assertIn("unavailable", result.lower())
 
     def test_ask_complex_command_keeps_explicit_confirmation_gate(self):
         sandbox = self.sandbox(binary="/definitely/missing/bwrap")
-        from cli import rag_chat
+        from cli import session_workspace
 
-        old_mode = rag_chat.EXECUTION_MODE
-        old_sandbox = getattr(rag_chat.COMMAND_RUNNER, "sandbox", None)
+        old_mode = session_workspace.EXECUTION_MODE
+        old_sandbox = getattr(session_workspace.COMMAND_RUNNER, "sandbox", None)
         try:
-            rag_chat.EXECUTION_MODE = ExecutionMode.ASK
-            rag_chat.COMMAND_RUNNER.sandbox = sandbox
-            with patch.object(rag_chat, "confirm", return_value=False) as confirm:
-                result = rag_chat.run_cmd("ls | head", need_confirm=False)
+            session_workspace.EXECUTION_MODE = ExecutionMode.ASK
+            session_workspace.COMMAND_RUNNER.sandbox = sandbox
+            with patch.object(session_workspace, "confirm", return_value=False) as confirm:
+                result = session_workspace.run_cmd("ls | head", need_confirm=False)
         finally:
-            rag_chat.EXECUTION_MODE = old_mode
-            rag_chat.COMMAND_RUNNER.sandbox = old_sandbox
+            session_workspace.EXECUTION_MODE = old_mode
+            session_workspace.COMMAND_RUNNER.sandbox = old_sandbox
         confirm.assert_called_once()
         self.assertEqual(result, "CANCELLED")
 
     def test_ask_complex_command_fails_closed_after_approved_confirmation(self):
         sandbox = self.sandbox(binary="/definitely/missing/bwrap")
-        from cli import rag_chat
+        from cli import session_workspace
 
-        old_mode = rag_chat.EXECUTION_MODE
-        old_sandbox = getattr(rag_chat.COMMAND_RUNNER, "sandbox", None)
+        old_mode = session_workspace.EXECUTION_MODE
+        old_sandbox = getattr(session_workspace.COMMAND_RUNNER, "sandbox", None)
         try:
-            rag_chat.EXECUTION_MODE = ExecutionMode.ASK
-            rag_chat.COMMAND_RUNNER.sandbox = sandbox
-            with patch.object(rag_chat, "confirm", return_value=True) as confirm, \
-                 patch.object(rag_chat.COMMAND_RUNNER, "run_simple") as simple, \
-                 patch.object(rag_chat.COMMAND_RUNNER, "run_complex_approved") as complex_run:
-                result = rag_chat.run_cmd("printf compatibility | cat", need_confirm=False)
+            session_workspace.EXECUTION_MODE = ExecutionMode.ASK
+            session_workspace.COMMAND_RUNNER.sandbox = sandbox
+            with patch.object(session_workspace, "confirm", return_value=True) as confirm, \
+                 patch.object(session_workspace.COMMAND_RUNNER, "run_simple") as simple, \
+                 patch.object(session_workspace.COMMAND_RUNNER, "run_complex_approved") as complex_run:
+                result = session_workspace.run_cmd("printf compatibility | cat", need_confirm=False)
         finally:
-            rag_chat.EXECUTION_MODE = old_mode
-            rag_chat.COMMAND_RUNNER.sandbox = old_sandbox
+            session_workspace.EXECUTION_MODE = old_mode
+            session_workspace.COMMAND_RUNNER.sandbox = old_sandbox
         confirm.assert_called_once()
         simple.assert_not_called()
         complex_run.assert_not_called()
@@ -2975,29 +2996,29 @@ class Phase1bRagChatRoutingTests(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        from cli import rag_chat
+        from cli import session_workspace
 
-        cls.rag_chat = rag_chat
+        cls.session_workspace = session_workspace
 
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
         self.workspace_root = Path(self.temp.name) / "workspace"
         self.workspace_root.mkdir()
-        self.old_mode = self.rag_chat.EXECUTION_MODE
-        self.old_workspace = self.rag_chat.WORKSPACE
-        self.old_project_root = self.rag_chat.PROJECT_ROOT
-        self.old_sandbox = self.rag_chat.COMMAND_RUNNER.sandbox
-        self.old_audit_logger = self.rag_chat.AUDIT_LOGGER
-        self.rag_chat.WORKSPACE = Workspace.from_path(self.workspace_root)
-        self.rag_chat.PROJECT_ROOT = str(self.workspace_root)
-        self.rag_chat.AUDIT_LOGGER = AuditLogger(Path(self.temp.name) / "audit.jsonl")
+        self.old_mode = self.session_workspace.EXECUTION_MODE
+        self.old_workspace = self.session_workspace.WORKSPACE
+        self.old_project_root = self.session_workspace.PROJECT_ROOT
+        self.old_sandbox = self.session_workspace.COMMAND_RUNNER.sandbox
+        self.old_audit_logger = self.session_workspace.AUDIT_LOGGER
+        self.session_workspace.WORKSPACE = Workspace.from_path(self.workspace_root)
+        self.session_workspace.PROJECT_ROOT = str(self.workspace_root)
+        self.session_workspace.AUDIT_LOGGER = AuditLogger(Path(self.temp.name) / "audit.jsonl")
 
     def tearDown(self):
-        self.rag_chat.EXECUTION_MODE = self.old_mode
-        self.rag_chat.WORKSPACE = self.old_workspace
-        self.rag_chat.PROJECT_ROOT = self.old_project_root
-        self.rag_chat.COMMAND_RUNNER.sandbox = self.old_sandbox
-        self.rag_chat.AUDIT_LOGGER = self.old_audit_logger
+        self.session_workspace.EXECUTION_MODE = self.old_mode
+        self.session_workspace.WORKSPACE = self.old_workspace
+        self.session_workspace.PROJECT_ROOT = self.old_project_root
+        self.session_workspace.COMMAND_RUNNER.sandbox = self.old_sandbox
+        self.session_workspace.AUDIT_LOGGER = self.old_audit_logger
         self.temp.cleanup()
 
     def sandbox_available(self):
@@ -3010,20 +3031,20 @@ class Phase1bRagChatRoutingTests(unittest.TestCase):
     def test_read_only_commands_route_only_through_sandbox_in_every_mode(self):
         for mode in (ExecutionMode.SAFE, ExecutionMode.ASK, ExecutionMode.AUTO):
             with self.subTest(mode=mode):
-                self.rag_chat.EXECUTION_MODE = mode
+                self.session_workspace.EXECUTION_MODE = mode
                 sandbox = self.sandbox_available()
-                self.rag_chat.COMMAND_RUNNER.sandbox = sandbox
-                with patch.object(self.rag_chat, "confirm") as confirm, \
-                     patch.object(self.rag_chat.COMMAND_RUNNER, "run_simple") as simple, \
-                     patch.object(self.rag_chat.COMMAND_RUNNER, "run_complex_approved") as complex_run:
-                    result = self.rag_chat.run_cmd("git status", need_confirm=False)
+                self.session_workspace.COMMAND_RUNNER.sandbox = sandbox
+                with patch.object(self.session_workspace, "confirm") as confirm, \
+                     patch.object(self.session_workspace.COMMAND_RUNNER, "run_simple") as simple, \
+                     patch.object(self.session_workspace.COMMAND_RUNNER, "run_complex_approved") as complex_run:
+                    result = self.session_workspace.run_cmd("git status", need_confirm=False)
                 self.assertEqual(result, "sandboxed")
                 confirm.assert_not_called()
                 simple.assert_not_called()
                 complex_run.assert_not_called()
-                sandbox.ensure_available.assert_called_once_with(self.rag_chat.WORKSPACE)
+                sandbox.ensure_available.assert_called_once_with(self.session_workspace.WORKSPACE)
                 sandbox.run.assert_called_once_with(
-                    self.rag_chat.WORKSPACE,
+                    self.session_workspace.WORKSPACE,
                     ["git", "status"],
                     profile=ANY,
                     resource_limits=DEFAULT_RESOURCE_LIMITS,
@@ -3035,29 +3056,29 @@ class Phase1bRagChatRoutingTests(unittest.TestCase):
                 self.assertFalse(profile.network)
 
     def test_read_only_fails_closed_without_bubblewrap_and_never_runs_on_host(self):
-        self.rag_chat.EXECUTION_MODE = ExecutionMode.SAFE
+        self.session_workspace.EXECUTION_MODE = ExecutionMode.SAFE
         sandbox = MagicMock()
         sandbox.ensure_available.return_value = ToolResult("failed", "sandbox unavailable")
-        self.rag_chat.COMMAND_RUNNER.sandbox = sandbox
-        with patch.object(self.rag_chat.COMMAND_RUNNER, "run_simple") as simple, \
-             patch.object(self.rag_chat.COMMAND_RUNNER, "run_complex_approved") as complex_run:
-            result = self.rag_chat.run_cmd("pwd", need_confirm=False)
+        self.session_workspace.COMMAND_RUNNER.sandbox = sandbox
+        with patch.object(self.session_workspace.COMMAND_RUNNER, "run_simple") as simple, \
+             patch.object(self.session_workspace.COMMAND_RUNNER, "run_complex_approved") as complex_run:
+            result = self.session_workspace.run_cmd("pwd", need_confirm=False)
         self.assertIn("sandbox unavailable", result)
         simple.assert_not_called()
         complex_run.assert_not_called()
         sandbox.run.assert_not_called()
 
     def test_auto_workspace_mutation_uses_available_sandbox(self):
-        self.rag_chat.EXECUTION_MODE = ExecutionMode.AUTO
+        self.session_workspace.EXECUTION_MODE = ExecutionMode.AUTO
         sandbox = self.sandbox_available()
-        self.rag_chat.COMMAND_RUNNER.sandbox = sandbox
+        self.session_workspace.COMMAND_RUNNER.sandbox = sandbox
 
-        result = self.rag_chat.run_cmd("make test", need_confirm=False)
+        result = self.session_workspace.run_cmd("make test", need_confirm=False)
 
         self.assertEqual(result, "sandboxed")
-        sandbox.ensure_available.assert_called_once_with(self.rag_chat.WORKSPACE)
+        sandbox.ensure_available.assert_called_once_with(self.session_workspace.WORKSPACE)
         sandbox.run.assert_called_once_with(
-            self.rag_chat.WORKSPACE, ["make", "test"], profile=ANY,
+            self.session_workspace.WORKSPACE, ["make", "test"], profile=ANY,
             resource_limits=DEFAULT_RESOURCE_LIMITS,
             cgroup_limits=DEFAULT_CGROUP_LIMITS,
         )
@@ -3066,15 +3087,15 @@ class Phase1bRagChatRoutingTests(unittest.TestCase):
         }))
 
     def test_auto_shell_complex_uses_shell_inside_available_sandbox(self):
-        self.rag_chat.EXECUTION_MODE = ExecutionMode.AUTO
+        self.session_workspace.EXECUTION_MODE = ExecutionMode.AUTO
         sandbox = self.sandbox_available()
-        self.rag_chat.COMMAND_RUNNER.sandbox = sandbox
+        self.session_workspace.COMMAND_RUNNER.sandbox = sandbox
 
-        result = self.rag_chat.run_cmd("printf sandboxed | cat", need_confirm=False)
+        result = self.session_workspace.run_cmd("printf sandboxed | cat", need_confirm=False)
 
         self.assertEqual(result, "sandboxed")
         sandbox.run.assert_called_once_with(
-            self.rag_chat.WORKSPACE,
+            self.session_workspace.WORKSPACE,
             shell_argv("printf sandboxed | cat"),
             profile=ANY,
             resource_limits=DEFAULT_RESOURCE_LIMITS,
@@ -3082,31 +3103,31 @@ class Phase1bRagChatRoutingTests(unittest.TestCase):
         )
 
     def test_ask_workspace_mutation_uses_sandbox_after_confirmation(self):
-        self.rag_chat.EXECUTION_MODE = ExecutionMode.ASK
+        self.session_workspace.EXECUTION_MODE = ExecutionMode.ASK
         sandbox = self.sandbox_available()
-        self.rag_chat.COMMAND_RUNNER.sandbox = sandbox
-        with patch.object(self.rag_chat, "confirm", return_value=True) as confirm:
-            result = self.rag_chat.run_cmd("pytest tests", need_confirm=False)
+        self.session_workspace.COMMAND_RUNNER.sandbox = sandbox
+        with patch.object(self.session_workspace, "confirm", return_value=True) as confirm:
+            result = self.session_workspace.run_cmd("pytest tests", need_confirm=False)
 
         self.assertEqual(result, "sandboxed")
         confirm.assert_called_once()
         sandbox.run.assert_called_once_with(
-            self.rag_chat.WORKSPACE, ["pytest", "tests"], profile=ANY,
+            self.session_workspace.WORKSPACE, ["pytest", "tests"], profile=ANY,
             resource_limits=DEFAULT_RESOURCE_LIMITS,
             cgroup_limits=DEFAULT_CGROUP_LIMITS,
         )
 
     def test_ask_shell_complex_uses_sandbox_after_confirmation(self):
-        self.rag_chat.EXECUTION_MODE = ExecutionMode.ASK
+        self.session_workspace.EXECUTION_MODE = ExecutionMode.ASK
         sandbox = self.sandbox_available()
-        self.rag_chat.COMMAND_RUNNER.sandbox = sandbox
-        with patch.object(self.rag_chat, "confirm", return_value=True) as confirm:
-            result = self.rag_chat.run_cmd("printf sandboxed | cat", need_confirm=False)
+        self.session_workspace.COMMAND_RUNNER.sandbox = sandbox
+        with patch.object(self.session_workspace, "confirm", return_value=True) as confirm:
+            result = self.session_workspace.run_cmd("printf sandboxed | cat", need_confirm=False)
 
         self.assertEqual(result, "sandboxed")
         confirm.assert_called_once()
         sandbox.run.assert_called_once_with(
-            self.rag_chat.WORKSPACE,
+            self.session_workspace.WORKSPACE,
             shell_argv("printf sandboxed | cat"),
             profile=ANY,
             resource_limits=DEFAULT_RESOURCE_LIMITS,
@@ -3121,12 +3142,12 @@ class Phase1bRagChatRoutingTests(unittest.TestCase):
         a success that never happened -- the concrete way a fabricated
         conclusion survives a harness that already prints exit codes.
         """
-        self.rag_chat.EXECUTION_MODE = ExecutionMode.AUTO
+        self.session_workspace.EXECUTION_MODE = ExecutionMode.AUTO
         sandbox = self.sandbox_available()
         sandbox.run.return_value = ToolResult(
             "failed", "command failed", stdout="last lines", exit_code=2)
-        self.rag_chat.COMMAND_RUNNER.sandbox = sandbox
-        result = self.rag_chat.run_cmd("make 2>&1 | tail -3", need_confirm=False)
+        self.session_workspace.COMMAND_RUNNER.sandbox = sandbox
+        result = self.session_workspace.run_cmd("make 2>&1 | tail -3", need_confirm=False)
         self.assertIn("(exit 2)", result)
 
     def test_sigpipe_from_head_is_not_reported_as_a_failure(self):
@@ -3136,27 +3157,27 @@ class Phase1bRagChatRoutingTests(unittest.TestCase):
         POINT of head, not an error. Reporting 141 would send the model
         debugging one of its most common idioms.
         """
-        self.rag_chat.EXECUTION_MODE = ExecutionMode.AUTO
+        self.session_workspace.EXECUTION_MODE = ExecutionMode.AUTO
         sandbox = self.sandbox_available()
         sandbox.run.return_value = ToolResult(
             "failed", "command failed", stdout="a.c\nb.c", exit_code=141)
-        self.rag_chat.COMMAND_RUNNER.sandbox = sandbox
-        result = self.rag_chat.run_cmd("find . -name '*.c' | head -5",
-                                       need_confirm=False)
+        self.session_workspace.COMMAND_RUNNER.sandbox = sandbox
+        result = self.session_workspace.run_cmd("find . -name '*.c' | head -5",
+                                                need_confirm=False)
         self.assertNotIn("exit", result)
         self.assertIn("a.c", result)
 
     def test_ask_fails_closed_when_sandbox_is_unavailable(self):
-        self.rag_chat.EXECUTION_MODE = ExecutionMode.ASK
+        self.session_workspace.EXECUTION_MODE = ExecutionMode.ASK
         sandbox = MagicMock()
         sandbox.ensure_available.return_value = ToolResult("failed", "sandbox unavailable")
-        self.rag_chat.COMMAND_RUNNER.sandbox = sandbox
-        with patch.object(self.rag_chat, "confirm", return_value=True), \
-             patch.object(self.rag_chat.COMMAND_RUNNER, "run_simple") as simple, \
-             patch.object(self.rag_chat.COMMAND_RUNNER, "run_complex_approved",
+        self.session_workspace.COMMAND_RUNNER.sandbox = sandbox
+        with patch.object(self.session_workspace, "confirm", return_value=True), \
+             patch.object(self.session_workspace.COMMAND_RUNNER, "run_simple") as simple, \
+             patch.object(self.session_workspace.COMMAND_RUNNER, "run_complex_approved",
                           return_value=ToolResult("ok", "done", stdout="compatibility")) as complex_run:
-            mutate = self.rag_chat.run_cmd("make test", need_confirm=False)
-            complex_result = self.rag_chat.run_cmd("printf compatibility | cat", need_confirm=False)
+            mutate = self.session_workspace.run_cmd("make test", need_confirm=False)
+            complex_result = self.session_workspace.run_cmd("printf compatibility | cat", need_confirm=False)
 
         self.assertIn("sandbox unavailable", mutate)
         self.assertIn("sandbox unavailable", complex_result)
@@ -3164,14 +3185,14 @@ class Phase1bRagChatRoutingTests(unittest.TestCase):
         complex_run.assert_not_called()
 
     def test_ask_declined_command_does_not_start_sandbox_or_runner(self):
-        self.rag_chat.EXECUTION_MODE = ExecutionMode.ASK
+        self.session_workspace.EXECUTION_MODE = ExecutionMode.ASK
         sandbox = self.sandbox_available()
-        self.rag_chat.COMMAND_RUNNER.sandbox = sandbox
-        with patch.object(self.rag_chat, "confirm", return_value=False), \
-             patch.object(self.rag_chat.COMMAND_RUNNER, "run_simple") as simple, \
-             patch.object(self.rag_chat.COMMAND_RUNNER, "run_complex_approved") as complex_run:
-            mutate = self.rag_chat.run_cmd("make test", need_confirm=False)
-            complex_result = self.rag_chat.run_cmd("printf x | cat", need_confirm=False)
+        self.session_workspace.COMMAND_RUNNER.sandbox = sandbox
+        with patch.object(self.session_workspace, "confirm", return_value=False), \
+             patch.object(self.session_workspace.COMMAND_RUNNER, "run_simple") as simple, \
+             patch.object(self.session_workspace.COMMAND_RUNNER, "run_complex_approved") as complex_run:
+            mutate = self.session_workspace.run_cmd("make test", need_confirm=False)
+            complex_result = self.session_workspace.run_cmd("printf x | cat", need_confirm=False)
 
         self.assertEqual(mutate, "CANCELLED")
         self.assertEqual(complex_result, "CANCELLED")
@@ -3181,14 +3202,14 @@ class Phase1bRagChatRoutingTests(unittest.TestCase):
         complex_run.assert_not_called()
 
     def test_auto_unavailable_sandbox_never_uses_non_sandboxed_runner(self):
-        self.rag_chat.EXECUTION_MODE = ExecutionMode.AUTO
+        self.session_workspace.EXECUTION_MODE = ExecutionMode.AUTO
         sandbox = MagicMock()
         sandbox.ensure_available.return_value = ToolResult("failed", "sandbox unavailable")
-        self.rag_chat.COMMAND_RUNNER.sandbox = sandbox
-        with patch.object(self.rag_chat.COMMAND_RUNNER, "run_simple") as simple, \
-             patch.object(self.rag_chat.COMMAND_RUNNER, "run_complex_approved") as complex_run:
-            mutate = self.rag_chat.run_cmd("make test", need_confirm=False)
-            complex_result = self.rag_chat.run_cmd("printf x | cat", need_confirm=False)
+        self.session_workspace.COMMAND_RUNNER.sandbox = sandbox
+        with patch.object(self.session_workspace.COMMAND_RUNNER, "run_simple") as simple, \
+             patch.object(self.session_workspace.COMMAND_RUNNER, "run_complex_approved") as complex_run:
+            mutate = self.session_workspace.run_cmd("make test", need_confirm=False)
+            complex_result = self.session_workspace.run_cmd("printf x | cat", need_confirm=False)
 
         self.assertIn("sandbox unavailable", mutate)
         self.assertIn("sandbox unavailable", complex_result)
@@ -3196,7 +3217,7 @@ class Phase1bRagChatRoutingTests(unittest.TestCase):
         complex_run.assert_not_called()
 
     def test_auto_fails_closed_for_absent_inexecutable_and_refused_sandboxes(self):
-        self.rag_chat.EXECUTION_MODE = ExecutionMode.AUTO
+        self.session_workspace.EXECUTION_MODE = ExecutionMode.AUTO
         non_executable = Path(self.temp.name) / "not-executable-bwrap"
         non_executable.write_text("not executable")
         non_executable.chmod(0o644)
@@ -3208,20 +3229,20 @@ class Phase1bRagChatRoutingTests(unittest.TestCase):
             refused,
         )
         for sandbox in sandboxes:
-            self.rag_chat.COMMAND_RUNNER.sandbox = sandbox
-            with patch.object(self.rag_chat.COMMAND_RUNNER, "run_simple") as simple, \
-                 patch.object(self.rag_chat.COMMAND_RUNNER, "run_complex_approved") as complex_run:
-                result = self.rag_chat.run_cmd("make test", need_confirm=False)
+            self.session_workspace.COMMAND_RUNNER.sandbox = sandbox
+            with patch.object(self.session_workspace.COMMAND_RUNNER, "run_simple") as simple, \
+                 patch.object(self.session_workspace.COMMAND_RUNNER, "run_complex_approved") as complex_run:
+                result = self.session_workspace.run_cmd("make test", need_confirm=False)
             self.assertIn("sandbox unavailable", result)
             simple.assert_not_called()
             complex_run.assert_not_called()
 
     def test_dangerous_command_never_reaches_bubblewrap(self):
-        self.rag_chat.EXECUTION_MODE = ExecutionMode.AUTO
+        self.session_workspace.EXECUTION_MODE = ExecutionMode.AUTO
         sandbox = self.sandbox_available()
-        self.rag_chat.COMMAND_RUNNER.sandbox = sandbox
+        self.session_workspace.COMMAND_RUNNER.sandbox = sandbox
 
-        result = self.rag_chat.run_cmd("rm -rf build", need_confirm=False)
+        result = self.session_workspace.run_cmd("rm -rf build", need_confirm=False)
 
         self.assertIn("command denied", result)
         sandbox.ensure_available.assert_not_called()
@@ -3230,13 +3251,13 @@ class Phase1bRagChatRoutingTests(unittest.TestCase):
     def test_network_is_refused_before_execution_in_safe(self):
         """SAFE stops it before bubblewrap is even asked to exist, and the
         refusal names both ways forward: the flags, and fetch_url."""
-        self.rag_chat.EXECUTION_MODE = ExecutionMode.SAFE
+        self.session_workspace.EXECUTION_MODE = ExecutionMode.SAFE
         sandbox = self.sandbox_available()
-        self.rag_chat.COMMAND_RUNNER.sandbox = sandbox
-        with patch.object(self.rag_chat.COMMAND_RUNNER, "run_simple") as simple, \
-             patch.object(self.rag_chat.COMMAND_RUNNER, "run_complex_approved") as complex_run:
-            result = self.rag_chat.run_cmd("curl https://example.invalid",
-                                           need_confirm=False)
+        self.session_workspace.COMMAND_RUNNER.sandbox = sandbox
+        with patch.object(self.session_workspace.COMMAND_RUNNER, "run_simple") as simple, \
+             patch.object(self.session_workspace.COMMAND_RUNNER, "run_complex_approved") as complex_run:
+            result = self.session_workspace.run_cmd("curl https://example.invalid",
+                                                    need_confirm=False)
         self.assertIn("network", result)
         self.assertIn("fetch_url", result)
         sandbox.ensure_available.assert_not_called()
@@ -3247,29 +3268,29 @@ class Phase1bRagChatRoutingTests(unittest.TestCase):
     def test_auto_network_reaches_the_slirp_sandbox_without_a_prompt(self):
         """AUTO grants the network now; it must still go through the network
         sandbox, and only through it."""
-        self.rag_chat.EXECUTION_MODE = ExecutionMode.AUTO
+        self.session_workspace.EXECUTION_MODE = ExecutionMode.AUTO
         sandbox = self.sandbox_available()
-        self.rag_chat.COMMAND_RUNNER.sandbox = sandbox
-        with patch.object(self.rag_chat, "confirm") as confirm:
-            result = self.rag_chat.run_cmd("curl https://example.invalid",
-                                           need_confirm=False)
+        self.session_workspace.COMMAND_RUNNER.sandbox = sandbox
+        with patch.object(self.session_workspace, "confirm") as confirm:
+            result = self.session_workspace.run_cmd("curl https://example.invalid",
+                                                    need_confirm=False)
         self.assertEqual(result, "sandboxed")
         confirm.assert_not_called()
-        sandbox.preflight_network.assert_called_once_with(self.rag_chat.WORKSPACE)
+        sandbox.preflight_network.assert_called_once_with(self.session_workspace.WORKSPACE)
 
     def test_ask_network_routes_only_to_slirp_sandbox_after_confirmation(self):
-        self.rag_chat.EXECUTION_MODE = ExecutionMode.ASK
+        self.session_workspace.EXECUTION_MODE = ExecutionMode.ASK
         sandbox = self.sandbox_available()
-        self.rag_chat.COMMAND_RUNNER.sandbox = sandbox
-        with patch.object(self.rag_chat, "confirm", return_value=True) as confirm, \
-             patch.object(self.rag_chat.COMMAND_RUNNER, "run_simple") as simple, \
-             patch.object(self.rag_chat.COMMAND_RUNNER, "run_complex_approved") as complex_run:
-            result = self.rag_chat.run_cmd("curl https://example.invalid", need_confirm=False)
+        self.session_workspace.COMMAND_RUNNER.sandbox = sandbox
+        with patch.object(self.session_workspace, "confirm", return_value=True) as confirm, \
+             patch.object(self.session_workspace.COMMAND_RUNNER, "run_simple") as simple, \
+             patch.object(self.session_workspace.COMMAND_RUNNER, "run_complex_approved") as complex_run:
+            result = self.session_workspace.run_cmd("curl https://example.invalid", need_confirm=False)
         self.assertEqual(result, "sandboxed")
         confirm.assert_called_once()
-        sandbox.preflight_network.assert_called_once_with(self.rag_chat.WORKSPACE)
+        sandbox.preflight_network.assert_called_once_with(self.session_workspace.WORKSPACE)
         sandbox.run.assert_called_once_with(
-            self.rag_chat.WORKSPACE, ["curl", "https://example.invalid"],
+            self.session_workspace.WORKSPACE, ["curl", "https://example.invalid"],
             profile=ANY, backend=NetworkBackend.SLIRP4NETNS,
             resource_limits=DEFAULT_RESOURCE_LIMITS,
             cgroup_limits=DEFAULT_CGROUP_LIMITS,
@@ -3279,54 +3300,54 @@ class Phase1bRagChatRoutingTests(unittest.TestCase):
         complex_run.assert_not_called()
 
     def test_ask_network_declined_starts_no_sandbox_or_preflight(self):
-        self.rag_chat.EXECUTION_MODE = ExecutionMode.ASK
+        self.session_workspace.EXECUTION_MODE = ExecutionMode.ASK
         sandbox = self.sandbox_available()
-        self.rag_chat.COMMAND_RUNNER.sandbox = sandbox
-        with patch.object(self.rag_chat, "confirm", return_value=False) as confirm:
-            result = self.rag_chat.run_cmd("curl https://example.invalid", need_confirm=False)
+        self.session_workspace.COMMAND_RUNNER.sandbox = sandbox
+        with patch.object(self.session_workspace, "confirm", return_value=False) as confirm:
+            result = self.session_workspace.run_cmd("curl https://example.invalid", need_confirm=False)
         self.assertEqual(result, "CANCELLED")
         confirm.assert_called_once()
         sandbox.preflight_network.assert_not_called()
         sandbox.run.assert_not_called()
 
     def test_ask_network_fails_closed_for_preflight_or_containment_failure(self):
-        self.rag_chat.EXECUTION_MODE = ExecutionMode.ASK
+        self.session_workspace.EXECUTION_MODE = ExecutionMode.ASK
         for summary in ("slirp unavailable", "network containment failure"):
             with self.subTest(summary=summary):
                 sandbox = self.sandbox_available()
                 sandbox.preflight_network.return_value = ToolResult("failed", summary)
-                self.rag_chat.COMMAND_RUNNER.sandbox = sandbox
-                with patch.object(self.rag_chat, "confirm", return_value=True), \
-                     patch.object(self.rag_chat.COMMAND_RUNNER, "run_simple") as simple:
-                    result = self.rag_chat.run_cmd("curl https://example.invalid", need_confirm=False)
+                self.session_workspace.COMMAND_RUNNER.sandbox = sandbox
+                with patch.object(self.session_workspace, "confirm", return_value=True), \
+                     patch.object(self.session_workspace.COMMAND_RUNNER, "run_simple") as simple:
+                    result = self.session_workspace.run_cmd("curl https://example.invalid", need_confirm=False)
                 self.assertIn(summary, result)
                 sandbox.run.assert_not_called()
                 simple.assert_not_called()
 
     def test_ask_remote_write_and_ssh_are_denied_without_confirmation(self):
-        self.rag_chat.EXECUTION_MODE = ExecutionMode.ASK
+        self.session_workspace.EXECUTION_MODE = ExecutionMode.ASK
         sandbox = self.sandbox_available()
-        self.rag_chat.COMMAND_RUNNER.sandbox = sandbox
+        self.session_workspace.COMMAND_RUNNER.sandbox = sandbox
         for command in (
             "curl -X POST https://example.invalid", "git push", "ssh example.invalid",
         ):
-            with self.subTest(command=command), patch.object(self.rag_chat, "confirm") as confirm:
-                result = self.rag_chat.run_cmd(command, need_confirm=False)
+            with self.subTest(command=command), patch.object(self.session_workspace, "confirm") as confirm:
+                result = self.session_workspace.run_cmd(command, need_confirm=False)
             self.assertIn("required capabilities", result)
             confirm.assert_not_called()
         sandbox.preflight_network.assert_not_called()
         sandbox.run.assert_not_called()
 
     def test_ask_network_shell_uses_single_confirmation_and_slirp(self):
-        self.rag_chat.EXECUTION_MODE = ExecutionMode.ASK
+        self.session_workspace.EXECUTION_MODE = ExecutionMode.ASK
         sandbox = self.sandbox_available()
-        self.rag_chat.COMMAND_RUNNER.sandbox = sandbox
-        with patch.object(self.rag_chat, "confirm", return_value=True) as confirm:
-            result = self.rag_chat.run_cmd("curl https://example.invalid | head", need_confirm=False)
+        self.session_workspace.COMMAND_RUNNER.sandbox = sandbox
+        with patch.object(self.session_workspace, "confirm", return_value=True) as confirm:
+            result = self.session_workspace.run_cmd("curl https://example.invalid | head", need_confirm=False)
         self.assertEqual(result, "sandboxed")
         confirm.assert_called_once()
         sandbox.run.assert_called_once_with(
-            self.rag_chat.WORKSPACE,
+            self.session_workspace.WORKSPACE,
             shell_argv("curl https://example.invalid | head"),
             profile=ANY, backend=NetworkBackend.SLIRP4NETNS,
             resource_limits=DEFAULT_RESOURCE_LIMITS,
@@ -3337,12 +3358,12 @@ class Phase1bRagChatRoutingTests(unittest.TestCase):
         self.assertTrue(profile.shell_complex)
 
     def test_ask_network_preflight_is_cached_and_audited(self):
-        self.rag_chat.EXECUTION_MODE = ExecutionMode.ASK
+        self.session_workspace.EXECUTION_MODE = ExecutionMode.ASK
         sandbox = self.sandbox_available()
-        self.rag_chat.COMMAND_RUNNER.sandbox = sandbox
-        with patch.object(self.rag_chat, "confirm", return_value=True):
-            self.rag_chat.run_cmd("curl https://example.invalid", need_confirm=False)
-            self.rag_chat.run_cmd("curl https://example.invalid", need_confirm=False)
+        self.session_workspace.COMMAND_RUNNER.sandbox = sandbox
+        with patch.object(self.session_workspace, "confirm", return_value=True):
+            self.session_workspace.run_cmd("curl https://example.invalid", need_confirm=False)
+            self.session_workspace.run_cmd("curl https://example.invalid", need_confirm=False)
         self.assertEqual(sandbox.preflight_network.call_count, 1)
         event = json.loads((Path(self.temp.name) / "audit.jsonl").read_text().splitlines()[0])
         self.assertEqual(event["required_capabilities"], ["network"])
@@ -3353,20 +3374,20 @@ class Phase1bRagChatRoutingTests(unittest.TestCase):
     @unittest.skipUnless(os.environ.get("SPEAR_TEST_NETWORK") == "1",
                          "set SPEAR_TEST_NETWORK=1 for opt-in end-to-end routing")
     def test_opt_in_ask_network_routes_through_slirp(self):
-        self.rag_chat.EXECUTION_MODE = ExecutionMode.ASK
-        self.rag_chat.COMMAND_RUNNER.sandbox = BubblewrapSandbox()
-        with patch.object(self.rag_chat, "confirm", return_value=True):
-            result = self.rag_chat.run_cmd(
+        self.session_workspace.EXECUTION_MODE = ExecutionMode.ASK
+        self.session_workspace.COMMAND_RUNNER.sandbox = BubblewrapSandbox()
+        with patch.object(self.session_workspace, "confirm", return_value=True):
+            result = self.session_workspace.run_cmd(
                 "curl --fail --silent --show-error https://example.com/", need_confirm=False
             )
         self.assertNotIn("ERROR:", result)
 
     def test_command_audit_records_capability_names_only(self):
-        self.rag_chat.EXECUTION_MODE = ExecutionMode.AUTO
+        self.session_workspace.EXECUTION_MODE = ExecutionMode.AUTO
         sandbox = self.sandbox_available()
-        self.rag_chat.COMMAND_RUNNER.sandbox = sandbox
+        self.session_workspace.COMMAND_RUNNER.sandbox = sandbox
 
-        self.rag_chat.run_cmd("make test", need_confirm=False)
+        self.session_workspace.run_cmd("make test", need_confirm=False)
 
         event = json.loads((Path(self.temp.name) / "audit.jsonl").read_text())
         self.assertEqual(event["required_capabilities"], [
@@ -3377,15 +3398,15 @@ class Phase1bRagChatRoutingTests(unittest.TestCase):
         ])
 
     def test_sandbox_preflight_is_cached_between_sandboxed_commands(self):
-        self.rag_chat.EXECUTION_MODE = ExecutionMode.AUTO
+        self.session_workspace.EXECUTION_MODE = ExecutionMode.AUTO
         sandbox = BubblewrapSandbox(binary="bwrap")
-        self.rag_chat.COMMAND_RUNNER.sandbox = sandbox
+        self.session_workspace.COMMAND_RUNNER.sandbox = sandbox
         with patch.object(sandbox, "preflight",
                           return_value=ToolResult("ok", "sandbox preflight completed")) as preflight, \
              patch.object(sandbox, "run",
                           return_value=ToolResult("ok", "done", stdout="sandboxed")):
-            self.rag_chat.run_cmd("make test", need_confirm=False)
-            self.rag_chat.run_cmd("pytest tests", need_confirm=False)
+            self.session_workspace.run_cmd("make test", need_confirm=False)
+            self.session_workspace.run_cmd("pytest tests", need_confirm=False)
 
         self.assertEqual(preflight.call_count, 1)
 
@@ -4772,13 +4793,13 @@ class ShowDiffTests(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        from cli import rag_chat
-        cls.rag_chat = rag_chat
+        from cli import terminal_ui
+        cls.terminal_ui = terminal_ui
 
     def render(self, old, new):
         buffer = io.StringIO()
         with contextlib.redirect_stdout(buffer):
-            self.rag_chat.show_diff(old, new)
+            self.terminal_ui.show_diff(old, new)
         return re.sub(r"\x1b\[[0-9;]*m", "", buffer.getvalue())
 
     INCLUDES = ("#include <stdio.h>\n#include <dirent.h>\n#include <stdlib.h>\n"
@@ -4943,17 +4964,18 @@ class TrajectoryRecordingTests(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        from cli import rag_chat
-        cls.rag_chat = rag_chat
+        from cli import project_checks, session_history
+        cls.project_checks = project_checks
+        cls.session_history = session_history
 
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
         self.path = Path(self.temp.name) / "trajectories.jsonl"
-        self._saved = self.rag_chat.TRAJECTORY_FILE
-        self.rag_chat.TRAJECTORY_FILE = str(self.path)
+        self._saved = self.session_history.TRAJECTORY_FILE
+        self.session_history.TRAJECTORY_FILE = str(self.path)
 
     def tearDown(self):
-        self.rag_chat.TRAJECTORY_FILE = self._saved
+        self.session_history.TRAJECTORY_FILE = self._saved
         self.temp.cleanup()
 
     STEPS = [{"tool": "bash", "arguments": {"command": "make"}, "result": "built"}]
@@ -4964,7 +4986,7 @@ class TrajectoryRecordingTests(unittest.TestCase):
         What needs training is running the change and judging the output, and
         neither is visible in the final prose.
         """
-        self.rag_chat.save_trajectory("q", self.STEPS, "a", "pass", "bench")
+        self.session_history.save_trajectory("q", self.STEPS, "a", "pass", "bench")
         sample = json.loads(self.path.read_text().strip())
         self.assertEqual(sample["steps"], self.STEPS)
         self.assertEqual(sample["verdict"], "pass")
@@ -4973,18 +4995,18 @@ class TrajectoryRecordingTests(unittest.TestCase):
     def test_failures_are_recorded_too_and_labelled(self):
         # A dataset of successes alone cannot teach what to stop doing, and
         # filtering later is free while re-running a session is not.
-        self.rag_chat.save_trajectory("q", self.STEPS, "a", "fail", "bench")
+        self.session_history.save_trajectory("q", self.STEPS, "a", "fail", "bench")
         self.assertEqual(json.loads(self.path.read_text())["verdict"], "fail")
 
     def test_samples_accumulate_one_per_line(self):
-        self.rag_chat.save_trajectory("q1", self.STEPS, "a", "pass", "bench")
-        count = self.rag_chat.save_trajectory("q2", self.STEPS, "a", "fail", "bench")
+        self.session_history.save_trajectory("q1", self.STEPS, "a", "pass", "bench")
+        count = self.session_history.save_trajectory("q2", self.STEPS, "a", "fail", "bench")
         self.assertEqual(count, 2)
         self.assertEqual(len(self.path.read_text().strip().split("\n")), 2)
 
     def test_no_declared_bench_gives_no_verdict_rather_than_a_pass(self):
-        with patch.object(self.rag_chat, "project_bench", return_value=None):
-            self.assertIsNone(self.rag_chat.run_project_bench())
+        with patch.object(self.project_checks, "project_bench", return_value=None):
+            self.assertIsNone(self.project_checks.run_project_bench())
 
     def test_a_turn_no_bench_judged_is_kept_as_unrated_not_dropped(self):
         """Recording is wider than judging, on purpose.
@@ -4994,7 +5016,7 @@ class TrajectoryRecordingTests(unittest.TestCase):
         single trajectory. "unrated" says the verdict is missing, which a
         trainer can filter on; dropping the turn says nothing happened.
         """
-        self.rag_chat.save_trajectory("q", self.STEPS, "a", "unrated", "answer")
+        self.session_history.save_trajectory("q", self.STEPS, "a", "unrated", "answer")
         sample = json.loads(self.path.read_text().strip())
         self.assertEqual((sample["verdict"], sample["source"]),
                          ("unrated", "answer"))
@@ -5003,7 +5025,7 @@ class TrajectoryRecordingTests(unittest.TestCase):
     def test_every_recorded_source_stays_distinguishable(self):
         for verdict, source in (("pass", "bench"), ("unrated", "change"),
                                 ("unrated", "answer"), ("pass", "user")):
-            self.rag_chat.save_trajectory("q", self.STEPS, "a", verdict, source)
+            self.session_history.save_trajectory("q", self.STEPS, "a", verdict, source)
         rows = [json.loads(l) for l in self.path.read_text().strip().split("\n")]
         self.assertEqual([(r["verdict"], r["source"]) for r in rows],
                          [("pass", "bench"), ("unrated", "change"),
@@ -5015,33 +5037,33 @@ class BenchLocationTests(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        from cli import rag_chat
-        cls.rag_chat = rag_chat
+        from cli import project_checks
+        cls.project_checks = project_checks
 
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
-        self._saved = self.rag_chat.BENCH_DIR
-        self.rag_chat.BENCH_DIR = self.temp.name
+        self._saved = self.project_checks.BENCH_DIR
+        self.project_checks.BENCH_DIR = self.temp.name
 
     def tearDown(self):
-        self.rag_chat.BENCH_DIR = self._saved
+        self.project_checks.BENCH_DIR = self._saved
         self.temp.cleanup()
 
     def test_a_bare_name_resolves_inside_the_harness(self):
         script = Path(self.temp.name) / "proj.sh"
         script.write_text("#!/bin/sh\nexit 0\n")
-        with patch.object(self.rag_chat, "project_bench", return_value="proj.sh"):
-            self.assertEqual(self.rag_chat.bench_command(), str(script))
+        with patch.object(self.project_checks, "project_bench", return_value="proj.sh"):
+            self.assertEqual(self.project_checks.bench_command(), str(script))
 
     def test_an_unknown_name_is_passed_through_as_a_command(self):
         # Escape hatch: a project that wants to own its bench still can.
-        with patch.object(self.rag_chat, "project_bench",
+        with patch.object(self.project_checks, "project_bench",
                           return_value="./scripts/mine.sh"):
-            self.assertEqual(self.rag_chat.bench_command(), "./scripts/mine.sh")
+            self.assertEqual(self.project_checks.bench_command(), "./scripts/mine.sh")
 
     def test_no_declared_bench_resolves_to_nothing(self):
-        with patch.object(self.rag_chat, "project_bench", return_value=None):
-            self.assertIsNone(self.rag_chat.bench_command())
+        with patch.object(self.project_checks, "project_bench", return_value=None):
+            self.assertIsNone(self.project_checks.bench_command())
 
 
 class SessionTmpdirTests(unittest.TestCase):
@@ -5292,21 +5314,23 @@ class SandboxDownStopsBlindEditsTests(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        from cli import rag_chat
-        cls.rag_chat = rag_chat
+        from cli import session_workspace, tool_handlers, tool_routing
+        cls.session_workspace = session_workspace
+        cls.tool_handlers = tool_handlers
+        cls.tool_routing = tool_routing
 
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
         self.root = Path(self.temp.name)
         (self.root / "f.c").write_text("int main(void) { return 0; }\n")
-        self._ws = self.rag_chat.WORKSPACE
-        self.rag_chat.WORKSPACE = Workspace.from_path(self.root)
-        self._mode = self.rag_chat.EXECUTION_MODE
-        self.rag_chat.EXECUTION_MODE = ExecutionMode.AUTO
+        self._ws = self.session_workspace.WORKSPACE
+        self.session_workspace.WORKSPACE = Workspace.from_path(self.root)
+        self._mode = self.session_workspace.EXECUTION_MODE
+        self.session_workspace.EXECUTION_MODE = ExecutionMode.AUTO
 
     def tearDown(self):
-        self.rag_chat.WORKSPACE = self._ws
-        self.rag_chat.EXECUTION_MODE = self._mode
+        self.session_workspace.WORKSPACE = self._ws
+        self.session_workspace.EXECUTION_MODE = self._mode
         self.temp.cleanup()
 
     def test_an_unavailable_sandbox_is_remembered_for_the_turn(self):
@@ -5318,12 +5342,12 @@ class SandboxDownStopsBlindEditsTests(unittest.TestCase):
         down = ToolResult(
             status="failed", summary="bubblewrap sandbox unavailable",
             stderr="bubblewrap sandbox unavailable", exit_code=1)
-        with patch.object(self.rag_chat, "run_cmd_result", return_value=down):
-            self.rag_chat.execute_tool("bash", {"command": "ls"}, cache)
-        self.assertTrue(cache.get(self.rag_chat.SANDBOX_DOWN))
+        with patch.object(self.tool_handlers, "run_cmd_result", return_value=down):
+            self.tool_routing.execute_tool("bash", {"command": "ls"}, cache)
+        self.assertTrue(cache.get(self.tool_handlers.SANDBOX_DOWN))
 
     def test_edits_are_refused_once_it_is_down(self):
-        cache = {self.rag_chat.SANDBOX_DOWN: True}
+        cache = {self.tool_handlers.SANDBOX_DOWN: True}
         before = (self.root / "f.c").read_text()
         for tool, args in (
             ("edit_file", {"path": "f.c", "old_text": "return 0",
@@ -5332,14 +5356,14 @@ class SandboxDownStopsBlindEditsTests(unittest.TestCase):
             ("append_file", {"path": "f.c", "content": "// more"}),
         ):
             with self.subTest(tool=tool):
-                result = self.rag_chat.execute_tool(tool, args, cache)
+                result = self.tool_routing.execute_tool(tool, args, cache)
                 self.assertIn("REFUSED", result)
                 # The refusal is the point: the file must be untouched.
                 self.assertEqual(before, (self.root / "f.c").read_text())
 
     def test_a_working_sandbox_leaves_edits_alone(self):
         cache = {}
-        result = self.rag_chat.execute_tool(
+        result = self.tool_routing.execute_tool(
             "edit_file", {"path": "f.c", "old_text": "return 0",
                           "new_text": "return 1"}, cache)
         self.assertNotIn("REFUSED", result)
@@ -5357,41 +5381,41 @@ class LearnedRulesAreGlobalTests(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        from cli import rag_chat
-        cls.rag_chat = rag_chat
+        from cli import turn_context
+        cls.turn_context = turn_context
 
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
-        self._file = self.rag_chat.LEARNED_RULES_FILE
-        self.rag_chat.LEARNED_RULES_FILE = str(
+        self._file = self.turn_context.LEARNED_RULES_FILE
+        self.turn_context.LEARNED_RULES_FILE = str(
             Path(self.temp.name) / "rules-learned.md")
 
         # A shipped rule of this test's own. rules.d/ ships empty -- a rule
         # describes one organisation's code, so none belongs to the platform
         # -- and the ordering below needs something to be ordered after.
 
-        self._rules_dir = self.rag_chat.RULES_DIR
+        self._rules_dir = self.turn_context.RULES_DIR
         shipped = Path(self.temp.name) / "rules.d"
         shipped.mkdir()
         (shipped / "20-conventions.md").write_text(
             "## Conventions\n\nLeave a blank line after a comment block.\n",
             encoding="utf-8")
-        self.rag_chat.RULES_DIR = str(shipped)
+        self.turn_context.RULES_DIR = str(shipped)
 
     def tearDown(self):
-        self.rag_chat.LEARNED_RULES_FILE = self._file
-        self.rag_chat.RULES_DIR = self._rules_dir
+        self.turn_context.LEARNED_RULES_FILE = self._file
+        self.turn_context.RULES_DIR = self._rules_dir
         self.temp.cleanup()
 
     def test_a_recalled_rule_is_injected_after_the_shipped_ones(self):
-        self.rag_chat.save_learned_rule("never rewrite an existing header")
-        self.rag_chat.save_learned_rule("- prefer build.sh over make")
-        body = Path(self.rag_chat.LEARNED_RULES_FILE).read_text()
+        self.turn_context.save_learned_rule("never rewrite an existing header")
+        self.turn_context.save_learned_rule("- prefer build.sh over make")
+        body = Path(self.turn_context.LEARNED_RULES_FILE).read_text()
         self.assertEqual(len(body.strip().splitlines()), 2)
         # The leading dash the user typed is not doubled.
         self.assertNotIn("- - ", body)
 
-        rules = self.rag_chat.load_rules()
+        rules = self.turn_context.load_rules()
         self.assertIn("## Rule: learned", rules)
         self.assertIn("never rewrite an existing header", rules)
         # After the shipped ones, so a later line can qualify an earlier one.
@@ -5409,8 +5433,8 @@ class RepeatedCorpusSearchIsCachedTests(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        from cli import rag_chat
-        cls.rag_chat = rag_chat
+        from cli import tool_handlers
+        cls.tool_handlers = tool_handlers
 
     def _context(self, cache):
         return SimpleNamespace(cache=cache, action_id="a1", role="main",
@@ -5424,12 +5448,12 @@ class RepeatedCorpusSearchIsCachedTests(unittest.TestCase):
             calls.append(query)
             return f"# File: so3/usr/src/more.c\n{query}"
 
-        with patch.object(self.rag_chat, "search_corpus", fake_search):
-            first = self.rag_chat._registered_search_corpus(
+        with patch.object(self.tool_handlers, "search_corpus", fake_search):
+            first = self.tool_handlers._registered_search_corpus(
                 self._context(cache), {"query": "how does more read stdin"})
-            second = self.rag_chat._registered_search_corpus(
+            second = self.tool_handlers._registered_search_corpus(
                 self._context(cache), {"query": "how does more read stdin"})
-            other = self.rag_chat._registered_search_corpus(
+            other = self.tool_handlers._registered_search_corpus(
                 self._context(cache), {"query": "something else"})
 
         self.assertEqual(calls, ["how does more read stdin", "something else"],
@@ -5511,39 +5535,40 @@ class CorpusRulesTravelWithTheHarnessTests(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        from cli import rag_chat
-        cls.rag_chat = rag_chat
+        from cli import session_workspace, turn_context
+        cls.session_workspace = session_workspace
+        cls.turn_context = turn_context
 
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
         self.root = Path(self.temp.name)
-        self.saved = (self.rag_chat.PROJECT, self.rag_chat.PROJECT_ROOT,
-                      self.rag_chat.CORPUS_ROOT, self.rag_chat.SHIPPED_CORPUS_RULES)
+        self.saved = (self.session_workspace.PROJECT, self.session_workspace.PROJECT_ROOT,
+                      self.session_workspace.CORPUS_ROOT, self.turn_context.SHIPPED_CORPUS_RULES)
         self.shipped = self.root / "shipped"
         self.shipped.mkdir()
         (self.shipped / "demo.md").write_text("SHIPPED MAP\n")
-        self.rag_chat.SHIPPED_CORPUS_RULES = str(self.shipped)
-        self.rag_chat.PROJECT = "demo"
+        self.turn_context.SHIPPED_CORPUS_RULES = str(self.shipped)
+        self.session_workspace.PROJECT = "demo"
         self.tree = self.root / "tree"
         self.tree.mkdir()
-        self.rag_chat.PROJECT_ROOT = self.rag_chat.CORPUS_ROOT = str(self.tree)
+        self.session_workspace.PROJECT_ROOT = self.session_workspace.CORPUS_ROOT = str(self.tree)
 
     def tearDown(self):
-        (self.rag_chat.PROJECT, self.rag_chat.PROJECT_ROOT,
-         self.rag_chat.CORPUS_ROOT, self.rag_chat.SHIPPED_CORPUS_RULES) = self.saved
+        (self.session_workspace.PROJECT, self.session_workspace.PROJECT_ROOT,
+         self.session_workspace.CORPUS_ROOT, self.turn_context.SHIPPED_CORPUS_RULES) = self.saved
         self.temp.cleanup()
 
     def test_the_shipped_map_is_used_when_the_tree_has_none(self):
-        self.assertIn("SHIPPED MAP", self.rag_chat.load_corpus_rules())
+        self.assertIn("SHIPPED MAP", self.turn_context.load_corpus_rules())
 
     def test_a_tree_that_has_its_own_map_wins(self):
         """A tree someone else owns may carry one, and theirs beats ours."""
         (self.tree / ".edgem-rules.md").write_text("TREE MAP\n")
-        rules = self.rag_chat.load_corpus_rules()
+        rules = self.turn_context.load_corpus_rules()
         self.assertIn("TREE MAP", rules)
         self.assertNotIn("SHIPPED MAP", rules)
 
     def test_a_corpus_with_no_map_anywhere_invents_nothing(self):
-        self.rag_chat.PROJECT = "unknown-corpus"
-        self.assertEqual("", self.rag_chat.load_corpus_rules())
+        self.session_workspace.PROJECT = "unknown-corpus"
+        self.assertEqual("", self.turn_context.load_corpus_rules())
 

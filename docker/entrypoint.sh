@@ -52,16 +52,16 @@ fi
 "$APP/bin/python" - <<'PY'
 import os, sys
 sys.path.insert(0, "/opt/spear/spear")
-from cli import rag_chat
+from cli import chat_settings, corpus_registry, corpus_search
 found = miss = 0
-for name, spec in sorted(rag_chat.load_projects().items()):
+for name, spec in sorted(corpus_registry.load_projects().items()):
     if os.path.isdir(spec["path"]):
         found += 1
     else:
         miss += 1
         print(f"  missing: {name:16s} {spec['path']}")
 print(f"corpora: {found} present, {miss} missing "
-      f"(root {rag_chat.CORPORA_ROOT or '/'})")
+      f"(root {corpus_registry.CORPORA_ROOT or '/'})")
 
 # The image SHIPS its index, so a corpus whose collection is absent is a
 # packaging fault, not a user choice. Unchecked, the harness says "no index
@@ -70,10 +70,10 @@ print(f"corpora: {found} present, {miss} missing "
 import textwrap
 
 import chromadb
-have = {c.name for c in chromadb.PersistentClient(path=rag_chat.DB_PATH).list_collections()}
-absent = sorted(n for n, spec in rag_chat.load_projects().items()
+have = {c.name for c in chromadb.PersistentClient(path=chat_settings.DB_PATH).list_collections()}
+absent = sorted(n for n, spec in corpus_registry.load_projects().items()
                 if os.path.isdir(spec["path"])
-                and rag_chat.collection_name_for(spec) not in have)
+                and corpus_search.collection_name_for(spec) not in have)
 if absent:
     # Every name, not the first six. Announcing 11 and listing 6 reads as a
     # bug in the count -- the reader cannot tell which five are missing from
@@ -100,9 +100,9 @@ PY
 "$APP/bin/python" - <<'PYSTD'
 import sys
 sys.path.insert(0, "/opt/spear/spear")
-from cli import rag_chat
+from cli import chat_settings
 
-operator = rag_chat.STANDARD_OPERATOR
+operator = chat_settings.STANDARD_OPERATOR
 
 try:
     ingested = list(operator.store.list_standards())

@@ -15,14 +15,14 @@ from __future__ import annotations
 import inspect
 import unittest
 
-from cli import rag_chat
+from cli import standard_session
 from standard.standard_commands import StandardCommandError
 
 
 class TheTurnPathHandlesIt(unittest.TestCase):
 
     def source(self):
-        return inspect.getsource(rag_chat.standard_binding_for)
+        return inspect.getsource(standard_session.standard_binding_for)
 
     def test_the_refusal_is_caught(self):
         self.assertIn("except StandardCommandError", self.source())

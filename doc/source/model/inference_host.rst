@@ -266,7 +266,7 @@ Each colleague needs an SSH key accepted by the host account
 ``IdentitiesOnly`` matters on hosts with a low ``MaxAuthTries``: without it
 ssh offers every key it has and is disconnected before the right one.
 
-**The model.**  In the client checkout, ``spear/reds.conf`` (from
+**The model.**  In the client checkout, ``client/reds.conf`` (from
 ``reds.conf.example``):
 
 .. code-block:: sh
@@ -285,7 +285,7 @@ tunnel with ``SPEAR_API_BASE=http://127.0.0.1:8082/v1``
    $ ssh -o ExitOnForwardFailure=yes -L 8082:localhost:8010 -N -f spear-host
    $ curl -s http://127.0.0.1:8082/v1/models
 
-**The embedder.**  Two files in the client's ``spear/`` directory:
+**The embedder.**  Two files in the ``client/`` directory:
 
 .. code-block:: text
 

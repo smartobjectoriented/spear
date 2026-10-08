@@ -84,9 +84,9 @@ misconfiguration the client reports by name:
 
 ```sh
 # on the client
-echo 'operator@gpu-host'                       > spear/active-embed-remote.conf
+echo 'operator@gpu-host'                       > client/active-embed-remote.conf
 echo '~/spear-embed/venv/bin/python ~/spear-embed/worker.py' \
-                                               > spear/active-embed-remote-cmd.conf
+                                               > client/active-embed-remote-cmd.conf
 ```
 
 or `SPEAR_EMBED_REMOTE` and `SPEAR_EMBED_REMOTE_CMD` in the environment. A
@@ -146,7 +146,7 @@ from "this command is not a worker".
 
 ## Equivalence
 
-`spear/tests/test_embed_equivalence.py` compares this worker against the one
+`client/tests/test_embed_equivalence.py` compares this worker against the one
 it replaces, on real weights, and requires the vectors to be **bit-identical**
 — not merely close. Run it before switching a deployment over:
 

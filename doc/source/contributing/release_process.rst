@@ -56,7 +56,7 @@ format of the standard store — so that is what the numbers are about:
 * **PATCH** — bug fixes only, cut *on* an existing ``release/vX.Y`` branch.
 
 The served model is not part of the version: it is chosen per deployment
-(``spear/active-model.conf``, ``machine.env``) and changes without a release.
+(``client/active-model.conf``, ``machine.env``) and changes without a release.
 
 Release candidates append ``-rcN``, numbered from 1 for each version, e.g.
 ``v0.3.0-rc1`` then ``v0.3.0-rc2``.
@@ -208,7 +208,7 @@ requests, and must be green on the commit the tag will point at::
 
 SPEAR has no test workflow of its own — the suite needs the project's virtual
 environment and, for its sandbox tests, a host with bubblewrap and delegated
-cgroups — so it is run by hand, on the commit being tagged, from ``spear/``:
+cgroups — so it is run by hand, on the commit being tagged, from ``client/``:
 
 .. code-block:: sh
 

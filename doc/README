@@ -80,5 +80,5 @@ The version string
 ------------------
 
 The sibling projects derive `release` from their release tag. SPEAR has no
-release tags, so conf.py derives it from spear/active-model.conf instead: the served
+release tags, so conf.py derives it from client/active-model.conf instead: the served
 model appears in the page header and never has to be bumped by hand.

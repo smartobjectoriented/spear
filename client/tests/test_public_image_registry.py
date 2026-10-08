@@ -29,9 +29,9 @@ def load_generator():
 class PublicImageRegistry(unittest.TestCase):
     def generate(self, profile):
         with tempfile.TemporaryDirectory() as repo:
-            (Path(repo) / "spear").mkdir()
+            (Path(repo) / "client").mkdir()
             (Path(repo) / "docker").mkdir()
-            (Path(repo) / "spear" / "projects.json").write_text(json.dumps({
+            (Path(repo) / "client" / "projects.json").write_text(json.dumps({
                 "open":   {"path": "corpora/open", "kind": "generic",
                            "public": True, "corpora": ["closed", "lib"]},
                 "lib":    {"path": "corpora/lib", "kind": "generic",

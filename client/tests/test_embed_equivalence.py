@@ -109,7 +109,7 @@ class TheNewWorkerReproducesTheOldOne(unittest.TestCase):
     def legacy(self, texts):
         """The retired worker's semantics, as it computed them.
 
-        Reproduced through the client module exactly as spear/deploy/
+        Reproduced through the client module exactly as client/deploy/
         embed_worker.py did: it set the device, forced local compute, and
         called embed_documents, which read the registry for the prefix and
         capped the window. Calling the same function the same way is what

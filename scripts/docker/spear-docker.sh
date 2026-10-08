@@ -20,7 +20,7 @@ HERE="$(cd "$(dirname "$0")" && pwd)"
 # The release this is: "[spear vX.Y.Z] <script> <args>" on stderr, once.
 [ -r "$HERE/../common/banner.sh" ] && . "$HERE/../common/banner.sh"
 REPO="$(cd "$HERE/../.." && pwd)"
-APP="${SPEAR_APP:-$REPO/spear}"
+APP="${SPEAR_APP:-$REPO/client}"
 # The workstation image: private, because this mode mounts the host's own
 # registry and trees. No build ever produced the bare spear:1.0 this was.
 IMAGE="${SPEAR_IMAGE:-spear:$("$REPO/scripts/spearversion.sh")-private}"
@@ -60,7 +60,7 @@ fi
 # 127.0.0.1 the same thing on both sides.
 if [ "$REDS" = 1 ]; then
     REDS_PORT="${REDS_PORT:-8010}"
-    [ -n "${REDS_HOST:-}" ] || { echo "--reds: set REDS_HOST in spear/reds.conf (see reds.conf.example)" >&2; exit 1; }
+    [ -n "${REDS_HOST:-}" ] || { echo "--reds: set REDS_HOST in client/reds.conf (see reds.conf.example)" >&2; exit 1; }
     read -r -a REDS_SSH_ARGS <<< "${REDS_SSH_OPTS:-}"
     LPORT=8082
     API_BASE="http://127.0.0.1:$LPORT/v1"
@@ -124,7 +124,7 @@ echo "mounting ${#MOUNTS[@]} trees at their own paths · state $STATE · $API_BA
 # the image's own copy of the harness: the corpora registered relatively live
 # in the repository, and the image carries only the harness.
 [ -f "$APP/projects.json" ] && MOUNTS+=(
-    -v "$APP/projects.json:/opt/spear/spear/projects.json:ro")
+    -v "$APP/projects.json:/opt/spear/client/projects.json:ro")
 
 # -t only when there IS a terminal: docker refuses to allocate one otherwise,
 # which would make the container unusable from a script or a CI job.

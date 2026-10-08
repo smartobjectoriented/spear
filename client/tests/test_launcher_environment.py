@@ -158,13 +158,13 @@ class ThePublicCheckoutIsSelfContained(unittest.TestCase):
     def test_no_launcher_is_tracked_with_a_machine_file(self):
         tracked = subprocess.run(["git", "ls-files"], cwd=ROOT,
                                  capture_output=True, text=True, check=True)
-        self.assertNotIn("spear/machine.env", tracked.stdout.split())
+        self.assertNotIn("client/machine.env", tracked.stdout.split())
 
     def test_the_machine_file_is_ignored_rather_than_merely_absent(self):
         done = subprocess.run(["git", "check-ignore", "-q",
-                               "spear/machine.env"], cwd=ROOT)
+                               "client/machine.env"], cwd=ROOT)
         self.assertEqual(done.returncode, 0,
-                         "spear/machine.env is not gitignored, so a local "
+                         "client/machine.env is not gitignored, so a local "
                          "deployment's paths could be committed by accident")
 
     # Assembled from fragments, like the public-boundary scanner's own needles:

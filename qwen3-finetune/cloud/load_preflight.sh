@@ -83,7 +83,7 @@ EOF
 fi
 
 # ── the card ─────────────────────────────────────────────────────────────
-GPU_CONF="${GPU_CONF:-$HOME/spear/spear/active-gpu.conf}"
+GPU_CONF="${GPU_CONF:-$HOME/spear/client/active-gpu.conf}"
 if [ -z "$FT_GPU" ] && [ -f "$GPU_CONF" ]; then
     FT_GPU=$(tr -d '[:space:]' < "$GPU_CONF")
 fi

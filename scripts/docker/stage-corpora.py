@@ -46,7 +46,7 @@ FROM_REPO = ("spear/claude", "spear/corpora")
 
 
 def registries():
-    host = json.loads((REPO / "spear" / "projects.json").read_text())
+    host = json.loads((REPO / "client" / "projects.json").read_text())
     image = json.loads((HERE / "projects.docker.json").read_text())
     return host, image
 

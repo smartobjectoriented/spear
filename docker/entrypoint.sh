@@ -1,15 +1,15 @@
 #!/bin/bash
 # Fail loudly on the two things that make this container useless in silence.
 set -e
-APP=/opt/spear/spear
+APP=/opt/spear/client
 
 # 1. bubblewrap. Docker's default seccomp profile blocks clone(CLONE_NEWUSER),
 #    so bwrap cannot start -- and the harness then refuses EVERY command with
 #    "sandbox unavailable", which reads like a harness bug rather than a
 #    missing run flag. Say it here, once, with the fix.
-if ! /opt/spear/spear/bin/python - <<'PYBWRAP' 2>/dev/null; then
+if ! /opt/spear/client/bin/python - <<'PYBWRAP' 2>/dev/null; then
 import sys, tempfile
-sys.path.insert(0, "/opt/spear/spear")
+sys.path.insert(0, "/opt/spear/client")
 from harness.sandbox import BubblewrapSandbox
 from harness.workspace import Workspace
 # The harness's OWN sandbox, not a simpler bwrap invocation. A weaker probe
@@ -51,7 +51,7 @@ fi
 # not three questions later as an empty retrieval.
 "$APP/bin/python" - <<'PY'
 import os, sys
-sys.path.insert(0, "/opt/spear/spear")
+sys.path.insert(0, "/opt/spear/client")
 from cli import chat_settings, corpus_registry, corpus_search
 found = miss = 0
 for name, spec in sorted(corpus_registry.load_projects().items()):
@@ -99,7 +99,7 @@ PY
 # fabricated one passes inspection and fails later.
 "$APP/bin/python" - <<'PYSTD'
 import sys
-sys.path.insert(0, "/opt/spear/spear")
+sys.path.insert(0, "/opt/spear/client")
 from cli import chat_settings
 
 operator = chat_settings.STANDARD_OPERATOR

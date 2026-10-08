@@ -24,7 +24,7 @@ import shutil
 import sqlite3
 import sys
 
-APP = pathlib.Path(__file__).resolve().parents[2] / "spear"
+APP = pathlib.Path(__file__).resolve().parents[2] / "client"
 
 
 def main() -> int:

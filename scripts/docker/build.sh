@@ -1,7 +1,7 @@
 #!/bin/bash
 # Build the harness image.
 #
-# Contexts, deliberately not the obvious ones: the DEFAULT one is spear/
+# Contexts, deliberately not the obvious ones: the DEFAULT one is client/
 # (harness code), and the rest are NAMED contexts, one per input that a clone
 # does not necessarily carry. Keeping the default context narrow is what lets
 # the 4.5 GB embedder layer stay cached across rebuilds -- and what keeps
@@ -23,7 +23,7 @@ REPO="$(cd "$(dirname "$0")/../.." && pwd)"
 # The release this is: "[spear vX.Y.Z] <script> <args>" on stderr, once.
 [ -r "$REPO/scripts/common/banner.sh" ] && . "$REPO/scripts/common/banner.sh"
 HERE="$REPO/scripts/docker"
-APP="${SPEAR_APP:-$REPO/spear}"
+APP="${SPEAR_APP:-$REPO/client}"
 
 # THE PROFILE decides what the image is allowed to carry, and it defaults to
 # the one that is safe to hand to anyone. `private` is the deliberate word

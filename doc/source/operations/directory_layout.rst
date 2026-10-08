@@ -25,7 +25,7 @@ Top level
 
    * - Path
      - Content
-   * - ``spear/``
+   * - ``client/``
      - The application **and** its Python virtualenv.  ``bin/python`` here is
        the interpreter every command in this documentation uses.
    * - ``server/``
@@ -38,7 +38,7 @@ Top level
    * - ``docker/``
      - The container image: ``Dockerfile``, the entrypoint and the
        relative-path corpus registry.  It sits at the root rather than under
-       ``spear/`` because it draws on both (:doc:`/start/container`).
+       ``client/`` because it draws on both (:doc:`/start/container`).
    * - ``models/``
      - Model weights, when a model is served locally.  Not tracked.
    * - ``llama.cpp-next/``
@@ -69,9 +69,9 @@ Top level
 The application
 ===============
 
-The code is one package per concern, imported from ``spear/`` as their common
+The code is one package per concern, imported from ``client/`` as their common
 root (``from evidence import completion``).  ``rag_chat`` and the other
-commands are run as files (``spear/bin/python spear/cli/rag_chat.py``); the
+commands are run as files (``client/bin/python client/cli/rag_chat.py``); the
 launchers and the image do that for you.
 
 .. list-table::
@@ -243,7 +243,7 @@ variables are read by ``scripts/docker/build.sh`` when it bakes an image
 Persistent state
 ================
 
-These live in the state directory: ``SPEAR_STATE_DIR``, or ``spear/`` when it
+These live in the state directory: ``SPEAR_STATE_DIR``, or ``client/`` when it
 is not set.  The knowledge store and the standard store are the exception:
 without ``SPEAR_STATE_DIR`` they default to ``~/.local/state/spear``.
 
@@ -299,16 +299,16 @@ arrangement, and the rest of this documentation uses the names:
      - Script
      - What it does
    * - ``spear-chat``
-     - ``spear/spear-chat.sh``
+     - ``client/spear-chat.sh``
      - the assistant
    * - ``spear-corpus``
-     - ``spear/spear-corpus.sh``
+     - ``client/spear-corpus.sh``
      - the corpus registry (``/corpus`` in the chat)
    * - ``spear-index``
-     - ``spear/bin/python spear/retrieval/index_dir.py``
+     - ``client/bin/python client/retrieval/index_dir.py``
      - index any tree
    * - ``spear-reindex``
-     - ``spear/bin/python spear/retrieval/index_corpus.py``
+     - ``client/bin/python client/retrieval/index_corpus.py``
      - rebuild a build-system corpus with the curated walk
    * - ``spear-server``
      - ``server/inference/serve.sh``

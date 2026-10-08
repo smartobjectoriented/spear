@@ -1,6 +1,6 @@
 """The client runtime never depends on the server tree.
 
-`spear/` and `server/` share a repository so that a protocol change is one
+`client/` and `server/` share a repository so that a protocol change is one
 commit. They do not share a process. The client decides what an answer means
 -- retrieval semantics, corpus identity, the vector store, the agent runtime
 -- and the server decides what a machine does. A client that imported the
@@ -31,12 +31,12 @@ REPO = ROOT.parent
 
 
 def client_modules():
-    """Production client modules: spear/**.py, excluding tests and the venv."""
-    out = subprocess.run(["git", "ls-files", "spear"], cwd=REPO,
+    """Production client modules: client/**.py, excluding tests and the venv."""
+    out = subprocess.run(["git", "ls-files", "client"], cwd=REPO,
                          capture_output=True, text=True).stdout.split()
 
     return [REPO / name for name in out
-            if name.endswith(".py") and not name.startswith("spear/tests/")]
+            if name.endswith(".py") and not name.startswith("client/tests/")]
 
 
 def imported_names(path):

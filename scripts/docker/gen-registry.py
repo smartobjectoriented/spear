@@ -9,7 +9,7 @@ knowing why -- and a publication of one machine's corpus graph, with its
 project names, its federations and its collection hashes.
 
 The repository therefore carries exactly one registry by hand, and it is an
-example: spear/projects.example.json. There is no second one to keep in step.
+example: client/projects.example.json. There is no second one to keep in step.
 
 Two rewrites happen here, and both are about things that move:
 
@@ -67,10 +67,10 @@ def host_registry():
     registry is the honest answer: the image carries the harness and whatever
     index the host had, and the operator registers their own trees.
     """
-    live = os.path.join(REPO, "spear", "projects.json")
+    live = os.path.join(REPO, "client", "projects.json")
 
     if not os.path.isfile(live):
-        print("   registry: no spear/projects.json — image ships no corpora",
+        print("   registry: no client/projects.json — image ships no corpora",
               file=sys.stderr)
         return {}
 

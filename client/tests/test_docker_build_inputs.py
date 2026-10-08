@@ -25,7 +25,7 @@ DOCKERFILE = ROOT / "docker" / "Dockerfile"
 BUILD_SH = ROOT / "scripts" / "docker" / "build.sh"
 
 # The default build context, set by build.sh's last line.
-DEFAULT_CONTEXT = ROOT / "spear"
+DEFAULT_CONTEXT = ROOT / "client"
 
 # Produced by build.sh before it calls docker, and gitignored: a committed copy
 # would publish one machine's corpus graph and be stale besides. The COPY may
@@ -141,14 +141,14 @@ class NoHostRegistryIsPublished(unittest.TestCase):
         registries = sorted(p for p in tracked()
                             if p.name.endswith(".json")
                             and "projects" in p.name)
-        self.assertEqual(registries, [Path("spear/projects.example.json")])
+        self.assertEqual(registries, [Path("client/projects.example.json")])
 
     def test_the_example_names_no_real_tree(self):
         """A template full of placeholders, not a sanitised real registry."""
         import json
 
         example = json.loads(
-            (ROOT / "spear" / "projects.example.json").read_text())
+            (ROOT / "client" / "projects.example.json").read_text())
 
         for name, spec in example.items():
             if not isinstance(spec, dict):

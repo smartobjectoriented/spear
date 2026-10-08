@@ -30,7 +30,7 @@ import torch
 
 _FIELDS = ("sequence_len", "micro_batch_size", "gradient_accumulation_steps",
            "learning_rate", "lora_r", "lora_alpha", "gradient_checkpointing")
-_BUNDLE = Path(__file__).resolve().parents[2] / "spear" / "training/training_bundle.py"
+_BUNDLE = Path(__file__).resolve().parents[2] / "client" / "training/training_bundle.py"
 
 
 def _from_yaml(path):

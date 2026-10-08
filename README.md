@@ -66,7 +66,7 @@ scripts/docker/spear-docker.sh --reds --auto         # opens the tunnel, then ch
 ```
 
 To run it natively — to change the harness, index your projects or bind your
-own standards — start from `spear/deploy/install.sh`. Both paths, and the
+own standards — start from `client/deploy/install.sh`. Both paths, and the
 three `--security-opt` flags without which the sandbox cannot start in a
 container, are in
 [Getting started](https://smartobjectoriented.github.io/spear/start/getting_started.html).
@@ -97,7 +97,7 @@ make -C doc html          # doc/build/html/index.html
 
 | Directory | What it holds |
 |---|---|
-| `spear/` | the client: chat, the coding core and its control plane, the normative runtime, retrieval, and the execution harness |
+| `client/` | the client: chat, the coding core and its control plane, the normative runtime, retrieval, and the execution harness |
 | `server/` | the generic inference server component (llama.cpp launcher, model fetch, embedding) |
 | `doc/` | the Sphinx documentation published at the link above |
 | `docker/`, `scripts/` | the container image and the release, configuration and image scripts |

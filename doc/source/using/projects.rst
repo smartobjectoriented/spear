@@ -18,9 +18,9 @@ another tree, ``cd`` into it. No flag relocates the workspace.
 The registry
 ************
 
-``spear/projects.json`` holds the corpora registered on this machine. It is
+``client/projects.json`` holds the corpora registered on this machine. It is
 untracked, because the paths in it are machine-specific;
-``spear/projects.example.json`` is the tracked template.
+``client/projects.example.json`` is the tracked template.
 
 Manage it from the shell or from inside a session:
 

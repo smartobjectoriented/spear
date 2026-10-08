@@ -17,7 +17,7 @@ Health check
    host   $ ~/spear/scripts/bootstrap-runtime.sh --root ~/spear-runtime --verify
 
    client $ curl -s http://127.0.0.1:8082/v1/models | head -c 200   # through the tunnel
-   client $ cd ~/spear/spear && ./bin/python -m unittest tests.test_tool_runtime tests.test_command_policy tests.test_sandbox
+   client $ cd ~/spear/client && ./bin/python -m unittest tests.test_tool_runtime tests.test_command_policy tests.test_sandbox
 
 The server's side is :ref:`inference_host`; its step 9 is the full check.
 
@@ -130,7 +130,7 @@ Logs and audit
 ==============
 
 The paths below are relative to the state directory: ``SPEAR_STATE_DIR``, or
-``spear/`` when it is not set.
+``client/`` when it is not set.
 
 Server log
    Server-side: model load, context, slot activity.  In the journal

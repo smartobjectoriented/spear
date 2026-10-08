@@ -332,7 +332,7 @@ Smoke test
 
 .. code-block:: console
 
-   $ cd ~/spear/spear              # the client checkout
+   $ cd ~/spear/client              # the client checkout
    $ ./bin/python -c "
    from openai import OpenAI
    from model_backend import OpenAICompatibleBackend, ConversationMessage, TextBlock

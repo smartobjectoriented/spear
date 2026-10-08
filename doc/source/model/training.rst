@@ -129,7 +129,7 @@ The frozen bundle
 
 .. code-block:: console
 
-   $ cd ~/spear/spear
+   $ cd ~/spear/client
    $ ./bin/python -m training readiness --source audit/training-data
    $ ./bin/python -m training freeze --source audit/training-data --output /tmp/out
    $ ./bin/python -m training validate-bundle /tmp/out/bundles/<id>

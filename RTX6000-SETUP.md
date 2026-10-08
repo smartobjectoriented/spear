@@ -10,7 +10,7 @@ NB: *Qwen3-Coder* is a MoE A3B (3B active) — it would NOT help; the dense
 coder is the 2.5 line.
 
 ## What carries over from the laptop
-- `spear/` — the whole harness (rag_chat.py, tool-guide.md, rules.d/,
+- `client/` — the whole harness (rag_chat.py, tool-guide.md, rules.d/,
   system-prompt.md) and the ChromaDB corpora (SO3 / lvgl-so3 / micropython-so3).
 - The `~/soo/so3/.edgem-rules.md` per-corpus orientation map.
 - ✅ RAG + rules + skills + history.
@@ -26,7 +26,7 @@ coder is the 2.5 line.
    cmake -B build -DGGML_CUDA=ON -DCMAKE_CUDA_ARCHITECTURES=120
    cmake --build build -j --config Release
    ```
-2. Copy `/opt/llm/spear/spear` (with its `chromadb/`) and `~/.local/bin/spear-*`
+2. Copy `/opt/llm/spear/client` (with its `chromadb/`) and `~/.local/bin/spear-*`
    and `~/soo/so3` (or re-index there). Put llama.cpp at `/opt/llm/llama.cpp`.
 3. Fetch the model:  `server/scripts/fetch-model.sh`   (downloads the Q8_0 shards)
 4. Activate it:      `spear-model coder32`

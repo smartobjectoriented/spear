@@ -124,7 +124,7 @@ elif [ "$MODE" = reds ]; then
     # shellcheck disable=SC1090
     [ -f "$SCRIPT_DIR/reds.conf" ] && source "$SCRIPT_DIR/reds.conf"
     REDS_PORT="${REDS_PORT:-8010}"
-    [ -n "${REDS_HOST:-}" ] || { echo "--reds: set REDS_HOST in spear/reds.conf (see reds.conf.example)" >&2; exit 1; }
+    [ -n "${REDS_HOST:-}" ] || { echo "--reds: set REDS_HOST in client/reds.conf (see reds.conf.example)" >&2; exit 1; }
     # Extra ssh options from reds.conf, so the target is self-contained rather
     # than depending on the operator's personal ~/.ssh/config. Needed on hosts
     # with a low MaxAuthTries: without IdentitiesOnly, ssh offers every key in

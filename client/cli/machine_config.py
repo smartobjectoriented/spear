@@ -1,4 +1,4 @@
-"""Write spear/machine.env from what this machine already has.
+"""Write client/machine.env from what this machine already has.
 
 machine.env is this machine's local configuration -- where the session
 accumulates, where a deployment's private content lives, which host embeds a
@@ -199,7 +199,7 @@ def _comparable(text: str) -> list[str]:
 def main(argv=None, *, remote_revision=None, stdin=None) -> int:
     ap = argparse.ArgumentParser(
         prog="spear-configure",
-        description="Write spear/machine.env from what this machine has.")
+        description="Write client/machine.env from what this machine has.")
     ap.add_argument("--check", action="store_true",
                     help="say whether machine.env still matches; write nothing")
     ap.add_argument("--yes", action="store_true",

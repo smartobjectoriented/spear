@@ -9,18 +9,18 @@ Examples (from `spear`):
 
 ```bash
 # Infrastructure smoke run (writes only under audit/benchmarks/)
-/opt/llm/spear/spear/bin/python -m benchmarks.runner --smoke \
+/opt/llm/spear/client/bin/python -m benchmarks.runner --smoke \
   --task control-edit --output audit/benchmarks/smoke
 
 # Real local-model trial, one repetition of the control task
-/opt/llm/spear/spear/bin/python -m benchmarks.runner --real \
+/opt/llm/spear/client/bin/python -m benchmarks.runner --real \
   --configuration full --task control-edit --repetitions 1 \
   --output audit/benchmarks/real-control
 
 # Resume incomplete runs and aggregate an existing manifest
-/opt/llm/spear/spear/bin/python -m benchmarks.runner --real --resume \
+/opt/llm/spear/client/bin/python -m benchmarks.runner --real --resume \
   --output audit/benchmarks/real-control
-/opt/llm/spear/spear/bin/python -m benchmarks.runner --report \
+/opt/llm/spear/client/bin/python -m benchmarks.runner --report \
   --output audit/benchmarks/real-control
 ```
 

@@ -94,7 +94,10 @@ Entry format
        wins for its kind, and a declared build that fails is never replaced by
        a probe. Either kind of command can verify a change when it really runs
        and passes. A Makefile whose bare ``make`` only prints help, as a Sphinx
-       one does, is not taken for a build
+       one does, is not taken for a build. SPEAR runs the first entry of each
+       list; the others are further forms that count as that kind of
+       verification when the agent runs them. To require several checks,
+       chain them into the first with ``&&``
    * - ``lint_commands``, ``acceptance_commands``
      - further commands recognised as verification when the agent runs them
    * - ``bench``
@@ -279,6 +282,18 @@ A skill is held to the same rule: its ``scope:`` must name the project or a
 family (``[family:acme-bsp]``), or say ``[any]`` to be generic. ``/recall`` rules are generic by what that command
 means. A project's own map (an in-tree ``.edgem-rules.md``, or
 ``rules.d/corpora/<name>.md``) belongs to that project only.
+
+What a build command proves
+***************************
+
+A project's build command proves what it exercises, on the tree it runs in.
+Where that tree is a working copy derived from a source of truth kept
+elsewhere -- a component fetched and patched by a build framework, with the
+patches in git and the working copy not -- a build that passes shows the
+working copy compiles, not that the change is kept: rebuilding from the
+patches can lose it. Such a project covers both by chaining a check that the
+patches reproduce the working copy after its build command; SPEAR's verdict
+then reflects both, and its meaning is unchanged.
 
 Exclusions have granularity
 ***************************

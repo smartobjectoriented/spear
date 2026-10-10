@@ -101,10 +101,13 @@ class RequestScope:
     anchors: frozenset[str] = field(default_factory=frozenset)
     broadened: bool = False
     extra_roots: tuple[str, ...] = ()
+    # The workspace's own name and every declared project id, case-folded:
+    # words that name a project, never one file of it.
+    referents: frozenset[str] = field(default_factory=frozenset)
 
     @classmethod
     def of(cls, current: str, *, previous: str = "", root: str = "",
-           extra_roots=()) -> "RequestScope":
+           extra_roots=(), referents=()) -> "RequestScope":
         """The scope of the current turn.
 
         A follow-up that only says "yes, do it" names nothing: what it agrees
@@ -120,7 +123,8 @@ class RequestScope:
 
         return cls(root=str(root or ""), text=words, anchors=anchors(words),
                    broadened=broadened(words),
-                   extra_roots=tuple(str(item) for item in extra_roots or ()))
+                   extra_roots=tuple(str(item) for item in extra_roots or ()),
+                   referents=frozenset(str(item).casefold() for item in referents or ()))
 
     @property
     def roots(self) -> tuple[str, ...]:
@@ -204,8 +208,15 @@ def _alike(first: str, second: str) -> bool:
     return len(shared) * 2 >= len(a | b)
 
 
-def _sibling_of(directory: Path, component: str, scope: RequestScope):
-    """The anchor-bearing entry `component` is an analogue of, or None."""
+def _sibling_of(directory: Path, component: str, scope: RequestScope,
+                places: frozenset[str] = frozenset()):
+    """The anchor-bearing entry `component` is an analogue of, or None.
+
+    `places` are words that name where the target is rather than which file
+    it is: the project and the directories on the target's own path. Such a
+    word does not make a file of the same stem the named target ("the driver
+    used by alpha" is not about alpha.h); naming that file in full does.
+    """
     stem, ext = _split_name(component)
 
     if stem.casefold() in _SHARED_NAMES:
@@ -229,6 +240,10 @@ def _sibling_of(directory: Path, component: str, scope: RequestScope):
         segments = set(re.split(r"[_.-]", entry_stem)) | {entry_stem}
 
         for anchor in scope.anchors & segments:
+            if anchor in places and not entry.is_dir() \
+                    and entry.name.casefold() not in scope.anchors:
+                continue
+
             affix = _affix(entry.name, anchor, component)
 
             if affix is None:
@@ -280,9 +295,10 @@ def sibling_write_refusal(scope: RequestScope | None, target: str) -> str:
         return ""
 
     directory = root.resolve()
+    places = scope.referents | {part.casefold() for part in relative.parts[:-1]}
 
     for component in relative.parts:
-        found = _sibling_of(directory, component, scope)
+        found = _sibling_of(directory, component, scope, places)
 
         if found is not None:
             neighbour, anchor = found

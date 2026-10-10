@@ -280,6 +280,88 @@ class WritesStayOnTheNamedTarget(unittest.TestCase):
         self.assertEqual(envelope.error_category, "outside_project")
 
 
+class APlaceIsNotAFileTarget(unittest.TestCase):
+    """A word that names the project, or a directory on the target's own path,
+    names where the work is, not the file that happens to share its stem.
+
+    "the driver used by alpha" once made alpha.h the named target, so every
+    other header of alpha/include/alpha/ became a refused sibling -- among
+    them the compatibility layer the change had to extend.
+    """
+
+    REQUEST = "Upgrade the driver used by alpha so that it works on the new core."
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.root = Path(self.tmp.name)
+        family(self.root)
+
+        for directory in ("kernel/alpha/include/alpha", "include"):
+            (self.root / directory).mkdir(parents=True)
+
+            for name in ("alpha.h", "rt.h", "debug.h", "ring.h"):
+                (self.root / directory / name).write_text("x")
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def refusal(self, text, target, referents=()):
+        scope = request_scope.RequestScope.of(text, root=str(self.root),
+                                              referents=referents)
+
+        return request_scope.sibling_write_refusal(scope, target)
+
+    def test_the_workspace_name_does_not_target_its_namesake_file(self):
+        self.assertTrue(self.refusal(self.REQUEST, "include/rt.h"))
+        self.assertEqual(self.refusal(self.REQUEST, "include/rt.h", ("alpha",)), "")
+
+    def test_a_declared_project_id_does_not_either(self):
+        self.assertEqual(self.refusal(self.REQUEST, "include/rt.h", ("omega", "alpha")), "")
+
+    def test_a_directory_on_the_target_path_does_not_either(self):
+        for name in ("rt.h", "debug.h", "alpha.h"):
+            with self.subTest(name=name):
+                self.assertEqual(
+                    self.refusal(self.REQUEST, f"kernel/alpha/include/alpha/{name}"), "")
+
+    def test_the_file_named_in_full_stays_the_target(self):
+        text = "Update alpha.h for the driver used by alpha."
+
+        self.assertEqual(self.refusal(text, "kernel/alpha/include/alpha/alpha.h", ("alpha",)), "")
+        self.assertIn("alpha", self.refusal(text, "kernel/alpha/include/alpha/rt.h", ("alpha",)))
+
+    def test_a_path_to_the_file_stays_explicit(self):
+        text = "Modify kernel/alpha/include/alpha/alpha.h to add the mapping."
+
+        self.assertEqual(self.refusal(text, "kernel/alpha/include/alpha/alpha.h"), "")
+        self.assertIn("alpha", self.refusal(text, "kernel/alpha/include/alpha/rt.h"))
+
+    def test_a_true_sibling_is_still_refused(self):
+        text = "Please move the image of alpha to images/."
+
+        for referents in ((), ("omega",)):
+            with self.subTest(referents=referents):
+                self.assertIn("alpha", self.refusal(text, "cfg/beta.cfg", referents))
+                self.assertIn("alpha", self.refusal(text, "out/beta/post.sh", referents))
+
+    def test_the_turn_scope_carries_the_project_and_the_registry(self):
+        from unittest import mock
+
+        from cli import session_workspace, tool_routing
+
+        context = SimpleNamespace(working_state=SimpleNamespace(objective=self.REQUEST),
+                                  conversation=None)
+
+        with mock.patch.object(session_workspace, "PROJECT_ROOT", str(self.root)), \
+                mock.patch.object(session_workspace, "PROJECT", "alpha"), \
+                mock.patch("cli.corpus_registry.load_projects",
+                           return_value={"omega": {}, "alpha": {}}):
+            scope = tool_routing._request_scope(context)
+
+        self.assertEqual(scope.referents, frozenset({"alpha", "omega"}))
+        self.assertEqual(request_scope.sibling_write_refusal(scope, "include/rt.h"), "")
+
+
 class ShellWritesObeyTheSameScope(unittest.TestCase):
     """`--auto` must not turn cp, sed -i or python -c into a way round the
     refusal edit_file gives."""

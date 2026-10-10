@@ -322,9 +322,18 @@ def _request_scope(agent_context):
                           if session_workspace.WORKSPACE is not None else ())
         if str(item) == base or str(item).startswith(base.rstrip("/") + "/")
         for path in (str(item), os.path.realpath(str(item)))))
+    from cli.corpus_registry import load_projects
+
+    try:
+        declared = tuple(load_projects())
+    except Exception:
+        declared = ()
+
+    referents = tuple(name for name in (getattr(session_workspace, "PROJECT", None), *declared)
+                      if name)
     scope = request_scope.RequestScope.of(
         current, previous=earlier[-1] if earlier else "",
-        root=root, extra_roots=extra)
+        root=root, extra_roots=extra, referents=referents)
 
     try:
         agent_context._request_scope = (current, scope)

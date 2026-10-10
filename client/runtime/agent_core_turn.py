@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import subprocess
+from dataclasses import replace
 from typing import Any
 
 from runtime.cancellation import OperationCancelled
@@ -59,6 +60,67 @@ def _core_history(conversation) -> tuple[list[dict], str]:
     request = turns.pop()["content"] if turns and turns[-1]["role"] == "user" else ""
 
     return turns, request
+
+
+_STOP_REASON = {
+    "completed": RuntimeTerminalReason.COMPLETED,
+    "iterations": RuntimeTerminalReason.ROUND_BUDGET_EXHAUSTED,
+    "tool_budget": RuntimeTerminalReason.TOOL_BUDGET_EXHAUSTED,
+    "context": RuntimeTerminalReason.BUDGET_EXHAUSTED,
+    "halted": RuntimeTerminalReason.STALLED,
+    "truncated": RuntimeTerminalReason.INVALID_TURN,
+    "model_error": RuntimeTerminalReason.MODEL_FAILURE,
+    "cancelled": RuntimeTerminalReason.INTERRUPTED,
+}
+
+#: How much of a failed validation's output a repair pass is given.
+REPAIR_OUTPUT_CHARS = 2000
+
+
+def repairable_failure(context, reason, project, verdict, breaker):
+    """The project validation that failed on the final state, if this turn may
+    be given one repair pass for it; otherwise None.
+
+    Only a standalone implementation turn that finished normally qualifies:
+    a MIXED implementation pass belongs to the MIXED orchestrator, which owns
+    its own repair and adjudication. A validation that did not run is not a
+    failure, and a turn stopped by its budget, a refusal loop, a truncation or
+    the operator is not resumed.
+    """
+    if getattr(context, "mixed_record", None) is not None:
+        return None
+
+    if reason != RuntimeTerminalReason.COMPLETED or breaker.tripped is not None \
+            or context.cancellation.is_cancelled or verdict.state != "UNVERIFIED":
+        return None
+
+    from evidence import completion
+
+    return next((run for run in project or ()
+                 if run.status == completion.FAILED), None)
+
+
+def repair_request(failed, epoch) -> str:
+    """What a repair pass is told: the failed validation as SPEAR ran it."""
+    origin = {"configured": "configured in projects.json",
+              "probed": "probed from the tree"}.get(failed.origin, failed.origin or "unknown")
+    output = (failed.evidence or "").strip()
+    status = "non-zero"
+
+    if output.endswith(")") and "(exit status " in output.splitlines()[-1]:
+        status = output.splitlines()[-1].rsplit("(exit status ", 1)[1].rstrip(")")
+
+    return (
+        "The project's own validation failed on the current state of the tree, "
+        "after your changes.\n\n"
+        f"validation: {failed.validation_kind} ({origin})\n"
+        f"command: {failed.command}\n"
+        f"exit status: {status}\n"
+        f"source epoch: {epoch}\n\n"
+        "Output, bounded:\n"
+        f"{output[-REPAIR_OUTPUT_CHARS:] or '(none)'}\n\n"
+        "This is your one repair pass: fix what this output shows, then answer. "
+        "The validation will be run again on the state you leave.")
 
 
 def _generated_in(root):
@@ -181,15 +243,82 @@ class CodingCoreMixin:
         max_tokens = (core_loop.MAX_TOKENS if not window or window > 2 * core_loop.MAX_TOKENS
                       else window // 4)
 
-        try:
+        def run_pass(history, request, rounds, calls):
+            """One run of the core, and the reason it stopped. An interruption
+            propagates to the caller."""
             core = core_loop.run(
                 model=model, host=host, system=system, history=history,
                 request=request, tool_definitions=definitions,
-                max_iterations=context.max_model_rounds,
-                max_tool_calls=context.max_tool_actions,
+                max_iterations=rounds, max_tool_calls=calls,
                 context_window=window, max_tokens=max_tokens,
                 cancelled=lambda: (context.cancellation.is_cancelled
                                    or breaker.tripped is not None))
+
+            if breaker.tripped is not None and core.stop == "cancelled" \
+                    and not context.cancellation.is_cancelled:
+                core.stop, core.final = "halted", breaker.conclusion()
+                name, target, refusal = breaker.tripped
+                context.trace.emit(EventType.REPEATED_REFUSAL_STOPPED, context.task_id,
+                                   status=EventStatus.OK,
+                                   metadata={"tool": name, "target": target[:200],
+                                             "refusal": refusal,
+                                             "count": breaker.counts[breaker.tripped],
+                                             "limit": breaker.limit})
+
+            return core, _STOP_REASON[core.stop]
+
+        root = getattr(context, "project_root", "") or os.getcwd()
+        commands = getattr(context, "project_commands", None)
+
+        def judge(core):
+            """The epoch, the project's own validation of it, and the verdict."""
+            epoch = completion.timeline(context.core_evidence, _generated_in(root), root)[0]
+            project = completion.project_evidence(
+                project_build_runs(context, tool_log), commands, epoch)
+            verdict = completion.decide(
+                context.core_evidence, project_runs=project, project_commands=commands,
+                answer=core.final, generated=_generated_in(root), root=root)
+
+            return epoch, project, verdict
+
+        try:
+            core, reason = run_pass(history, request, context.max_model_rounds,
+                                    context.max_tool_actions)
+            epoch, project, verdict = judge(core)
+            failed = repairable_failure(context, reason, project, verdict, breaker)
+            rounds = context.max_model_rounds - core.iterations
+            calls = context.max_tool_actions - len(core.records)
+
+            # One repair pass, with the evidence of the validation that failed
+            # on the state the first pass left. Its result is validated again
+            # at whatever epoch it ends; it is never repaired a second time.
+
+            if failed is not None and rounds > 0 and calls > 0:
+                generation = context.working_state.mutation_generation
+                context.apply_state_event(StateEventType.RETRY_RECORDED,
+                                          reason="project_validation_failed")
+                context.trace.emit(EventType.VALIDATION_REPAIR_STARTED, context.task_id,
+                                   status=EventStatus.OK,
+                                   metadata={"command": failed.command[:300],
+                                             "kind": failed.validation_kind,
+                                             "origin": failed.origin, "epoch": epoch})
+                core, reason = run_pass(core.messages[1:], repair_request(failed, epoch),
+                                        rounds, calls)
+                epoch, project, verdict = judge(core)
+
+                # A repair that did not finish proves nothing about its own
+                # result, whatever the build now says.
+
+                if reason != RuntimeTerminalReason.COMPLETED and verdict.state == "VERIFIED":
+                    verdict = replace(verdict, state="UNVERIFIED",
+                                      reason="the repair pass did not finish")
+
+                context.trace.emit(EventType.VALIDATION_REPAIR_FINISHED, context.task_id,
+                                   status=EventStatus.OK,
+                                   metadata={"stop": core.stop, "epoch": epoch,
+                                             "mutated": context.working_state.mutation_generation
+                                             != generation,
+                                             "verdict": verdict.state})
         except (KeyboardInterrupt, OperationCancelled) as exc:
             summary = (exc.reason if isinstance(exc, OperationCancelled)
                        else "interrupted by user")
@@ -202,42 +331,12 @@ class CodingCoreMixin:
                                 None, cache, error_category=FailureKind.INTERRUPTED.value,
                                 error_summary=summary)
 
-        if breaker.tripped is not None and core.stop == "cancelled" \
-                and not context.cancellation.is_cancelled:
-            core.stop, core.final = "halted", breaker.conclusion()
-            name, target, refusal = breaker.tripped
-            context.trace.emit(EventType.REPEATED_REFUSAL_STOPPED, context.task_id,
-                               status=EventStatus.OK,
-                               metadata={"tool": name, "target": target[:200],
-                                         "refusal": refusal,
-                                         "count": breaker.counts[breaker.tripped],
-                                         "limit": breaker.limit})
-
-        reason = {
-            "completed": RuntimeTerminalReason.COMPLETED,
-            "iterations": RuntimeTerminalReason.ROUND_BUDGET_EXHAUSTED,
-            "tool_budget": RuntimeTerminalReason.TOOL_BUDGET_EXHAUSTED,
-            "context": RuntimeTerminalReason.BUDGET_EXHAUSTED,
-            "halted": RuntimeTerminalReason.STALLED,
-            "truncated": RuntimeTerminalReason.INVALID_TURN,
-            "model_error": RuntimeTerminalReason.MODEL_FAILURE,
-            "cancelled": RuntimeTerminalReason.INTERRUPTED,
-        }[core.stop]
-
         if reason in (RuntimeTerminalReason.STALLED, RuntimeTerminalReason.MODEL_FAILURE,
                       RuntimeTerminalReason.INVALID_TURN, RuntimeTerminalReason.INTERRUPTED) \
                 and context.working_state.terminal_status == TerminalStatus.RUNNING:
             context.apply_state_event(StateEventType.TASK_FAILED,
                                       summary=core.error or core.stop)
 
-        root = getattr(context, "project_root", "") or os.getcwd()
-        commands = getattr(context, "project_commands", None)
-        epoch = completion.timeline(context.core_evidence, _generated_in(root), root)[0]
-        project = completion.project_evidence(
-            project_build_runs(context, tool_log), commands, epoch)
-        verdict = completion.decide(
-            context.core_evidence, project_runs=project, project_commands=commands,
-            answer=core.final, generated=_generated_in(root), root=root)
         context.core_verdict = verdict
         final = completion.qualify(core.final, verdict)
 

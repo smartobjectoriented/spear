@@ -92,6 +92,8 @@ class EventType(StrEnum):
     NORMATIVE_POSTCHECK_STARTED = "normative_postcheck_started"
     NORMATIVE_CONSTRAINT_STATUS = "normative_constraint_status"
     REPAIR_STARTED = "repair_started"
+    VALIDATION_REPAIR_STARTED = "validation_repair_started"
+    VALIDATION_REPAIR_FINISHED = "validation_repair_finished"
     FINAL_MIXED_VERDICT = "final_mixed_verdict"
     CONSTRAINT_COVERAGE_EXPANDED = "constraint_coverage_expanded"
     CONSTRAINT_APPLICABILITY_DECIDED = "constraint_applicability_decided"

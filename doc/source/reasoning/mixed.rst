@@ -270,7 +270,10 @@ provision, and the contradiction the evidence found — never a model's
 speculation. The source epoch moves, every earlier check becomes stale, the
 bound checks run again, and the verdict is computed afresh from the new final
 source. A model-only finding, an ambiguity, an unresolved applicability or a
-MAY never triggers a repair.
+MAY never triggers a repair. This is the only repair a MIXED turn gets: the
+implementation pass is not also given the repair a standalone implementation
+turn receives after a failed project validation
+(:doc:`/reasoning/implementation`).
 
 The verdict
 ***********

@@ -186,6 +186,24 @@ it was refused or timed out — never from the text the model was shown. The
 verdict at the end of the turn (:ref:`evidence_verdicts`) is computed from
 this record alone.
 
+One repair after a failed project validation
+********************************************
+
+When the coding pass ends and the project's own validation -- its declared or
+probed build or test command (:term:`declared and probed commands`) -- then runs
+on the final state and fails, the coding core gets exactly one more pass. It is
+given that validation as SPEAR ran it: the kind and origin of the command, the
+command, its exit status, the bounded output and the source epoch it judged.
+Whatever the repair pass leaves is validated again at its own epoch; a failure
+then, a validation that could not run, or a repair pass that stopped before
+finishing is ``UNVERIFIED``. There is no second repair, and a pass that changes
+nothing ends the turn with the same failure.
+
+The repair is not offered when the validation did not run, nor to a turn
+stopped by its budget, a repeated refusal, a truncation or the operator. A
+MIXED implementation pass never receives it: MIXED owns its own single repair
+and its adjudication (:doc:`/reasoning/mixed`).
+
 Example
 *******
 

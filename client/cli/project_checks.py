@@ -126,8 +126,11 @@ def verify_project_command(command):
     if result.status == "ok" and result.exit_code in (None, 0):
         return "passed", ""
 
-    return "failed", project_build.summarize(
+    detail = project_build.summarize(
         (result.stdout or "") + (result.stderr or "") or result.summary)
+
+    return "failed", (detail + f"\n(exit status {result.exit_code})"
+                      if result.exit_code is not None else detail)
 
 
 def run_normative_check(command):

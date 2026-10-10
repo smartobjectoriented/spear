@@ -230,7 +230,7 @@ def missing_requirements(skill: Skill, *, which=shutil.which) -> tuple[str, ...]
     return tuple(command for command in skill.requires if not which(command))
 
 
-def applies_to(skill: Skill, *, project: str = "", kind: str = "",
+def applies_to(skill: Skill, *, project: str = "", kind: str = "", families=(),
                which=shutil.which) -> bool:
     """Whether this skill belongs in *this* session's prompt.
 
@@ -245,7 +245,8 @@ def applies_to(skill: Skill, *, project: str = "", kind: str = "",
     if ANY_SCOPE in skill.scope:
         return True
 
-    return bool(set(skill.scope) & ({project, kind} - {""}))
+    return bool(set(skill.scope) & (({project, kind} - {""})
+                                    | {f"family:{name}" for name in families}))
 
 
 def reconcile(skills, collection, *, project: str = "") -> dict[str, int]:

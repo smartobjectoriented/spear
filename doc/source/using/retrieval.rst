@@ -291,7 +291,8 @@ never sees, because it is stripped before injection:
 
 ``scope``
    The registered projects the procedure belongs to -- a bitbake procedure has
-   no business in an LVGL session.  ``[any]`` makes it generic, and must be
+   no business in an LVGL session -- or ``family:<name>`` for every project
+   declaring that family.  ``[any]`` makes it generic, and must be
    written: a skill that states no scope is used nowhere
    (:ref:`context_selection`).  A file saved by ``save_skill`` always states
    one.

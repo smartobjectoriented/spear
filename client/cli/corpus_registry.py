@@ -5,6 +5,7 @@ import re
 import sys
 import json
 from cli.chat_settings import APP_DIR, ROOT_DIR
+from context.workspace_context import FAMILY_PREFIX, project_families, reserved_project_id
 from cli.terminal_ui import C_ACCENT, C_DIM, C_ERR, C_OK, C_RST, C_WARN
 
 
@@ -62,6 +63,15 @@ def resolve_corpus_path(path):
     return os.path.normpath(os.path.join(CORPORA_ROOT, path))
 
 
+_WARNED: set[str] = set()
+
+
+def _warn_once(message):
+    if message not in _WARNED:
+        _WARNED.add(message)
+        print(message, file=sys.stderr)
+
+
 def load_projects():
     """Return {name: {"path","kind", ...}}. Tolerates the legacy {name: path} format (treated as
     generic). Extra keys (exclude, include_build — see reindex_options) are
@@ -77,6 +87,23 @@ def load_projects():
     projects = {}
 
     for name, val in raw.items():
+        # A name that reads as a family in a scope ("family:x") is refused
+        # here, where the registry is read, rather than silently matching
+        # every rule written for that family.
+
+        if reserved_project_id(name):
+            _warn_once(f"projects.json: '{name}' is not a usable project name "
+                       f"(names starting with '{FAMILY_PREFIX}' are reserved for "
+                       f"project families); the entry is ignored")
+            continue
+
+        if not isinstance(val, str):
+            bad = project_families(val)[1]
+
+            if bad:
+                _warn_once(f"projects.json: '{name}' declares unusable families "
+                           f"{', '.join(bad)} (lower-case names, no ':'); they are ignored")
+
         if isinstance(val, str):
             projects[name] = {"path": val, "kind": "generic"}
         else:

@@ -16,10 +16,45 @@ any other project.
 from __future__ import annotations
 
 import os
+import re
 from dataclasses import dataclass, field
 
 #: Capability families (tool_selection) a workspace may be offered.
 CODING, NORMATIVE, GENERAL = "CODING", "NORMATIVE", "GENERAL"
+
+#: How a scope names a project family, beside the projects it names directly.
+FAMILY_PREFIX = "family:"
+
+_FAMILY_NAME = re.compile(r"[a-z0-9][a-z0-9_.-]*")
+
+
+def reserved_project_id(name: str) -> bool:
+    """A registry name that would read as a family in a scope."""
+    return str(name).casefold().startswith(FAMILY_PREFIX)
+
+
+def project_families(spec) -> tuple[tuple[str, ...], tuple[str, ...]]:
+    """(the families a registry entry declares, the values it got wrong).
+
+    Membership is what the entry says in "families", and nothing else: no
+    directory, build file or rule makes a project a member of anything.
+    """
+    raw = (spec or {}).get("families") or ()
+
+    if isinstance(raw, str):
+        raw = (raw,)
+
+    good, bad = [], []
+
+    for value in raw if isinstance(raw, (list, tuple)) else (raw,):
+        name = str(value).strip().casefold()
+
+        if isinstance(value, str) and _FAMILY_NAME.fullmatch(name):
+            good.append(name)
+        else:
+            bad.append(str(value))
+
+    return tuple(dict.fromkeys(good)), tuple(bad)
 
 
 @dataclass(frozen=True)
@@ -38,15 +73,18 @@ class WorkspaceContext:
     check_bindings: tuple[str, ...] = ()             # normative_checks ids
     applicability_declarations: int = 0
     families: tuple[str, ...] = field(default=(CODING, GENERAL))
+    project_families: tuple[str, ...] = ()           # declared in projects.json
 
     @property
     def names(self) -> frozenset[str]:
         """What a project-scoped rule may name to apply here: the registered
-        project and its own parts. An unregistered tree answers to nothing."""
+        project, its own parts and the families it declares (as family:<name>).
+        An unregistered tree answers to nothing."""
         if not self.registered:
             return frozenset()
 
         names = {self.workspace_id} | set(self.corpora)
+        names |= {FAMILY_PREFIX + name for name in self.project_families}
 
         if self.workspace_id.startswith("workspace:"):
             names.add(self.workspace_id.split(":", 1)[1])
@@ -69,7 +107,8 @@ class WorkspaceContext:
                 "bound_standard": list(self.bound_standard) if self.bound_standard else None,
                 "check_bindings": list(self.check_bindings),
                 "applicability_declarations": self.applicability_declarations,
-                "families": list(self.families)}
+                "families": list(self.families),
+                "project_families": list(self.project_families)}
 
 
 def _declared_standards(spec) -> tuple[tuple[str, str], ...]:
@@ -112,4 +151,5 @@ def from_session(*, project: str, spec: dict | None, registered: bool, project_r
                              if isinstance(entry, dict) and entry.get("id")) if registered else (),
         applicability_declarations=len(spec.get("normative_applicability") or ())
         if registered else 0,
-        families=families)
+        families=families,
+        project_families=project_families(spec)[0] if registered else ())

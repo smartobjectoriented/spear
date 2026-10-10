@@ -29,6 +29,7 @@ import re
 
 from context.context_selection import (GENERIC, HOST_PATHS, NOWHERE, PROJECTS, WORKSPACE,
                                Candidate, SourceType)
+from context.workspace_context import FAMILY_PREFIX
 
 _HEADER = re.compile(r"\A---\s*\n(.*?)\n---\s*(?:\n|\Z)", re.S)
 _TASKS = frozenset({"implementation", "mixed", "normative", "general"})
@@ -56,6 +57,8 @@ def parse_rule(content: str):
         scope = (GENERIC,)
     elif kind == "corpus" and values:
         scope = (PROJECTS,) + values
+    elif kind == "family" and values:
+        scope = (PROJECTS,) + tuple(FAMILY_PREFIX + value.casefold() for value in values)
     elif kind == "path" and values:
         scope = (HOST_PATHS,) + values
     else:

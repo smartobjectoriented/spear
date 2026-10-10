@@ -37,6 +37,7 @@ from harness.tool_primitives import ExecutionMode
 from runtime.tracing import EventStatus, EventType, new_task_id
 from runtime.working_state import StateEventType, WorkingState
 from context.context_engine import ContextLayer
+from context.workspace_context import project_families
 from runtime.compaction import CompactionMode, CompactionPolicy
 from runtime.agent_context import AgentContext
 from runtime.agent_runtime import AgentRuntime
@@ -567,8 +568,10 @@ def main():
 
                     if missing:
                         state = f" {C_DIM}needs {', '.join(missing)}{C_RST}"
-                    elif not skill_library.applies_to(skill, project=session_workspace.PROJECT,
-                                                      kind=session_workspace.PROJECT_KIND):
+                    elif not skill_library.applies_to(
+                            skill, project=session_workspace.PROJECT,
+                            kind=session_workspace.PROJECT_KIND,
+                            families=project_families(session_workspace.PROJECT_SPEC)[0]):
                         state = f" {C_DIM}other corpus{C_RST}"
                     else:
                         state = ""

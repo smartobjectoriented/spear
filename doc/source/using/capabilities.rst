@@ -49,8 +49,9 @@ deployment's own file: commands and server names are not public material.
        ``HOME`` and the variables ``env`` names
    * - ``scope``
      - where the provider applies, in the rule header's syntax
-       (:ref:`context_selection`): ``global``, ``corpus <project>[, ...]`` or
-       ``path <dir>``. Without one it applies nowhere
+       (:ref:`context_selection`): ``global``, ``corpus <project>[, ...]``,
+       ``family <name>[, ...]`` or ``path <dir>``. Without one it applies
+       nowhere
    * - ``tasks``
      - the request classes it serves: ``implementation``, ``mixed``,
        ``general`` (default: implementation and mixed)

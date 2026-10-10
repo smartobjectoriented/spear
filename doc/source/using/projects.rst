@@ -79,6 +79,12 @@ Entry format
      - federate these registered corpora into a session on this project
    * - ``shared``
      - attach this corpus to **every** session
+   * - ``families``
+     - the project families this project belongs to, e.g. ``["acme-bsp"]``:
+       it then receives the rules, skills and capabilities scoped to
+       ``family acme-bsp``. Membership is exactly what this list says --
+       never inferred from the tree -- and an unregistered tree has none.
+       Lower-case names; a project may not itself be called ``family:...``
    * - ``build_commands``, ``test_commands``
      - how this tree is built and tested: the **project's own verification**.
        SPEAR runs them on the final tree of a change-making turn, and a failure
@@ -260,6 +266,7 @@ because nobody scoped it.
    ---
    scope: global                     every workspace: the only generic scope
    scope: corpus acme-firmware       this registered project, or one of its parts
+   scope: family acme-bsp            every registered project declaring that family
    scope: path /srv/src/acme         workspaces whose tree lies under this directory
    tasks: implementation, mixed      the request classes it serves (the default);
                                      also normative, general
@@ -268,8 +275,8 @@ because nobody scoped it.
    ---
    Build the documentation with `make -C doc html` and treat warnings as errors.
 
-A skill is held to the same rule: its ``scope:`` must name the project, or say
-``[any]`` to be generic. ``/recall`` rules are generic by what that command
+A skill is held to the same rule: its ``scope:`` must name the project or a
+family (``[family:acme-bsp]``), or say ``[any]`` to be generic. ``/recall`` rules are generic by what that command
 means. A project's own map (an in-tree ``.edgem-rules.md``, or
 ``rules.d/corpora/<name>.md``) belongs to that project only.
 

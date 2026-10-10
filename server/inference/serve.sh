@@ -24,7 +24,7 @@
 # mode -- owns the output, and that is also who owns where the output goes.
 set -euo pipefail
 
-KEYS=(LLAMA_BIN MODEL CTX HOST PORT PARALLEL NGL THREADS NCPUMOE LORA GPU_UUID)
+KEYS=(LLAMA_BIN MODEL CTX HOST PORT PARALLEL NGL THREADS NCPUMOE LORA GPU_UUID GPU_WAIT)
 
 # The environment must survive the config file, so capture it first and put it
 # back afterwards. Sourcing is what lets an operator keep a readable file with
@@ -91,6 +91,55 @@ if [ -z "${CUDA_VISIBLE_DEVICES:-}" ] && [ -n "${SPEAR_SERVER_GPU_UUID:-}" ]; th
     export CUDA_VISIBLE_DEVICES="$SPEAR_SERVER_GPU_UUID"
 fi
 echo "serving on GPU ${CUDA_VISIBLE_DEVICES:-<unpinned>}" >&2
+
+# ── the card is there ────────────────────────────────────────────────
+# llama.cpp does not stop when CUDA finds no device: it serves the whole model
+# from the CPU, two orders of magnitude slower, behind a health check that
+# answers ok. At boot the driver can come up after this service starts, so
+# wait for the card and refuse to start without it.
+#
+# Not checked when no layer goes to a GPU, when the caller hid every card
+# (-1), or on a host without nvidia-smi, which this cannot speak for.
+
+gpu_ready() {
+    local listed wanted w line found
+    listed="$(nvidia-smi --query-gpu=uuid --format=csv,noheader 2>/dev/null)" || return 1
+    [ -n "$listed" ] || return 1
+    IFS=, read -ra wanted <<<"${CUDA_VISIBLE_DEVICES:-}"
+
+    for w in "${wanted[@]}"; do
+        case "$w" in
+            GPU-*)
+                found=""
+                while read -r line; do
+                    case "$line" in "$w"*) found=1 ;; esac
+                done <<<"$listed"
+                [ -n "$found" ] || return 1 ;;
+            ''|*[!0-9]*) ;;
+            *) [ "$w" -lt "$(wc -l <<<"$listed")" ] || return 1 ;;
+        esac
+    done
+}
+
+if [ "${SPEAR_SERVER_NGL:-99}" != 0 ] && [ "${CUDA_VISIBLE_DEVICES:-}" != -1 ] \
+        && command -v nvidia-smi >/dev/null; then
+    WAIT="${SPEAR_SERVER_GPU_WAIT:-300}"
+    case "$WAIT" in
+        ''|*[!0-9]*) echo "serve.sh: SPEAR_SERVER_GPU_WAIT is not a number: $WAIT" >&2; exit 78 ;;
+    esac
+    deadline=$((SECONDS + WAIT))
+
+    until gpu_ready; do
+        if [ "$SECONDS" -ge "$deadline" ]; then
+            echo "serve.sh: GPU ${CUDA_VISIBLE_DEVICES:-<any>} not available after ${WAIT}s;" \
+                 "not serving from the CPU" >&2
+            echo "  check the driver with nvidia-smi, or set SPEAR_SERVER_NGL=0 to serve" \
+                 "from the CPU on purpose" >&2
+            exit 69              # EX_UNAVAILABLE
+        fi
+        sleep 5
+    done
+fi
 
 # The build links shared libraries beside the binary.
 export LD_LIBRARY_PATH="$(dirname "$SPEAR_SERVER_LLAMA_BIN")${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"

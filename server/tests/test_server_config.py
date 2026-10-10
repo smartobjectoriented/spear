@@ -30,6 +30,19 @@ printf '%s\\n' "ldpath=${LD_LIBRARY_PATH:-}" >> "$SPEAR_TEST_ARGV"
 exit 0
 """
 
+#: A stand-in for nvidia-smi: it lists the UUIDs in SPEAR_TEST_GPUS, or fails
+#: as it does before the driver is up. SPEAR_TEST_GPU_LATE makes the cards
+#: appear only from its Nth call on.
+NVIDIA_SMI = """#!/bin/bash
+n=$(( $(cat "$SPEAR_TEST_NVSMI_CALLS" 2>/dev/null || echo 0) + 1 ))
+echo "$n" > "$SPEAR_TEST_NVSMI_CALLS"
+if [ "$n" -lt "${SPEAR_TEST_GPU_LATE:-1}" ] || [ -z "${SPEAR_TEST_GPUS:-}" ]; then
+    echo "NVIDIA-SMI has failed because it couldn't communicate with the NVIDIA driver."
+    exit 9
+fi
+tr , '\\n' <<<"$SPEAR_TEST_GPUS"
+"""
+
 
 class Serving(unittest.TestCase):
     def setUp(self):
@@ -49,6 +62,11 @@ class Serving(unittest.TestCase):
         (self.root / "config").mkdir()
         self.argv = self.root / "argv.txt"
 
+        self.tools = self.root / "tools"
+        self.tools.mkdir()
+        (self.tools / "nvidia-smi").write_text(NVIDIA_SMI)
+        (self.tools / "nvidia-smi").chmod(0o755)
+
     def conf(self, text):
         (self.root / "config" / "server.conf").write_text(text)
 
@@ -61,9 +79,11 @@ class Serving(unittest.TestCase):
         Not called `run`: TestCase.run is how unittest executes a test,
         and overriding it makes the runner call this instead.
         """
-        e = {"PATH": os.environ["PATH"], "HOME": str(self.root),
+        e = {"PATH": f"{self.tools}:{os.environ['PATH']}", "HOME": str(self.root),
              "SPEAR_SERVER_ROOT": str(self.root),
-             "SPEAR_TEST_ARGV": str(self.argv)}
+             "SPEAR_TEST_ARGV": str(self.argv),
+             "SPEAR_TEST_GPUS": "GPU-0123-aaaa,GPU-9999-bbbb",
+             "SPEAR_TEST_NVSMI_CALLS": str(self.root / "nvsmi-calls")}
         e.update(env or {})
         proc = subprocess.run(["bash", str(SERVE), *args], env=e,
                               capture_output=True, text=True, timeout=60)
@@ -219,6 +239,54 @@ class Serving(unittest.TestCase):
         self.gpu_conf("SPEAR_SERVER_GPU_UUID=GPU-0123\n")
         self.serve(env=self.complete(CUDA_VISIBLE_DEVICES="GPU-9999"))
         self.assertEqual(self.served()["gpu"], "GPU-9999")
+
+    # ── D'. the card must be there ───────────────────────────────────
+
+    def test_a_visible_card_is_served(self):
+        self.gpu_conf("SPEAR_SERVER_GPU_UUID=GPU-0123\n")
+        self.serve(env=self.complete())
+        self.assertEqual(self.served()["gpu"], "GPU-0123")
+
+    def test_a_driver_that_is_not_up_is_not_served_from_the_cpu(self):
+        self.gpu_conf("SPEAR_SERVER_GPU_UUID=GPU-0123\n")
+        proc = self.serve(env=self.complete(SPEAR_TEST_GPUS="", SPEAR_SERVER_GPU_WAIT="0"),
+                          expect=69)
+        self.assertIn("not serving from the CPU", proc.stderr)
+        self.assertFalse(self.argv.exists())
+
+    def test_a_card_the_host_does_not_show_is_refused(self):
+        self.gpu_conf("SPEAR_SERVER_GPU_UUID=GPU-7777\n")
+        self.serve(env=self.complete(SPEAR_SERVER_GPU_WAIT="0"), expect=69)
+        self.assertFalse(self.argv.exists())
+
+    def test_a_card_index_beyond_the_host_is_refused(self):
+        self.serve(env=self.complete(CUDA_VISIBLE_DEVICES="2", SPEAR_SERVER_GPU_WAIT="0"),
+                   expect=69)
+
+    def test_a_card_that_comes_up_late_is_waited_for(self):
+        self.gpu_conf("SPEAR_SERVER_GPU_UUID=GPU-0123\n")
+        self.serve(env=self.complete(SPEAR_TEST_GPU_LATE="2", SPEAR_SERVER_GPU_WAIT="30"))
+        self.assertEqual(self.served()["gpu"], "GPU-0123")
+
+    def test_serving_from_the_cpu_on_purpose_needs_no_card(self):
+        self.serve(env=self.complete(SPEAR_TEST_GPUS="", SPEAR_SERVER_NGL="0"))
+        self.assertEqual(self.served()["--n-gpu-layers"], "0")
+
+    def test_every_card_hidden_by_the_caller_needs_no_card(self):
+        self.serve(env=self.complete(SPEAR_TEST_GPUS="", CUDA_VISIBLE_DEVICES="-1"))
+
+    def test_a_host_without_nvidia_smi_is_not_judged(self):
+        bare = self.root / "bare"
+        bare.mkdir()
+
+        for tool in ("bash", "dirname", "basename", "awk", "wc", "sleep"):
+            (bare / tool).symlink_to(shutil.which(tool))
+
+        self.serve(env=self.complete(PATH=str(bare)))
+        self.assertTrue(self.argv.exists())
+
+    def test_a_non_numeric_wait_is_refused(self):
+        self.serve(env=self.complete(SPEAR_SERVER_GPU_WAIT="soon"), expect=78)
 
     # ── E. offload and adapter ───────────────────────────────────────
 

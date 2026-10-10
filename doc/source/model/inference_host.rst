@@ -220,6 +220,13 @@ no root, but survives a logout only with ``loginctl enable-linger`` — a
 decision for the host's administrator.  ``server/inference/README.md`` weighs
 the two.
 
+At boot the NVIDIA driver can come up after the service.  ``serve.sh``
+therefore waits for the configured card (``SPEAR_SERVER_GPU_WAIT``, 300 s by
+default) and exits rather than start llama-server without it: llama.cpp would
+otherwise serve the whole model from the CPU, two orders of magnitude slower,
+while ``/health`` answers ``ok``.  ``SPEAR_SERVER_NGL=0`` serves from the CPU on
+purpose.
+
 ``active`` means *started*, not *serving*; wait on ``/health`` as in step 5.
 Day to day:
 

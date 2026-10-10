@@ -99,3 +99,10 @@ the supervisor must not undo it. `RestartSec=15`, with `StartLimitBurst=5` in
 600 s so a server that cannot allocate its card stops retrying instead of
 hammering the GPU. `TimeoutStartSec=900`, because a start timeout shorter than
 the model load turns a working server into a restart loop.
+
+`serve.sh` waits for the configured card before it starts llama-server, and
+exits 69 if the card has not appeared after `SPEAR_SERVER_GPU_WAIT` seconds
+(300 by default). Without that, a service started at boot before the NVIDIA
+driver is up runs the whole model on the CPU: llama.cpp only warns, and
+`/health` still answers ok. `SPEAR_SERVER_NGL=0` serves from the CPU on purpose
+and skips the check.

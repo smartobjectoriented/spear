@@ -5,6 +5,10 @@ snapshot copies were protected only from write_file and
 patch: delete_file then a fresh write_file, a shell redirection, cp, tee,
 truncate or ln -sf reached the same file. Every mutation path asks here,
 about the path as written and about the file it actually reaches.
+
+A repository's own state is a target too: no tool edits git metadata, and
+the sandbox binds it read-only under every command that may write
+(write_protection.py).
 """
 
 from __future__ import annotations
@@ -62,6 +66,50 @@ def is_snapshot(path: str) -> bool:
     return False
 
 
+def gitdir_named_by(dotgit: str) -> str:
+    """The directory a `.git` FILE names (a worktree's or a submodule's), or ""."""
+    try:
+        with open(dotgit, "r", encoding="utf-8", errors="replace") as handle:
+            line = handle.readline(4096)
+    except OSError:
+        return ""
+
+    if not line.startswith("gitdir:"):
+        return ""
+
+    return os.path.realpath(os.path.join(os.path.dirname(dotgit), line[7:].strip()))
+
+
+def _is_gitdir(directory: str) -> bool:
+    return (os.path.isfile(os.path.join(directory, "HEAD"))
+            and (os.path.isdir(os.path.join(directory, "objects"))
+                 or os.path.isfile(os.path.join(directory, "commondir"))))
+
+
+def is_git_metadata(path: str) -> bool:
+    """Whether `path` is part of a repository's own state.
+
+    A `.git` component, file or directory, is. So is anything inside a git
+    directory with another name: the one a `.git` file points to
+    (--separate-git-dir, a worktree's) or a bare repository, recognised by
+    its HEAD beside its objects or its commondir.
+    """
+    path = os.path.abspath(str(path))
+
+    if ".git" in path.split("/"):
+        return True
+
+    directory = path
+
+    while directory != "/":
+        if _is_gitdir(directory):
+            return True
+
+        directory = os.path.dirname(directory)
+
+    return False
+
+
 def _head(path: str) -> str:
     try:
         with open(path, "r", encoding="utf-8", errors="replace") as handle:
@@ -70,21 +118,32 @@ def _head(path: str) -> str:
         return ""
 
 
-def refusal(path: str, label: str | None = None) -> str:
-    """Why `path` may not be mutated, or "". `label` names it in the answer."""
+def refusal(path: str, label: str | None = None, *, follow: bool = True) -> str:
+    """Why `path` may not be mutated, or "". `label` names it in the answer.
+
+    `follow=False` judges a symbolic link as itself, for deleting it: what
+    it points at is not what changes.
+    """
     if not path:
         return ""
 
     label = label or path
     candidates = [str(path)]
-    real = os.path.realpath(path)
+    real = (os.path.realpath(path) if follow else
+            os.path.join(os.path.realpath(os.path.dirname(os.path.abspath(path))),
+                         os.path.basename(path)))
 
     if real != str(path):
         candidates.append(real)
 
     # A directory is judged as the tree it is: `mkdir generated` or a write
     # aimed at `.../generated` itself is a change inside it.
+
     candidates += [item.rstrip("/") + "/" for item in list(candidates) if os.path.isdir(item)]
+
+    for candidate in candidates:
+        if is_git_metadata(candidate):
+            return f"{label} is git metadata — change it through git, not by editing it"
 
     for candidate in candidates:
         if _GENERATED_PATH.search(candidate):
@@ -93,7 +152,7 @@ def refusal(path: str, label: str | None = None) -> str:
         if is_snapshot(candidate):
             return f"{label} is a snapshot copy"
 
-    if os.path.isfile(real) and says_generated(_head(real)):
+    if follow and os.path.isfile(real) and says_generated(_head(real)):
         return f"{label} is a generated file — change its source"
 
     return ""

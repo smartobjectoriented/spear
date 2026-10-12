@@ -20,7 +20,7 @@ from cli.session_workspace import (
     COMMAND_POLICY, _capture_checkpoint_path, _forget_cached_reads,
     _record_mutation, apply_unified_diff, audit_denied_mutation,
     audit_mutation_result, audit_rejected_mutation, authorize_mutation,
-    command_result_text, edit_file, find_file, is_excluded_path,
+    command_result_text, edit_file, find_file,
     preserve_third_party_header, resolve_path, run_cmd_result,
     safe_mode_refusal,
 )
@@ -464,6 +464,27 @@ def _sandbox_down_result(label, path):
     )
 
 
+def _protected_result(action, path, fpath, *, follow=True):
+    """The target policy's refusal of `fpath`, shown and audited, or None.
+
+    The same question the coding core's write and delete ports ask: a file
+    one tool may not change, no tool may.
+    """
+    from harness import target_policy
+
+    refusal = target_policy.refusal(str(fpath), path, follow=follow)
+
+    if not refusal:
+        return None
+
+    result = f"ERROR: {refusal}."
+    audit_rejected_mutation(action, "protected target", paths=(fpath,))
+    tool_result(result)
+    print()
+
+    return _classified_handler_result(result)
+
+
 def _registered_edit_file(context, args):
     path = (args.get("path") or "").strip()
 
@@ -496,6 +517,11 @@ def _registered_edit_file(context, args):
             result = f"ERROR: {exc}"
             audit_rejected_mutation("apply_patch", str(exc), paths=(path,))
         else:
+            protected = _protected_result("apply_patch", path, fpath)
+
+            if protected is not None:
+                return protected
+
             blocked = authorize_mutation(
                 f"Apply patch to {C_BOLD}{path}{C_RST} ?",
                 action="apply_patch", paths=(fpath,),
@@ -557,6 +583,9 @@ def _registered_append_file(context, args):
         return _classified_handler_result(result)
 
     fpath = find_file(path)
+
+    if fpath and (protected := _protected_result("append_file", path, fpath)) is not None:
+        return protected
 
     if not fpath:
         result = f"ERROR: file not found: {path}"
@@ -643,14 +672,13 @@ def _registered_delete_file(context, args):
 
         return _classified_handler_result(result)
 
-    if is_excluded_path(fpath):
-        result = (f"ERROR: {path} is in a third-party or snapshot tree that is "
-                  f"never modified from here.")
-        audit_rejected_mutation("delete_file", "excluded tree", paths=(fpath,))
-        tool_result(result)
-        print()
+    # A link is judged as itself: deleting it leaves what it names alone.
 
-        return _classified_handler_result(result)
+    protected = _protected_result("delete_file", path, fpath,
+                                  follow=not os.path.islink(fpath))
+
+    if protected is not None:
+        return protected
 
     blocked = authorize_mutation(
         f"Delete {C_BOLD}{path}{C_RST} ?", action="delete_file", paths=(fpath,))
@@ -736,6 +764,11 @@ def _registered_write_file(context, args):
         print()
 
         return _classified_handler_result(refused)
+
+    protected = _protected_result("write_file", path, fpath)
+
+    if protected is not None:
+        return protected
 
     if looks_like_diff(content) and os.path.isfile(fpath):
         print()
@@ -1055,6 +1088,15 @@ def _fetch_url_to_disk(context, url, save_as):
 
     if os.path.isdir(fpath):
         return f"ERROR fetch_url: '{save_as}' is a directory."
+
+    from harness import target_policy
+
+    protected = target_policy.refusal(str(fpath), save_as)
+
+    if protected:
+        audit_rejected_mutation("fetch_url", "protected target", paths=(fpath,))
+
+        return f"ERROR fetch_url: {protected}."
 
     with Spinner("Downloading…"):
         data, content_type, final_url = web_fetch.download(url)

@@ -938,6 +938,34 @@ class CommandPolicy:
 
         return frozenset(capabilities), danger, outside, refusal
 
+    _STAGE_KEYWORDS = frozenset({"do", "then", "else", "elif", "time", "!", "{",
+                                 "exec", "nohup", "env", "command"})
+
+    def stage_argvs(self, command: str) -> "list[tuple[str, ...]]":
+        """The argv each stage of `command` runs, environment prefixes set aside."""
+        found = []
+
+        for part in self._shell_stages(self._strip_heredoc_bodies(command or "")):
+            try:
+                argv = tuple(shlex.split(part, posix=True))
+            except ValueError:
+                continue
+
+            while argv and (self._ASSIGNMENT.match(argv[0])
+                            or argv[0] in self._STAGE_KEYWORDS):
+                argv = argv[1:]
+
+            if argv:
+                found.append(argv)
+
+        return found
+
+    def writes_git(self, command: str) -> bool:
+        """Whether `command` runs one of the git commands allowed to write git."""
+        return any(Path(argv[0]).name == "git" and len(argv) > 1
+                   and argv[1] in self.GIT_NETWORK_WRITE
+                   for argv in self.stage_argvs(command))
+
     def classify(self, command: str) -> CommandAssessment:
         if not command or not command.strip():
             return self._assessment(command, (), CommandClassification.DANGEROUS, "empty command")

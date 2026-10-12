@@ -16,6 +16,7 @@ from harness.tool_primitives import (
 )
 from harness.tool_runtime import CommandRunner
 from harness.workspace import SandboxSpec, Workspace, effective_mount_root
+from harness import write_protection
 from runtime.tracing import EventStatus, EventType, new_action_id
 from cli.chat_settings import AUDIT_LOGGER, STATE_DIR
 from cli.corpus_registry import load_projects
@@ -545,9 +546,11 @@ def run_cmd_result(cmd, need_confirm=True, cancellation=None, execution_mode=Non
         return authorization.result
 
     granted_capabilities = authorization.granted_capabilities
+    git_writable = COMMAND_POLICY.writes_git(cmd)
     profile = ExecutionProfile.from_capabilities(
         granted_capabilities,
         assessment.host_read_paths if Capability.HOST_READ in granted_capabilities else (),
+        git_writable=git_writable,
     )
     sandboxed = False
 
@@ -583,6 +586,11 @@ def run_cmd_result(cmd, need_confirm=True, cancellation=None, execution_mode=Non
 
             if default_chars is not None:
                 sandbox.max_output_chars = default_chars
+
+        # A clone adds a repository the next command must find protected.
+
+        if git_writable:
+            write_protection.forget()
 
         sandboxed = True
     else:
@@ -734,33 +742,18 @@ def edit_file(path, old_text, new_text, *, execution_context=None):
     if not fpath:
         return f"ERROR: file not found: {path}"
 
-    # guard: a bad/incomplete path can fuzzy-resolve to a SNAPSHOT copy
-    # (e.g. avz.back/…). Never write there — it corrupts the pristine copy and
-    # is never the file the user meant.
+    # A bad or incomplete path can fuzzy-resolve to a snapshot copy, generated
+    # output or git metadata. The same policy every other mutation asks.
 
-    if is_excluded_path(fpath):
-        return (f"ERROR: {os.path.relpath(fpath, PROJECT_ROOT)} is a snapshot copy "
-                f"(.back/.pristine, or .0 beside its live tree) — never edit it. "
-                f"Use the LIVE source path (re-check it with ls/find).")
+    from harness import target_policy
+
+    protected = target_policy.refusal(str(fpath), path)
+
+    if protected:
+        return f"ERROR: {protected}."
 
     with fpath.open("r", encoding="utf-8") as f:
         content = f.read()
-
-    # guard: never edit a GENERATED / DO-NOT-MODIFY file — it is overwritten on
-    # the next build/regen and editing it hides the real fix (must change the
-    # source that generates it, or the Kconfig/config instead).
-    # str(): resolve_path returns a Path, and re.search refuses one. This
-    # raised TypeError on EVERY edit of an existing file, so edit_file has been
-    # dead since the workspace started resolving to Path objects — which is why
-    # the model always fell back to rewriting whole files with write_file.
-
-    if re.search(r"/generated/|/build/tmp/", str(fpath)) or re.search(
-            r"DO NOT (?:MODIFY|EDIT)|auto(?:matically)?[ -]?generated|@generated",
-            content[:600], re.IGNORECASE):
-        return (f"ERROR: {path} is a GENERATED / DO-NOT-MODIFY file (it gets "
-                f"overwritten on the next build). Do NOT edit it — fix the "
-                f"source that generates it (a script, Kconfig, .config, or a "
-                f"template), not the generated output.")
 
     # guard: a no-op edit changes nothing but reports success — the model then
     # believes it acted. The comparison is EXACT. It used to normalise

@@ -116,8 +116,8 @@ Every call the coding core makes crosses SpearHost, whichever tool made it:
 
 ``write`` / ``delete``
    the protected-target policy (generated output, snapshot and third-party
-   copies), the confirmation the mode requires, and the checkpoint that makes
-   ``/undo`` possible.
+   copies, git metadata), the confirmation the mode requires, and the
+   checkpoint that makes ``/undo`` possible.
 
 ``run_command``
    the command policy (what may run, what it may write, whether it may reach
@@ -157,6 +157,12 @@ tree or a ``recipes-qemu/qemu/`` layer stays editable. The refusal belongs to
 the file, not to the tool: ``patch``, ``write_file``, ``delete_file`` and the
 terminal's redirections, ``cp``, ``tee``, ``truncate`` or ``ln -sf`` are all
 refused the same file, judged both as written and as the path it resolves to.
+
+**Git metadata.** No tool edits a repository's state: ``.git`` (directory or
+file), the git directory a ``.git`` file names, and anything under them are
+refused to every tool, and bound read-only by the sandbox under every command
+that may write, so a script or ``git add`` fails there too. Only ``git
+clone``, ``fetch`` and ``pull`` keep them writable.
 
 **Advisory and read-only turns.** A turn that asks only to be told something,
 or is told not to change anything, keeps its reading tools and loses every

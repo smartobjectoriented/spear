@@ -12,6 +12,7 @@ from unittest.mock import MagicMock, patch
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 import harness.sandbox
+import harness.write_protection
 
 from harness.command_policy import CommandPolicy
 from harness.resource_control import DEFAULT_RESOURCE_LIMITS, ExecutionProfile
@@ -799,6 +800,132 @@ class ToolchainReachableInsideTheSandboxTests(unittest.TestCase):
         pairs = [(argv[i + 1], argv[i + 2]) for i, a in enumerate(argv)
                  if a == "--ro-bind" and i + 2 < len(argv)]
         self.assertIn(("/opt/toolchains", "/opt/toolchains"), pairs)
+
+
+def _git_tree(root):
+    """A committed repository with a submodule-shaped checkout beside it."""
+    git = ["git", "-C", str(root), "-c", "user.name=t", "-c", "user.email=t@t"]
+    (root / "a.txt").write_text("a\n")
+    (root / "run.sh").write_text("#!/bin/sh\necho P >> .git/HEAD\n")
+    subprocess.run(git + ["init", "-q"], check=True)
+    subprocess.run(git + ["add", "-A"], check=True)
+    subprocess.run(git + ["commit", "-qm", "base"], check=True)
+    (root / "store").mkdir()
+    subprocess.run(["git", "init", "-q", "--separate-git-dir", str(root / "store/sub"),
+                    str(root / "sub")], check=True)
+
+
+def _fingerprint(*trees):
+    found = []
+
+    for tree in trees:
+        paths = [tree] if tree.is_file() else sorted(tree.rglob("*"))
+        found += [(str(path), path.read_bytes()) for path in paths if path.is_file()]
+
+    return found
+
+
+class GitMetadataIsReadOnlyTests(unittest.TestCase):
+    """A command granted workspace write still cannot change git's state."""
+
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.root = Path(self.temp.name).resolve() / "ws"
+        self.root.mkdir()
+        _git_tree(self.root)
+        self.workspace = Workspace.from_path(self.root)
+        self.write = ExecutionProfile.from_capabilities(
+            {Capability.FILESYSTEM_READ, Capability.WORKSPACE_WRITE, Capability.SHELL_COMPLEX})
+        self.addCleanup(self.temp.cleanup)
+        harness.write_protection.forget()
+
+    def protected(self, argv):
+        return [(argv[i + 1], argv[i + 2]) for i, token in enumerate(argv)
+                if token == "--ro-bind-try" and argv[i + 1].startswith(str(self.root))]
+
+    def test_every_git_directory_and_file_is_bound_read_only_after_the_tree(self):
+        argv = BubblewrapSandbox().build_argv(self.workspace, ["true"], self.write)
+        mount = BubblewrapSandbox().mount_root(self.workspace, self.write)
+        found = self.protected(argv)
+
+        self.assertEqual(sorted(host for host, _ in found),
+                         [str(self.root / ".git"), str(self.root / "store/sub"),
+                          str(self.root / "sub/.git")])
+
+        for host, inside in found:
+            self.assertEqual(inside, mount + host[len(str(self.root)):])
+
+        tree = argv.index("--bind")
+        self.assertTrue(all(argv.index(host) > tree for host, _ in found))
+
+    @patch.dict(os.environ, {"SPEAR_SANDBOX_IDENTITY_MOUNT": "0"})
+    def test_the_binds_follow_the_tree_to_its_neutral_mount(self):
+        other = Path(self.temp.name).resolve() / "other"
+        other.mkdir()
+        (other / ".git").mkdir()
+        workspace = Workspace.from_path(self.root, extra_roots=[other])
+        found = dict(self.protected(BubblewrapSandbox().build_argv(workspace, ["true"],
+                                                                   self.write)))
+        argv = BubblewrapSandbox().build_argv(workspace, ["true"], self.write)
+        rendered = "\0".join(argv)
+
+        self.assertEqual(found[str(self.root / ".git")], "/workspace/.git")
+        self.assertIn(f"--ro-bind-try\0{other / '.git'}\0/workspaces/other/.git", rendered)
+
+    def test_nothing_is_added_without_write_or_for_a_clone(self):
+        sandbox = BubblewrapSandbox()
+        read = ExecutionProfile.from_capabilities({Capability.FILESYSTEM_READ})
+        clone = ExecutionProfile.from_capabilities(
+            {Capability.FILESYSTEM_READ, Capability.WORKSPACE_WRITE, Capability.NETWORK},
+            git_writable=True)
+
+        self.assertEqual(self.protected(sandbox.build_argv(self.workspace, ["true"], read)), [])
+        self.assertEqual(self.protected(sandbox.build_argv(
+            self.workspace, ["true"], clone, backend=NetworkBackend.SLIRP4NETNS)), [])
+
+    def test_a_new_repository_is_found_once_the_cache_is_dropped(self):
+        sandbox = BubblewrapSandbox()
+        sandbox.build_argv(self.workspace, ["true"], self.write)
+        (self.root / "deep/vendor").mkdir(parents=True)
+        subprocess.run(["git", "init", "-q", str(self.root / "deep/vendor")], check=True)
+        harness.write_protection.forget()
+        hosts = [host for host, _ in self.protected(
+            sandbox.build_argv(self.workspace, ["true"], self.write))]
+
+        self.assertIn(str(self.root / "deep/vendor/.git"), hosts)
+
+    def test_no_program_can_change_git_state_in_the_sandbox(self):
+        before = _fingerprint(self.root / ".git", self.root / "store", self.root / "sub/.git")
+        sandbox = BubblewrapSandbox()
+
+        for command in ("rm -f .git/index", "echo P > .git/HEAD", "echo P>>.git/config",
+                        "cp a.txt .git/config", "mv a.txt .git/HEAD", "sed -i s/a/b/ .git/config",
+                        "python3 -c \"open('.git/index','ab').write(b'P')\"",
+                        "sh run.sh", "echo gitdir: /tmp > sub/.git", "rm -f store/sub/HEAD",
+                        "touch .git/objects/new", "echo P >> a.txt && git add a.txt",
+                        "git -c user.name=t -c user.email=t@t commit -qam m"):
+            with self.subTest(command=command):
+                result = sandbox.run(self.workspace, ["/bin/sh", "-c", command],
+                                     profile=self.write)
+
+                self.assertFalse(result.ok, result.to_legacy_text())
+
+        self.assertEqual(_fingerprint(self.root / ".git", self.root / "store",
+                                      self.root / "sub/.git"), before)
+        self.assertTrue((self.root / "a.txt").is_file())
+
+    def test_ordinary_files_and_read_only_git_still_work(self):
+        sandbox = BubblewrapSandbox()
+
+        for command in ("echo more >> a.txt", "git status --short", "git log --oneline",
+                        "git diff --stat", "git show --stat HEAD", "cd sub && git status"):
+            with self.subTest(command=command):
+                result = sandbox.run(self.workspace, ["/bin/sh", "-c", command],
+                                     profile=self.write)
+
+                self.assertTrue(result.ok, result.to_legacy_text())
+
+        self.assertEqual((self.root / "a.txt").read_text(), "a\nmore\n")
 
 
 if __name__ == "__main__":

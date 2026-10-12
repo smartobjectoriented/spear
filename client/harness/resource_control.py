@@ -49,10 +49,14 @@ class ExecutionProfile:
     #: Host paths to expose read-only, at their own path, in addition to the
     #: workspace. Empty unless host:read was granted.
     host_read_paths: tuple[str, ...] = ()
+    #: The command is one the policy lets write git (clone, fetch, pull):
+    #: the repositories in the tree stay writable for it.
+    git_writable: bool = False
 
     @classmethod
     def from_capabilities(cls, capabilities: Sequence[Capability],
-                          host_read_paths: Sequence[str] = ()) -> "ExecutionProfile":
+                          host_read_paths: Sequence[str] = (), *,
+                          git_writable: bool = False) -> "ExecutionProfile":
         granted = frozenset(capabilities)
         workspace_read = Capability.FILESYSTEM_READ in granted
         workspace_write = Capability.WORKSPACE_WRITE in granted
@@ -82,6 +86,7 @@ class ExecutionProfile:
             container_runtime=Capability.CONTAINER_RUNTIME in granted,
             secrets_allowed=Capability.SECRETS in granted,
             host_read_paths=tuple(host_read_paths),
+            git_writable=git_writable,
         )
 
     def audit_metadata(self) -> Mapping[str, bool]:

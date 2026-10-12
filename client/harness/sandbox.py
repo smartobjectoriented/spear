@@ -21,6 +21,7 @@ from enum import StrEnum
 from pathlib import Path
 from typing import Sequence
 
+from harness import write_protection
 from harness.resource_control import (
     CgroupLimits,
     ExecutionProfile,
@@ -232,6 +233,52 @@ class BubblewrapSandbox:
 
         for extra in workspace.extra_roots:
             argv.extend([flag, str(extra), mounts[str(extra)]])
+
+        if profile is not None and profile.workspace_write:
+            argv.extend(self._protection_argv(workspace, profile, mounts))
+
+        return argv
+
+    @staticmethod
+    def _protected_paths(workspace: Workspace, profile: ExecutionProfile) -> list[str]:
+        """Host paths under the writable trees that the command may not write."""
+        roots = [str(root) for root in workspace.roots]
+        found: list[str] = []
+
+        for root in roots:
+            if not profile.git_writable:
+                found.extend(write_protection.trees(root).git)
+
+        kept: list[str] = []
+
+        # Outermost first; a path under one already kept is covered by it.
+
+        for path in sorted(set(found)):
+            if not write_protection.within(path, roots):
+                continue
+
+            if any(path.startswith(parent.rstrip("/") + "/") for parent in kept):
+                continue
+
+            kept.append(path)
+
+        return kept
+
+    def _protection_argv(self, workspace: Workspace, profile: ExecutionProfile,
+                         mounts: dict[str, str]) -> list[str]:
+        """Bind what may not be written back read-only, over the writable trees.
+
+        After the workspace binds, since in bwrap the later bind is the one in
+        force, and at the path the tree has inside. ``--ro-bind-try``: a path
+        that is gone by then has nothing left to protect.
+        """
+        argv: list[str] = []
+        roots = [str(root) for root in workspace.roots]
+
+        for path in self._protected_paths(workspace, profile):
+            root = write_protection.within(path, roots)
+            inside = mounts[root] + path[len(root):]
+            argv.extend(["--ro-bind-try", path, inside])
 
         return argv
 

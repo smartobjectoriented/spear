@@ -77,6 +77,20 @@ instead. The rule belongs to the target, not to the tool
 shell write listed above ask the same question, about the path as written and
 about its ``realpath``, so a link or a ``..`` does not change the answer.
 
+**Git metadata.** A repository's own state — a ``.git`` directory, a ``.git``
+file (a worktree's or a submodule's) and the git directory it names, or any
+directory holding git's ``HEAD`` beside its ``objects`` — is never edited by a
+tool: the coding core's file tools, the legacy ones (``edit_file``,
+``append_file`` and ``fetch_url``'s ``save_as`` included) and every shell
+write are refused it (``target_policy.py``). Since a terminal command
+may run a program whose writes no parser sees — a script, ``patch`` fed on
+stdin, a Makefile rule — the sandbox also binds every ``.git`` and the git
+directories they name read-only, on top of the writable tree, for every
+command granted workspace write (``write_protection.py``, :doc:`sandbox`).
+``git status``, ``log``, ``diff`` and ``show`` keep working; the only commands
+that keep git writable are ``clone``, ``fetch`` and ``pull``, the ones the
+command policy lets write it.
+
 **Read-only and advisory turns.** A turn that only asks to be told something,
 or is told not to change anything, keeps its reading tools and runs its
 commands without workspace write — so the prohibition cannot be routed around

@@ -880,13 +880,13 @@ class EditFileTest(unittest.TestCase):
         """The guard the crash was hiding must keep working."""
         self._write("gen.c", "/* automatically generated */\nint x;\n")
         out = self.session_workspace.edit_file("gen.c", "int x", "int y")
-        self.assertIn("GENERATED", out)
+        self.assertIn("is a generated file", out)
 
     def test_a_path_under_generated_is_refused(self):
         os.makedirs(os.path.join(self.tmp.name, "generated"))
         self._write("generated/tbl.c", "int t;\n")
         out = self.session_workspace.edit_file("generated/tbl.c", "int t", "int u")
-        self.assertIn("GENERATED", out)
+        self.assertIn("is a generated file", out)
 
 
 class ToolErrorHandlerTest(unittest.TestCase):

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -52,6 +53,50 @@ class TargetPolicy(unittest.TestCase):
         for path in ("plain.c", "new.c", "more.c.0", "lib/libfoo.so.1.0", "src/regenerated.c"):
             with self.subTest(path=path):
                 self.assertFalse(self.refused(path))
+
+
+class GitMetadata(unittest.TestCase):
+    """A repository's own state is refused, however the path reaches it."""
+
+    def setUp(self):
+        self.root = os.path.realpath(tempfile.mkdtemp())
+        git = ["git", "-C", self.root, "-c", "user.name=t", "-c", "user.email=t@t"]
+        Path(self.root, "a.txt").write_text("a\n")
+        Path(self.root, ".gitignore").write_text("*.o\n")
+        subprocess.run(git + ["init", "-q"], check=True)
+        subprocess.run(git + ["add", "-A"], check=True)
+        subprocess.run(git + ["commit", "-qm", "base"], check=True)
+
+        # A submodule-shaped checkout whose git directory is not called .git.
+
+        os.makedirs(f"{self.root}/store")
+        subprocess.run(["git", "init", "-q", "--separate-git-dir", f"{self.root}/store/sub",
+                        f"{self.root}/sub"], check=True)
+        Path(self.root, "sub/s.c").write_text("int s;\n")
+        os.symlink(".git/config", f"{self.root}/alias")
+        self.object = next(str(item.relative_to(self.root))
+                           for item in Path(self.root, ".git/objects").glob("??/*"))
+
+    def refusal(self, relative):
+        return target_policy.refusal(os.path.join(self.root, relative), relative)
+
+    def test_git_state_is_refused_as_written_and_as_reached(self):
+        for path in (".git", ".git/index", ".git/HEAD", ".git/config", self.object,
+                     ".git/hooks/pre-commit", "sub/.git", "store/sub/HEAD",
+                     "store/sub/refs/heads/x", "alias", "sub/../.git/HEAD"):
+            with self.subTest(path=path):
+                self.assertIn("is git metadata", self.refusal(path))
+
+    def test_the_files_beside_it_are_not(self):
+        for path in ("a.txt", ".gitignore", ".github/workflows/ci.yml", "sub/s.c",
+                     "store/notes.txt", "new.c"):
+            with self.subTest(path=path):
+                self.assertEqual(self.refusal(path), "")
+
+    def test_a_gitdir_is_found_from_its_dot_git_file(self):
+        self.assertEqual(target_policy.gitdir_named_by(f"{self.root}/sub/.git"),
+                         f"{self.root}/store/sub")
+        self.assertEqual(target_policy.gitdir_named_by(f"{self.root}/a.txt"), "")
 
 
 if __name__ == "__main__":

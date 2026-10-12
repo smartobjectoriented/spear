@@ -106,6 +106,11 @@ Filesystem
    * - the workspace
      - **the only host-writable mount**, at its own host path by default (see
        below); the registered corpora beside it unless ``--single-root``
+   * - git metadata
+     - when the workspace is writable: every ``.git`` directory and file in
+       it, and the git directories ``.git`` files name, bound back read-only
+       (``--ro-bind-try``) after the workspace, at their path inside it —
+       except for ``git clone``, ``fetch`` and ``pull``
 
 Environment:
 
@@ -125,6 +130,14 @@ Workspace binding follows the profile
 
 A read-only profile therefore cannot write even by accident: the restriction
 is a mount option, not a check in Python.
+
+A writable profile is narrowed the same way. The repositories in the tree are
+found by a walk that reads directories only (never file contents, and not
+``build/tmp``, ``build/downloads`` or ``build/sstate-cache``), cached per root
+for the session and walked again when a root changes or a ``git clone`` ran.
+Each is bound read-only over the writable tree, so ``rm .git/index``, a
+script appending to ``.git/config`` or ``git add`` fail with *Read-only file
+system* whatever spells them; ``git status`` and ``git log`` read and run.
 
 ``<mount>`` is the workspace's own host path, so a build tree configured
 outside the sandbox keeps working inside it — CMake caches, generated

@@ -179,7 +179,9 @@ and ``patch``, to ``delete_file`` -- a deleted file could be written afresh --
 and to every write a terminal command makes: a redirection, ``tee``, ``cp``,
 ``install``, ``truncate``, ``ln``, and any path an inline program mentions.
 The decision is taken on the path as written and on the file it reaches, so a
-link or a ``..`` does not change it.
+link or a ``..`` does not change it.  Git metadata (``.git`` and the git
+directory a ``.git`` file names) is refused the same way, and the sandbox
+binds it read-only under every command that may write.
 
 A refusal is deterministic, so asking again cannot change it.  When a turn
 asks for the same refused operation five times -- the same tool, target and

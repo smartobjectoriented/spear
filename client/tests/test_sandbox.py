@@ -928,5 +928,93 @@ class GitMetadataIsReadOnlyTests(unittest.TestCase):
         self.assertEqual((self.root / "a.txt").read_text(), "a\nmore\n")
 
 
+class OutputTreesAndNamedFilesTests(unittest.TestCase):
+    """What else a writable command gets read-only: output trees unless it
+    builds, and the protected files it names."""
+
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.root = Path(self.temp.name).resolve() / "ws"
+        for directory in ("out/generated", "build/tmp/work", "build/conf", "u-boot.back",
+                          "rootfs", "rootfs.0", "zynq-rev1.0", "br/build/pkg-1.0/.git", "tests"):
+            (self.root / directory).mkdir(parents=True)
+        (self.root / "br/.config").write_text("BR2_x=y\n")
+        (self.root / "gen.h").write_text("/* DO NOT EDIT */\nint g;\n")
+        (self.root / "a.txt").write_text("a\n")
+        (self.root / "x.diff").write_text("--- a/gen.h\n+++ b/gen.h\n@@ -1 +1 @@\n-x\n+y\n")
+        (self.root / "tests/test_h.py").write_text(f"open('{self.root}/gen.h', 'a')\n")
+        self.workspace = Workspace.from_path(self.root)
+        self.addCleanup(self.temp.cleanup)
+        harness.write_protection.forget()
+        harness.write_protection.target_policy.forget_refused()
+
+    def bound(self, **options):
+        profile = ExecutionProfile.from_capabilities(
+            {Capability.FILESYSTEM_READ, Capability.WORKSPACE_WRITE, Capability.SHELL_COMPLEX},
+            **options)
+        argv = BubblewrapSandbox().build_argv(self.workspace, ["true"], profile)
+        return sorted(argv[i + 1][len(str(self.root)) + 1:] for i, token in enumerate(argv)
+                      if token == "--ro-bind-try" and argv[i + 1].startswith(str(self.root)))
+
+    def test_output_trees_are_found_by_name_and_place(self):
+        trees = harness.write_protection.trees(str(self.root))
+
+        self.assertEqual(sorted(path[len(str(self.root)) + 1:] for path in trees.outputs),
+                         ["build/tmp", "out/generated", "rootfs.0", "u-boot.back"])
+
+        # Buildroot's package tree beside its .config is the build's own.
+
+        self.assertEqual(trees.git, ())
+
+    def test_they_are_bound_unless_the_command_builds(self):
+        self.assertEqual(self.bound(guard_outputs=True),
+                         ["build/tmp", "out/generated", "rootfs.0", "u-boot.back"])
+        self.assertEqual(self.bound(), [])
+        self.assertEqual(self.bound(protected_paths=(str(self.root / "gen.h"),)), ["gen.h"])
+
+    def test_a_named_file_inside_a_bound_tree_is_not_bound_twice(self):
+        self.assertEqual(self.bound(guard_outputs=True, protected_paths=(
+            str(self.root / "out/generated/t.h"),)),
+            ["build/tmp", "out/generated", "rootfs.0", "u-boot.back"])
+
+    def files(self, command, **options):
+        harness.write_protection.target_policy.forget_refused()
+        found = harness.write_protection.command_files(command, [self.root], cwd=str(self.root),
+                                                       **options)
+        return sorted(path[len(str(self.root)) + 1:] for path in found)
+
+    def test_the_protected_files_a_command_reaches(self):
+        cases = {"echo P >> gen.h": ["gen.h"], "make poke T=gen.h": ["gen.h"],
+                 "cp /tmp/s/gen.h ./": ["gen.h"], "patch -p1 < x.diff": ["gen.h"],
+                 "python3 -m unittest tests.test_h": ["gen.h"], "cd tests && echo > ../a.txt": [],
+                 "echo P >> a.txt": []}
+
+        for command, expected in cases.items():
+            with self.subTest(command=command):
+                self.assertEqual(self.files(command), expected)
+
+    def test_a_file_refused_earlier_stays_bound_except_for_a_build(self):
+        harness.write_protection.target_policy.refusal(str(self.root / "gen.h"))
+        found = harness.write_protection.command_files("echo P >> a.txt", [self.root])
+
+        self.assertEqual(found, (str(self.root / "gen.h"),))
+        self.assertEqual(harness.write_protection.command_files("make", [self.root], build=True), ())
+
+    def test_a_build_is_judged_on_its_own_words(self):
+        self.assertEqual(self.files("patch -p1 < x.diff", build=True), [])
+        self.assertEqual(self.files("make T=gen.h", build=True), ["gen.h"])
+        self.assertEqual(self.files("python3 -m unittest", build=True), ["gen.h"])
+
+    def test_a_sandbox_path_is_read_as_the_host_path_it_binds(self):
+        tmp = Path(self.temp.name) / "session-tmp"
+        tmp.mkdir()
+        (tmp / "p.py").write_text("open('/workspace/gen.h','a')\n")
+        aliases = {"/tmp": str(tmp), "/workspace": str(self.root)}
+
+        self.assertEqual(self.files("python3 /tmp/p.py", aliases=aliases), ["gen.h"])
+        self.assertEqual(self.files("echo P > /workspace/gen.h",
+                                    aliases={"/workspace": str(self.root)}), ["gen.h"])
+
+
 if __name__ == "__main__":
     unittest.main()

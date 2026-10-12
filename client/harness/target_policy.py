@@ -28,6 +28,24 @@ _COPY_SUFFIX = ".0"
 _GENERATED_MARK = re.compile(
     r"DO NOT (?:MODIFY|EDIT)|auto(?:matically)?[ -]?generated|@generated", re.IGNORECASE)
 
+# A generator says so in a comment at the top of what it writes. The same
+# words in prose are not that: Linux's init/Kconfig mentions "auto-generated"
+# in the help text of its first option.
+
+_COMMENT_LINE = re.compile(r"\s*(?:#|//|/\*|\*|;|--|%|<!--|\"\"\"|\'\'\'|dnl\b)")
+_MARKER_LINES = 10
+
+# A saved Kconfig configuration is the source a .config is made from, even
+# though Linux, U-Boot, Buildroot and BusyBox write it with the same
+# "Automatically generated file; DO NOT EDIT." header.
+
+_SAVED_CONFIG = re.compile(r"(?:^|_)defconfig$")
+
+# Every file a refusal named in this session. The sandbox binds them back
+# read-only under a command that is not a build (write_protection.py).
+
+_REFUSED: set[str] = set()
+
 
 def says_generated(head: str) -> bool:
     """Whether a file's opening says the file is generated.
@@ -41,7 +59,8 @@ def says_generated(head: str) -> bool:
                          if line.startswith(("--- ", "+++ "))
                          or not line.startswith(("+", "-", " ")))
 
-    return bool(_GENERATED_MARK.search(head))
+    return any(_COMMENT_LINE.match(line) and _GENERATED_MARK.search(line)
+               for line in head.splitlines()[:_MARKER_LINES])
 
 
 def is_snapshot(path: str) -> bool:
@@ -127,7 +146,25 @@ def refusal(path: str, label: str | None = None, *, follow: bool = True) -> str:
     if not path:
         return ""
 
-    label = label or path
+    answer = _judge(str(path), label or str(path), follow)
+
+    if answer and follow:
+        _REFUSED.add(os.path.realpath(path))
+
+    return answer
+
+
+def refused_paths() -> frozenset[str]:
+    """The files a refusal named in this session, as they resolve."""
+    return frozenset(_REFUSED)
+
+
+def forget_refused() -> None:
+    """Start a new session's record of refused files."""
+    _REFUSED.clear()
+
+
+def _judge(path: str, label: str, follow: bool) -> str:
     candidates = [str(path)]
     real = (os.path.realpath(path) if follow else
             os.path.join(os.path.realpath(os.path.dirname(os.path.abspath(path))),
@@ -152,7 +189,8 @@ def refusal(path: str, label: str | None = None, *, follow: bool = True) -> str:
         if is_snapshot(candidate):
             return f"{label} is a snapshot copy"
 
-    if follow and os.path.isfile(real) and says_generated(_head(real)):
+    if (follow and os.path.isfile(real) and not _SAVED_CONFIG.search(os.path.basename(real))
+            and says_generated(_head(real))):
         return f"{label} is a generated file — change its source"
 
     return ""

@@ -149,14 +149,20 @@ written because it resembles the one asked for.
 change the file tools would refuse cannot be made through the terminal instead.
 
 **Protected and generated paths.** Files a build produces (``/generated/``,
-``/build/tmp/``, or a file whose head says *DO NOT MODIFY*, *DO NOT EDIT* or
-*auto-generated*) are refused with a pointer to their source. Snapshot copies
+``/build/tmp/``, or a file whose leading comment says *DO NOT MODIFY*, *DO NOT
+EDIT* or *auto-generated*) are refused with a pointer to their source; the
+words in prose, in a patch's added lines or in a saved ``*_defconfig`` do not
+make a file generated. Snapshot copies
 (``.back`` and ``.pristine`` trees, a ``.0`` tree beside its live one) are
 never written; a component's name decides nothing, so an attached ``u-boot/``
 tree or a ``recipes-qemu/qemu/`` layer stays editable. The refusal belongs to
 the file, not to the tool: ``patch``, ``write_file``, ``delete_file`` and the
 terminal's redirections, ``cp``, ``tee``, ``truncate`` or ``ln -sf`` are all
 refused the same file, judged both as written and as the path it resolves to.
+What no parser sees — ``patch < x.diff``, a script, a test helper, a Makefile
+rule — meets the sandbox instead: the protected files the command reaches are
+bound read-only under it, and so are the generated and snapshot trees unless
+the command is a build or a test run.
 
 **Git metadata.** No tool edits a repository's state: ``.git`` (directory or
 file), the git directory a ``.git`` file names, and anything under them are

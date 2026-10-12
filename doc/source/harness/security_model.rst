@@ -58,8 +58,9 @@ same judgement is applied to what a shell command writes — a redirection, the
 destination of ``cp``, ``mv``, ``install``, ``ln`` or ``rsync``, the ``of=``
 of ``dd``, the operands of ``rm``, ``touch``, ``mkdir``, ``tee``,
 ``truncate`` or ``sed -i``, and any path an inline interpreter program names —
-with relative operands read from the directory the command runs in
-(``request_scope.py``). **A terminal command cannot make a change the file
+with relative operands read from the directory the command runs in, a ``$VAR``
+read as the value the command assigned it, ``x>>file`` read without its
+spaces, and ``cp src dir/`` judged on ``dir/src`` (``request_scope.py``). **A terminal command cannot make a change the file
 tools would refuse.**
 
 **Project scope.** A command that searches outside the project (``find`` or
@@ -68,14 +69,30 @@ home directory outside it, is refused unless the operator named that path:
 another checkout is another project, not a source of this one's build.
 
 **Generated and protected trees.** Build outputs (``/generated/``,
-``/build/tmp/``, files whose head says *DO NOT MODIFY*, *DO NOT EDIT*,
-*auto-generated* or ``@generated``) and snapshot copies (``.back`` and
-``.pristine`` trees, a ``.0`` tree beside its live one, never a directory
-because of its name) are never written; the refusal points at the source to change
-instead. The rule belongs to the target, not to the tool
-(``target_policy.py``): ``write_file``, ``patch``, ``delete_file`` and every
-shell write listed above ask the same question, about the path as written and
-about its ``realpath``, so a link or a ``..`` does not change the answer.
+``/build/tmp/``, files that say *DO NOT MODIFY*, *DO NOT EDIT*,
+*auto-generated* or ``@generated`` in a comment within their first ten lines)
+and snapshot copies (``.back`` and ``.pristine`` trees, a ``.0`` tree beside
+its live one, never a directory because of its name) are never written; the
+refusal points at the source to change instead. The same words in prose do not
+count (Linux's ``init/Kconfig`` uses *auto-generated* in a help text), nor do
+they in the ``+`` lines of a patch, and a saved Kconfig configuration
+(``defconfig``, ``*_defconfig``) is a source even under its *Automatically
+generated file; DO NOT EDIT.* header. The rule belongs to the target, not to
+the tool (``target_policy.py``): ``write_file``, ``patch``, ``delete_file``
+and every shell write listed above ask the same question, about the path as
+written and about its ``realpath``, so a link or a ``..`` does not change the
+answer.
+
+The parser is not the boundary: a program may write what no word of its
+command names. So for a command granted workspace write, the sandbox binds
+back read-only the protected files the command can reach — those its words
+name, those named in the files it runs or feeds (a diff given to ``patch``, a
+script, the tests a runner discovers, a here-document) and every file refused
+earlier in the session — and, unless the command builds or tests, the
+generated and snapshot trees themselves (``write_protection.py``). A build
+(``make``, ``cmake``, ``ninja``, ``bitbake``, a ``build.sh``, a compiler, a
+test runner) keeps writing its output, which is how generated files are
+meant to change; only the files its own words name stay protected.
 
 **Git metadata.** A repository's own state — a ``.git`` directory, a ``.git``
 file (a worktree's or a submodule's) and the git directory it names, or any

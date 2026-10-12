@@ -111,6 +111,11 @@ Filesystem
        it, and the git directories ``.git`` files name, bound back read-only
        (``--ro-bind-try``) after the workspace, at their path inside it —
        except for ``git clone``, ``fetch`` and ``pull``
+   * - protected targets
+     - the same way: the protected files the command names or reaches
+       through the files it runs or feeds, the files refused earlier in the
+       session, and — unless the command builds or tests — the generated and
+       snapshot trees (:doc:`security_model`)
 
 Environment:
 
@@ -138,6 +143,11 @@ for the session and walked again when a root changes or a ``git clone`` ran.
 Each is bound read-only over the writable tree, so ``rm .git/index``, a
 script appending to ``.git/config`` or ``git add`` fail with *Read-only file
 system* whatever spells them; ``git status`` and ``git log`` read and run.
+The same walk finds the generated and snapshot trees (``generated/``,
+``build/tmp``, ``.back``, ``.pristine``, a ``.0`` beside its live tree),
+bound read-only for a command that is not a build or a test run; the
+protected files a command reaches are found from its words and from the
+files it names, never by reading the whole tree.
 
 ``<mount>`` is the workspace's own host path, so a build tree configured
 outside the sandbox keeps working inside it — CMake caches, generated

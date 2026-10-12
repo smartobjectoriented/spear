@@ -510,14 +510,15 @@ SIGPIPE_EXIT = 141
 
 
 def run_cmd_result(cmd, need_confirm=True, cancellation=None, execution_mode=None,
-                   exec_cmd=None, timeout=None, output_chars=None):
+                   exec_cmd=None, timeout=None, output_chars=None, cwd=None):
     """Return the security substrate's structured command result.
 
     `cmd` is what is classified and authorised. `exec_cmd`, when given, is
     what runs in its place: the same command inside a harness-built script
     (the terminal's carried-over session), never anything the policy did not
     judge -- and judged as the script it runs in. `timeout` replaces the
-    sandbox's default for this call.
+    sandbox's default for this call. `cwd` is where the command starts, for
+    reading the relative paths it names.
     """
     # The coding core's control plane answers gateway commands before they
     # get here. One that arrives anyway came from a runtime that has no
@@ -547,10 +548,29 @@ def run_cmd_result(cmd, need_confirm=True, cancellation=None, execution_mode=Non
 
     granted_capabilities = authorization.granted_capabilities
     git_writable = COMMAND_POLICY.writes_git(cmd)
+    builds = COMMAND_POLICY.builds(cmd)
+    protected = ()
+
+    # What the command names that no tool may change is bound read-only
+    # under it, whatever program would write it (write_protection.py).
+
+    if Capability.WORKSPACE_WRITE in granted_capabilities and WORKSPACE is not None:
+        mount = effective_mount_root(WORKSPACE.root)
+        aliases = {inside: host for host, inside in WORKSPACE.mount_map(
+            mount, identity=mount != SandboxSpec().workspace_mount).items() if inside != host}
+        tmpdir = getattr(COMMAND_RUNNER.sandbox, "session_tmpdir", None)
+
+        if tmpdir:
+            aliases[SandboxSpec().tmpdir] = tmpdir
+
+        protected = write_protection.command_files(
+            cmd, WORKSPACE.roots, cwd=cwd or str(WORKSPACE.root), build=builds,
+            aliases=aliases)
+
     profile = ExecutionProfile.from_capabilities(
         granted_capabilities,
         assessment.host_read_paths if Capability.HOST_READ in granted_capabilities else (),
-        git_writable=git_writable,
+        git_writable=git_writable, guard_outputs=not builds, protected_paths=protected,
     )
     sandboxed = False
 
@@ -587,9 +607,10 @@ def run_cmd_result(cmd, need_confirm=True, cancellation=None, execution_mode=Non
             if default_chars is not None:
                 sandbox.max_output_chars = default_chars
 
-        # A clone adds a repository the next command must find protected.
+        # A clone adds a repository, and a build a generated tree, that the
+        # next command must find protected.
 
-        if git_writable:
+        if git_writable or builds:
             write_protection.forget()
 
         sandboxed = True

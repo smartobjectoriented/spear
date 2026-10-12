@@ -22,7 +22,8 @@ this directory holds only the source that generates them.
 
 | Asset | Role |
 |---|---|
-| `spear-mark.svg` | the mark alone: `html_logo` (sidebar) and `html_favicon` |
+| `spear-mark.svg` | the mark alone, plain: `html_favicon` and other small sizes |
+| `spear-mark-detailed.svg` | the mark alone, with its line of text: `html_logo` (sidebar) |
 | `spear-logo.svg` | the landing-page lockup, mark + SPEAR |
 | `spear-logo-horizontal.svg` | mark + SPEAR, for use outside the manual |
 
@@ -31,10 +32,10 @@ whole pixel at 16, 32, 48 and 64 px: at 16 px each stage is 4 px tall and the
 gaps between them exactly 1 px. The three stages keep one height, so the
 result reads as the end of a funnel rather than as an arrowhead.
 
-One mark, with one difference by size: the landing lockup cuts a line of text
-into the specification, where it is about 6 px tall. Below about 48 px that
-line is sub-pixel and only muddies the bar, so the mark used everywhere else
-goes without it. Proportions, colours and corner radii are identical.
+One mark, with one difference by size: from about 48 px up (the sidebar, the
+landing lockup) a line of text is cut into the specification. Below that the
+line is sub-pixel and only muddies the bar, so the favicon and the compact
+lockup go without it. Proportions, colours and corner radii are identical.
 
 The wordmark is monoline geometry, not live text. A logo that renders
 differently on a machine without the right font is not a logo, so **no asset

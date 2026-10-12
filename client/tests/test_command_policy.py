@@ -787,5 +787,63 @@ class OutsideReadPolicyTests(unittest.TestCase):
         self.assertIn("READ-ONLY", reason)
 
 
+class StageAndRedirectionParsingTests(unittest.TestCase):
+    """What a command writes and runs, read the way the shell reads it."""
+
+    def setUp(self):
+        self.policy = CommandPolicy()
+
+    def writes(self, command):
+        assessment = self.policy.classify(command)
+        return Capability.WORKSPACE_WRITE in assessment.required_capabilities
+
+    def test_a_newline_ends_a_command(self):
+        assessment = self.policy.classify(
+            "cat > /tmp/p.py <<'EOF'\nopen('x','a').write('P')\nEOF\npython3 /tmp/p.py")
+
+        self.assertEqual(assessment.classification, CommandClassification.DANGEROUS)
+        self.assertEqual([argv[0] for argv in self.policy.stage_argvs("make\nls -l\ngit status")],
+                         ["make", "ls", "git"])
+
+    def test_a_read_only_heredoc_pipeline_stays_read_only(self):
+        self.assertFalse(self.writes("cat <<'EOF' | grep b\na\nb\nEOF"))
+
+    def test_descriptor_duplication_is_not_a_file_write(self):
+        for command in ("git apply x.diff 2>&1", "git status 2>&1 | head", "echo x >&2",
+                        "ls 2>/dev/null; ls"):
+            with self.subTest(command=command):
+                self.assertFalse(self.writes(command))
+
+        for command in ("echo P>>t", "echo x > out.txt 2>&1", "make 2>&1 > log"):
+            with self.subTest(command=command):
+                self.assertTrue(self.writes(command))
+
+    def test_a_variable_destination_is_its_literal_value_or_nothing(self):
+        self.assertTrue(self.writes("F=out.txt; echo P >> $F"))
+        self.assertTrue(self.writes("F='out.txt'; echo P >> ${F}"))
+        self.assertFalse(self.writes("echo P >> $UNSET"))
+        self.assertFalse(self.writes("F=/dev/null; echo P > $F"))
+
+    def test_builds_and_tests_are_told_from_other_writers(self):
+        for command in ("make -j8", "cd linux && make 2>&1 | tail", ". ./env.sh && bitbake rootfs",
+                        "./scripts/build.sh -c rootfs", "ib-build.sh", "cmake --build build",
+                        "python3 -m unittest discover -s tests", "pytest -q", "./configure"):
+            with self.subTest(command=command):
+                self.assertTrue(self.policy.builds(command))
+
+        for command in ("patch -p1 < x.diff", "./scripts/run.sh", "echo x > make", "cp a b",
+                        "git apply x", "grep make Makefile", "python3 x.py"):
+            with self.subTest(command=command):
+                self.assertFalse(self.policy.builds(command))
+
+    def test_only_clone_fetch_and_pull_write_git(self):
+        self.assertTrue(self.policy.writes_git("cd vendor && git clone https://x/y.git"))
+        self.assertTrue(self.policy.writes_git("git pull"))
+
+        for command in ("git status", "git add a", "echo clone > x", "git log | grep pull"):
+            with self.subTest(command=command):
+                self.assertFalse(self.policy.writes_git(command))
+
+
 if __name__ == "__main__":
     unittest.main()

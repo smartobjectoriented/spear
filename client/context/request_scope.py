@@ -485,6 +485,51 @@ def _at(directory: str, token: str) -> str:
     return os.path.join(directory, token)
 
 
+_VARIABLE = re.compile(r"\$(?:\{(\w+)\}|(\w+))")
+_LITERAL_ASSIGNMENT = re.compile(r"^([A-Za-z_]\w*)=([^$`]*)$")
+
+
+def _with_assignments(stages):
+    """Each stage with the variables assigned literally before it substituted.
+
+    `F=board/x; echo P >> $F` writes board/x. A value the command computes is
+    left as `$F`, which counts as a destination known only at run time.
+    """
+    values = {}
+    found = []
+
+    for argv in stages:
+        argv = [_VARIABLE.sub(lambda match: values.get(match.group(1) or match.group(2),
+                                                       match.group(0)), token)
+                for token in argv]
+
+        for token in (argv[1:] if argv[0] in ("export", "local", "readonly") else argv):
+            assignment = _LITERAL_ASSIGNMENT.match(token)
+
+            if not assignment:
+                break
+
+            values[assignment.group(1)] = assignment.group(2)
+
+        found.append(argv)
+
+    return found
+
+
+def _copied_into(argv) -> list[str]:
+    """What `cp src dir/` writes: dir/src's name, not the directory."""
+    if Path(argv[0]).name not in ("cp", "mv", "install"):
+        return []
+
+    operands = [arg for arg in argv[1:] if not arg.startswith("-")]
+
+    if len(operands) < 2 or not (operands[-1].endswith("/") or os.path.isdir(operands[-1])):
+        return []
+
+    return [os.path.join(operands[-1], os.path.basename(source.rstrip("/")))
+            for source in operands[:-1]]
+
+
 def shell_write_targets(command: str, scope: RequestScope, cwd: str | None = None) -> list[str]:
     """Every path a shell command may write: a redirection, the destination
     of cp/mv/install/ln, the operands of rm/touch/mkdir/tee/truncate/sed -i.
@@ -501,7 +546,7 @@ def shell_write_targets(command: str, scope: RequestScope, cwd: str | None = Non
     if not command:
         return []
 
-    words = list(_split_stages(command))
+    words = _with_assignments(list(_split_stages(command)))
     patterns = [argv[index + 1] for argv in words
                 for index, arg in enumerate(argv[:-1])
                 if arg in ("-name", "-iname")]
@@ -521,6 +566,7 @@ def shell_write_targets(command: str, scope: RequestScope, cwd: str | None = Non
     for argv in stages:
         destinations = _shell_destinations(argv)
         targets += [path for item in destinations for path in _expand_in(scope, item)]
+        targets += _copied_into(argv)
 
         if _opaque(argv) or any("$" in item or "{}" in item
                                 for item in destinations) or (
@@ -572,12 +618,43 @@ _SHELL_KEYWORDS = frozenset({"do", "then", "else", "elif", "time", "!", "{",
                              "(", "exec", "nohup", "env", "sudo", "command"})
 
 
+def _detach_redirections(stage: str) -> str:
+    """`echo P>>t` as `echo P >>t`: an unquoted `>` ends the word before it.
+
+    Left joined, shlex hands over `P>>t` as one word and the file it writes
+    is never seen. A word of digits before it is the descriptor (`2>x`).
+    """
+    out: list[str] = []
+    word: list[str] = []
+    quote = ""
+
+    for char in stage:
+        if quote:
+            quote = "" if char == quote else quote
+        elif char in "'\"":
+            quote = char
+        elif (char == ">" and word and word[-1] not in ">&|<"
+              and not "".join(word).isdigit()):
+            out.append("".join(word) + " ")
+            word = []
+
+        if char.isspace() and not quote:
+            out.append("".join(word) + char)
+            word = []
+        else:
+            word.append(char)
+
+    return "".join(out) + "".join(word)
+
+
 def _split_stages(command: str):
     # find's `-exec ... \;` terminator is not a command separator; `+` ends
     # the same -exec without looking like one.
     command = command.replace("\\;", "+").replace("';'", "+")
 
     for stage in re.split(r"&&|\|\||[;|\n]", command):
+        stage = _detach_redirections(stage)
+
         try:
             argv = shlex.split(stage, posix=True)
         except ValueError:

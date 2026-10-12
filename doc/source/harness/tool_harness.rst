@@ -181,7 +181,9 @@ and to every write a terminal command makes: a redirection, ``tee``, ``cp``,
 The decision is taken on the path as written and on the file it reaches, so a
 link or a ``..`` does not change it.  Git metadata (``.git`` and the git
 directory a ``.git`` file names) is refused the same way, and the sandbox
-binds it read-only under every command that may write.
+binds it read-only under every command that may write, together with the
+protected files the command reaches and, unless it builds or tests, the
+generated and snapshot trees.
 
 A refusal is deterministic, so asking again cannot change it.  When a turn
 asks for the same refused operation five times -- the same tool, target and

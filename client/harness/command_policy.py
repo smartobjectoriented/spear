@@ -25,6 +25,11 @@ from harness.tool_primitives import (
 from harness.workspace import SandboxSpec, Workspace, effective_mount_root
 
 
+# A redirection that duplicates a descriptor: `>&2`, the `>&1` of `2>&1`.
+
+_FD_DUPLICATE = re.compile(r"[<>]&(?:\d+|-)(?![\w./])")
+
+
 @dataclass(frozen=True)
 class CommandAssessment:
     command: str
@@ -626,6 +631,12 @@ class CommandPolicy:
 
         return CommandClassification.READ_ONLY
 
+    # A literal assignment: `F=x`, `F='x'`. A value built from a substitution
+    # is not known before the command runs.
+
+    _LITERAL_ASSIGNMENT = re.compile(
+        r"(?:^|[\s;&|(])([A-Za-z_]\w*)=(?:'([^']*)'|\"([^\"$`]*)\"|([^\s;&|()<>'\"$`]*))")
+
     @classmethod
     def _writes_via_redirection(cls, command: str) -> bool:
         """True when a redirection actually creates or extends a file.
@@ -633,11 +644,33 @@ class CommandPolicy:
         `2>/dev/null` is a redirection that writes nothing, and demanding
         workspace:write for it made every read-only pipeline carrying the idiom
         unavailable in SAFE — the mode where searching a tree is the whole
-        point.
-        """
+        point. Nor do `2>&1` and `>&2`, which only duplicate a descriptor: read
+        as writes, they handed `git apply x 2>&1` a writable tree.
 
-        for match in re.finditer(r"(?<![=])\d*>{1,2}\s*(\S*)", command):
-            if match.group(1) not in cls._REDIRECT_SINKS:
+        A destination held in a variable is the value the command assigned it,
+        when that value is literal. Otherwise nothing says what it is, and it
+        earns no write: the tree stays read-only and the write fails there.
+        """
+        values = {match.group(1): next(group for group in match.groups()[1:] if group is not None)
+                  for match in cls._LITERAL_ASSIGNMENT.finditer(command)}
+
+        for match in re.finditer(r"(?<![=])\d*>{1,2}\|?(&?)\s*([^\s;|&()<>]*)", command):
+            duplicate, target = match.groups()
+
+            if duplicate and re.fullmatch(r"\d+|-", target):
+                continue
+
+            variable = re.match(r"\$(?:\{(\w+)\}|(\w+))", target)
+
+            if variable:
+                name = variable.group(1) or variable.group(2)
+
+                if name not in values:
+                    continue
+
+                target = values[name] + target[variable.end():]
+
+            if target not in cls._REDIRECT_SINKS:
                 return True
 
         return False
@@ -666,7 +699,9 @@ class CommandPolicy:
         proposing to paste the file by hand.
 
         Bodies that feed an interpreter are kept, because there the body is
-        commands and dropping it would hide them from the danger scan.
+        commands and dropping it would hide them from the danger scan. A
+        dropped body takes its closing delimiter with it: on a line of its
+        own, the word would read as a program.
         """
         lines = command.split("\n")
         kept: list[str] = []
@@ -685,9 +720,7 @@ class CommandPolicy:
                 while index < len(lines) and lines[index].strip() != delimiter:
                     index += 1
 
-                if index < len(lines):
-                    kept.append(lines[index])
-                    index += 1
+                index += 1
 
         return "\n".join(kept)
 
@@ -756,7 +789,21 @@ class CommandPolicy:
 
                 continue
 
-            if char in "|;&()<>":
+            # `2>&1` and `>&2` duplicate a descriptor and name no file: they
+            # stay inside the word, or the `1` reads as a program.
+
+            duplicate = _FD_DUPLICATE.match(command, index)
+
+            if duplicate:
+                current.append(duplicate.group(0))
+                index = duplicate.end()
+
+                continue
+
+            # A newline ends a command as `;` does: `cat > x <<EOF ... EOF`
+            # then `python3 x` on the next line is two commands.
+
+            if char in "|;&()<>\n":
                 parts.append("".join(current))
                 parts.append(char)
                 current = []
@@ -941,15 +988,29 @@ class CommandPolicy:
     _STAGE_KEYWORDS = frozenset({"do", "then", "else", "elif", "time", "!", "{",
                                  "exec", "nohup", "env", "command"})
 
+    _SEPARATORS = frozenset({"|", "||", "&&", ";", "&", "(", ")", "<", ">"})
+
     def stage_argvs(self, command: str) -> "list[tuple[str, ...]]":
         """The argv each stage of `command` runs, environment prefixes set aside."""
         found = []
+        redirect_target = False
 
         for part in self._shell_stages(self._strip_heredoc_bodies(command or "")):
+            if part.strip() in self._SEPARATORS:
+                redirect_target = part.strip() in {"<", ">"}
+                continue
+
             try:
                 argv = tuple(shlex.split(part, posix=True))
             except ValueError:
                 continue
+
+            # What follows `>` or `<` is its file; the rest of the fragment
+            # is the command that continues.
+
+            if redirect_target and argv:
+                argv = argv[1:]
+                redirect_target = False
 
             while argv and (self._ASSIGNMENT.match(argv[0])
                             or argv[0] in self._STAGE_KEYWORDS):
@@ -959,6 +1020,19 @@ class CommandPolicy:
                 found.append(argv)
 
         return found
+
+    # What builds or tests: the build tools and test runners the policy lets
+    # write, BitBake, and a project's own build script or configure step.
+
+    BUILD_BINS = (WORKSPACE_MUTATING_BINS - {"tee"}) | frozenset({
+        "gmake", "meson", "scons", "ctest", "bitbake"})
+    _BUILD_SCRIPT = re.compile(r"(?:^|[-_])build(?:[-_][\w-]*)?\.sh$|^configure$|^autogen\.sh$")
+
+    def builds(self, command: str) -> bool:
+        """Whether `command` builds or tests: its output is the build's to write."""
+        return any(Path(argv[0]).name in self.BUILD_BINS or self._is_module_test_run(argv)
+                   or self._BUILD_SCRIPT.search(Path(argv[0]).name)
+                   for argv in self.stage_argvs(command))
 
     def writes_git(self, command: str) -> bool:
         """Whether `command` runs one of the git commands allowed to write git."""

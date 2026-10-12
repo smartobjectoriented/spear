@@ -59,6 +59,10 @@ def coding_host(agent_context, cache, record):
     from harness.control_plane import SpearHost
     from agent.host import CommandOutcome
 
+    # Where the terminal call last authorized runs, for the command it runs.
+
+    command_cwd = [None]
+
     def context():
         return _execution_context(agent_context, cache,
                                   task_id=getattr(agent_context, "task_id", None),
@@ -73,6 +77,9 @@ def coding_host(agent_context, cache, record):
 
         if cwd:
             ctx.metadata = {**ctx.metadata, "command_cwd": cwd}
+
+        if name == "terminal":
+            command_cwd[0] = cwd
 
         return TOOL_ROUTER.authorize(ctx, name, arguments)
 
@@ -142,6 +149,7 @@ def coding_host(agent_context, cache, record):
         result = run_cmd_result(
             command, need_confirm=False, cancellation=ctx.cancellation,
             exec_cmd=script, timeout=timeout, output_chars=output_chars,
+            cwd=command_cwd[0],
             execution_mode=(ExecutionMode.SAFE
                             if ctx.read_only or _write_gate_closed(ctx)
                             or ctx.role in {"explorer", "reviewer", "planning"}

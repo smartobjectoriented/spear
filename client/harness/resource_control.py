@@ -52,11 +52,17 @@ class ExecutionProfile:
     #: The command is one the policy lets write git (clone, fetch, pull):
     #: the repositories in the tree stay writable for it.
     git_writable: bool = False
+    #: The command is not a build or a test: generated trees and snapshot
+    #: copies are bound read-only for it.
+    guard_outputs: bool = False
+    #: Further protected host paths the command names or reaches.
+    protected_paths: tuple[str, ...] = ()
 
     @classmethod
     def from_capabilities(cls, capabilities: Sequence[Capability],
                           host_read_paths: Sequence[str] = (), *,
-                          git_writable: bool = False) -> "ExecutionProfile":
+                          git_writable: bool = False, guard_outputs: bool = False,
+                          protected_paths: Sequence[str] = ()) -> "ExecutionProfile":
         granted = frozenset(capabilities)
         workspace_read = Capability.FILESYSTEM_READ in granted
         workspace_write = Capability.WORKSPACE_WRITE in granted
@@ -87,6 +93,8 @@ class ExecutionProfile:
             secrets_allowed=Capability.SECRETS in granted,
             host_read_paths=tuple(host_read_paths),
             git_writable=git_writable,
+            guard_outputs=guard_outputs,
+            protected_paths=tuple(protected_paths),
         )
 
     def audit_metadata(self) -> Mapping[str, bool]:

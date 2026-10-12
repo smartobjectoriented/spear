@@ -187,6 +187,11 @@ class BubblewrapSandbox:
 
         return ["--bind", self._session_tmpdir, self.spec.tmpdir]
 
+    @property
+    def session_tmpdir(self) -> str | None:
+        """The host directory bound at /tmp, once the first command made it."""
+        return self._session_tmpdir
+
     def mount_root(
         self, workspace: Workspace, profile: ExecutionProfile | None = None
     ) -> str:
@@ -246,15 +251,21 @@ class BubblewrapSandbox:
         found: list[str] = []
 
         for root in roots:
-            if not profile.git_writable:
-                found.extend(write_protection.trees(root).git)
+            trees = write_protection.trees(root)
 
+            if not profile.git_writable:
+                found.extend(trees.git)
+
+            if profile.guard_outputs:
+                found.extend(trees.outputs)
+
+        found.extend(profile.protected_paths)
         kept: list[str] = []
 
         # Outermost first; a path under one already kept is covered by it.
 
         for path in sorted(set(found)):
-            if not write_protection.within(path, roots):
+            if not write_protection.within(path, roots) or path in roots:
                 continue
 
             if any(path.startswith(parent.rstrip("/") + "/") for parent in kept):

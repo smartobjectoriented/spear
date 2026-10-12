@@ -1,7 +1,7 @@
 """Which files no mutation may touch, whatever tool attempts it.
 
 A refusal attaches to the target, not to the tool. Generated output and
-snapshot or third-party copies were protected only from write_file and
+snapshot copies were protected only from write_file and
 patch: delete_file then a fresh write_file, a shell redirection, cp, tee,
 truncate or ln -sf reached the same file. Every mutation path asks here,
 about the path as written and about the file it actually reaches.
@@ -13,8 +13,14 @@ import os
 import re
 
 _GENERATED_PATH = re.compile(r"/generated/|/build/tmp/")
-_SNAPSHOT_PATH = re.compile(r"/(?:u-boot|atf|qemu)(?:\.back)?/|\.back/|\.pristine/|\.0/|"
-                            r"/build/tmp/")
+
+# A directory named as a copy is one wherever it sits. ".0" names a version as
+# often as a copy (zynq-rev1.0, linux-6.0), so it counts only beside the live
+# tree it copies (rootfs.0 next to rootfs). A component's name never decides:
+# an attached u-boot/ or a recipes-qemu/qemu/ layer is the project's source.
+
+_SNAPSHOT_SUFFIXES = (".back", ".pristine")
+_COPY_SUFFIX = ".0"
 _GENERATED_MARK = re.compile(
     r"DO NOT (?:MODIFY|EDIT)|auto(?:matically)?[ -]?generated|@generated", re.IGNORECASE)
 
@@ -35,8 +41,25 @@ def says_generated(head: str) -> bool:
 
 
 def is_snapshot(path: str) -> bool:
-    """Third-party and snapshot trees, never written by a turn."""
-    return bool(_SNAPSHOT_PATH.search(str(path)))
+    """Whether `path` lies in a snapshot copy, never written by a turn."""
+    path = str(path)
+
+    if "/build/tmp/" in path:
+        return True
+
+    parts = path.split("/")
+    directories = parts if path.endswith("/") else parts[:-1]
+
+    for index, part in enumerate(directories):
+        if part.endswith(_SNAPSHOT_SUFFIXES):
+            return True
+
+        live = part[:-len(_COPY_SUFFIX)]
+
+        if part.endswith(_COPY_SUFFIX) and live and os.path.isdir("/".join(parts[:index] + [live]) or "/"):
+            return True
+
+    return False
 
 
 def _head(path: str) -> str:
@@ -68,7 +91,7 @@ def refusal(path: str, label: str | None = None) -> str:
             return f"{label} is a generated file — change its source"
 
         if is_snapshot(candidate):
-            return f"{label} is a snapshot or third-party copy"
+            return f"{label} is a snapshot copy"
 
     if os.path.isfile(real) and says_generated(_head(real)):
         return f"{label} is a generated file — change its source"

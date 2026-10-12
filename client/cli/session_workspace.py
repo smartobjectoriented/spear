@@ -734,14 +734,14 @@ def edit_file(path, old_text, new_text, *, execution_context=None):
     if not fpath:
         return f"ERROR: file not found: {path}"
 
-    # guard: a bad/incomplete path can fuzzy-resolve to a SNAPSHOT or
-    # third-party tree (e.g. avz.back/…, u-boot/…). Never write there — it
-    # corrupts the pristine copy and is never the file the user meant.
+    # guard: a bad/incomplete path can fuzzy-resolve to a SNAPSHOT copy
+    # (e.g. avz.back/…). Never write there — it corrupts the pristine copy and
+    # is never the file the user meant.
 
     if is_excluded_path(fpath):
-        return (f"ERROR: {os.path.relpath(fpath, PROJECT_ROOT)} is a snapshot / "
-                f"third-party copy (.back/.0/.pristine/u-boot/atf/qemu) — never "
-                f"edit it. Use the LIVE source path (re-check it with ls/find).")
+        return (f"ERROR: {os.path.relpath(fpath, PROJECT_ROOT)} is a snapshot copy "
+                f"(.back/.pristine, or .0 beside its live tree) — never edit it. "
+                f"Use the LIVE source path (re-check it with ls/find).")
 
     with fpath.open("r", encoding="utf-8") as f:
         content = f.read()
@@ -1016,7 +1016,7 @@ def apply_unified_diff(fpath, diff_text):
 
 
 def is_excluded_path(p):
-    """Third-party / snapshot trees we must NEVER auto-write into."""
+    """Snapshot copies we must NEVER auto-write into."""
     from harness import target_policy
 
     return target_policy.is_snapshot(str(p))

@@ -198,7 +198,10 @@ command, its exit status, the bounded output and the source epoch it judged.
 Whatever the repair pass leaves is validated again at its own epoch; a failure
 then, a validation that could not run, or a repair pass that stopped before
 finishing is ``UNVERIFIED``. There is no second repair, and a pass that changes
-nothing ends the turn with the same failure.
+nothing ends the turn with the same failure. A change is a change whatever made
+it: source that a terminal command rewrote (``sed -i``, ``git apply``) starts a
+new epoch, which the project validation judges like one written by the file
+tools.
 
 The repair is not offered when the validation did not run, nor to a turn
 stopped by its budget, a repeated refusal, a truncation or the operator. A

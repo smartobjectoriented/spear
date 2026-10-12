@@ -272,7 +272,9 @@ class CodingCoreMixin:
 
         def judge(core):
             """The epoch, the project's own validation of it, and the verdict."""
-            epoch = completion.timeline(context.core_evidence, _generated_in(root), root)[0]
+            epoch, _, changed = completion.timeline(context.core_evidence,
+                                                    _generated_in(root), root)
+            context.core_source_epoch, context.core_source_changed = epoch, changed
             project = completion.project_evidence(
                 project_build_runs(context, tool_log), commands, epoch)
             verdict = completion.decide(

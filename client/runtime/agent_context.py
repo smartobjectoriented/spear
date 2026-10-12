@@ -106,6 +106,10 @@ class AgentContext:
     #: The agent core path's structured evidence (completion.Evidence), one
     #: per call. What changed is read from here, not from the tool log text.
     core_evidence: Any = None
+    #: The agent core path's final source epoch and the source files it
+    #: changed, by any tool (completion.timeline), once judged.
+    core_source_epoch: int | None = None
+    core_source_changed: tuple[str, ...] = ()
     #: A MIXED turn's project-side normative configuration: the project spec
     #: holding `normative_checks` / `normative_applicability`, where it was
     #: declared, and the confined runner a bound check runs through,

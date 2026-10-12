@@ -230,6 +230,58 @@ class ValidationRepair(unittest.TestCase):
         self.assertLess(len(request), agent_core_turn.REPAIR_OUTPUT_CHARS + 800)
 
 
+def sed(old, new):
+    """A turn that changes a.sh through the terminal, not a write tool."""
+    return turn("", call(f"s-{old}", "terminal", command=f"sed -i s/{old}/{new}/ a.sh"))
+
+
+class TerminalChanges(unittest.TestCase):
+    """`git apply` or `sed -i` change source without a write tool: the project
+    validation still runs on the state they leave, its failure still earns
+    the one repair, and a repair made that way is validated again."""
+
+    run_turn = ValidationRepair.run_turn
+    repairs = ValidationRepair.repairs
+
+    def test_a_terminal_only_change_is_validated_and_repaired(self):
+        result, context = self.run_turn(
+            [sed("alpha", "beta"), turn("Done."), sed("beta", "gamma"),
+             turn("Fixed: it prints gamma.")],
+            verifier=Verifier(None, wanted="gamma"))
+
+        self.assertEqual(len(self.repairs()), 1)
+        self.assertEqual(len(context.project_verifier.calls), 2)
+        self.assertEqual(context.core_verdict.state, "VERIFIED")
+
+    def test_a_passing_model_check_does_not_outweigh_a_failing_project_validation(self):
+        result, context = self.run_turn(
+            [sed("alpha", "beta"), turn("", call("c2", "terminal", command="./a.sh")),
+             turn("Done."), turn("I cannot see what to change.")],
+            verifier=Verifier(None, wanted=""))
+
+        self.assertEqual(len(self.repairs()), 1)
+        self.assertEqual(context.core_verdict.state, "UNVERIFIED")
+        self.assertTrue(result.final_response.startswith("**UNVERIFIED**"))
+
+    def test_a_repair_made_through_the_terminal_is_validated_again(self):
+        result, context = self.run_turn(
+            [turn("", call("c1", "patch", path="a.sh", old_string="alpha", new_string="beta")),
+             turn("Done."), sed("beta", "gamma"), turn("Fixed: it prints gamma.")],
+            verifier=Verifier(None, wanted="gamma"))
+
+        self.assertEqual(len(self.repairs()), 1)
+        self.assertEqual(len(context.project_verifier.calls), 2)
+        self.assertEqual(context.core_verdict.state, "VERIFIED")
+
+    def test_the_final_validation_runs_once_per_epoch(self):
+        result, context = self.run_turn([sed("alpha", "beta"), turn("Done.")],
+                                        verifier=Verifier(None, wanted="beta"))
+
+        self.assertEqual(self.repairs(), [])
+        self.assertEqual(len(context.project_verifier.calls), 1)
+        self.assertEqual(context.core_verdict.state, "VERIFIED")
+
+
 class TheCodingCoreIsUnchanged(unittest.TestCase):
     """The repair pass is SPEAR's; the core it runs is the one v0.3.0 shipped."""
 

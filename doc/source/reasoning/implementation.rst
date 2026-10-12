@@ -150,10 +150,11 @@ change the file tools would refuse cannot be made through the terminal instead.
 
 **Protected and generated paths.** Files a build produces (``/generated/``,
 ``/build/tmp/``, or a file whose head says *DO NOT MODIFY*, *DO NOT EDIT* or
-*auto-generated*) are refused with a pointer to their source. Snapshot and
-third-party copies (``.back``, ``.pristine``, ``.0``, vendored ``u-boot``,
-``atf``, ``qemu`` trees) are never written. The refusal belongs to the file,
-not to the tool: ``patch``, ``write_file``, ``delete_file`` and the
+*auto-generated*) are refused with a pointer to their source. Snapshot copies
+(``.back`` and ``.pristine`` trees, a ``.0`` tree beside its live one) are
+never written; a component's name decides nothing, so an attached ``u-boot/``
+tree or a ``recipes-qemu/qemu/`` layer stays editable. The refusal belongs to
+the file, not to the tool: ``patch``, ``write_file``, ``delete_file`` and the
 terminal's redirections, ``cp``, ``tee``, ``truncate`` or ``ln -sf`` are all
 refused the same file, judged both as written and as the path it resolves to.
 

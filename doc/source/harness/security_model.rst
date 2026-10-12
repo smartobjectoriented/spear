@@ -69,9 +69,9 @@ another checkout is another project, not a source of this one's build.
 
 **Generated and protected trees.** Build outputs (``/generated/``,
 ``/build/tmp/``, files whose head says *DO NOT MODIFY*, *DO NOT EDIT*,
-*auto-generated* or ``@generated``) and snapshot or third-party copies
-(``.back``, ``.pristine``, ``.0`` trees, vendored ``u-boot``, ``atf``,
-``qemu``) are never written; the refusal points at the source to change
+*auto-generated* or ``@generated``) and snapshot copies (``.back`` and
+``.pristine`` trees, a ``.0`` tree beside its live one, never a directory
+because of its name) are never written; the refusal points at the source to change
 instead. The rule belongs to the target, not to the tool
 (``target_policy.py``): ``write_file``, ``patch``, ``delete_file`` and every
 shell write listed above ask the same question, about the path as written and

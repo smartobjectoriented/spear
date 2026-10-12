@@ -40,11 +40,11 @@ MARK = f'''  <!-- 1. the specification: the authoritative source -->
   <!-- 3. the one action -->
   <path fill="{ACCENT}" d="M20 44 H44 L32 60 Z"/>'''
 
-# The landing lockup shows the mark at about 90 px, where the specification
-# can carry its line of text. It is CUT OUT rather than painted white -- a
-# white notch is only invisible until the background stops being white -- and
-# it is the only difference: below about 48 px it is a sub-pixel line, so the
-# compact mark, the sidebar and the favicon go without it.
+# From about 48 px up (the sidebar, the landing lockup) the specification can
+# carry its line of text. It is CUT OUT rather than painted white -- a white
+# notch is only invisible until the background stops being white -- and it is
+# the only difference: below that it is a sub-pixel line, so the favicon and
+# the compact lockup go without it.
 MARK_LANDING = MARK.replace(
     f'<rect x="4" y="4" width="56" height="16" rx="4" fill="{WARM}"/>',
     f'<path fill="{WARM}" fill-rule="evenodd"\n'
@@ -105,8 +105,11 @@ def main():
         (OUT / name).write_text(text)
         written.append(name)
 
-    # the mark: sidebar (html_logo), favicon, and anywhere it stands alone
+    # the mark: favicon, and anywhere it stands alone at small sizes
     write("spear-mark.svg", svg(64, 64, MARK, f"{NAME} mark", FULL))
+
+    # the sidebar's mark (html_logo, 48 px), detailed like the landing one
+    write("spear-mark-detailed.svg", svg(64, 64, MARK_LANDING, f"{NAME} mark", FULL))
 
     # The two lockups, with the mark and the wordmark optically centred on
     # one line. Computed rather than typed: the mark's box and the cap height

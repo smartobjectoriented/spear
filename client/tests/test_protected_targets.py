@@ -178,12 +178,16 @@ class GitMetadataIsNeverMutated(Targets):
                 with self.subTest(target=target, command=command):
                     self.assertUnchanged(target, [("core", "terminal", {"command": command})])
 
-    def test_git_commands_that_write_it_fail(self):
+    def test_git_commands_that_write_it_fail_beside_another_writer(self):
         for command in ("echo more >> a.txt; git add a.txt 2>&1",
                         "echo more >> a.txt; git -c user.name=t -c user.email=t@t commit -qam m 2>&1",
                         "echo more >> a.txt; git stash 2>&1",
-                        "echo x > a.txt; git config core.foo bar 2>&1"):
+                        "echo x > a.txt; git config core.foo bar 2>&1",
+                        "git add a.txt && echo P >> .git/HEAD", "git status; cp a.txt .git/config",
+                        "git stash; python3 -c \"open('.git/HEAD','a').write('P')\"",
+                        "git add a.txt && ./poke.sh"):
             with self.subTest(command=command):
+                Path(self.root, "poke.sh").write_text("#!/bin/sh\necho P >> .git/HEAD\n")
                 self.assertUnchanged(".git", [("core", "terminal", {"command": command})])
 
     def test_ordinary_files_beside_it_stay_writable(self):
@@ -211,6 +215,155 @@ class GitMetadataIsNeverMutated(Targets):
 
                 self.assertFalse(record.refused, text)
                 self.assertEqual(record.exit_code, 0, text)
+
+
+def git(root, *arguments):
+    """git's own answer about `root`, on the host."""
+    return subprocess.run(["git", "-C", root, *arguments], capture_output=True, text=True,
+                          check=True).stdout
+
+
+@unittest.skipUnless(SANDBOX, "needs the bubblewrap sandbox")
+class GitKeepsItsOwnRecords(Targets):
+    """A git command alone keeps its own repository's records; nothing else
+    does, and it reaches no other repository and nothing outside."""
+
+    def fill(self):
+        super().fill()
+
+        for path, text in (("out/generated/table.h", "int table;\n"),
+                           ("gen/config.h", GEN_MARK)):
+            Path(self.root, path).parent.mkdir(parents=True, exist_ok=True)
+            Path(self.root, path).write_text(text)
+
+        base = ["-c", "user.name=t", "-c", "user.email=t@t"]
+        git(self.root, "add", "-f", "out", "gen")
+        git(self.root, *base, "commit", "-qm", "outputs")
+        git(self.root, "worktree", "add", "-q", f"{self.root}/wt")
+
+        # A linked worktree whose .git file names its git directory the long way.
+
+        Path(self.root, "wt/.git").write_text("gitdir: ../sub/../.git/worktrees/wt\n")
+        write_protection.forget()
+
+    def terminal(self, command):
+        self.call = self.spear_session(self.OBJECTIVE)
+        text, record = self.call("terminal", command=command)
+        self.assertFalse(record.refused, text)
+
+        return json.loads(text)
+
+    def test_add_stash_checkout_restore_and_clean_work(self):
+        Path(self.root, "a.txt").write_text("changed\n")
+        self.assertEqual(self.terminal("git add a.txt")["exit_code"], 0)
+        self.assertEqual(git(self.root, "diff", "--cached", "--name-only"), "a.txt\n")
+
+        self.assertEqual(self.terminal("git stash 2>&1 | tail -1")["exit_code"], 0)
+        self.assertEqual(Path(self.root, "a.txt").read_text(), "alpha\nbeta\ngamma\n")
+        self.assertEqual(len(git(self.root, "stash", "list").splitlines()), 1)
+        self.assertEqual(self.terminal("git stash pop")["exit_code"], 0)
+        self.assertEqual(Path(self.root, "a.txt").read_text(), "changed\n")
+
+        self.assertEqual(self.terminal("git restore --staged a.txt && git checkout -- a.txt")
+                         ["exit_code"], 0)
+        self.assertEqual(Path(self.root, "a.txt").read_text(), "alpha\nbeta\ngamma\n")
+        Path(self.root, "a.txt").write_text("again\n")
+        self.assertEqual(self.terminal("timeout 30 git restore a.txt")["exit_code"], 0)
+        self.assertEqual(Path(self.root, "a.txt").read_text(), "alpha\nbeta\ngamma\n")
+
+        Path(self.root, "junk/deep").mkdir(parents=True)
+        Path(self.root, "junk/deep/j.o").write_text("j\n")
+        Path(self.root, "stray.txt").write_text("s\n")
+        self.assertEqual(self.terminal("git clean -fd")["exit_code"], 0)
+        self.assertFalse(Path(self.root, "junk").exists())
+        self.assertFalse(Path(self.root, "stray.txt").exists())
+
+    def test_a_submodule_and_a_worktree_keep_their_own_records(self):
+        superproject = fingerprint(Path(self.root, ".git/index"))
+        result = self.terminal("cd sub2 && git add s.txt")
+
+        self.assertEqual(result["exit_code"], 0, result)
+        self.assertEqual(git(f"{self.root}/sub2", "diff", "--cached", "--name-only"), "s.txt\n")
+        self.assertEqual(fingerprint(Path(self.root, ".git/index")), superproject)
+
+        Path(self.root, "wt/a.txt").write_text("in the worktree\n")
+        result = self.terminal("git -C wt add a.txt")
+
+        self.assertEqual(result["exit_code"], 0, result)
+        self.assertEqual(git(f"{self.root}/wt", "diff", "--cached", "--name-only"), "a.txt\n")
+        self.assertEqual(fingerprint(Path(self.root, ".git/index")), superproject)
+
+    def test_the_worktree_stays_under_the_target_policy(self):
+        edited = {"out/generated/table.h": "int edited;\n", "gen/config.h": GEN_MARK + "int e;\n"}
+
+        for target, text in edited.items():
+            Path(self.root, target).write_text(text)
+
+        # A file is protected by its marker when the command names it, as
+        # under any other command; a generated tree is, named or not.
+
+        for command, targets in (("git checkout -- out/generated/table.h", edited),
+                                 ("git restore gen/config.h", edited),
+                                 ("git checkout -- .", ["out/generated/table.h"])):
+            with self.subTest(command=command):
+                self.terminal(command)
+
+                for target in targets:
+                    self.assertEqual(Path(self.root, target).read_text(), edited[target])
+
+        Path(self.root, "vendor").mkdir()
+        subprocess.run(["git", "init", "-q", f"{self.root}/vendor"], check=True)
+        Path(self.root, "out/generated/new.h").write_text("int n;\n")
+        nested = fingerprint(Path(self.root, "vendor/.git"))
+        write_protection.forget()
+        self.terminal("git clean -ffdx")
+
+        self.assertEqual(fingerprint(Path(self.root, "vendor/.git")), nested)
+        self.assertTrue(Path(self.root, "out/generated/new.h").is_file())
+
+    def test_git_cannot_be_steered_out_of_its_records(self):
+        outside = os.path.realpath(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, outside, ignore_errors=True)
+        subprocess.run(["git", "init", "-q", outside], check=True)
+        Path(outside, "f.txt").write_text("f\n")
+        os.makedirs(f"{self.root}/hooks")
+        Path(self.root, "hooks/post-checkout").write_text("#!/bin/sh\necho P > .git/hooked\n")
+        Path(self.root, "scripts").mkdir()
+        Path(self.root, "scripts/git").write_text("#!/bin/sh\necho P > .git/shadowed\n")
+
+        for script in ("hooks/post-checkout", "scripts/git"):
+            os.chmod(f"{self.root}/{script}", 0o755)
+
+        sub2 = fingerprint(Path(self.root, ".git/modules/sub2"))
+        cases = (
+            ["git --git-dir=.git --work-tree=.git checkout HEAD -- a.txt"],
+            ["GIT_WORK_TREE=.git git checkout HEAD -- a.txt"],
+            ["env GIT_DIR=.git GIT_WORK_TREE=.git git checkout HEAD -- a.txt"],
+            ["export GIT_WORK_TREE=$PWD/.git", "git checkout HEAD -- a.txt"],
+            ["git -c core.hooksPath=hooks checkout -b one"],
+            ["export GIT_CONFIG_PARAMETERS=\"'core.hookspath'='hooks'\"", "git checkout -b two"],
+            ["export PATH=$PWD/scripts:$PATH", "git add a.txt"],
+            ["export HOME=$PWD", "git add a.txt"],
+            ["cd .git && git add a.txt"],
+            ["git -C .git add a.txt"],
+            [f"git -C {outside} add f.txt"],
+            [f"cd {outside} && git add f.txt"],
+            ["bash -c 'git --work-tree=.git checkout HEAD -- a.txt'"],
+            ["git add a.txt && git --work-tree=.git checkout HEAD -- a.txt"])
+
+        for steps in cases:
+            with self.subTest(steps=steps):
+                before = fingerprint(Path(self.root, ".git"))
+                self.call = self.spear_session(self.OBJECTIVE)
+
+                for command in steps:
+                    self.call("terminal", command=command)
+
+                self.assertEqual(fingerprint(Path(self.root, ".git")), before)
+                self.assertFalse(Path(self.root, ".git/a.txt").exists())
+                self.assertEqual(git(outside, "status", "--porcelain"), "?? f.txt\n")
+
+        self.assertEqual(fingerprint(Path(self.root, ".git/modules/sub2")), sub2)
 
 
 GEN_MARK = "/* DO NOT EDIT: generated by gen.sh */\nint x;\n"

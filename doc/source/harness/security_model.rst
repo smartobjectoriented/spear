@@ -115,9 +115,25 @@ may run a program whose writes no parser sees — a script, ``patch`` fed on
 stdin, a Makefile rule — the sandbox also binds every ``.git`` and the git
 directories they name read-only, on top of the writable tree, for every
 command granted workspace write (``write_protection.py``, :doc:`sandbox`).
-``git status``, ``log``, ``diff`` and ``show`` keep working; the only commands
-that keep git writable are ``clone``, ``fetch`` and ``pull``, the ones the
-command policy lets write it.
+``git status``, ``log``, ``diff`` and ``show`` keep working.
+
+Git itself keeps its records. ``add``, ``checkout``, ``restore``,
+``switch``, ``stash``, ``clean``, ``fetch`` and ``pull`` find writable the
+git directories of the repository they run in — followed through the
+command's ``cd`` and ``-C`` steps, and through a ``.git`` file to the git
+directory it names and that one's common directory, all canonically — and
+no other (``write_protection.git_dirs``). Only when the command is git's
+alone and run as itself (``CommandPolicy.git_writes``): every other stage
+reads; nothing writes a file, substitutes, defines a function or sources a
+script; no ``-c``, ``--git-dir``, ``--work-tree`` or interactive form
+(``-p``, ``-i``, ``-e``); no ``GIT_*``, ``HOME``, ``PATH``, ``LD_*`` or
+editor in the command or exported by the session; no directory outside the
+roots or inside git's own state; no writable directory ahead of the system's
+``git`` on ``PATH`` that holds a ``git`` or could before a second git
+command runs. Otherwise the repository stays read-only and the git command
+fails there. What git changes in the worktree is judged like any other
+write: a protected file it names and the generated trees stay read-only
+under it. ``reset``, ``commit``, ``config`` and the rest keep no records.
 
 **Read-only and advisory turns.** A turn that only asks to be told something,
 or is told not to change anything, keeps its reading tools and runs its

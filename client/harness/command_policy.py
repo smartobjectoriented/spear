@@ -127,6 +127,12 @@ class CommandPolicy:
     CONTAINER_BINS = frozenset({"docker", "podman"})
     GPU_BINS = frozenset({"nvidia-smi"})
     GIT_NETWORK_WRITE = frozenset({"clone", "fetch", "pull"})
+
+    # The git commands that keep their own repository's records as they work:
+    # the index, the stash, HEAD. What they change in the worktree is judged
+    # like any other write.
+
+    GIT_LOCAL_WRITE = frozenset({"add", "restore", "checkout", "switch", "stash", "clean"})
     GIT_NETWORK_ONLY = frozenset({"push"})
     _SHELL_SYNTAX = re.compile(r"[|&;<>`$()\n]")
 
@@ -525,7 +531,10 @@ class CommandPolicy:
             return frozenset({Capability.FILESYSTEM_READ, Capability.WORKSPACE_WRITE})
 
         if binary == "git":
-            subcommand = argv[1] if len(argv) > 1 else ""
+            subcommand = (self.git_command(argv) or ("", ()))[0]
+
+            if subcommand in self.GIT_LOCAL_WRITE:
+                return frozenset({Capability.FILESYSTEM_READ, Capability.WORKSPACE_WRITE})
 
             if subcommand in self.GIT_NETWORK_WRITE:
                 return frozenset({
@@ -1268,11 +1277,105 @@ class CommandPolicy:
         return found and not any(self._writes_output(target)
                                  for target in self._redirect_targets(command))
 
+    # Global options that leave git where it is and reading what it reads.
+
+    _GIT_PLAIN_OPTIONS = frozenset({
+        "--no-pager", "-P", "-p", "--paginate", "--no-optional-locks", "--literal-pathspecs",
+        "--glob-pathspecs", "--noglob-pathspecs", "--icase-pathspecs", "--no-replace-objects",
+        "--no-lazy-fetch", "--no-advice"})
+
+    def git_command(self, argv: Sequence[str]) -> "tuple[str, tuple[str, ...]] | None":
+        """(subcommand, the -C directories in order) of a git argv.
+
+        None when a global option sends git somewhere else or runs something
+        of its own: -c, --git-dir, --work-tree, --exec-path, --namespace...
+        """
+        directories: list[str] = []
+        index = 1
+
+        while index < len(argv) and argv[index].startswith("-"):
+            option = argv[index]
+
+            if option == "-C" and index + 1 < len(argv):
+                directories.append(argv[index + 1])
+                index += 2
+            elif option in self._GIT_PLAIN_OPTIONS:
+                index += 1
+            else:
+                return None
+
+        return (argv[index] if index < len(argv) else ""), tuple(directories)
+
     def writes_git(self, command: str) -> bool:
-        """Whether `command` runs one of the git commands allowed to write git."""
-        return any(Path(argv[0]).name == "git" and len(argv) > 1
-                   and argv[1] in self.GIT_NETWORK_WRITE
+        """Whether `command` runs a git command that writes a repository's records."""
+        return any(argv[0] == "git"
+                   and (self.git_command(argv) or ("", ()))[0] in (self.GIT_NETWORK_WRITE
+                                                                  | self.GIT_LOCAL_WRITE)
                    for argv in self.stage_argvs(command))
+
+    # What may run beside a git command that writes its records: what runs
+    # no program of the command's choosing and writes no file.
+
+    _BESIDE_GIT = (READ_ONLY_BINS - {"find"}) | frozenset({"echo", "printf", "true", "false",
+                                                           "test", "[", "pwd"})
+
+    # Interactive forms hand the change to an editor or a prompt.
+
+    _GIT_INTERACTIVE = re.compile(r"^(?:-[a-zA-Z]*[pie][a-zA-Z]*|--(?:patch|interactive|edit)\b.*)$")
+
+    # Words that steer git, or a program it runs, from the environment.
+
+    _GIT_STEERING = re.compile(
+        r"GIT_|(?:^|[^\w$])(?:HOME|PATH|XDG_\w+|LD_\w+|BASH_ENV|ENV|EDITOR|VISUAL|PAGER)=")
+
+    def git_writes(self, command: str) -> "list[tuple[str, tuple[str, ...]]] | None":
+        """Where the git commands that write their repository's records run.
+
+        The steps in order: ("cd", directory) and ("git", its -C
+        directories). None unless the command is git's alone -- every other
+        stage reads, and nothing writes a file, substitutes, defines a
+        function, sources a script or steers git (-c, --git-dir,
+        --work-tree, a GIT_ variable, HOME, PATH, an editor). Only then may
+        the repositories it names keep their records (write_protection.py).
+        Clone writes no repository that exists, and adds no step.
+        """
+        if (self._GIT_STEERING.search(command) or re.search(r"[`]|\$\(|<<|\(\s*\)|\bfunction\b",
+                                                             command)
+                or self._writes_via_redirection(command)):
+            return None
+
+        steps: list[tuple[str, tuple[str, ...]]] = []
+
+        for argv in self.stage_argvs(command):
+            if argv[0] == "cd":
+                operands = [word for word in argv[1:] if word not in ("-P", "-L", "--")]
+                steps.append(("cd", tuple(operands[:1]) if len(operands) == 1 else ("",)))
+                continue
+
+            if argv[0] != "git":
+                if argv[0] in self._BESIDE_GIT and not (argv[0] == "sed" and any(
+                        self._SED_IN_PLACE.match(arg) for arg in argv[1:])):
+                    continue
+
+                return None
+
+            parsed = self.git_command(argv)
+
+            if parsed is None:
+                return None
+
+            subcommand, directories = parsed
+
+            if subcommand in self.GIT_LOCAL_WRITE | {"fetch", "pull"}:
+                if any(self._GIT_INTERACTIVE.match(word)
+                       for word in argv[argv.index(subcommand) + 1:]):
+                    return None
+
+                steps.append(("git", directories))
+            elif subcommand not in self.GIT_READ_ONLY | {"clone"}:
+                return None
+
+        return steps
 
     def classify(self, command: str) -> CommandAssessment:
         if not command or not command.strip():
@@ -1433,15 +1536,17 @@ class CommandPolicy:
                 capabilities=(Capability.FILESYSTEM_READ, Capability.WORKSPACE_WRITE))
 
         if binary == "git":
-            if len(argv) > 1 and argv[1] in self.GIT_READ_ONLY:
+            subcommand = (self.git_command(argv) or ("", ()))[0]
+
+            if subcommand in self.GIT_READ_ONLY:
                 return self._assessment(command, argv, CommandClassification.READ_ONLY,
                                         capabilities=self._simple_capabilities(argv))
 
-            if len(argv) > 1 and argv[1] in self.GIT_NETWORK_ONLY:
+            if subcommand in self.GIT_NETWORK_ONLY:
                 return self._assessment(command, argv, CommandClassification.READ_ONLY,
                                         capabilities=self._simple_capabilities(argv))
 
-            if len(argv) > 1 and argv[1] in self.GIT_NETWORK_WRITE:
+            if subcommand in self.GIT_NETWORK_WRITE | self.GIT_LOCAL_WRITE:
                 return self._assessment(command, argv, CommandClassification.WORKSPACE_MUTATING,
                                         capabilities=self._simple_capabilities(argv))
 

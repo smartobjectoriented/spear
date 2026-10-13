@@ -127,6 +127,104 @@ def forget() -> None:
     _CACHE.clear()
 
 
+def _entered(directory: str, word: str, roots, aliases) -> str:
+    """The directory `cd word` enters from `directory`, canonical, or "".
+
+    "" when it cannot be followed or may not be: a word the shell expands,
+    a directory outside the roots, one inside git's own state.
+    """
+    if not word or word == "-" or re.search(r"[$`~*?\[\]{}]", word):
+        return ""
+
+    path = os.path.realpath(_candidates(word, [directory], aliases)[0])
+
+    if (not os.path.isdir(path) or not within(path, roots)
+            or target_policy.is_git_metadata(os.path.join(path, "x"))):
+        return ""
+
+    return path
+
+
+def _repository(directory: str, roots) -> tuple[str, ...]:
+    """The git directories of the repository holding `directory`.
+
+    Its `.git` directory; or the git directory its `.git` file names, with
+    the common directory a linked worktree keeps its refs and objects in.
+    A `.git` that is a link is not followed.
+    """
+    top = within(directory, roots)
+    current = directory
+
+    while True:
+        dotgit = os.path.join(current, ".git")
+
+        if os.path.islink(dotgit):
+            return ()
+
+        if os.path.isdir(dotgit):
+            return (os.path.realpath(dotgit),)
+
+        if os.path.isfile(dotgit):
+            named = target_policy.gitdir_named_by(dotgit)
+
+            if not named:
+                return ()
+
+            try:
+                with open(os.path.join(named, "commondir"), "r", encoding="utf-8") as handle:
+                    common = handle.readline(4096).strip()
+            except OSError:
+                common = ""
+
+            return (named,) + ((os.path.realpath(os.path.join(named, common)),) if common else ())
+
+        if current == top or current == os.path.dirname(current):
+            return ()
+
+        current = os.path.dirname(current)
+
+
+def git_dirs(steps, roots, *, cwd: str | None = None, aliases=None) -> tuple[str, ...]:
+    """The git directories the git commands of `steps` keep their records in.
+
+    `steps` is CommandPolicy.git_writes: each git command's repository is
+    the one holding the directory it runs in, followed through the cd and
+    -C steps before it. Nothing when a step cannot be followed, and nothing
+    outside the roots, which the sandbox does not bind at all.
+    """
+    roots = [os.path.realpath(str(root)) for root in roots]
+    aliases = dict(aliases or {})
+
+    if not roots:
+        return ()
+
+    current = (os.path.realpath(_candidates(cwd, (), aliases)[0])
+               if cwd and cwd.startswith("/") else roots[0])
+
+    if not within(current, roots):
+        return ()
+
+    found: list[str] = []
+
+    for kind, words in steps:
+        directory = current
+
+        for word in words:
+            directory = _entered(directory, word, roots, aliases)
+
+            if not directory:
+                return ()
+
+        if kind == "cd":
+            current = directory
+            continue
+
+        found += [path for path in _repository(directory, roots)
+                  if within(path, roots) and os.path.isdir(path)]
+
+    return tuple(dict.fromkeys(found))
+
+
 def within(path: str, roots) -> str:
     """The root among `roots` that holds `path`, or ""."""
     best = ""

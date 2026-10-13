@@ -167,8 +167,9 @@ the command is a build or a test run.
 **Git metadata.** No tool edits a repository's state: ``.git`` (directory or
 file), the git directory a ``.git`` file names, and anything under them are
 refused to every tool, and bound read-only by the sandbox under every command
-that may write, so a script or ``git add`` fails there too. Only ``git
-clone``, ``fetch`` and ``pull`` keep them writable.
+that may write, so a script writing there fails too. A git command run alone
+keeps its own repository's records — ``git add``, ``checkout``, ``stash``,
+``clean`` work — and nothing else is let in with it.
 
 **Advisory and read-only turns.** A turn that asks only to be told something,
 or is told not to change anything, keeps its reading tools and loses every

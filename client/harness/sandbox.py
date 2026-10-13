@@ -245,33 +245,43 @@ class BubblewrapSandbox:
         return argv
 
     @staticmethod
-    def _protected_paths(workspace: Workspace, profile: ExecutionProfile) -> list[str]:
-        """Host paths under the writable trees that the command may not write."""
+    def _protected_paths(workspace: Workspace,
+                         profile: ExecutionProfile) -> "list[tuple[str, bool]]":
+        """Host paths under the writable trees bound again: (path, writable).
+
+        Read-only, what the command may not write. Writable again, the git
+        directories its own git commands keep their records in, when one lies
+        under a path bound read-only (a submodule's, under its superproject's
+        .git). Outermost first; a path bound the way the nearest bound one
+        around it already is adds nothing.
+        """
         roots = [str(root) for root in workspace.roots]
-        found: list[str] = []
+        unlocked = {os.path.realpath(path) for path in profile.git_dirs}
+        found: dict[str, bool] = {}
 
         for root in roots:
             trees = write_protection.trees(root)
-
-            if not profile.git_writable:
-                found.extend(trees.git)
+            found.update(dict.fromkeys(
+                (path for path in trees.git if os.path.realpath(path) not in unlocked), False))
 
             if profile.guard_outputs:
-                found.extend(trees.outputs)
+                found.update(dict.fromkeys(trees.outputs, False))
 
-        found.extend(profile.protected_paths)
-        kept: list[str] = []
+        found.update(dict.fromkeys(profile.protected_paths, False))
+        found.update(dict.fromkeys(unlocked, True))
+        kept: list[tuple[str, bool]] = []
 
-        # Outermost first; a path under one already kept is covered by it.
-
-        for path in sorted(set(found)):
+        for path in sorted(found):
             if not write_protection.within(path, roots) or path in roots:
                 continue
 
-            if any(path.startswith(parent.rstrip("/") + "/") for parent in kept):
+            around = [(parent, writable) for parent, writable in kept
+                      if path.startswith(parent.rstrip("/") + "/")]
+
+            if found[path] == (around[-1][1] if around else True):
                 continue
 
-            kept.append(path)
+            kept.append((path, found[path]))
 
         return kept
 
@@ -280,16 +290,16 @@ class BubblewrapSandbox:
         """Bind what may not be written back read-only, over the writable trees.
 
         After the workspace binds, since in bwrap the later bind is the one in
-        force, and at the path the tree has inside. ``--ro-bind-try``: a path
-        that is gone by then has nothing left to protect.
+        force, and at the path the tree has inside. ``-try``: a path that is
+        gone by then has nothing left to protect.
         """
         argv: list[str] = []
         roots = [str(root) for root in workspace.roots]
 
-        for path in self._protected_paths(workspace, profile):
+        for path, writable in self._protected_paths(workspace, profile):
             root = write_protection.within(path, roots)
             inside = mounts[root] + path[len(root):]
-            argv.extend(["--ro-bind-try", path, inside])
+            argv.extend(["--bind-try" if writable else "--ro-bind-try", path, inside])
 
         return argv
 

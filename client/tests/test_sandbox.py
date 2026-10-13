@@ -872,16 +872,41 @@ class GitMetadataIsReadOnlyTests(unittest.TestCase):
         self.assertEqual(found[str(self.root / ".git")], "/workspace/.git")
         self.assertIn(f"--ro-bind-try\0{other / '.git'}\0/workspaces/other/.git", rendered)
 
-    def test_nothing_is_added_without_write_or_for_a_clone(self):
+    def test_nothing_is_added_without_write_and_a_clone_unlocks_nothing(self):
         sandbox = BubblewrapSandbox()
         read = ExecutionProfile.from_capabilities({Capability.FILESYSTEM_READ})
         clone = ExecutionProfile.from_capabilities(
-            {Capability.FILESYSTEM_READ, Capability.WORKSPACE_WRITE, Capability.NETWORK},
-            git_writable=True)
+            {Capability.FILESYSTEM_READ, Capability.WORKSPACE_WRITE, Capability.NETWORK})
 
         self.assertEqual(self.protected(sandbox.build_argv(self.workspace, ["true"], read)), [])
-        self.assertEqual(self.protected(sandbox.build_argv(
-            self.workspace, ["true"], clone, backend=NetworkBackend.SLIRP4NETNS)), [])
+        self.assertEqual(len(self.protected(sandbox.build_argv(
+            self.workspace, ["true"], clone, backend=NetworkBackend.SLIRP4NETNS))), 3)
+
+    def test_only_the_git_directories_named_are_left_writable(self):
+        (self.root / ".git/modules").mkdir()
+        subprocess.run(["git", "init", "-q", "--separate-git-dir",
+                        str(self.root / ".git/modules/inner"), str(self.root / "inner")],
+                       check=True)
+        harness.write_protection.forget()
+
+        def binds(*unlocked):
+            profile = ExecutionProfile.from_capabilities(
+                {Capability.FILESYSTEM_READ, Capability.WORKSPACE_WRITE},
+                git_dirs=[str(self.root / path) for path in unlocked])
+            argv = BubblewrapSandbox().build_argv(self.workspace, ["true"], profile)
+            return [(argv[i], argv[i + 1][len(str(self.root)) + 1:]) for i, token in enumerate(argv)
+                    if token in ("--ro-bind-try", "--bind-try")
+                    and argv[i + 1].startswith(str(self.root))]
+
+        self.assertEqual(binds(".git"), [("--ro-bind-try", ".git/modules/inner"),
+                                         ("--ro-bind-try", "inner/.git"),
+                                         ("--ro-bind-try", "store/sub"),
+                                         ("--ro-bind-try", "sub/.git")])
+        self.assertEqual(binds(".git/modules/inner"), [("--ro-bind-try", ".git"),
+                                                       ("--bind-try", ".git/modules/inner"),
+                                                       ("--ro-bind-try", "inner/.git"),
+                                                       ("--ro-bind-try", "store/sub"),
+                                                       ("--ro-bind-try", "sub/.git")])
 
     def test_a_new_repository_is_found_once_the_cache_is_dropped(self):
         sandbox = BubblewrapSandbox()

@@ -509,6 +509,61 @@ def read_file(path):
 SIGPIPE_EXIT = 141
 
 
+# What the carried-over session may export that would steer git, or a
+# program git runs, while it writes its records.
+
+_STEERING_EXPORT = re.compile(r"^(?:GIT_(?!PAGER$)\w+|XDG_\w+|LD_\w+|BASH_ENV|ENV|EDITOR|VISUAL)$")
+
+
+def _session_exports(script):
+    """{name: value} that a terminal session script restores before its command."""
+    found = {}
+
+    for line in (script or "").splitlines():
+        match = re.match(r'declare -x ([A-Za-z_]\w*)(?:="((?:[^"\\]|\\.)*)")?$', line)
+
+        if match:
+            found[match.group(1)] = re.sub(r"\\(.)", r"\1", match.group(2) or "")
+
+    return found
+
+
+def _git_is_steered(cmd, script, aliases):
+    """Whether the session around `cmd` makes its git something else.
+
+    An export that redirects git or loads code into it, a HOME other than
+    the sandbox's, or a writable directory ahead of the system's git on PATH
+    that holds a `git`, or could by the time a second git command runs.
+    """
+    spec = SandboxSpec()
+    exports = _session_exports(script)
+
+    if any(_STEERING_EXPORT.match(name) for name in exports):
+        return True
+
+    if exports.get("HOME", spec.home) != spec.home:
+        return True
+
+    writable = [str(root) for root in WORKSPACE.roots] + [spec.home] + list(aliases.values())
+    several = sum(argv[0] == "git" for argv in COMMAND_POLICY.stage_argvs(cmd)) > 1
+
+    for entry in exports.get("PATH", spec.path).split(":"):
+        if entry in ("/usr/bin", "/bin"):
+            return False
+
+        if not entry.startswith("/"):
+            return True
+
+        host = next((path + entry[len(inside):] for inside, path in aliases.items()
+                     if entry == inside or entry.startswith(inside.rstrip("/") + "/")), entry)
+
+        if write_protection.within(os.path.realpath(host), writable) and (
+                several or os.path.lexists(os.path.join(host, "git"))):
+            return True
+
+    return False
+
+
 def run_cmd_result(cmd, need_confirm=True, cancellation=None, execution_mode=None,
                    exec_cmd=None, timeout=None, output_chars=None, cwd=None):
     """Return the security substrate's structured command result.
@@ -547,9 +602,9 @@ def run_cmd_result(cmd, need_confirm=True, cancellation=None, execution_mode=Non
         return authorization.result
 
     granted_capabilities = authorization.granted_capabilities
-    git_writable = COMMAND_POLICY.writes_git(cmd)
     builds = COMMAND_POLICY.builds(cmd)
     protected = ()
+    git_dirs = ()
 
     # What the command names that no tool may change is bound read-only
     # under it, whatever program would write it (write_protection.py).
@@ -567,10 +622,19 @@ def run_cmd_result(cmd, need_confirm=True, cancellation=None, execution_mode=Non
             cmd, WORKSPACE.roots, cwd=cwd or str(WORKSPACE.root), build=builds,
             aliases=aliases)
 
+        # A git command keeps its own repository's records, and only when the
+        # command is git's alone, run as itself (CommandPolicy.git_writes).
+
+        steps = COMMAND_POLICY.git_writes(cmd)
+
+        if steps and not _git_is_steered(cmd, exec_cmd, aliases):
+            git_dirs = write_protection.git_dirs(steps, WORKSPACE.roots,
+                                                 cwd=cwd or str(WORKSPACE.root), aliases=aliases)
+
     profile = ExecutionProfile.from_capabilities(
         granted_capabilities,
         assessment.host_read_paths if Capability.HOST_READ in granted_capabilities else (),
-        git_writable=git_writable, guard_outputs=not builds, protected_paths=protected,
+        git_dirs=git_dirs, guard_outputs=not builds, protected_paths=protected,
     )
     sandboxed = False
 
@@ -610,7 +674,7 @@ def run_cmd_result(cmd, need_confirm=True, cancellation=None, execution_mode=Non
         # A clone adds a repository, and a build a generated tree, that the
         # next command must find protected.
 
-        if git_writable or builds:
+        if builds or COMMAND_POLICY.writes_git(cmd):
             write_protection.forget()
 
         sandboxed = True

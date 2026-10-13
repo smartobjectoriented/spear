@@ -867,14 +867,47 @@ class StageAndRedirectionParsingTests(unittest.TestCase):
                 self.assertEqual(self.policy.classify_script(command).classification,
                                  CommandClassification.DANGEROUS)
 
-    def test_only_clone_fetch_and_pull_write_git(self):
-        self.assertTrue(self.policy.writes_git("cd vendor && git clone https://x/y.git"))
-        self.assertTrue(self.policy.writes_git("git pull"))
+    def test_the_git_commands_that_keep_their_records(self):
+        for command in ("cd vendor && git clone https://x/y.git", "git pull", "git add a",
+                        "git -C linux checkout -- f", "git stash", "git clean -fd", "git restore a"):
+            with self.subTest(command=command):
+                self.assertTrue(self.policy.writes_git(command))
 
-        for command in ("git status", "git add a", "echo clone > x", "git log | grep pull"):
+        for command in ("git status", "git reset --hard", "git commit -am m", "echo clone > x",
+                        "git log | grep pull", "git -c x=y add a"):
             with self.subTest(command=command):
                 self.assertFalse(self.policy.writes_git(command))
 
+        for command in ("git add a", "git -C linux checkout -- f", "git stash", "git clean -fd"):
+            with self.subTest(command=command):
+                self.assertEqual(self.policy.classify(command).classification,
+                                 CommandClassification.WORKSPACE_MUTATING)
+
+        self.assertEqual(self.policy.classify("git -C linux log").classification,
+                         CommandClassification.READ_ONLY)
+
+    def test_where_git_keeps_its_records(self):
+        self.assertEqual(self.policy.git_writes("cd linux && git status && git add -A 2>&1 | tail"),
+                         [("cd", ("linux",)), ("git", ())])
+        self.assertEqual(self.policy.git_writes("timeout 9 git -C a -C b checkout -- f"),
+                         [("git", ("a", "b"))])
+        self.assertEqual(self.policy.git_writes("bash -c 'git stash'"), [("git", ())])
+        self.assertEqual(self.policy.git_writes("git clone u x && git -C x log"), [])
+
+    def test_git_is_trusted_only_alone_and_as_itself(self):
+        for command in ("git add a > .git/x", "git add a && cp a .git/config",
+                        "git add a; echo P >> .git/HEAD", "git --git-dir=.git add a",
+                        "git --work-tree=.git checkout -- hooks/x", "git -c core.hooksPath=h add a",
+                        "GIT_DIR=x git add a", "env GIT_WORK_TREE=.git git checkout -- f",
+                        "export GIT_INDEX_FILE=i; git add a", "HOME=. git add a",
+                        "PATH=.:$PATH git add a", "EDITOR=./e git add -e a", "git add -p a",
+                        "git checkout --patch f", "git stash -p", "git clean -i",
+                        "./git add a", "git commit -am m", "git config x y",
+                        "git add $(cat list)", "git add `cat list`", "git() { :; }; git add a",
+                        ". ./env.sh && git add a", "make && git add a", "git apply x.diff",
+                        "find . -exec git add {} +", "cat <<EOF | git apply\nx\nEOF"):
+            with self.subTest(command=command):
+                self.assertIsNone(self.policy.git_writes(command))
 
 if __name__ == "__main__":
     unittest.main()

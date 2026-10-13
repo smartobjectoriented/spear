@@ -90,9 +90,20 @@ name, those named in the files it runs or feeds (a diff given to ``patch``, a
 script, the tests a runner discovers, a here-document) and every file refused
 earlier in the session — and, unless the command builds or tests, the
 generated and snapshot trees themselves (``write_protection.py``). A build
-(``make``, ``cmake``, ``ninja``, ``bitbake``, a ``build.sh``, a compiler, a
-test runner) keeps writing its output, which is how generated files are
-meant to change; only the files its own words name stay protected.
+(``make``, ``cmake``, ``ninja``, ``bitbake``, a project's ``build.sh``,
+``configure`` or a layer's ``updiff.sh``, a compiler, a test runner) keeps
+writing its output, which is how generated files are meant to change; only
+the files its own words name stay protected. The authority is the build's
+alone: every other stage of the command must write nothing, and no
+redirection or ``tee`` may write into a generated tree.
+
+A launcher — ``timeout``, ``nice``, ``env``, ``nohup``, ``exec``,
+``command``, ``time``, ``bash -c`` or ``sh -c`` — is judged by what it runs,
+read through its options and, for a shell, through its script: a wrapped
+build stays a build, and a wrapped write stays a write, refused the same.
+A launcher this cannot read (an option it does not know, ``env -S``, words
+after a ``-c`` script, a script the outer shell expands, a program that is
+an expansion) is refused.
 
 **Git metadata.** A repository's own state — a ``.git`` directory, a ``.git``
 file (a worktree's or a submodule's) and the git directory it names, or any

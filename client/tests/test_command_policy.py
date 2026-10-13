@@ -836,6 +836,37 @@ class StageAndRedirectionParsingTests(unittest.TestCase):
             with self.subTest(command=command):
                 self.assertFalse(self.policy.builds(command))
 
+    def test_a_launcher_is_judged_by_what_it_runs(self):
+        for command in ("./scripts/updiff.sh linux", "cd t && . ./env.sh && updiff.sh linux 2>&1 | tail",
+                        "timeout 600 ./scripts/updiff.sh linux", "timeout -k5 -sKILL 1m bitbake linux",
+                        "nice -n 5 make", "nice -10 make", "env -i -u X A=1 make", "nohup make",
+                        "time -p make", "exec make", "bash -c './scripts/build.sh linux'",
+                        "sh -ec '. ./env.sh && updiff.sh linux' 2>&1 | tail",
+                        "timeout 60 bash -o pipefail -c 'nice make -j$(nproc) | tail'",
+                        "make -j$(nproc) 2>&1 | tee build.log"):
+            with self.subTest(command=command):
+                self.assertTrue(self.policy.builds(command))
+                self.assertIn(Capability.WORKSPACE_WRITE,
+                              self.policy.classify_script(command).required_capabilities)
+
+    def test_a_launcher_lends_no_authority(self):
+        for command in ("timeout 60 sh -c 'echo x > build/tmp/f'", "env A=1 cp a out/generated/",
+                        "bash -c './scripts/run.sh'", "bash -c 'make; cp x generated/y'",
+                        "make && echo x > build/tmp/new", "make | tee build/tmp/log",
+                        "F=build/tmp/x; make > $F", "make > $UNKNOWN", "timeout --bogus 5 make",
+                        "env -S make", "env -C dir make", "bash -c 'make' extra", "nice"):
+            with self.subTest(command=command):
+                self.assertFalse(self.policy.builds(command))
+
+        for command in ("timeout 5 rm -rf x", "bash -c 'rm x'", "nice python3 x.py",
+                        "cd t && timeout 5 bash -c 'python3 -c 1'", "env -S 'make' x",
+                        "timeout --bogus 5 make", "bash -c 'ls' arg", 'bash -c "$(cat x)"',
+                        'bash -c "make -j$(nproc)"', "bash -c '$(cat x)'", "bash -c '$CMD'",
+                        "timeout 9 sh -c 'echo x > /etc/passwd'", "bash x.sh", "env"):
+            with self.subTest(command=command):
+                self.assertEqual(self.policy.classify_script(command).classification,
+                                 CommandClassification.DANGEROUS)
+
     def test_only_clone_fetch_and_pull_write_git(self):
         self.assertTrue(self.policy.writes_git("cd vendor && git clone https://x/y.git"))
         self.assertTrue(self.policy.writes_git("git pull"))

@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import hashlib
 import io
+import json
 import os
 import shutil
 import subprocess
@@ -376,6 +377,119 @@ class AProtectedTargetStaysProtected(Targets):
                                     ("delete_file", {"reason": "r"})):
                 with self.subTest(target=label, tool=name):
                     self.assertUnchanged(target, [("legacy", name, {"path": target, **arguments})])
+
+
+UPDIFF = """#!/bin/sh
+# What a layer's updiff.sh does to the trees: BitBake writes its work
+# directory under build/tmp, then the recipe's patch is regenerated from the
+# attached tree against the pristine copy.
+set -e
+recipe=$1
+work=build/tmp/work/$recipe
+mkdir -p $work/temp build/meta-x/recipes-x/$recipe/files
+echo updiff > $work/temp/log.do_updiff
+cp $recipe/file.c $work/pristine.c.new
+diff -u $work/pristine.c $recipe/file.c > build/meta-x/recipes-x/$recipe/files/0001-$recipe.patch || true
+"""
+
+BUILD = """#!/bin/sh
+set -e
+mkdir -p build/tmp/deploy/$1 out/generated
+echo image > build/tmp/deploy/$1/Image
+echo '/* DO NOT EDIT */' > out/generated/version.h
+"""
+
+
+@unittest.skipUnless(SANDBOX, "needs the bubblewrap sandbox")
+class ProjectBuildDrivers(Targets):
+    """A project's build driver writes the build trees however it is launched;
+    a launcher never lends that authority to anything else."""
+
+    def fill(self):
+        super().fill()
+
+        for path, text in (("scripts/updiff.sh", UPDIFF), ("scripts/build.sh", BUILD),
+                           ("scripts/run.sh", "#!/bin/sh\necho P >> build/tmp/work/x/post.sh\n"),
+                           ("env.sh", "export IB_ROOT=$PWD\nexport PATH=$PATH:$IB_ROOT/scripts\n"),
+                           ("linux/file.c", "int v = 2;\n"),
+                           ("build/tmp/work/linux/pristine.c", "int v = 1;\n"),
+                           ("build/tmp/work/x/post.sh", "#!/bin/sh\n"),
+                           ("out/generated/table.h", "int table;\n")):
+            Path(self.root, path).parent.mkdir(parents=True, exist_ok=True)
+            Path(self.root, path).write_text(text)
+
+        for script in ("updiff.sh", "build.sh", "run.sh"):
+            os.chmod(f"{self.root}/scripts/{script}", 0o755)
+
+        write_protection.forget()
+
+    LAUNCHES = ("./scripts/updiff.sh linux", ". ./env.sh && updiff.sh linux",
+                "timeout 60 ./scripts/updiff.sh linux", "nice -n 5 ./scripts/updiff.sh linux",
+                "env IB_X=1 ./scripts/updiff.sh linux",
+                "timeout -k 5 60 nice env -u IB_X ./scripts/updiff.sh linux",
+                "bash -c './scripts/updiff.sh linux'",
+                "sh -c '. ./env.sh && updiff.sh linux' 2>&1 | tail -5",
+                "cd linux && timeout 30 bash -ec 'cd .. && ./scripts/updiff.sh linux' 2>&1 | tail",
+                "timeout 60 bash -c 'nice ./scripts/updiff.sh linux; ls build/tmp'")
+
+    def test_updiff_writes_its_trees_through_every_launcher(self):
+        patch = Path(self.root, "build/meta-x/recipes-x/linux/files/0001-linux.patch")
+        log = Path(self.root, "build/tmp/work/linux/temp/log.do_updiff")
+
+        for command in self.LAUNCHES:
+            with self.subTest(command=command):
+                for path in (patch, log):
+                    if path.exists():
+                        path.unlink()
+
+                self.call = self.spear_session(self.OBJECTIVE)
+                text, record = self.call("terminal", command=command)
+
+                self.assertFalse(record.refused, text)
+                self.assertEqual(json.loads(text)["exit_code"], 0, text)
+                self.assertEqual(log.read_text(), "updiff\n")
+                self.assertIn("+int v = 2;", patch.read_text())
+
+    def test_a_build_script_writes_its_generated_trees_when_wrapped(self):
+        for command in ("./scripts/build.sh linux", "timeout 60 sh -c './scripts/build.sh linux'"):
+            with self.subTest(command=command):
+                shutil.rmtree(Path(self.root, "build/tmp/deploy"), ignore_errors=True)
+                self.call = self.spear_session(self.OBJECTIVE)
+                text, record = self.call("terminal", command=command)
+
+                self.assertEqual(json.loads(text)["exit_code"], 0, text)
+                self.assertEqual(Path(self.root, "build/tmp/deploy/linux/Image").read_text(),
+                                 "image\n")
+                self.assertIn("DO NOT EDIT", Path(self.root, "out/generated/version.h").read_text())
+
+    def test_an_arbitrary_wrapped_write_gains_nothing(self):
+        cases = {
+            "build/tmp/work/x/post.sh": (
+                "timeout 60 sh -c 'echo P >> build/tmp/work/x/post.sh'",
+                "env A=1 cp a.txt build/tmp/work/x/post.sh",
+                "nice -n 1 tee -a build/tmp/work/x/post.sh < a.txt",
+                "bash -c './scripts/run.sh'", "timeout 9 ./scripts/run.sh",
+                "bash -c './scripts/updiff.sh linux; echo P >> build/tmp/work/x/post.sh'",
+                "./scripts/updiff.sh linux && echo P >> build/tmp/work/x/post.sh",
+                "./scripts/updiff.sh linux | tee -a build/tmp/work/x/post.sh",
+                "F=build/tmp/work/x/post.sh; make > $F",
+                "echo 'echo P >> build/tmp/work/x/post.sh' > c.sh; timeout 5 bash -c \"$(cat c.sh)\"",
+                "timeout 5 bash -c '$(cat c.sh)'", "bash -c 'sh c.sh' && make"),
+            "build/tmp/work/x/new.sh": (
+                "timeout 60 sh -c 'echo P > build/tmp/work/x/new.sh'",
+                "make; bash -c 'cp a.txt build/tmp/work/x/new.sh'"),
+            "out/generated/table.h": (
+                "bash -c 'cp a.txt out/generated/table.h'",
+                "nohup sh -c 'echo P >> out/generated/table.h'",
+                "timeout 5 make poke T=out/generated/table.h")}
+        Path(self.root, "Makefile").write_text("all:\n\t@echo built\npoke:\n\t@echo P >> $(T)\n")
+
+        for target, commands in cases.items():
+            for command in commands:
+                with self.subTest(target=target, command=command):
+                    self.call = self.spear_session(self.OBJECTIVE)
+                    target_policy.forget_refused()
+                    self.assertUnchanged(target, [("core", "terminal", {"command": command})])
 
 
 class ShellWriteTargets(unittest.TestCase):

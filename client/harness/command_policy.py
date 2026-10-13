@@ -14,6 +14,7 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import AbstractSet, Callable, Sequence
 
+from harness import target_policy
 from harness.tool_primitives import (
     DEFAULT_CAPABILITY_POLICY,
     Capability,
@@ -651,8 +652,18 @@ class CommandPolicy:
         when that value is literal. Otherwise nothing says what it is, and it
         earns no write: the tree stays read-only and the write fails there.
         """
+        return any(not target.startswith("$") for target in cls._redirect_targets(command))
+
+    @classmethod
+    def _redirect_targets(cls, command: str) -> "list[str]":
+        """The files the redirections of `command` write, sinks set aside.
+
+        A variable destination is its literal value; one with no literal
+        value is returned as written, starting with `$`.
+        """
         values = {match.group(1): next(group for group in match.groups()[1:] if group is not None)
                   for match in cls._LITERAL_ASSIGNMENT.finditer(command)}
+        found = []
 
         for match in re.finditer(r"(?<![=])\d*>{1,2}\|?(&?)\s*([^\s;|&()<>]*)", command):
             duplicate, target = match.groups()
@@ -665,15 +676,13 @@ class CommandPolicy:
             if variable:
                 name = variable.group(1) or variable.group(2)
 
-                if name not in values:
-                    continue
-
-                target = values[name] + target[variable.end():]
+                if name in values:
+                    target = values[name] + target[variable.end():]
 
             if target not in cls._REDIRECT_SINKS:
-                return True
+                found.append(target)
 
-        return False
+        return found
 
     _HEREDOC_RE = re.compile(r"<<-?\s*([\'\"]?)([A-Za-z_][\w-]*)\1")
 
@@ -819,7 +828,7 @@ class CommandPolicy:
         return parts
 
     def _shell_capabilities(
-        self, command: str
+        self, command: str, depth: int = 0
     ) -> "tuple[frozenset[Capability], str, list[str], str]":
         """Best-effort stage analysis; this intentionally is not a shell parser.
 
@@ -926,6 +935,38 @@ class CommandPolicy:
             if not argv:
                 continue
 
+            argv, script, unreadable = self._peeled(argv, token)
+
+            if unreadable:
+                danger = danger or (f"{unreadable}: what it would run cannot be read here, so "
+                                    f"the pipeline that contains it cannot run.")
+                continue
+
+            if script is not None:
+                if depth >= self._MAX_UNWRAP:
+                    danger = danger or "shells nested this deep cannot be read."
+                    continue
+
+                inner, inner_danger, inner_outside, inner_refusal = self._shell_capabilities(
+                    self._strip_heredoc_bodies(script), depth + 1)
+                capabilities.update(inner)
+                danger = danger or inner_danger
+                refusal = refusal or inner_refusal
+                outside.extend(path for path in inner_outside if path not in outside)
+                stdin_from_pipeline = False
+                continue
+
+            if not argv:
+                continue
+
+            # In a script handed to a shell, a program that is an expansion
+            # runs what it expands to, unseen.
+
+            if depth and argv[0].startswith("$"):
+                danger = danger or (f"'{argv[0]}' runs a program this cannot read, so the "
+                                    f"pipeline that contains it cannot run.")
+                continue
+
             binary = Path(argv[0]).name
 
             # The in-place sed rule lives in the single-command classifier, so
@@ -985,13 +1026,170 @@ class CommandPolicy:
 
         return frozenset(capabilities), danger, outside, refusal
 
-    _STAGE_KEYWORDS = frozenset({"do", "then", "else", "elif", "time", "!", "{",
-                                 "exec", "nohup", "env", "command"})
+    _STAGE_KEYWORDS = frozenset({"do", "then", "else", "elif", "!", "{"})
 
     _SEPARATORS = frozenset({"|", "||", "&&", ";", "&", "(", ")", "<", ">"})
 
-    def stage_argvs(self, command: str) -> "list[tuple[str, ...]]":
-        """The argv each stage of `command` runs, environment prefixes set aside."""
+    # Launchers run the command they are handed, and that command is what is
+    # judged: wrapped, it keeps the authority it has alone and gains none.
+    # `bash -c` and `sh -c` hand over a script, judged as a script. A
+    # launcher whose options are not read here runs something unseen, and
+    # is refused.
+
+    _LAUNCHER_OPTIONS = {
+        "timeout": ({"--preserve-status", "--foreground", "-v", "--verbose"},
+                    ("-s", "--signal", "-k", "--kill-after")),
+        "nice": (set(), ("-n", "--adjustment")),
+        "env": ({"-i", "--ignore-environment"}, ("-u", "--unset")),
+        "nohup": (set(), ()),
+        "exec": ({"-c", "-l", "-cl", "-lc"}, ("-a",)),
+        "command": ({"-p"}, ()),
+        "time": ({"-p"}, ()),
+    }
+    _LAUNCHERS = frozenset(_LAUNCHER_OPTIONS)
+    _SCRIPT_SHELLS = frozenset({"bash", "sh"})
+    _MAX_UNWRAP = 4
+    _DURATION = re.compile(r"\d+(?:\.\d+)?[smhd]?")
+    _DUPLICATION = re.compile(r"\d*[<>]&(?:\d+|-)")
+
+    def _launched(self, argv: Sequence[str], raw: str = "") -> "tuple[str, object]":
+        """What one stage runs: ("argv", argv), ("script", text), or ("", why).
+
+        A stage that launches nothing comes back unchanged, as does a launcher
+        given nothing to run (`env` alone prints the environment).
+        """
+        name, rest = argv[0], list(argv[1:])
+
+        if name in self._SCRIPT_SHELLS:
+            return self._shell_script(argv, raw)
+
+        if name not in self._LAUNCHERS:
+            return "argv", tuple(argv)
+
+        flags, valued = self._LAUNCHER_OPTIONS[name]
+
+        while rest and rest[0].startswith("-") and rest[0] != "-":
+            option = rest.pop(0)
+
+            if option == "--":
+                break
+
+            if name == "command" and option in ("-v", "-V"):
+                return "argv", tuple(argv)
+
+            if option in valued and rest:
+                rest.pop(0)
+            elif not (option in flags
+                      or any(option.startswith(long + "=") for long in valued if long[1] == "-")
+                      or any(option.startswith(short) for short in valued if short[1] != "-")
+                      or (name == "nice" and re.fullmatch(r"-\d+", option))):
+                return "", f"{name} {option}"
+
+        if name == "timeout":
+            if not rest or not self._DURATION.fullmatch(rest[0]):
+                return "", "timeout without a duration"
+
+            rest.pop(0)
+
+        while name == "env" and rest and self._ASSIGNMENT.match(rest[0]):
+            rest.pop(0)
+
+        return "argv", tuple(rest) if rest else tuple(argv)
+
+    def _shell_script(self, argv: Sequence[str], raw: str = "") -> "tuple[str, object]":
+        """The script of `bash -c SCRIPT`; any other use of the shell unchanged.
+
+        Options are the inert ones only: -e, -u, -x, -o pipefail. Words after
+        the script would become its $0, $1..., which the script then runs
+        unseen, so they are refused. So is an expansion the outer shell makes
+        inside the script: `bash -c "$(cat x)"` runs what x holds. In single
+        quotes (`raw`, the stage as written, shows them) the script reaches
+        the inner shell as it reads here.
+        """
+        rest = list(argv[1:])
+        script = None
+
+        while rest:
+            option = rest.pop(0)
+
+            if option in ("-o", "+o") and rest and rest[0] in ("pipefail", "errexit", "nounset",
+                                                                "xtrace"):
+                rest.pop(0)
+                continue
+
+            if not re.fullmatch(r"-[euxc]+", option):
+                return "argv", tuple(argv)
+
+            if "c" in option:
+                if not rest:
+                    return "", f"{argv[0]} -c without a script"
+
+                script = rest.pop(0)
+                break
+
+        if script is None:
+            return "argv", tuple(argv)
+
+        if rest:
+            return "", f"{argv[0]} -c with arguments for its script"
+
+        if re.search(r"[$`]", script) and f"'{script}'" not in raw:
+            return "", (f"{argv[0]} -c with a script the outer shell expands (single quotes "
+                        f"pass it as written)")
+
+        return "script", script
+
+    def _peeled(self, argv: Sequence[str], raw: str = "") -> "tuple[tuple[str, ...], str | None, str]":
+        """(argv, script, unreadable) of one stage, its launchers taken off.
+
+        A descriptor duplication (`2>&1`) stays in its stage's words and is
+        no argument of the command.
+        """
+        argv = tuple(word for index, word in enumerate(argv)
+                     if index == 0 or not self._DUPLICATION.fullmatch(word))
+
+        for _ in range(self._MAX_UNWRAP):
+            kind, value = self._launched(argv, raw)
+
+            if not kind:
+                return argv, None, value
+
+            if kind == "script":
+                return argv, value, ""
+
+            if value == argv:
+                break
+
+            argv = value
+
+            while argv and self._ASSIGNMENT.match(argv[0]):
+                argv = argv[1:]
+
+            if not argv:
+                break
+
+        return argv, None, ""
+
+    def unwrapped(self, argv: Sequence[str], depth: int = 0,
+                  raw: str = "") -> "list[tuple[str, ...]]":
+        """The argvs one stage really runs, launchers taken off.
+
+        An unreadable launcher is kept as it is, so that whatever asks about
+        builds or git finds no build and no git in it.
+        """
+        peeled, script, unreadable = self._peeled(argv, raw)
+
+        if unreadable:
+            return [tuple(argv)]
+
+        if script is not None:
+            return self.stage_argvs(script, depth + 1) if depth < self._MAX_UNWRAP else [tuple(argv)]
+
+        return [peeled] if peeled else []
+
+    def stage_argvs(self, command: str, depth: int = 0) -> "list[tuple[str, ...]]":
+        """The argv each stage of `command` runs, environment prefixes and
+        launchers set aside."""
         found = []
         redirect_target = False
 
@@ -1012,27 +1210,63 @@ class CommandPolicy:
                 argv = argv[1:]
                 redirect_target = False
 
+            # A descriptor duplication left after a `$(...)` is no program.
+
             while argv and (self._ASSIGNMENT.match(argv[0])
-                            or argv[0] in self._STAGE_KEYWORDS):
+                            or argv[0] in self._STAGE_KEYWORDS
+                            or self._DUPLICATION.fullmatch(argv[0])):
                 argv = argv[1:]
 
             if argv:
-                found.append(argv)
+                found.extend(self.unwrapped(argv, depth, part))
 
         return found
 
     # What builds or tests: the build tools and test runners the policy lets
-    # write, BitBake, and a project's own build script or configure step.
+    # write, BitBake, and a project's own build drivers: its build script,
+    # its configure step, and a BitBake layer's updiff.sh, which regenerates a
+    # recipe's patch series from its unpacked tree.
 
     BUILD_BINS = (WORKSPACE_MUTATING_BINS - {"tee"}) | frozenset({
         "gmake", "meson", "scons", "ctest", "bitbake"})
-    _BUILD_SCRIPT = re.compile(r"(?:^|[-_])build(?:[-_][\w-]*)?\.sh$|^configure$|^autogen\.sh$")
+    _BUILD_SCRIPT = re.compile(
+        r"(?:^|[-_])build(?:[-_][\w-]*)?\.sh$|^configure$|^autogen\.sh$|^updiff\.sh$")
+
+    # What may run beside a build without taking its authority: what writes
+    # no file. `tee` qualifies for a file outside the generated trees.
+
+    _BESIDE_A_BUILD = SHELL_BUILTINS | READ_ONLY_BINS | frozenset({
+        "printf", "nproc", "sleep", "wait", "date", "uname"})
+    _OUTPUT_PATH = re.compile(r"(?:^|/)(?:generated|build/tmp)(?:/|$)")
+
+    def _writes_output(self, path: str) -> bool:
+        return (path.startswith("$") or bool(self._OUTPUT_PATH.search(path))
+                or target_policy.is_snapshot(path))
 
     def builds(self, command: str) -> bool:
-        """Whether `command` builds or tests: its output is the build's to write."""
-        return any(Path(argv[0]).name in self.BUILD_BINS or self._is_module_test_run(argv)
-                   or self._BUILD_SCRIPT.search(Path(argv[0]).name)
-                   for argv in self.stage_argvs(command))
+        """Whether `command` builds or tests: its output is the build's to write.
+
+        The authority is the build's alone. Every other stage must write
+        nothing, and no redirection may write into a generated tree: a
+        command beside a build, or a launcher around one, gains nothing from
+        it (stage_argvs judges what a launcher runs).
+        """
+        found = False
+
+        for argv in self.stage_argvs(command):
+            name = Path(argv[0]).name
+
+            if (name in self.BUILD_BINS or self._is_module_test_run(argv)
+                    or self._BUILD_SCRIPT.search(name)):
+                found = True
+            elif argv[0] == "tee":
+                if any(self._writes_output(arg) for arg in argv[1:] if not arg.startswith("-")):
+                    return False
+            elif argv[0] not in self._BESIDE_A_BUILD:
+                return False
+
+        return found and not any(self._writes_output(target)
+                                 for target in self._redirect_targets(command))
 
     def writes_git(self, command: str) -> bool:
         """Whether `command` runs one of the git commands allowed to write git."""

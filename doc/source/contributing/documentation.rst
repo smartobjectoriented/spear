@@ -163,6 +163,10 @@ staged under ``~/snap/drawio/common`` and the PNG copied back:
      - Testing
      - 14
      - Mixed
+   * - 15
+     - Deployment
+     - 
+     - 
 
 A page added or moved in ``spear.drawio`` shifts the indices after it.
 

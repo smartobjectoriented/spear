@@ -390,9 +390,11 @@ On a turn that engages it:
 * an opening retrieval against the document is issued **before** the model's
   first round, so the turn starts from the source rather than arriving at it;
 * the four normative tools are put on the table;
-* on a turn whose scope is purely normative, the tools that read a working
-  tree are taken **off** the table — not by instruction, but by not offering
-  them;
+* on a turn whose scope is purely normative, the tools that reach a working
+  tree — ``bash`` and the file-write tools (the ``COMMAND``, ``FILE_READ`` and
+  ``FILE_WRITE`` categories, ``answer_scope.py``) — are taken **off** the
+  table, not by instruction but by not offering them; ``search_corpus`` and
+  the normative tools stay;
 * every normative claim in the answer is checked against what was retrieved.
 
 The normative tools
@@ -428,10 +430,11 @@ A section is not a provision. One retrieved unit routinely carries a Rule, a
 Permission and an Observation that share an ordinal, and a claim grounded by
 one of them is not grounded by the others.
 
-SPEAR therefore records provisions, not section numbers: each carries its
-**kind** (Rule, Permission, Observation, …), its **ordinal**, its **section**,
-its **page** and its **source id**. Two provisions that print the same label
-are two records, and an answer that cites the label without saying which one it
+SPEAR therefore records provisions, not section numbers. A provision's
+identity is its **section**, its **kind** (Rule, Permission, Observation, …)
+and its **ordinal** (``provision_identity.py``); its page and source id are
+carried with it but are not part of the identity. Two provisions that print
+the same label are two records, and an answer that cites the label without saying which one it
 means is ambiguous — which the guards report rather than resolve by guessing.
 
 Normative force
@@ -522,8 +525,8 @@ documentation.
 Three things are true of that turn and are worth naming:
 
 #. the first tool call was against the document, not against the source tree;
-#. no code-reading tool was offered, because the question asked about the
-   document and nothing else;
+#. no tool that reaches the source tree (``bash``, the file-write tools) was
+   offered, because the question asked about the document and nothing else;
 #. every sentence carries the provision it rests on, so a reader can check it
    without trusting the agent.
 

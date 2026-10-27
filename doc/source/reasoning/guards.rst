@@ -122,7 +122,7 @@ of the conversation it was generated from:
 
 .. code-block:: console
 
-   $ ls "${SPEAR_STATE_DIR:-$HOME/.local/state/spear}/audit"
+   $ ls "${SPEAR_STATE_DIR:-client}/audit"
    checkpoints  runtime-trace.jsonl  sessions  tool-actions.jsonl  tool-results
 
 The per-session ``events.jsonl`` carries the turn-by-turn event stream —

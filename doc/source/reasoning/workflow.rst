@@ -20,7 +20,7 @@ available on this path; the turn says so when its workspace has any.
 Why the stages are separate
 ***************************
 
-Each separation answers a way the single-pass version fails.
+Each separation prevents a way a single-pass change fails.
 
 **INVESTIGATE before PLAN.** A requirement nobody read cannot be planned
 against. The turn must hold both sides — what the authoritative source requires
@@ -43,6 +43,11 @@ tests is a true statement and an irrelevant one.
 
 **REVIEW reads the ledger.** The closing report is generated from the
 requirement ledger, not from the model's own summary of its work.
+
+The stages advance on recorded events, not on the model's say-so: an accepted
+plan moves the turn to EDIT, a recorded validation result moves it from EDIT
+to TEST, and finalization moves it to REVIEW (from EDIT or TEST) and then to
+DONE.
 
 INVESTIGATE
 ***********
@@ -98,9 +103,11 @@ An edit outside the tree the session opened is refused whatever the plan says.
 TEST
 ****
 
-The validation designed in PLAN is run. A requirement whose code changed and
-whose validation has not run is not "done" — it is recorded as *code changed,
-awaiting validation*, and the closing report says so.
+The validation designed in PLAN is run, and the turn enters TEST when a
+validation result is recorded — writing a file does not move it there. A
+requirement whose code was written and whose validation has not run is
+recorded as *code changed, awaiting validation*, and the closing report says
+so.
 
 A validation that fails the same way twice does not get patched a third time.
 It reopens PLAN, because two identical failures against the same design are
@@ -109,8 +116,12 @@ evidence about the design.
 REVIEW
 ******
 
-The requirement ledger is published as a matrix: one row per requirement, with
-its evidence, its disposition and whether its validation ran.
+REVIEW is entered when the turn finalizes, from EDIT or TEST. The ledger's rows
+are the requirements the turn inherited from the previous grounded turn, and
+they are published as a matrix: one row per requirement, with its evidence,
+its disposition and whether its validation ran. A turn that carried no
+requirements produces no matrix. A plan item that no validation claims to
+cover is listed as *planned, not validated*.
 
 Three dispositions matter more than the rest, because they are the ones a
 summary tends to lose:
@@ -133,10 +144,10 @@ with why. Narrowing the work is a visible decision, not a silence.
 
 .. note::
 
-   If the closing prose claims the work is complete while the ledger still has
-   an open row, the report says to take the matrix and not the claim. The
-   ledger has the last word, and "incomplete" is a correct result when it is
-   the true one.
+   The turn is set to DONE at finalization whatever the ledger holds. Open
+   rows do not hold it back; they make the report name them and say that the
+   turn is not finished, and a matrix that disagrees with the closing prose
+   is the record. "Incomplete" is a correct result when it is the true one.
 
 .. seealso::
 

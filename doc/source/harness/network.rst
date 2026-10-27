@@ -205,18 +205,18 @@ not advertise both makes the ``network`` capability unavailable:
    slirp4netns network backend unavailable:
    pinned namespace attachment requires --netns-type and --userns-path
 
-There is deliberately **no fallback** to the PID-based form.  Local version at
-the time of writing: ``slirp4netns 1.2.1`` (libslirp 4.7.0), which supports
-``--netns-type=[path|pid]`` and ``--userns-path``.  It has no ``tapfd`` mode.
+There is deliberately **no fallback** to the PID-based form.
+``slirp4netns 1.2.1`` (libslirp 4.7.0), for example, supports
+``--netns-type=[path|pid]`` and ``--userns-path``; it has no ``tapfd`` mode.
 
 Retries are not a fix
 =====================
 
 None are used, and none would work.  Once the child has moved into the second
 user namespace, re-running the helper against the same PID does not restore
-the earlier namespace — it re-observes the wrong one.  The correction removes
-the temporal dependency rather than papering over it, and
-``network_ready_timeout_seconds`` was **not** increased.
+the earlier namespace — it re-observes the wrong one.  Pinned namespaces remove
+the temporal dependency instead of papering over it, and
+``network_ready_timeout_seconds`` is not a lever for it.
 
 Descriptor hygiene
 ==================

@@ -86,9 +86,10 @@ Filesystem
    * - ``/dev``
      - minimal device set
    * - ``/tmp``
-     - a private per-session directory, outside the workspace, removed when
-       the session ends (``SPEAR_SANDBOX_EPHEMERAL_TMP=1``: a fresh tmpfs per
-       command)
+     - by default a private per-session host directory, outside the
+       workspace, removed when the session ends; a fresh tmpfs per command
+       with ``SPEAR_SANDBOX_EPHEMERAL_TMP=1``, or when that directory cannot
+       be created
    * - ``/home``, ``/home/sandbox``
      - empty directories
    * - ``/etc``

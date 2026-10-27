@@ -61,7 +61,7 @@ It is **workspace-aware**. A turn starts from its workspace — a registered
 project, or an unregistered tree on its own — and is given only what belongs to
 it or is explicitly generic: rules, skills, :term:`workspace knowledge`, project
 metadata and external capabilities, selected deterministically by workspace and
-task class, never by resemblance to the request (:ref:`context_selection`).
+request class, never by resemblance to the request (:ref:`context_selection`).
 
 It is **self-hosted**. No prompt, no source file and no command output leaves
 the machine unless a tool call is granted the ``network`` capability and routed
@@ -99,7 +99,7 @@ The parts
    Any OpenAI-compatible endpoint — ``llama-server`` from ``llama.cpp-next``
    on ``127.0.0.1:8080`` by default — or the Anthropic API.  The coding core
    needs the OpenAI-compatible interface; the Anthropic backend serves the
-   general and normative paths only.  See :doc:`/model/model_serving`.
+   general and normative paths only.  See :doc:`/model/backends`.
 
 **A retrieval corpus.**
    A vector store indexed from the source trees SPEAR is expected to reason
@@ -113,17 +113,12 @@ The parts
 
 **A workspace context.**
    What a turn is told about its workspace: the rules and skills that apply
-   to it, its declared build and test commands, and its *workspace knowledge*
-   — typed, provenance-aware facts kept in ``knowledge.sqlite3`` under the
-   state directory, recorded by the operator with ``/remember`` or
-   ``/knowledge``; what a model offers stays a proposal until the operator
-   accepts it.  See :doc:`/using/context` and :doc:`/using/knowledge`.
+   to it, its declared build and test commands, and its :term:`workspace
+   knowledge`.  See :doc:`/using/context` and :doc:`/using/knowledge`.
 
 **External capabilities.**
-   Tools of MCP servers over stdio, registered per workspace in
-   ``capabilities.json`` and reached only through SPEAR's gateway, which
-   applies scope and a read/write policy.  A provider that cannot start is
-   reported, not hidden.  See :doc:`/using/capabilities`.
+   Tools of MCP servers, registered per workspace and reached only through
+   SPEAR's gateway.  See :doc:`/using/capabilities`.
 
 **An execution harness.**
    The part that lets the model actually *do* things: read files, run builds,
@@ -145,17 +140,12 @@ What SPEAR does
 **Controlled code modification**
     Changes are made by the coding core inside a contained workspace: every
     read, write and command crosses the :term:`control plane`, and a shell command
-    cannot write where the file tools may not.  A file refused to one tool —
-    generated output, a snapshot copy — is refused to every tool, deletion and
-    shell redirection included; a turn that keeps repeating a refused
-    operation is stopped.
+    cannot write where the file tools may not.  Generated output and snapshot
+    copies are refused to every tool (:term:`target policy`).
 
 **Final-state verification**
-    A change is ``VERIFIED`` only if the checks that show what the answer
-    claims ran and passed on the final source — not on an earlier state of it.
-    A command sent to the background, or a Makefile that only prints its help,
-    is no check.  The project's declared build and test commands take
-    precedence; where it declares none, probed ones fill in.
+    A change is ``VERIFIED`` only if a check ran and passed on the final
+    source — not on an earlier state of it (:doc:`/reasoning/evidence`).
 
 **Evidence-based compliance**
     A change that must satisfy a standard is judged constraint by constraint,
@@ -166,7 +156,7 @@ What SPEAR does
 **Workspace knowledge and external capabilities**
     What is known about a workspace persists across sessions with its
     provenance, and goes stale when the source it was bound to changes.
-    External tools are offered only to the workspaces and task classes they
+    External tools are offered only to the workspaces and request classes they
     are registered for, and never to a normative pass.
 
 **Multiple model backends**
@@ -174,91 +164,26 @@ What SPEAR does
     for the general and normative paths.
 
 **Confined execution**
-    One rule governs the whole execution path: **fail-closed** — a confinement
-    that cannot be applied is an error, never a silent downgrade.
+    Everything the model proposes is classified, authorized, confined and
+    audited before it runs, and a confinement that cannot be applied is an
+    error, never a silent downgrade (:term:`fail-closed`).
 
-Why the harness is the interesting part
-=======================================
+The confined execution path
+===========================
 
-A model that can only talk is safe and not very useful.  A model that can run
-arbitrary commands is useful and not at all safe.  The :term:`harness` is the entire
-answer to "how do we get the second without the first".
+A model that can only talk is safe and not very useful; a model that can run
+arbitrary commands is useful and not at all safe.  The :term:`harness` is how
+SPEAR gets the second without the first, and it rests on three assumptions:
+the model is untrusted input — it proposes tool calls, it does not authorize
+them; a command's argv is untrusted data, never interpolated into a shell
+string; and the workspace is the only writable host surface.
 
-Its design rests on one rule, applied without exception:
-
-.. admonition:: Fail-closed
-   :class: important
-
-   Any mechanism that cannot be honoured is an **error**, never a downgrade.
-   If the sandbox is unavailable, the command does not run unsandboxed.  If
-   the resource-control mechanism is unavailable, the command does not run
-   unlimited.  If the network helper cannot attach the way we require, the
-   network command does not fall back to a weaker attachment.
-
-That rule is why several code paths look more paranoid than they strictly
-need to be, and why the test suite spends as much effort proving that things
-*do not* happen as proving that they do.
-
-Layers of confinement
-=====================
-
-Four independent layers apply to every sandboxed command.  They are
-independent on purpose: each one assumes the others may fail.
-
-.. list-table::
-   :header-rows: 1
-   :widths: 18 30 52
-
-   * - Layer
-     - Mechanism
-     - What it bounds
-   * - Authorization
-     - ``CommandPolicy`` + ``CapabilityPolicy``
-     - *whether* a command may run at all, and with which capabilities
-   * - Filesystem / namespaces
-     - Bubblewrap
-     - what the command can see, write and reach
-   * - Per-process limits
-     - ``prlimit`` inside the sandbox
-     - descriptors and core dumps of each process
-   * - Whole-tree limits
-     - cgroup v2 via a transient systemd scope
-     - memory, task count and CPU of the command *and every descendant*
-
-The order in which these wrap each other is fixed and is not an
-implementation detail; see :doc:`/harness/sandbox`.
-
-Trust boundaries
-================
-
-Three boundaries matter, and it is worth being explicit about which side of
-each one the model sits on.
-
-*The model is untrusted input.*
-   It proposes tool calls; it does not authorize them.  Every proposal goes
-   through classification and capability intersection before anything runs.
-
-*The command argv is untrusted data.*
-   It is never passed to a shell by the harness.  ``shell=False`` everywhere,
-   structured argv everywhere.  When a command genuinely needs shell syntax,
-   that is a distinct capability (``shell:complex``) and an explicit
-   ``/bin/sh -c`` argv, not string interpolation.
-
-*The workspace is the only writable host surface.*
-   Everything else the command sees is read-only or private to the sandbox.
-
-What this documentation covers
-==============================
-
-The chapters follow the life of a tool call: what may run
-(:doc:`/harness/security_model`), where it runs (:doc:`/harness/sandbox`), how it reaches the
-network if allowed (:doc:`/harness/network`), what resources it may consume
-(:doc:`/harness/resource_control`), how all of that is verified (:doc:`/operations/testing`), and
-what to look at when it misbehaves (:doc:`/operations/operations`).
-
-Several sections quote real measurements.  Those numbers come from this
-machine and are labelled as such; :doc:`/harness/resource_control` discusses which of
-them are portable and which are not.
+A coding-core call first crosses the :term:`control plane`; a command then
+passes a decision layer (what may run at all), a boundary layer (where it runs)
+and an execution layer (how it is confined: Bubblewrap, per-process and
+whole-tree resource limits).  The layers
+are described in :doc:`/harness/tool_harness`, the authorization rules and the
+complete fail-closed list in :doc:`/harness/security_model`.
 
 Project
 =======

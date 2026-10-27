@@ -143,9 +143,9 @@ every conflict is in the audit trail (``knowledge_proposed``,
 Legacy remembered notes
 ***********************
 
-Before :term:`workspace knowledge`, ``/remember`` and the ``remember`` tool appended
-notes to a ``memories-*.md`` file per corpus. Those notes are no longer shown to
-a turn, and SPEAR says so at start-up while a file is unmigrated. Nothing moves
+A ``memories-*.md`` file per corpus holds remembered notes in the legacy
+format, written by ``/remember`` or the ``remember`` tool rather than recorded
+as :term:`workspace knowledge`. Those notes are not shown to a turn, and SPEAR says so at start-up while a file is unmigrated. Nothing moves
 them automatically:
 
 .. code-block:: text

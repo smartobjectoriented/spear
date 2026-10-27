@@ -18,34 +18,15 @@ SPEAR draws one distinction to prevent this:
 resolve what the current message *means*. They do not supply what the current
 answer is *made of*.
 
-Scope is read from the current message
-**************************************
+The request class is read from the current message
+**************************************************
 
-Every turn is classified from its own words:
-
-.. list-table::
-   :header-rows: 1
-   :widths: 22 44 34
-
-   * - Scope
-     - The question
-     - What is on the table
-   * - ``NORMATIVE``
-     - about the specification — what it defines, requires or means
-     - with a standard bound, the authoritative tools; the working-tree
-       tools are withheld
-   * - ``IMPLEMENTATION``
-     - about this project's code — read it, change it, build it
-     - with no standard engaged, the coding core's six tools
-       (:doc:`/reasoning/implementation`)
-   * - ``MIXED``
-     - about both — a comparison, a compliance question, or a change that must
-       satisfy the standard
-     - both for a question; a change runs the three-pass MIXED pipeline
-       (:doc:`/reasoning/mixed`)
-   * - ``GENERAL``
-     - neither, with no document bound
-     - the coding core's six tools
+Every turn's :term:`request class` — ``GENERAL``, ``IMPLEMENTATION``,
+``NORMATIVE`` or ``MIXED`` — is read from its own words and from whether a
+standard is engaged, never from the subjects of earlier turns
+(:doc:`/overview/architecture` lists the classes and the path each one runs).
+A normative turn is offered the standard's tools and none of the working
+tree's.
 
 "How does our parser handle this?" is an implementation question and is
 answered from the code. "What does the specification require here?" is a

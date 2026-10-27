@@ -10,8 +10,8 @@
    :numbered:
    :hidden:
 
-   overview/index
    start/index
+   overview/index
    using/index
    reasoning/index
    harness/harness
@@ -34,20 +34,13 @@ Specification-driven Platform for Embedded Agentic Reasoning
 
 |
 
-.. rst-class:: left
-
-Overview
-********
-
 SPEAR is an engineering agent for specified systems. It keeps apart the agent
 that changes code, the :term:`control plane` that confines it, the evidence of what it
 did, the normative reasoning about a bound standard, and the compliance
 evidence that judges a change — and computes its verdicts from that evidence on
 the :term:`final source state`. Each turn is given the context of its own workspace —
 rules, skills, knowledge, project metadata and external capabilities — selected
-deterministically by workspace and task class.
-
-- :ref:`Overview <part_overview>`: :ref:`Introduction <introduction>`, :ref:`Architecture <architecture>`, :ref:`Glossary <glossary>`
+deterministically by workspace and request class.
 
 .. rst-class:: left
 
@@ -58,10 +51,17 @@ Getting started
 
 .. rst-class:: left
 
+Overview
+********
+
+- :ref:`Overview <part_overview>`: :ref:`Introduction <introduction>`, :ref:`Architecture <architecture>`, :ref:`Glossary <glossary>`
+
+.. rst-class:: left
+
 Using SPEAR
 ***********
 
-- :ref:`Using SPEAR <part_using>`: :ref:`spear-chat <usage>`, :ref:`Projects and corpora <projects>`, :ref:`Retrieval <retrieval>`, :ref:`Context <context>`, :ref:`Workspace knowledge <knowledge>`, :ref:`External capabilities <capabilities>`, :ref:`Configuration reference <configuration>`
+- :ref:`Using SPEAR <part_using>`: :ref:`spear-chat <usage>`, :ref:`Projects and corpora <projects>`, :ref:`Retrieval <retrieval>`, :ref:`Context selection <context_selection>`, :ref:`Context <context>`, :ref:`Workspace knowledge <knowledge>`, :ref:`External capabilities <capabilities>`, :ref:`Configuration reference <configuration>`
 
 .. rst-class:: left
 
@@ -75,14 +75,14 @@ Request modes and evidence
 The confined execution path
 ***************************
 
-- :ref:`The confined execution path <harness>`
+- :ref:`The confined execution path <harness>`: :ref:`Tool execution harness <tool_harness>`, :ref:`Security model <security_model>`, :ref:`Sandbox <sandbox>`, :ref:`Network backend <network>`, :ref:`Resource control <resource_control>`, :ref:`Final harness audit <final_harness_audit>`, :ref:`Runtime internals <harness_internals>`
 
 .. rst-class:: left
 
 The model and its weights
 *************************
 
-- :ref:`The model and its weights <model>`
+- :ref:`The model and its weights <model>`: :ref:`Setting up an inference host <inference_host>`, :ref:`Model serving <model_serving>`, :ref:`Model backends <backends>`, :ref:`Rebuilding the runtime <runtime_bootstrap>`, :ref:`Training and fine-tuning <training>`, :ref:`Model history and what it cost <model_history>`
 
 .. rst-class:: left
 

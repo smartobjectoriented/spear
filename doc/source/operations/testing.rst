@@ -47,6 +47,12 @@ the launcher and the embedding worker — run from the same directory:
 
    $ ./bin/python -m unittest discover -s ../server/tests -p "test_*.py"
 
+No CI workflow runs either suite: the only workflow,
+``.github/workflows/docs.yml``, builds the documentation.  The suites are run
+by hand — the modules a change touches while working on it, the whole suite
+before a pull request and on the commit a release tags
+(:doc:`/contributing/release_process`).
+
 Opt-in suites
 =============
 
@@ -95,7 +101,8 @@ they are checked at the mechanism level instead:
   failure, i.e. the sandboxed command never started;
 * the marker file the command would have created does not exist;
 * the supervisor's descriptor count did not grow;
-* no residual ``spear-tool-*`` unit, no orphan ``bwrap`` or ``slirp4netns``.
+* no residual ``spear-tool-*`` unit after a real-cgroup test (see
+  `Residual state`_).
 
 Descriptor and namespace hygiene
 --------------------------------
@@ -144,7 +151,17 @@ timeout, not of the attachment.
 Residual state
 ==============
 
-After a full run, all four must hold:
+Part of it is asserted by the suites themselves:
+
+* ``PinnedNamespaceAttachmentTests`` (always on) checks that the supervisor's
+  descriptor count does not grow — after a successful run, a setup failure and
+  a Python exception — and that the command's descriptor table holds no
+  namespace handle;
+* ``OptInRealCgroupTests`` (``SPEAR_TEST_CGROUP=1``) checks after every test
+  that ``systemctl --user list-units`` lists no ``spear-tool-*`` unit, and
+  that a timed-out command left no descendant alive.
+
+The rest is checked by hand after a full run.  All three must come back empty:
 
 .. code-block:: console
 
@@ -155,7 +172,9 @@ After a full run, all four must hold:
    $ ls /sys/fs/cgroup/user.slice/user-*.slice/user@*.service/app.slice/spear-tool-* 2>/dev/null
    (nothing)
 
-and the supervisor's descriptor count is unchanged across repeated runs.
+No test looks for orphan ``bwrap`` or ``slirp4netns`` processes or for a
+leftover cgroup directory, and without ``SPEAR_TEST_CGROUP=1`` none lists the
+units either.
 
 .. note::
 
@@ -168,5 +187,5 @@ Live smoke test
 ===============
 
 The end-to-end check that serving and the backend contract are both healthy is
-in :doc:`/model/model_serving`; the expected answer is ``end_turn`` /
+in :ref:`backends_smoke_test`; the expected answer is ``end_turn`` /
 ``SPEAR-BACKEND-OK`` / empty tool tuple.

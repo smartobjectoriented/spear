@@ -56,8 +56,8 @@ bench judged is recorded ``pass`` or ``fail``; a turn nothing judged is
 recorded ``unrated`` rather than dropped.
 
 That width is the point, not an oversight.  Gating the recording on a verdict
-is what once left the dataset holding a single trajectory — exactly one project
-declares a bench — while every other session produced nothing.  ``/good``
+would keep only the turns of projects that declare a bench, and every other
+session would produce nothing.  ``/good``
 promotes what was right after the fact, which is a curation act on a record
 that already exists.
 

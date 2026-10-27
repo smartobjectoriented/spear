@@ -51,32 +51,13 @@ commit the rest separately — the working tree is not the unit of work.
 Tests
 *****
 
-The suite runs from the ``spear`` directory:
-
-.. code-block:: console
-
-    $ PYTHONPATH=. ./bin/python -m unittest discover -s tests -p "test_*.py"
-
 Run the modules you touched while you work; run the whole suite before you
-open the pull request, not during. See :ref:`testing <testing>` for what the
-suite covers and, more usefully, what it deliberately does not.
+open the pull request, not during.  The commands, what the suite covers and,
+more usefully, what it deliberately does not, are in :ref:`testing <testing>`.
 
 Documentation
 *************
 
-Every project in this family uses the same layout: ``doc/Makefile``, sources
-under ``doc/source/*.rst``, configuration in ``doc/source/conf.py``, output in
-``doc/build/`` — which is generated, never edited and never indexed.
-
-To check for warnings reliably, clean first:
-
-.. code-block:: console
-
-    $ cd doc && make clean && make html
-
-An incremental build skips the consistency check, so existing warnings do not
-reappear without ``make clean``. Continuous integration builds with ``-W
---keep-going``, which turns every warning into an error: an extension that
-cannot reach its native tool only logs a warning and drops the node, so
-without ``-W`` the job stays green while the diagrams are missing from the
-published pages.
+A change that alters what a page states updates the page in the same pull
+request.  How the documentation is built, checked and illustrated is in
+:ref:`documentation`.

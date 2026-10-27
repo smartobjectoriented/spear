@@ -20,7 +20,7 @@ Prerequisites
 
 * Linux with systemd and ``bubblewrap`` — the execution :term:`harness` confines every
   command in a sandbox and refuses to run without one;
-* Python 3.12 for a native installation, or Docker for the container;
+* Python 3.12 or later for a native installation, or Docker for the container;
 * a model endpoint: an OpenAI-compatible server, local or remote
   (:ref:`backends`).
 
@@ -39,36 +39,29 @@ only prerequisite:
 
    $ git clone https://github.com/smartobjectoriented/spear ~/spear
    $ cd ~/spear
-   $ scripts/docker/build.sh --profile private      # ~20 min, mostly the embedder
-   $ scripts/docker/spear-docker.sh --reds --auto   # opens the tunnel, then chats
+   $ scripts/docker/build.sh        # spear:<version>-public, ~20 min, mostly the embedder
 
-``spear-docker.sh`` runs the ``private`` image of this machine,
-``spear:<version>-private``; a bare ``build.sh`` builds the ``public`` one,
-which is the image to hand to someone else (:ref:`image-profiles`). The image
-carries the harness and the embedder; you mount your own source trees. :doc:`/start/container_run` is the user's guide, and
-:doc:`/start/container` describes what is baked, what is mounted, and the three
-``--security-opt`` flags without which the harness refuses to run any command
-at all.  At the institute there is a shorter path still: the ``reds`` image
-carries the shared trees and their index, and ``spear-run.sh`` runs it with
-nothing but Docker (:ref:`container_run_reds`).
+Then run it as :doc:`/start/container_run` shows: the image carries the harness
+and the embedder, and you mount your own checkouts and point it at a model
+endpoint.  Its ``docker run`` line carries three ``--security-opt`` flags
+without which the harness refuses to run any command (:ref:`container`).
+
+On a workstation that also has a native installation,
+``scripts/docker/build.sh --profile private`` builds the image
+``scripts/docker/spear-docker.sh`` runs, and ``spear-docker.sh --reds --auto``
+opens the tunnel and chats (:ref:`image-profiles`, :ref:`container`).
+
+At the institute there is a shorter path still: the ``reds`` image carries the
+shared trees and their index, and ``spear-run.sh`` runs it with nothing but
+Docker (:ref:`container_run_reds`).
 
 The native path
 ---------------
 
 To change the harness, re-index, or register projects of your own, install it
-natively:
-
-.. code-block:: console
-
-   $ git clone https://github.com/smartobjectoriented/spear ~/spear
-   $ cd ~/spear
-   $ client/deploy/install.sh        # the virtualenv, under client/
-   $ client/deploy/preflight.sh      # what the harness needs, checked
-   $ client/spear-chat.sh --help     # every flag and setting
-
-``client/spear-chat.sh`` is the launcher; linking it onto your ``PATH`` as
-``spear-chat`` is the usual arrangement, and the rest of this page assumes it.
-See :ref:`installation` for the details.
+natively as :ref:`installation` describes.  The launcher it leaves is
+``client/spear-chat.sh``; linking it onto your ``PATH`` as ``spear-chat`` is
+the usual arrangement, and the rest of this page assumes it.
 
 Configure a model backend
 =========================
@@ -109,13 +102,11 @@ registry and index it:
 
 :doc:`/using/projects` documents every key a project can declare, including
 ``build_commands`` and ``test_commands``, which SPEAR runs on the final tree of
-every change. A project that declares none is still checked: SPEAR probes the
-tree for the usual build and test commands, and a declared kind always wins
-over a probed one.
+every change; a project that declares none is probed for the usual ones.
 
-The permission mode is chosen at launch: ``--safe`` (the default) changes
-nothing, ``--ask`` confirms every change and command, ``--auto`` runs without
-asking. ``--no-network`` removes network access from every mode.
+The permission mode is chosen at launch — ``--safe`` (the default), ``--ask``
+or ``--auto``; :doc:`/harness/security_model` says what each allows, and
+:doc:`/using/configuration` lists the other flags.
 
 Make a change
 =============
@@ -128,23 +119,12 @@ A request about the tree runs on the coding core (:ref:`implementation_mode`):
 
 The core reads, edits and runs ``make`` inside the workspace; every call
 crosses the :term:`control plane`, and in ``--ask`` you confirm each one. The answer
-ends with SPEAR's own verdict on what was shown — ``VERIFIED`` if a build ran
-and passed on the final source, ``UNVERIFIED`` (with the reason) if not. A
-command sent to the background (``make &``), or a Makefile that only prints its
-help, does not count as a check.
+ends with SPEAR's own verdict on what was shown — ``VERIFIED`` only if a check
+ran and passed on the final source (:doc:`/reasoning/evidence`).
 
-Tell SPEAR what it should keep knowing about the workspace; later coding and
-general turns in that workspace, and no other, are given it:
-
-.. code-block:: text
-
-   > /remember The board's console is on UART2, not UART0.
-   > /knowledge list
-
-What the model itself offers to remember stays a proposal until you accept it
-(:ref:`knowledge`). ``spear-chat --fresh`` starts without the stored
-conversation; knowledge, rules and configuration still apply. Tools of external
-MCP servers are made available per workspace in ``capabilities.json``
+Tell SPEAR what it should keep knowing about the workspace with
+``/remember``; later turns in that workspace are given it (:ref:`knowledge`).
+Tools of external MCP servers are made available per workspace
 (:ref:`capabilities`).
 
 Bind a standard
@@ -188,29 +168,18 @@ packet.
 Read the result
 ===============
 
-A MIXED turn ends with one line that keeps both dimensions apart:
-
-.. code-block:: text
-
-   MIXED VERDICT: COMPLIANCE NOT DEMONSTRATED — ACME-FRAME 2024, …
-   Coverage: COMPLETE — 3 cited, 1 added by the document's structure, …
-   Required: 4 — applicable 0 (…), applicability unresolved 4, …
-   Implementation evidence: VERIFIED. Normative: NOT_DEMONSTRATED.
-
-**Implementation evidence** says whether the change was shown to work.
-**Normative** says whether SPEAR holds authoritative evidence that each
-applicable requirement holds. ``COMPLIANCE NOT DEMONSTRATED`` does *not* mean
-non-compliant: it means that evidence is missing — and that the project can
-supply it, by declaring which provisions apply and binding its own conformance
-checks to them (:ref:`normative_checks`). :doc:`/reasoning/evidence` explains
-every verdict.
+A MIXED turn ends with a verdict that keeps two dimensions apart: whether the
+change was shown to work, and whether SPEAR holds authoritative evidence that
+each applicable requirement holds.  ``COMPLIANCE NOT DEMONSTRATED`` does *not*
+mean non-compliant: it means that evidence is missing, and a project can
+supply it (:ref:`normative_checks`).  :doc:`/reasoning/evidence` explains every
+verdict and :ref:`mixed_mode` shows a complete one.
 
 Retrieval is not a detail
 =========================
 
-Measured on 37 build-system questions, the same model answers **18–19 %** of
-them cold and **90 %** with the project's corpus injected. Index the projects
-you ask about (:ref:`retrieval-measured-effect`).
+Answers about a project are far better with its corpus indexed than without
+(:ref:`retrieval-measured-effect`): index the projects you ask about.
 
 Where next
 ==========

@@ -55,8 +55,10 @@ format of the standard store — so that is what the numbers are about:
   branch.
 * **PATCH** — bug fixes only, cut *on* an existing ``release/vX.Y`` branch.
 
-The served model is not part of the version: it is chosen per deployment
-(``client/active-model.conf``, ``machine.env``) and changes without a release.
+The served model is not part of the version: it is chosen per deployment —
+``SPEAR_SERVER_MODEL`` in the inference host's ``server.conf``
+(:doc:`/model/model_serving`), or ``client/active-model.conf`` for
+``spear-chat --local`` — and changes without a release.
 
 Release candidates append ``-rcN``, numbered from 1 for each version, e.g.
 ``v0.3.0-rc1`` then ``v0.3.0-rc2``.
@@ -208,20 +210,11 @@ requests, and must be green on the commit the tag will point at::
 
 SPEAR has no test workflow of its own — the suite needs the project's virtual
 environment and, for its sandbox tests, a host with bubblewrap and delegated
-cgroups — so it is run by hand, on the commit being tagged, from ``client/``:
-
-.. code-block:: sh
-
-   PYTHONPATH=. ./bin/python -m unittest discover -s tests -p "test_*.py"
-
-It must pass in full; a test that only fails because an optional host (the
-remote embedding server) is unreachable is re-run once that host is back, not
-waved through. The strict documentation build must be clean as well:
-
-.. code-block:: sh
-
-   cd doc && make clean && \
-       sphinx-build -W --keep-going -b html -d build/doctrees source build/html
+cgroups — so it is run by hand, on the commit being tagged, with the commands
+of :ref:`testing <testing>`.  It must pass in full; a test that only fails
+because an optional host (the remote embedding server) is unreachable is
+re-run once that host is back, not waved through.  The strict documentation
+build must be clean as well (:ref:`documentation`).
 
 Check ``SPEAR_VERSION_FALLBACK`` too: it must already read the version being
 tagged, since the tagged tree is what a gitless copy reports. It appears twice

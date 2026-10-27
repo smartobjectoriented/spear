@@ -63,7 +63,7 @@ over SSH.  Nothing on the host is exposed but ``sshd``.
        ``python3-dev``, ``curl``, ``wget``
      -
    * - Disk, under the account's home
-     - ~100 GB: model 85 GB (79 GiB), embedder venv 5 GB, embedder weights
+     - ~100 GB: model 85 GB (79 GiB), embedder venv 5 GB, embedder cache
        4.3 GB, llama.cpp build 1 GB
      -
    * - RAM
@@ -252,7 +252,10 @@ Prove it end to end — the real launcher, the real protocol, one text:
 
    $ scripts/bootstrap-runtime.sh --root ~/spear-runtime --verify --probe
 
-The first probe downloads ``BAAI/bge-m3`` (4.3 GB).  The client side of
+The first probe downloads ``BAAI/bge-m3`` into
+``~/spear-runtime/embed/hf``: 4.3 GB of cache, because the repository's
+weights, 2.2 GB, arrive in both formats (``pytorch_model.bin`` in the
+revision snapshot, ``model.safetensors`` from the converted revision).  The client side of
 the worker is in step 8; the protocol is in ``server/embed/README.md``.
 
 8. Client access
@@ -312,7 +315,7 @@ A leading ``~/`` is expanded on the host.  Indexing (``/reindex``,
    host   $ curl -s http://127.0.0.1:8010/props | grep -o '"n_ctx":[0-9]*'
    client $ spear-chat --reds          # the banner shows the model and the window
 
-What the reference deployment measured after its move to 512K:
+What the reference deployment measures at 512K:
 
 .. list-table::
    :widths: 50 50
@@ -341,8 +344,7 @@ says, then a restart:
 
 The dry run shows whether the release moved the llama.cpp pin or the model;
 if it did not, the bootstrap only verifies.  ``config/`` is never rewritten,
-so a key a new release introduces (as ``SPEAR_SERVER_ARCH`` was) has to be
-added by hand — its release notes say so, and ``--verify`` reports the command
+so a key a new release introduces has to be added by hand — its release notes say so, and ``--verify`` reports the command
 line it would now produce.
 
 **Before editing** ``server.conf``, copy it: ``cp -p server.conf

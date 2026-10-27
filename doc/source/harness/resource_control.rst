@@ -157,8 +157,7 @@ flags and the variable live together in one launcher.
 The supervisor environment
 --------------------------
 
-The :term:`harness` historically launched bwrap with ``env={}``.  ``systemd-run --user``
-cannot reach the user bus that way:
+``systemd-run --user`` cannot reach the user bus with an empty environment:
 
 .. code-block:: text
 

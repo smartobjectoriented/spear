@@ -1,28 +1,174 @@
 .. _operations:
 
-==========
-Operations
-==========
+==============================
+Operations and troubleshooting
+==============================
 
 What to look at when something misbehaves, and where each state is reported.
+Checking that a deployment is healthy end to end is the last step of setting
+up the inference host (:doc:`/model/inference_host`, *Verifying the whole*);
+changing the model it serves is in :doc:`/model/model_serving`.
 
-Health check
-============
+.. _troubleshooting:
+
+Symptoms
+========
+
+The symptoms below are the ones that come up in practice, with what each one
+actually means.
+
+No corpus index
+---------------
+
+*Symptom* — answers are vague, name nothing from the tree, or say the project
+could not be searched.
+
+Retrieval is not a refinement. The same model answers a small fraction of
+build-system questions cold and the large majority with the corpus injected;
+running without an index is running a different and much worse assistant.
 
 .. code-block:: console
 
-   host   $ systemctl status spear-inference
-   host   $ curl -s http://127.0.0.1:8010/health
-   {"status":"ok"}
-   host   $ ~/spear/scripts/bootstrap-runtime.sh --root ~/spear-runtime --verify
+   $ spear-chat
+   > /corpus                    # is this tree registered, and indexed?
+   > /reindex                   # build or rebuild the index
 
-   client $ curl -s http://127.0.0.1:8082/v1/models | head -c 200   # through the tunnel
-   client $ cd ~/spear/client && ./bin/python -m unittest tests.test_tool_runtime tests.test_command_policy tests.test_sandbox
+For a tree you are passing through, ``--here`` registers it ad hoc. For one you
+return to, register it properly with ``spear-corpus add`` and set
+``autoindex`` so a missing index is built on sight.
 
-The server's side is :ref:`inference_host`; its step 9 is the full check.
+Backend unavailable
+-------------------
 
-Reading a failure
-=================
+*Symptom* — the session starts and the first turn never returns, or fails with
+a connection error.
+
+Check the endpoint directly:
+
+.. code-block:: console
+
+   $ curl -s "$SPEAR_API_BASE/models"
+
+``SPEAR_API_BASE`` is the endpoint the session talks to, ending in ``/v1``;
+the port each backend listens on is in :doc:`/model/backends`.  The banner
+names the backend the session is talking to. If it names one you did
+not expect, a remembered choice in ``active-backend.conf`` is being reused —
+pass the backend flag explicitly.
+
+Where the backend is reached over an SSH tunnel, the flag opens the tunnel but
+does not start the server on the far side.
+
+Requests refused whole
+----------------------
+
+*Symptom* — a turn fails with an error from the server rather than a bad answer.
+
+Usually the context window. ``--ctx`` is what the client budgets against, not a
+request to the server; setting it above what the server serves produces
+requests the server rejects entirely. Lower it to the server's real window, or
+lower ``--max-tokens``.
+
+No standard bound
+-----------------
+
+*Symptom* — a question about a specification is answered from the source tree,
+with no citations.
+
+.. code-block:: text
+
+   /standard status          what is bound right now
+   /standard list            what has been ingested
+   /standard use <id> <rev>  bind one
+
+The binding is machine-wide, so another session may have changed it. A bound
+turn announces itself:
+
+.. code-block:: text
+
+   ⎿  bound standard: ACME-1234.5 2019-R2023 — normative claims are grounded
+      in it and cited
+
+If that line is absent on a question you meant as normative, the turn ran
+unbound. Rephrase it as a question about the document — asking what something
+*means*, how it *works* or how it should be *read* — rather than as a request
+to do something.
+
+The answer was withheld
+-----------------------
+
+*Symptom* — instead of an answer, a line saying the evidence does not support
+it, and a list of the clauses that were read.
+
+This is a result, not a fault. The named condition tells you what to supply;
+:ref:`Normative answer guards <guards>` lists each one and the usual next step. The
+most common are an ambiguous citation — name the provision kind as well as the
+ordinal — and an unsupported count, where the document may simply not state a
+bound.
+
+Stale or missing evidence
+-------------------------
+
+*Symptom* — the agent is told a file is unchanged since it last read it, or that
+a retrieval returned something it has already seen.
+
+Both are deliberate: re-reading what has not changed spends the context window
+for nothing, and a write puts the file back in play. If the
+agent is looping over the same area without progress, it is usually short of a
+*different* file rather than short of that one: say which.
+
+A ``source_id`` from an earlier turn cannot be fetched. Evidence is
+dereferenced only by the turn that retrieved it.
+
+Build or test failure during agent work
+---------------------------------------
+
+*Symptom* — the agent's own validation fails repeatedly.
+
+If the loop persists, the usual causes are a test command in ``projects.json``
+that does not run in this environment, or a requirement that cannot be reached
+by an automated test at all — which is an acceptable thing to state.
+
+Network disabled
+----------------
+
+*Symptom* — a fetch or a search fails, and nothing suggests a proxy.
+
+Network access is a property of the permission mode, and ``--no-network``
+takes it away from every mode (:doc:`/harness/security_model`, *Execution
+modes*): a refusal means the session's mode has no network, or the session was
+launched with ``--no-network``.
+
+Wrong writable root
+-------------------
+
+*Symptom* — an edit is refused although the file plainly exists.
+
+Tools run in the directory the session was launched from, and no flag moves
+the workspace: to work on a tree, launch from it.  Which paths are writable —
+``/workspaces/<name>`` for a registered corpus, and what ``--single-root``
+takes away — is in :doc:`/harness/security_model` (*Roots*).
+
+Where to look next
+------------------
+
+.. code-block:: console
+
+   $ ls "${SPEAR_STATE_DIR:-$HOME/spear/client}/audit/sessions"
+
+The state directory and its defaults are in :ref:`persistent-state`.
+
+The newest session directory holds ``events.jsonl`` — every tool call in order,
+and whether a :term:`standard binding` was set — and ``snapshot.json``, the
+conversation the turn ran on. Between them they answer most "why did it do
+that?" questions without guesswork.
+
+.. seealso::
+
+   :ref:`Normative answer guards <guards>` · :ref:`Authoritative standards
+   <standards>` · :ref:`Configuration reference <configuration>`
+
+Reading a harness failure
+=========================
 
 Every :term:`harness` failure surfaces as a ``ToolResult`` whose ``summary`` names the
 mechanism that refused.  The vocabulary is deliberately narrow.
@@ -110,27 +256,11 @@ supervisor that died between spawning the sandbox and releasing the command.
 It is harmless — the command never started — but it holds a namespace, so kill
 it.
 
-Switching model
-===============
-
-.. code-block:: console
-
-   host $ cp -p ~/spear-runtime/config/server.conf{,.bak-$(date +%F)}
-   host $ $EDITOR ~/spear-runtime/config/server.conf   # SPEAR_SERVER_MODEL / _LORA
-   host $ sudo systemctl restart spear-inference
-
-Or, for one foreground run without persisting:
-
-.. code-block:: console
-
-   host $ SPEAR_SERVER_MODEL=/path/to/other.gguf SPEAR_SERVER_ROOT=~/spear-runtime \
-              ~/spear/server/inference/serve.sh
-
 Logs and audit
 ==============
 
-The paths below are relative to the state directory: ``SPEAR_STATE_DIR``, or
-``client/`` when it is not set.
+The paths below are relative to the state directory
+(:ref:`persistent-state`).
 
 Server log
    Server-side: model load, context, slot activity.  In the journal
@@ -181,10 +311,6 @@ Known environment quirks
      - It will not find it.  Only ``/etc/alternatives``, ``/etc/passwd`` and
        ``/etc/group`` are bound, plus the generated resolver files on the
        network profile.
-   * - ``drawio`` CLI export renders boxes without their text
-     - a non-snap build exporting headless can drop the labels.  Export with
-       the drawio snap, staged under ``$HOME`` as
-       :ref:`the documentation convention <doc-diagrams>` describes.
    * - Network tests flaky under heavy load
      - the slirp readiness wait is a wall-clock timeout; the attachment itself
        is timing-independent (:doc:`/harness/network`).
@@ -192,12 +318,5 @@ Known environment quirks
      - unrelated to the harness: do not let the machine suspend during a
        fine-tuning run.
 
-Training-data capture
----------------------
-
-Normal harness tasks capture a provider-neutral, redacted training episode in
-``$SPEAR_STATE_DIR/audit/training-data``.  Capture is enabled by default and
-can be disabled with ``SPEAR_TRAINING_CAPTURE=0``.  Drafts are updated only at
-model/tool boundaries; finalized episodes are immutable, checksummed JSON with
-an append-only metadata manifest.  These records are source evidence for a
-future selective exporter, not ready-to-train SFT or preference data.
+Training-data capture and what it records are described in
+:doc:`/model/training`.

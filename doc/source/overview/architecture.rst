@@ -29,6 +29,38 @@ refusal to answer when the evidence is insufficient.
    The SPEAR infrastructure.  The two sources of truth — specification and
    implementation — are kept separate and reconciled only in the runtime.
 
+.. _deployment:
+
+Where each part runs
+====================
+
+SPEAR runs on two machines.  The operator machine — a workstation, or the
+container that stands for one — runs ``spear-chat`` and everything that
+touches a tree or keeps state: the control plane, the coding core and the
+normative runtime, the sandbox in which every tool, build and test runs, the
+project trees, the retrieval index and the state directory.  The inference
+host holds the GPU and runs only the ``server/`` component: ``llama-server``
+behind the ``spear-inference`` unit, serving the model on ``:8010``, the
+embedding worker that indexing calls over SSH, and fine-tuning.
+
+Two things cross between them.  Every model call goes through an SSH tunnel
+that ``spear-chat --reds`` opens from ``127.0.0.1:8082`` to the host's
+``:8010``; the prompt carries what the tools read, so that is what the host
+sees.  Indexing sends document chunks to the embedding worker and gets vectors
+back; a query is embedded on the operator machine and never leaves it.
+
+.. figure:: /img/SPEAR-Deployment.drawio.png
+   :width: 100%
+   :alt: The operator machine runs spear-chat, the sandbox, the project trees,
+         retrieval and state; the inference host runs llama-server, the
+         embedding worker and fine-tuning; a tunnel carries chat completions
+         and an SSH call carries document chunks to embed
+
+   Where each part runs, and what crosses between the two machines.
+
+Setting up the host is :doc:`/model/inference_host`; the ports and the other
+endpoints the client can use instead are in :ref:`backend_ports`.
+
 What a turn is told about its workspace — rules, skills, :term:`workspace knowledge`,
 project metadata — and the external capabilities it may reach are selected by
 the control plane per workspace and request class; they are described below

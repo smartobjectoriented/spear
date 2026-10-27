@@ -7,7 +7,7 @@ silhouette is a funnel, wide at the source and single at the result, and the
 two colours carry that meaning rather than decorating it: warm is the
 authoritative source, accent is everything derived from it.
 
-    python3 gen_identity.py        # writes the three canonical SVGs into ../../source/img
+    python3 gen_identity.py        # writes the four canonical SVGs into ../../source/img
 
 Everything is drawn here rather than typed into the files, because the mark
 and the wordmark share a stroke weight and a corner radius and those have to
@@ -40,12 +40,13 @@ MARK = f'''  <!-- 1. the specification: the authoritative source -->
   <!-- 3. the one action -->
   <path fill="{ACCENT}" d="M20 44 H44 L32 60 Z"/>'''
 
-# The landing lockup shows the mark at about 90 px, where the specification
-# can carry its line of text. It is CUT OUT rather than painted white -- a
-# white notch is only invisible until the background stops being white -- and
-# it is the only difference: below about 48 px it is a sub-pixel line, so the
-# compact mark, the sidebar and the favicon go without it.
-MARK_LANDING = MARK.replace(
+# From 64 px up the specification carries its line of text: the sidebar
+# shows the mark at 64 px, the landing lockup at about 90. The line is CUT OUT
+# rather than painted white -- a white notch is only invisible until the
+# background stops being white -- and it is the only difference: below 64 px
+# it falls off the pixel grid and smears, so the favicon and the horizontal
+# lockup go without it.
+MARK_LINED = MARK.replace(
     f'<rect x="4" y="4" width="56" height="16" rx="4" fill="{WARM}"/>',
     f'<path fill="{WARM}" fill-rule="evenodd"\n'
     '        d="M8 4 H56 A4 4 0 0 1 60 8 V16 A4 4 0 0 1 56 20 H8 A4 4 0 0 1 4 16\n'
@@ -105,8 +106,11 @@ def main():
         (OUT / name).write_text(text)
         written.append(name)
 
-    # the mark: sidebar (html_logo), favicon, and anywhere it stands alone
-    write("spear-mark.svg", svg(64, 64, MARK, f"{NAME} mark", FULL))
+    # the mark alone: the sidebar (html_logo), and anywhere it stands at 64 px
+    write("spear-mark.svg", svg(64, 64, MARK_LINED, f"{NAME} mark", FULL))
+
+    # the favicon, at 16 px, where the line would only muddy the bar
+    write("spear-favicon.svg", svg(64, 64, MARK, f"{NAME} mark", FULL))
 
     # The two lockups, with the mark and the wordmark optically centred on
     # one line. Computed rather than typed: the mark's box and the cap height
@@ -134,7 +138,7 @@ def main():
     # the landing lockup takes the detailed one, and no expansion line: the
     # page prints the full name as its own title just below, and that line
     # was the last thing here that needed a font to be installed.
-    lockup("spear-logo.svg", MARK_LANDING, 1.45, 0.72, height=104, gap=26, pad=8)
+    lockup("spear-logo.svg", MARK_LINED, 1.45, 0.72, height=104, gap=26, pad=8)
 
 
     for name in written:

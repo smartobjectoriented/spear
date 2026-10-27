@@ -30,13 +30,15 @@ max-width: none;
 
 /* The SPEAR mark is teal and amber, which has poor contrast against the RTD
  * theme's blue sidebar search area: sit it on a light rounded card, as the
- * sibling projects do. The theme's own ".wy-side-nav-search > a img.logo"
+ * sibling projects do. The card is 80 px so that the mark inside it is 64 px,
+ * the size at which the line cut into its top bar falls on whole pixels.
+ * The theme's own ".wy-side-nav-search > a img.logo"
  * rule forces "background: transparent" at the same specificity, hence the
  * matching selector and !important. */
 .wy-side-nav-search a img.logo,
 .wy-side-nav-search img.logo {
 	background-color: #c5ddf5 !important;   /* light blue card */
-	width: 64px;
+	width: 80px;
 	padding: 8px;
 	border-radius: 8px;
 }

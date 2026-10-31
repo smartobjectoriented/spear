@@ -8,9 +8,12 @@ read exit -1, no output, "bubblewrap sandbox command failed" -- ten times.
 from __future__ import annotations
 
 import json
+import os
 import signal
 import subprocess
 import sys
+import tempfile
+import time
 import unittest
 from pathlib import Path
 
@@ -59,6 +62,41 @@ class LimitKill(unittest.TestCase):
 
         self.assertEqual(code, -1)
         self.assertIn("resource limits", json.loads(text)["error"])
+
+
+class OutputBeforeTheKill(unittest.TestCase):
+    """The session /tmp is a host directory: the wrapper's output file
+    outlives the sandbox the cgroup killed, and its tail is returned."""
+
+    def setUp(self):
+        self.sandbox = BubblewrapSandbox.__new__(BubblewrapSandbox)
+        self.sandbox.max_output_chars = 10_000
+        self.sandbox._session_tmpdir = tempfile.mkdtemp()
+
+    def write(self, name, text, age=0):
+        path = Path(self.sandbox._session_tmpdir, name, "out")
+        path.parent.mkdir()
+        path.write_text(text)
+        if age:
+            past = time.time() - age
+            os.utime(path, (past, past))
+
+    def test_the_output_written_before_the_kill_is_returned(self):
+        started = time.time()
+        self.write("tmp.new", "SPEAR_BUILD_OUTPUT_SENTINEL before the kill\n")
+        result = self.sandbox._result_from_completed(completed(-signal.SIGKILL),
+                                                     DEFAULT_CGROUP_LIMITS, started)
+
+        self.assertIn("SPEAR_BUILD_OUTPUT_SENTINEL before the kill", result.stdout)
+        self.assertIn("output up to the kill follows", result.summary)
+
+    def test_an_earlier_command_output_is_not_taken(self):
+        self.write("tmp.old", "from an earlier command\n", age=600)
+        result = self.sandbox._result_from_completed(completed(-signal.SIGKILL),
+                                                     DEFAULT_CGROUP_LIMITS, time.time())
+
+        self.assertNotIn("earlier command", result.stdout)
+        self.assertIn("no output was kept", result.summary)
 
 
 class TheBuildFits(unittest.TestCase):

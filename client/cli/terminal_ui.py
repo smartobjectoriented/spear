@@ -345,12 +345,27 @@ class Liveness:
 
     def __init__(self):
         self.at = time.monotonic()
+        self.until = 0.0
 
     def touch(self):
         self.at = time.monotonic()
 
+    @contextmanager
+    def bounded(self, seconds):
+        """A command that runs under its own timeout is alive until that
+        timeout: a 600 s build is silent while it compiles, and the sandbox,
+        not this watchdog, ends it if it overruns."""
+        self.until = time.monotonic() + seconds
+
+        try:
+            yield
+        finally:
+            self.until = 0.0
+            self.touch()
+
     def silent_for(self):
-        return time.monotonic() - self.at
+        now = time.monotonic()
+        return 0.0 if now < self.until else now - max(self.at, self.until)
 
 
 LIVENESS = Liveness()

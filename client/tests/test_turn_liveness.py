@@ -37,6 +37,31 @@ class TheHeartbeat(unittest.TestCase):
         self.assertGreater(terminal_ui.LIVENESS.silent_for(), 30)
 
 
+class ABoundedCommand(unittest.TestCase):
+    """A build is silent while it compiles: under the 300 s heartbeat alone,
+    the watchdog interrupted a 600 s `build.sh linux` the sandbox was still
+    running within its own timeout."""
+
+    def test_a_running_command_is_alive_until_its_own_timeout(self):
+        with terminal_ui.LIVENESS.bounded(600):
+            terminal_ui.LIVENESS.at = time.monotonic() - 400
+
+            self.assertEqual(terminal_ui.LIVENESS.silent_for(), 0.0)
+
+    def test_past_its_timeout_the_silence_counts_again(self):
+        with terminal_ui.LIVENESS.bounded(600):
+            terminal_ui.LIVENESS.at = time.monotonic() - 400
+            terminal_ui.LIVENESS.until = time.monotonic() - 310
+
+            self.assertGreater(terminal_ui.LIVENESS.silent_for(), 300)
+
+    def test_the_end_of_the_command_is_a_sign_of_life(self):
+        with terminal_ui.LIVENESS.bounded(600):
+            terminal_ui.LIVENESS.at = time.monotonic() - 400
+
+        self.assertLess(terminal_ui.LIVENESS.silent_for(), 1)
+
+
 class TheWatchdog(unittest.TestCase):
     def run_turn(self, *, silence, threshold, work=0.6):
         source = CancellationSource()

@@ -23,7 +23,7 @@ from cli.session_workspace import (
     authorize_mutation, resolve_path, run_cmd_result, safe_mode_refusal,
 )
 from cli.terminal_ui import (
-    C_ACCENT, C_BOLD, C_RST, C_TOOL, tool_result, tool_use,
+    C_ACCENT, C_BOLD, C_RST, C_TOOL, LIVENESS, tool_result, tool_use,
 )
 from cli.tool_handlers import (
     NETWORK_ENABLED, SANDBOX_DOWN, WORK_PHASE, _classified_handler_result,
@@ -146,14 +146,16 @@ def coding_host(agent_context, cache, record):
 
     def run(command, script, timeout, output_chars):
         ctx = context()
-        result = run_cmd_result(
-            command, need_confirm=False, cancellation=ctx.cancellation,
-            exec_cmd=script, timeout=timeout, output_chars=output_chars,
-            cwd=command_cwd[0],
-            execution_mode=(ExecutionMode.SAFE
-                            if ctx.read_only or _write_gate_closed(ctx)
-                            or ctx.role in {"explorer", "reviewer", "planning"}
-                            else None))
+
+        with LIVENESS.bounded(timeout + 30):
+            result = run_cmd_result(
+                command, need_confirm=False, cancellation=ctx.cancellation,
+                exec_cmd=script, timeout=timeout, output_chars=output_chars,
+                cwd=command_cwd[0],
+                execution_mode=(ExecutionMode.SAFE
+                                if ctx.read_only or _write_gate_closed(ctx)
+                                or ctx.role in {"explorer", "reviewer", "planning"}
+                                else None))
         status = {"ok": "ok", "failed": "ok", "denied": "denied",
                   "cancelled": "cancelled", "timeout": "timeout"}.get(result.status, "error")
 

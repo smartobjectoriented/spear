@@ -258,7 +258,7 @@ class CgroupLimits:
 # Production contract, calibrated in STEP 1d-3d against real workloads on this
 # host (62 GiB RAM, 22 CPUs).  The measured peaks over read-only work, Python
 # test runs, shell pipelines, git and parallel builds were 518 MiB of memory
-# and 47 tasks, both reached by ``make -j22``.  An Infrabase kernel build
+# and 47 tasks, both reached by ``make -j22``.  A bitbake kernel build
 # (``build.sh linux``: bitbake plus a parallel kernel make) peaks at 2.9 GiB
 # and 111 tasks: under the first 2 GiB cap the OOM killer ended it with no
 # output.  The memory cap keeps a 2x margin on that build, the task cap a

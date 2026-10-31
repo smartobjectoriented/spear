@@ -36,7 +36,7 @@ class LimitKill(unittest.TestCase):
         self.sandbox.max_output_chars = 10_000
 
     def test_a_sigkill_under_active_limits_names_the_limits(self):
-        for code in (-signal.SIGKILL, 128 + signal.SIGKILL):
+        for code in (-signal.SIGKILL, 128 + signal.SIGKILL, -signal.SIGTERM, 128 + signal.SIGTERM):
             result = self.sandbox._result_from_completed(completed(code), DEFAULT_CGROUP_LIMITS)
 
             self.assertEqual(result.status, "failed")

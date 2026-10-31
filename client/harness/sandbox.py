@@ -595,11 +595,15 @@ class BubblewrapSandbox:
         if completed.returncode == 0:
             return ToolResult("ok", "bubblewrap sandbox command completed", stdout, stderr)
 
-        # SIGKILL of the whole sandbox, with a resource contract active, is the
-        # cgroup's OOM killer or task cap: the command's own output died with
-        # it, so the limit is the only evidence left to report.
+        # A sandbox ended by a signal, with a resource contract active, is the
+        # cgroup's doing: the kernel OOM-kills the process over the cap (SIGKILL)
+        # and systemd's OOM policy then stops the whole scope (SIGTERM). Timeouts
+        # never reach this point. The session wrapper died with it, so the
+        # output it had written and the limits are the evidence left.
 
-        if completed.returncode in (-signal.SIGKILL, 128 + signal.SIGKILL) \
+        killed = {signal.SIGKILL, signal.SIGTERM}
+
+        if (-completed.returncode in killed or completed.returncode - 128 in killed) \
                 and cgroup_limits is not None and cgroup_limits.active:
             left = self._output_left_since(started) if started is not None else ""
             return ToolResult(

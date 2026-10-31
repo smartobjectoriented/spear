@@ -283,7 +283,11 @@ class TerminalChanges(unittest.TestCase):
 
 
 class TheCodingCoreIsUnchanged(unittest.TestCase):
-    """The repair pass is SPEAR's; the core it runs is the one v0.3.0 shipped."""
+    """The repair pass is SPEAR's; the core it runs is the released one.
+
+    core-v0.3.1 is v0.3.0's core with one change: the patch tool refuses a
+    fuzzy match that would rewrite literal diff markers (agent/patch_guard.py).
+    """
 
     def test_the_core_tree_is_the_released_one(self):
         def tree(revision):
@@ -292,11 +296,11 @@ class TheCodingCoreIsUnchanged(unittest.TestCase):
 
             return done.stdout.strip() if done.returncode == 0 else ""
 
-        released = tree("v0.3.0:spear/agent")
+        released = tree("core-v0.3.1:client/agent")
         current = tree("HEAD:client/agent")
 
         if not released or not current:
-            self.skipTest("not a git checkout carrying the v0.3.0 tag")
+            self.skipTest("not a git checkout carrying the core-v0.3.1 tag")
 
         dirty = subprocess.run(["git", "status", "--porcelain", "--", "agent"], cwd=ROOT,
                                capture_output=True, text=True).stdout

@@ -174,12 +174,12 @@ class CgroupLimitsContractTests(unittest.TestCase):
     def test_production_defaults_are_active_and_calibrated(self):
         """The values calibrated in STEP 1d-3d, now in force."""
         self.assertTrue(DEFAULT_CGROUP_LIMITS.active)
-        self.assertEqual(DEFAULT_CGROUP_LIMITS.memory_max_bytes, 2 * 1024 ** 3)
+        self.assertEqual(DEFAULT_CGROUP_LIMITS.memory_max_bytes, 6 * 1024 ** 3)
         self.assertEqual(DEFAULT_CGROUP_LIMITS.memory_swap_max_bytes, 0)
         self.assertEqual(DEFAULT_CGROUP_LIMITS.tasks_max, 256)
         self.assertEqual(DEFAULT_CGROUP_LIMITS.cpu_quota_percent, 800)
         self.assertEqual(DEFAULT_CGROUP_LIMITS.systemd_properties(), [
-            "MemoryMax=2147483648",
+            "MemoryMax=6442450944",
             "MemorySwapMax=0",
             "TasksMax=256",
             "CPUQuota=800%",
@@ -551,7 +551,7 @@ class CgroupIntegrationContractTests(unittest.TestCase):
             runner.run_sandboxed(self.workspace, ["/bin/true"])
         argv = popen.call_args.args[0]
         self.assertEqual(argv[0], "/usr/bin/systemd-run")
-        for prop in ("MemoryMax=2147483648", "MemorySwapMax=0",
+        for prop in ("MemoryMax=6442450944", "MemorySwapMax=0",
                      "TasksMax=256", "CPUQuota=800%"):
             self.assertIn(prop, argv)
 

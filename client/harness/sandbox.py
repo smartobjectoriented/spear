@@ -562,12 +562,29 @@ class BubblewrapSandbox:
 
         return None
 
-    def _result_from_completed(self, completed: subprocess.CompletedProcess[str]) -> ToolResult:
+    def _result_from_completed(self, completed: subprocess.CompletedProcess[str],
+                               cgroup_limits: CgroupLimits | None = None) -> ToolResult:
         stdout = decode_command_output(completed.stdout)[: self.max_output_chars]
         stderr = decode_command_output(completed.stderr)[: self.max_output_chars]
 
         if completed.returncode == 0:
             return ToolResult("ok", "bubblewrap sandbox command completed", stdout, stderr)
+
+        # SIGKILL of the whole sandbox, with a resource contract active, is the
+        # cgroup's OOM killer or task cap: the command's own output died with
+        # it, so the limit is the only evidence left to report.
+
+        if completed.returncode in (-signal.SIGKILL, 128 + signal.SIGKILL) \
+                and cgroup_limits is not None and cgroup_limits.active:
+            return ToolResult(
+                "failed",
+                "bubblewrap sandbox command killed: it most likely exceeded the "
+                f"sandbox's resource limits ({', '.join(cgroup_limits.systemd_properties())}); "
+                "its output was lost with it. Run less in parallel or a smaller step.",
+                stdout=stdout,
+                stderr=stderr,
+                exit_code=completed.returncode,
+            )
 
         return ToolResult(
             "failed",
@@ -731,7 +748,7 @@ class BubblewrapSandbox:
             self.availability = SandboxAvailability.INEXECUTABLE
             return ToolResult("failed", f"bubblewrap sandbox unavailable: {exc}")
 
-        return self._result_from_completed(completed)
+        return self._result_from_completed(completed, cgroup_limits)
 
     @staticmethod
     def _safe_close(fd: int | None) -> None:
@@ -1062,7 +1079,7 @@ class BubblewrapSandbox:
 
                 completed = subprocess.CompletedProcess(bwrap_argv, bwrap_process.returncode, stdout, stderr)
 
-                return self._result_from_completed(completed)
+                return self._result_from_completed(completed, cgroup_limits)
 
         # The coordinator must not leak an in-flight namespace/helper if a
         # Python-level failure occurs while reading control data.

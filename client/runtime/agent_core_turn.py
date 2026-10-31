@@ -14,7 +14,7 @@ from models.model_backend import TextBlock
 from runtime.tracing import EventStatus, EventType, new_action_id
 from harness.tool_router import ToolResultEnvelope, ToolResultStatus
 from harness.tool_registry import COMMAND_TOOLS
-from harness import refusal_breaker
+from harness import refusal_breaker, repeat_breaker
 from runtime.working_state import StateEventType, TerminalStatus
 from runtime.agent_context import AgentContext, AgentResult, RuntimeTerminalReason
 from runtime.agent_verification import project_build_runs
@@ -185,11 +185,14 @@ class CodingCoreMixin:
             context.core_evidence = []
 
         breaker = refusal_breaker.RefusalBreaker()
+        repeats = repeat_breaker.RepeatBreaker()
 
         def record(item):
             nonlocal did_modify
             breaker.observe(item.name, dict(item.arguments), item.result,
                             item.refused or (not item.ok and "refused" in item.result[:300]))
+            repeats.observe(item.name, dict(item.arguments), item.result,
+                            item.ok and not item.refused)
             envelope = _core_envelope(item)
             self._record_tool_result(context, envelope)
             evidence = context.verification_policy.evidence_for_tool(
@@ -252,7 +255,8 @@ class CodingCoreMixin:
                 max_iterations=rounds, max_tool_calls=calls,
                 context_window=window, max_tokens=max_tokens,
                 cancelled=lambda: (context.cancellation.is_cancelled
-                                   or breaker.tripped is not None))
+                                   or breaker.tripped is not None
+                                   or repeats.tripped is not None))
 
             if breaker.tripped is not None and core.stop == "cancelled" \
                     and not context.cancellation.is_cancelled:
@@ -264,6 +268,17 @@ class CodingCoreMixin:
                                              "refusal": refusal,
                                              "count": breaker.counts[breaker.tripped],
                                              "limit": breaker.limit})
+
+            if repeats.tripped is not None and core.stop == "cancelled" \
+                    and not context.cancellation.is_cancelled:
+                core.stop, core.final = "halted", repeats.conclusion()
+                context.trace.emit(EventType.REPEATED_SUCCESS_STOPPED, context.task_id,
+                                   status=EventStatus.OK,
+                                   metadata={"reason": repeat_breaker.REASON,
+                                             "tool": repeats.tripped[0],
+                                             "arguments": repeats.tripped[1][:200],
+                                             "count": repeats.count,
+                                             "limit": repeats.limit})
 
             return core, _STOP_REASON[core.stop]
 

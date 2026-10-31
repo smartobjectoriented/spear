@@ -361,7 +361,7 @@ container's own limits):
 .. code-block:: python
 
    DEFAULT_CGROUP_LIMITS = CgroupLimits(
-       memory_max_bytes      = 2_147_483_648,   # 2 GiB — 4.1x the 518 MiB peak
+       memory_max_bytes      = 6_442_450_944,   # 6 GiB — 2x the 2.9 GiB kernel build
        memory_swap_max_bytes = 0,               # measured swap delta: 0 kB
        tasks_max             = 256,             # 5.4x the observed peak of 47
        cpu_quota_percent     = 800,             # no throttling except a massive build
@@ -432,10 +432,11 @@ Portability
    * - ``memory_swap_max_bytes=0``
      - **yes**
      - depends on no host resource
-   * - ``memory_max_bytes=2 GiB``
+   * - ``memory_max_bytes=6 GiB``
      - reasonably
-     - 3 % of RAM here; 50 % of a 4 GiB machine — permissive in relative terms
-       but still protective in absolute ones
+     - 10 % of RAM here; sized for an Infrabase kernel build (2.9 GiB peak),
+       which a 2 GiB cap OOM-killed with no output; on an 8 GiB machine it no
+       longer protects the host
    * - ``tasks_max=256``
      - **fragile**
      - the peak tracks ``nproc``: 47 for ``make -j22``.  On a 192-thread host,

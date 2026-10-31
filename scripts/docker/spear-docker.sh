@@ -141,7 +141,7 @@ exec docker run --rm "${TTY[@]}" \
     --security-opt seccomp=unconfined \
     --security-opt apparmor=unconfined \
     --security-opt systempaths=unconfined \
-    --memory 2g --memory-swap 2g --pids-limit 256 --cpus 8 \
+    --memory 6g --memory-swap 6g --pids-limit 256 --cpus 8 \
     -e SPEAR_RESOURCE_CONTROL=delegated \
     --network host \
     --user "$(id -u):$(id -g)" \

@@ -258,8 +258,11 @@ class CgroupLimits:
 # Production contract, calibrated in STEP 1d-3d against real workloads on this
 # host (62 GiB RAM, 22 CPUs).  The measured peaks over read-only work, Python
 # test runs, shell pipelines, git and parallel builds were 518 MiB of memory
-# and 47 tasks, both reached by ``make -j22``; the values below keep a 4.1x and
-# 5.4x margin on those.  ``CPUQuota=800%`` was the only point of the grid that
+# and 47 tasks, both reached by ``make -j22``.  An Infrabase kernel build
+# (``build.sh linux``: bitbake plus a parallel kernel make) peaks at 2.9 GiB
+# and 111 tasks: under the first 2 GiB cap the OOM killer ended it with no
+# output.  The memory cap keeps a 2x margin on that build, the task cap a
+# 2.3x margin.  ``CPUQuota=800%`` was the only point of the grid that
 # left every workload except a massively parallel build entirely un-throttled
 # (1.77x on ``make -j22``, versus 3.14x at 400% and 6.36x at 200%).
 #
@@ -272,7 +275,7 @@ class CgroupLimits:
 # would both need revisiting on a many-core machine.
 
 DEFAULT_CGROUP_LIMITS = CgroupLimits(
-    memory_max_bytes=2 * 1024 * 1024 * 1024,
+    memory_max_bytes=6 * 1024 * 1024 * 1024,
     memory_swap_max_bytes=0,
     tasks_max=256,
     cpu_quota_percent=800,

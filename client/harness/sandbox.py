@@ -562,8 +562,33 @@ class BubblewrapSandbox:
 
         return None
 
+    def _output_left_since(self, started: float) -> str:
+        """What a killed command had written so far, from the session /tmp.
+
+        The session wrapper writes the command's output to a file under /tmp,
+        which is a host directory bound for the whole session: a sandbox the
+        cgroup killed takes its processes, not that file."""
+        if not self._session_tmpdir:
+            return ""
+
+        found = []
+
+        for path in Path(self._session_tmpdir).glob("*/out"):
+            try:
+                if path.stat().st_mtime >= started - 1:
+                    found.append((path.stat().st_mtime, path))
+            except OSError:
+                continue
+
+        if not found:
+            return ""
+
+        data = max(found)[1].read_bytes()
+        return decode_command_output(data[-self.max_output_chars:])
+
     def _result_from_completed(self, completed: subprocess.CompletedProcess[str],
-                               cgroup_limits: CgroupLimits | None = None) -> ToolResult:
+                               cgroup_limits: CgroupLimits | None = None,
+                               started: float | None = None) -> ToolResult:
         stdout = decode_command_output(completed.stdout)[: self.max_output_chars]
         stderr = decode_command_output(completed.stderr)[: self.max_output_chars]
 
@@ -576,12 +601,14 @@ class BubblewrapSandbox:
 
         if completed.returncode in (-signal.SIGKILL, 128 + signal.SIGKILL) \
                 and cgroup_limits is not None and cgroup_limits.active:
+            left = self._output_left_since(started) if started is not None else ""
             return ToolResult(
                 "failed",
                 "bubblewrap sandbox command killed: it most likely exceeded the "
                 f"sandbox's resource limits ({', '.join(cgroup_limits.systemd_properties())}); "
-                "its output was lost with it. Run less in parallel or a smaller step.",
-                stdout=stdout,
+                + ("its output up to the kill follows. " if left else "no output was kept. ")
+                + "Run less in parallel or a smaller step.",
+                stdout=left or stdout,
                 stderr=stderr,
                 exit_code=completed.returncode,
             )
@@ -683,6 +710,7 @@ class BubblewrapSandbox:
         env = {} if unit is None else self.scope_runner.supervisor_env()
 
         try:
+            started = time.time()
             process = subprocess.Popen(
                 argv,
                 stdout=subprocess.PIPE,
@@ -748,7 +776,7 @@ class BubblewrapSandbox:
             self.availability = SandboxAvailability.INEXECUTABLE
             return ToolResult("failed", f"bubblewrap sandbox unavailable: {exc}")
 
-        return self._result_from_completed(completed, cgroup_limits)
+        return self._result_from_completed(completed, cgroup_limits, started)
 
     @staticmethod
     def _safe_close(fd: int | None) -> None:
@@ -939,6 +967,7 @@ class BubblewrapSandbox:
                     scoped_argv = bwrap_argv
                     scope_env = {}
 
+                started = time.time()
                 bwrap_process = subprocess.Popen(
                     scoped_argv,
                     stdout=subprocess.PIPE,
@@ -1079,7 +1108,7 @@ class BubblewrapSandbox:
 
                 completed = subprocess.CompletedProcess(bwrap_argv, bwrap_process.returncode, stdout, stderr)
 
-                return self._result_from_completed(completed, cgroup_limits)
+                return self._result_from_completed(completed, cgroup_limits, started)
 
         # The coordinator must not leak an in-flight namespace/helper if a
         # Python-level failure occurs while reading control data.

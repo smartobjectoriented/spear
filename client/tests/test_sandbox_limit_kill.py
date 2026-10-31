@@ -1,6 +1,6 @@
 """A command the sandbox's limits kill says so, instead of failing silently.
 
-An Infrabase kernel build exceeded the 2 GiB memory cap: the OOM killer took
+A bitbake kernel build exceeded the 2 GiB memory cap: the OOM killer took
 the whole sandbox, the session wrapper's output went with it, and the model
 read exit -1, no output, "bubblewrap sandbox command failed" -- ten times.
 """

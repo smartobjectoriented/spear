@@ -434,7 +434,7 @@ Portability
      - depends on no host resource
    * - ``memory_max_bytes=6 GiB``
      - reasonably
-     - 10 % of RAM here; sized for an Infrabase kernel build (2.9 GiB peak),
+     - 10 % of RAM here; sized for a bitbake kernel build (2.9 GiB peak),
        which a 2 GiB cap OOM-killed with no output; on an 8 GiB machine it no
        longer protects the host
    * - ``tasks_max=256``

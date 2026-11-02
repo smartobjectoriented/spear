@@ -8,7 +8,7 @@ import readline
 import subprocess
 from pathlib import Path
 from runtime import work_phase
-from harness.command_policy import CommandPolicy, ToolPolicy
+from harness.command_policy import AuthorizationResult, CommandPolicy, ToolPolicy
 from harness.resource_control import ExecutionProfile
 from harness.sandbox import BubblewrapSandbox
 from harness.tool_primitives import (
@@ -589,6 +589,17 @@ def run_cmd_result(cmd, need_confirm=True, cancellation=None, execution_mode=Non
                   else COMMAND_POLICY.classify(cmd))
     authorization = COMMAND_POLICY.authorize(assessment, mode,
                                                approve=confirm)
+
+    # A test runner imports code; what this session wrote is judged by what
+    # it calls (write_protection.authored_test_effects).
+
+    if authorization.allowed and WORKSPACE is not None:
+        authored = write_protection.authored_test_effects(
+            cmd, WORKSPACE.roots, cwd=cwd or str(WORKSPACE.root))
+
+        if authored:
+            authorization = AuthorizationResult(
+                ToolResult("denied", f"command denied: {authored}"))
 
     if authorization.result is not None:
         if (assessment.classification != CommandClassification.READ_ONLY

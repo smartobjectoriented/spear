@@ -66,6 +66,29 @@ CORE_VOCABULARY = (
 )
 
 
+#: The policy class of a refusal, named after its reason so that the model
+#: can tell a protected file from an interpreter or a boundary without
+#: parsing prose. Generic on purpose: the class says what kind of rule
+#: refused, never how the rule decides.
+POLICY_CLASSES = (
+    ("control_plane", re.compile(r"control-plane metadata")),
+    ("protected_target", re.compile(r"generated file|snapshot copy|git metadata")),
+    ("interpreter", re.compile(r"interpreter|running a script file|python3 -m unittest|"
+                               r"awk program|test runner")),
+    ("outside_workspace", re.compile(r"outside the workspace|escapes the workspace|"
+                                     r"leaves the workspace|another tree|outside the project|"
+                                     r"sandbox's own mounts")),
+    ("scope", re.compile(r"member of the same family|requested target")),
+    ("not_allowlisted", re.compile(r"not allowlisted|unapproved executable|mutating find "
+                                   r"action|in-place sed|find -\w+ without")),
+)
+
+
+def policy_class(text: str) -> str:
+    """The class of the rule behind a refusal, or "" for any other failure."""
+    return next((name for name, pattern in POLICY_CLASSES if pattern.search(text)), "")
+
+
 def core_vocabulary(text: str) -> str:
     """A SPEAR refusal in the coding core's tool vocabulary."""
     for pattern, replacement in CORE_VOCABULARY:
@@ -114,7 +137,10 @@ class SpearHost:
             if text.startswith(prefix):
                 text = text[len(prefix):]
 
-        return REFUSED.format(core_vocabulary(text.split("\n", 1)[0]))
+        line = core_vocabulary(text.split("\n", 1)[0])
+        kind = policy_class(line)
+
+        return REFUSED.format(f"{line} [policy: {kind}]" if kind else line)
 
     def command_cwd(self, arguments: Mapping[str, object]) -> str:
         """Where a terminal call runs: its workdir, the session's, or the root."""

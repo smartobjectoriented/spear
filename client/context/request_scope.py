@@ -556,22 +556,28 @@ def shell_write_targets(command: str, scope: RequestScope, cwd: str | None = Non
                            for index, token in enumerate(argv) if index]
               for argv, directory in zip(words, directories)]
     # What the whole command names, globs expanded in the project: the
-    # candidates when a write's destination is only known at run time.
-    mentioned = [path for argv in stages for token in argv[1:]
-                 for path in _expand_in(scope, token)]
-    mentioned += [path for item in list(mentioned)
-                  for path in _children_matching(scope, item, patterns)]
+    # candidates when a write's destination is only known at run time. A
+    # directory a stage only enters (`cd`) is where it runs, not a file it
+    # names. What lies inside a named directory is reached only by a writer
+    # fed from a walk of it (find -exec, xargs): counted for every unknown
+    # destination, `cd root && build.sh > $LOG` was refused for the first
+    # generated file the walk of the whole project met.
+    mentioned = [path for argv in stages if Path(argv[0]).name not in ("cd", "pushd")
+                 for token in argv[1:] for path in _expand_in(scope, token)]
+    walked = mentioned + [path for item in list(mentioned)
+                          for path in _children_matching(scope, item, patterns)]
     targets = []
 
     for argv in stages:
         destinations = _shell_destinations(argv)
         targets += [path for item in destinations for path in _expand_in(scope, item)]
         targets += _copied_into(argv)
+        fed = _writes_fed(argv) or any("{}" in item for item in destinations)
 
         if _opaque(argv) or any("$" in item or "{}" in item
                                 for item in destinations) or (
                 _writes_fed(argv) and not destinations):
-            targets += mentioned
+            targets += walked if fed else mentioned
             targets += _WORD_PATH.findall(" ".join(argv[1:]))
 
     return list(dict.fromkeys(targets))

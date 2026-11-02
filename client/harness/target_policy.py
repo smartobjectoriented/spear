@@ -41,6 +41,15 @@ _MARKER_LINES = 10
 
 _SAVED_CONFIG = re.compile(r"(?:^|_)defconfig$")
 
+# Control-plane metadata: what a guard reads to decide whether a tree can be
+# trusted. A tree's fingerprint sits beside the directory it describes and is
+# named after it (a linux.attach.sha256 next to linux/). Edited or
+# deleted by hand, it makes the guard vouch for a tree it never checked; only
+# the operation that owns it, a build, writes it.
+
+_FINGERPRINT_SUFFIXES = frozenset({"sha1", "sha256", "sha512", "md5", "fingerprint",
+                                   "stamp", "manifest"})
+
 # Every file a refusal named in this session. The sandbox binds them back
 # read-only under a command that is not a build (write_protection.py).
 
@@ -83,6 +92,29 @@ def is_snapshot(path: str) -> bool:
             return True
 
     return False
+
+
+def fingerprinted_tree(path: str) -> str:
+    """The directory `path` is the fingerprint of, or "".
+
+    `name.sha256` or `name.<tag>.sha256` beside a directory `name`: every
+    dotted prefix of the file name is tried, so `linux-6.12.attach.sha256`
+    finds `linux-6.12/`.
+    """
+    path = str(path).rstrip("/")
+    directory, name = os.path.split(path)
+    parts = name.split(".")
+
+    if len(parts) < 2 or parts[-1] not in _FINGERPRINT_SUFFIXES:
+        return ""
+
+    for end in range(1, len(parts)):
+        tree = ".".join(parts[:end])
+
+        if tree and os.path.isdir(os.path.join(directory or ".", tree)):
+            return os.path.join(directory, tree)
+
+    return ""
 
 
 def gitdir_named_by(dotgit: str) -> str:
@@ -181,6 +213,14 @@ def _judge(path: str, label: str, follow: bool) -> str:
     for candidate in candidates:
         if is_git_metadata(candidate):
             return f"{label} is git metadata — change it through git, not by editing it"
+
+    for candidate in candidates:
+        tree = fingerprinted_tree(candidate)
+
+        if tree:
+            return (f"{label} is control-plane metadata: the guard of "
+                    f"{os.path.basename(tree)}/ reads it, and only the build that owns it "
+                    f"may change it")
 
     for candidate in candidates:
         if _GENERATED_PATH.search(candidate):

@@ -266,6 +266,7 @@ class BubblewrapSandbox:
 
             if profile.guard_outputs:
                 found.update(dict.fromkeys(trees.outputs, False))
+                found.update(dict.fromkeys(trees.control, False))
 
         found.update(dict.fromkeys(profile.protected_paths, False))
         found.update(dict.fromkeys(unlocked, True))

@@ -6,16 +6,18 @@ on stdin, a script, a Makefile rule. The paths found here are bound back
 read-only on top of that bind, so the kernel refuses the write whatever
 program attempts it.
 
-Two kinds of path are found. The trees, by a walk that reads directories
-only and is cached per root for the session. And the protected files a
-command names, in its own text or in the files it feeds or runs: a marker
-says a file is generated only inside the file, and no walk reads contents.
+Two kinds of path are found. The trees, and the fingerprints a guard keeps
+beside them, by a walk that reads names only and is cached per root for the
+session. And the protected files a command names, in its own text or in the
+files it feeds or runs: a marker says a file is generated only inside the
+file, and no walk reads contents.
 """
 
 from __future__ import annotations
 
 import os
 import re
+import time
 from dataclasses import dataclass
 
 from harness import target_policy
@@ -29,6 +31,8 @@ class ProtectedTrees:
     git: tuple[str, ...] = ()
     #: Generated directories and snapshot copies (build/tmp among them).
     outputs: tuple[str, ...] = ()
+    #: Control-plane metadata: the fingerprints a guard keeps beside its trees.
+    control: tuple[str, ...] = ()
 
 
 # A build's own trees are its output, and not walked: the checkouts BitBake
@@ -44,6 +48,7 @@ _CACHE: dict[str, tuple[int, ProtectedTrees]] = {}
 def _walk(root: str) -> ProtectedTrees:
     git: list[str] = []
     outputs: list[str] = []
+    control: list[str] = []
 
     # Each directory with whether it lies in an output tree already found:
     # what is inside one is bound with it.
@@ -74,6 +79,9 @@ def _walk(root: str) -> ProtectedTrees:
 
             try:
                 if not entry.is_dir(follow_symlinks=False):
+                    if not inside and target_policy.fingerprinted_tree(entry.path):
+                        control.append(entry.path)
+
                     continue
             except OSError:
                 continue
@@ -94,7 +102,8 @@ def _walk(root: str) -> ProtectedTrees:
 
             pending.append((entry.path, output))
 
-    return ProtectedTrees(git=tuple(sorted(set(git))), outputs=tuple(sorted(outputs)))
+    return ProtectedTrees(git=tuple(sorted(set(git))), outputs=tuple(sorted(outputs)),
+                          control=tuple(sorted(control)))
 
 
 def trees(root: str) -> ProtectedTrees:
@@ -381,3 +390,73 @@ def command_files(command: str, roots, *, cwd: str | None = None,
 
     return tuple(path for path in files
                  if within(path, roots) and target_policy.refusal(path))
+
+
+# A test runner runs the modules it imports, and a module this session wrote
+# is code the model wrote: `python3 -m unittest x` ran the same file removals
+# and processes that `python3 x.py` was refused. The project's own tests are
+# not judged; one written or changed since SPEAR started is, by what it calls.
+
+_STARTED = time.time()
+_CODE_EFFECTS = re.compile(
+    r"\bsubprocess\b|\bos\.(?:system|popen|exec\w*|spawn\w*|remove|unlink|rmdir|removedirs"
+    r"|rename|replace|chmod|chown|kill)\b|\bpty\.spawn\b|\bshutil\.(?:rmtree|move|chown)\b"
+    r"|\.(?:unlink|rmdir|rename)\(|\bctypes\b")
+
+
+def authored_test_effects(command: str, roots, *, cwd: str | None = None,
+                          aliases=None) -> str:
+    """Why a test run may not import what this session wrote, or "".
+
+    The modules are the ones its words name, as files or dotted modules, and
+    the ones a runner discovers where it looks. A module counts as written
+    in this session when it changed since SPEAR started.
+    """
+    words = _words(command)
+
+    if not any(word in _TEST_RUNNERS for word in words):
+        return ""
+
+    roots = [str(root) for root in roots]
+    aliases = dict(aliases or {})
+
+    if cwd and cwd.startswith("/"):
+        cwd = _candidates(cwd, (), aliases)[0]
+
+    bases = [cwd] if cwd else []
+    bases += [base for base in (os.path.join(cwd or roots[0], word)
+                                for previous, word in zip(words, words[1:])
+                                if previous in ("cd", "-s", "--start-directory"))
+              if os.path.isdir(base)]
+    bases += roots
+    modules: dict[str, None] = {}
+    directories: list[str] = []
+
+    for word in words:
+        for name in (word, word + ".py"):
+            for candidate in _candidates(name, bases, aliases):
+                if os.path.isfile(candidate) and candidate.endswith(".py"):
+                    modules[os.path.realpath(candidate)] = None
+                elif os.path.isdir(candidate):
+                    directories.append(candidate)
+
+    for directory in (directories[:20] or [cwd or roots[0]]):
+        modules.update(dict.fromkeys(os.path.realpath(path) for path in _test_files(directory)))
+
+    for path in list(modules)[:_MAX_SCANNED]:
+        try:
+            if os.path.getmtime(path) < _STARTED or os.path.getsize(path) >= _SCAN_LIMIT:
+                continue
+
+            with open(path, "r", encoding="utf-8", errors="replace") as handle:
+                found = _CODE_EFFECTS.search(handle.read(_SCAN_LIMIT))
+        except OSError:
+            continue
+
+        if found:
+            return (f"{os.path.basename(path)}, written in this session, calls "
+                    f"{found.group(0).rstrip('(')}: a test runner is not a way to run "
+                    f"what the interpreter rule refuses. Change files with the editing "
+                    f"tools and run commands as commands.")
+
+    return ""

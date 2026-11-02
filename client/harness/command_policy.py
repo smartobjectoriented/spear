@@ -114,7 +114,26 @@ class CommandPolicy:
         "sudo", "su", "doas", "rm", "mv", "dd", "mkfs", "mount", "umount", "chmod",
         "chown", "kill", "pkill", "shutdown", "reboot", "rsync", "python", "python3",
         "bash", "sh", "zsh", "fish", "env",
+        "dash", "ash", "ksh", "mksh", "csh", "tcsh", "busybox", "pypy", "pypy3",
+        "perl", "ruby", "node", "nodejs", "php", "lua", "tclsh", "Rscript",
     })
+
+    # Every interpreter is one program whatever its version: refused as
+    # `python3`, `python3.12` ran the same script unjudged.
+
+    _VERSIONED_INTERPRETER = re.compile(
+        r"(?:python|pypy|perl|ruby|lua|php|tclsh|node)\d[\d.]*")
+
+    # An awk program that starts a command runs what this cannot read.
+
+    _AWK_BINS = frozenset({"awk", "gawk", "mawk", "nawk"})
+    _AWK_RUNS = re.compile(r"\bsystem\s*\(|\|\s*\"|\"\s*\|\s*getline|\|&")
+
+    # find's actions: -exec and -ok run a command, judged as that command;
+    # the others write or delete themselves.
+
+    _FIND_RUNS = frozenset({"-exec", "-execdir", "-ok", "-okdir"})
+    _FIND_WRITES = frozenset({"-delete", "-fprint", "-fprint0", "-fprintf", "-fls"})
 
     # Builtins carry no capability of their own: `cd` and `.` act through the
     # stage that follows them, and treating them as unknown programs would ask
@@ -621,9 +640,84 @@ class CommandPolicy:
                 or binary in self.SSH_BINS
                 or binary in self.CONTAINER_BINS
                 or binary in self.GPU_BINS
-                or binary in self.DANGEROUS_BINS
+                or self._runs_code(binary)
                 or binary in self.SHELL_BUILTINS
                 or binary == "git")
+
+    def _runs_code(self, binary: str) -> bool:
+        """Whether `binary` is refused as what it runs: a privileged, removing
+        or interpreting program."""
+        return binary in self.DANGEROUS_BINS or bool(self._VERSIONED_INTERPRETER.fullmatch(binary))
+
+    @classmethod
+    def _syntax_check(cls, argv: Sequence[str]) -> bool:
+        """`bash -n script`: the shell reads the script and runs none of it."""
+        options = [arg for arg in argv[1:] if arg.startswith("-")]
+        operands = [arg for arg in argv[1:] if not arg.startswith("-")]
+
+        return (Path(argv[0]).name in cls._SCRIPT_SHELLS and len(operands) == 1
+                and argv[1].startswith("-") and len(options) == len(argv) - 2
+                and all(re.fullmatch(r"-[eunx]+", option) for option in options)
+                and any("n" in option for option in options))
+
+    def _stage_danger(self, argv: Sequence[str], depth: int) -> str:
+        """Why one stage may not run whatever wraps it, or "".
+
+        The rules that judge what a program does rather than what it names:
+        an interpreter, an awk program that starts a command, and find's
+        actions. The same answer for a command alone and inside a script.
+        """
+        binary = Path(argv[0]).name
+
+        if self._syntax_check(argv):
+            return ""
+
+        if not self._is_module_test_run(argv) and (
+                self._runs_code(binary)
+                or ("/" in argv[0] and not self._is_workspace_program(argv[0]))):
+            if binary in self._PYTHON_BINS or self._VERSIONED_INTERPRETER.fullmatch(binary):
+                return f"{self._PYTHON_HINT} — so this command cannot run."
+
+            if binary in self._SCRIPT_SHELLS:
+                return (f"'{binary}' running a script file runs commands this cannot "
+                        f"judge as written, so it is not allowlisted: run them as "
+                        f"commands.")
+
+            return (f"'{argv[0]}' is not allowlisted, so the pipeline that "
+                    f"contains it cannot run.")
+
+        if binary in self._AWK_BINS and any(self._AWK_RUNS.search(arg) for arg in argv[1:]):
+            return "an awk program that starts a command runs what this cannot read."
+
+        if binary == "find":
+            if any(arg in self._FIND_WRITES for arg in argv[1:]):
+                return "mutating find action"
+
+            for index, arg in enumerate(argv):
+                if arg not in self._FIND_RUNS:
+                    continue
+
+                inner = []
+
+                for word in argv[index + 1:]:
+                    if word in (";", "+"):
+                        break
+
+                    if word != "{}":
+                        inner.append(word)
+
+                if not inner:
+                    return f"find {arg} without a command"
+
+                if depth >= self._MAX_UNWRAP:
+                    return "commands nested this deep cannot be read."
+
+                found = self._stage_danger(inner, depth + 1)
+
+                if found:
+                    return found
+
+        return ""
 
     def _sensitive_classification(
         self, argv: Sequence[str]
@@ -765,12 +859,17 @@ class CommandPolicy:
         cannot run", about a path the command never named. The same flaw makes
         ``grep 'foo(bar)' file`` -- an everyday idiom -- look like a pipeline.
 
+        A process substitution `<(cmd)` is a stage of its own, opened by "<("
+        and closed by ")<": what follows it is more of the command around it,
+        its operands (`diff <(git show HEAD:a.c) a.c`), not a program.
+
         Returns text and separators interleaved, the shape re.split produced.
         """
         parts: list[str] = []
         current: list[str] = []
         quote = ""
         index, length = 0, len(command)
+        opened: list[bool] = []
 
         while index < length:
             char = command[index]
@@ -821,7 +920,29 @@ class CommandPolicy:
             # A newline ends a command as `;` does: `cat > x <<EOF ... EOF`
             # then `python3 x` on the next line is two commands.
 
-            if char in "|;&()<>\n":
+            if char in "<>" and command[index + 1:index + 2] == "(":
+                parts.append("".join(current))
+                parts.append(command[index:index + 2])
+                opened.append(True)
+                current = []
+                index += 2
+
+                continue
+
+            if char in "()":
+                substitution = char == ")" and bool(opened) and opened.pop()
+
+                if char == "(":
+                    opened.append(False)
+
+                parts.append("".join(current))
+                parts.append(")<" if substitution else char)
+                current = []
+                index += 1
+
+                continue
+
+            if char in "|;&<>\n":
                 parts.append("".join(current))
                 parts.append(char)
                 current = []
@@ -874,6 +995,7 @@ class CommandPolicy:
         stdin_from_pipeline = False
         redirect_target = False
         redirect_reads = False
+        operands_only = False
 
         for stage in stages:
             token = stage.strip()
@@ -881,8 +1003,9 @@ class CommandPolicy:
             if not token:
                 continue
 
-            if token in {"|", "||", "&&", ";", "&", "(", ")", "<", ">"}:
+            if token in self._SEPARATORS:
                 stdin_from_pipeline = token == "|"
+                operands_only = token == ")<"
 
                 # `<` and `>` introduce a FILE, not a command. Analysing the
                 # next token as a command stage made `2>/dev/null` hit the
@@ -910,11 +1033,21 @@ class CommandPolicy:
                            and (target.startswith("/") or target.startswith("../")
                                 or "/../" in target or target == ".."))
 
+                # A relative `..` is judged as the traversal rule judges any
+                # operand: where the command stands is not known here, so
+                # neither is where it leads. Called a write, an input `<
+                # ../x.patch` read to the model as a refusal of something it
+                # never asked for.
+
                 if escapes:
                     if redirect_reads and target.startswith("/"):
                         found, denied = self._outside_reads([target])
                         refusal = refusal or denied
                         outside.extend(p for p in found if p not in outside)
+                    elif not target.startswith("/"):
+                        danger = danger or (
+                            f"relative path leaves the workspace: '{target}' — "
+                            f"name it by absolute path instead.")
                     else:
                         danger = danger or (
                             f"a redirection would write outside the workspace: "
@@ -932,6 +1065,16 @@ class CommandPolicy:
             try:
                 argv = tuple(shlex.split(token, posix=True))
             except ValueError:
+                continue
+
+            # After a process substitution, the words are the operands of the
+            # command around it: checked as paths, never run.
+
+            if operands_only:
+                operands_only = False
+                found, denied = self._outside_reads(list(argv))
+                refusal = refusal or denied
+                outside.extend(path for path in found if path not in outside)
                 continue
 
             # `VAR=value cmd` runs cmd: the assignments are its environment,
@@ -995,14 +1138,7 @@ class CommandPolicy:
                     "existing surrounding line(s) as old_text and those same "
                     "lines plus the new one as new_text.")
 
-            if not self._is_module_test_run(argv) and (
-                    binary in self.DANGEROUS_BINS or (
-                        "/" in argv[0] and not self._is_workspace_program(argv[0]))):
-                danger = danger or (
-                    f"{self._PYTHON_HINT} — so this command cannot run."
-                    if binary in self._PYTHON_BINS else
-                    f"'{argv[0]}' is not allowlisted, so the pipeline that "
-                    f"contains it cannot run.")
+            danger = danger or self._stage_danger(argv, depth)
 
             stage_caps = self._simple_capabilities(
                 argv, stdin_from_pipeline=stdin_from_pipeline)
@@ -1037,13 +1173,13 @@ class CommandPolicy:
 
     _STAGE_KEYWORDS = frozenset({"do", "then", "else", "elif", "!", "{"})
 
-    _SEPARATORS = frozenset({"|", "||", "&&", ";", "&", "(", ")", "<", ">"})
+    _SEPARATORS = frozenset({"|", "||", "&&", ";", "&", "(", ")", "<", ">", "<(", ">(", ")<"})
 
     # Launchers run the command they are handed, and that command is what is
     # judged: wrapped, it keeps the authority it has alone and gains none.
-    # `bash -c` and `sh -c` hand over a script, judged as a script. A
-    # launcher whose options are not read here runs something unseen, and
-    # is refused.
+    # A shell's -c hands over a script, judged as a script; xargs runs its
+    # command with operands read at run time. A launcher whose options are
+    # not read here runs something unseen, and is refused.
 
     _LAUNCHER_OPTIONS = {
         "timeout": ({"--preserve-status", "--foreground", "-v", "--verbose"},
@@ -1054,9 +1190,14 @@ class CommandPolicy:
         "exec": ({"-c", "-l", "-cl", "-lc"}, ("-a",)),
         "command": ({"-p"}, ()),
         "time": ({"-p"}, ()),
+        "xargs": ({"-0", "--null", "-r", "--no-run-if-empty", "-t", "--verbose", "-x",
+                   "--exit", "-o", "--open-tty"},
+                  ("-n", "--max-args", "-L", "--max-lines", "-P", "--max-procs", "-s",
+                   "--max-chars", "-d", "--delimiter", "-E", "-a", "--arg-file", "-I",
+                   "--replace")),
     }
     _LAUNCHERS = frozenset(_LAUNCHER_OPTIONS)
-    _SCRIPT_SHELLS = frozenset({"bash", "sh"})
+    _SCRIPT_SHELLS = frozenset({"bash", "sh", "dash", "ash", "ksh", "mksh", "zsh"})
     _MAX_UNWRAP = 4
     _DURATION = re.compile(r"\d+(?:\.\d+)?[smhd]?")
     _DUPLICATION = re.compile(r"\d*[<>]&(?:\d+|-)")
@@ -1201,10 +1342,16 @@ class CommandPolicy:
         launchers set aside."""
         found = []
         redirect_target = False
+        operands_only = False
 
         for part in self._shell_stages(self._strip_heredoc_bodies(command or "")):
             if part.strip() in self._SEPARATORS:
                 redirect_target = part.strip() in {"<", ">"}
+                operands_only = part.strip() == ")<"
+                continue
+
+            if operands_only:
+                operands_only = False
                 continue
 
             try:
@@ -1509,15 +1656,27 @@ class CommandPolicy:
             return self._assessment(command, argv, CommandClassification.WORKSPACE_MUTATING,
                                     capabilities=self._simple_capabilities(argv))
 
-        if binary in self.DANGEROUS_BINS or (
+        if self._syntax_check(argv):
+            return self._assessment(command, argv, CommandClassification.READ_ONLY,
+                                    capabilities=(Capability.FILESYSTEM_READ,))
+
+        if binary in self._AWK_BINS and self._stage_danger(argv, 0):
+            return self._assessment(command, argv, CommandClassification.DANGEROUS,
+                                    self._stage_danger(argv, 0))
+
+        if self._runs_code(binary) or (
                 "/" in argv[0] and not self._is_workspace_program(argv[0])):
-            if binary in self._PYTHON_BINS:
+            if binary in self._PYTHON_BINS or self._VERSIONED_INTERPRETER.fullmatch(binary):
                 # The way out comes before the refusal: a model reads the
                 # first clause and acts on it.
 
                 return self._assessment(
                     command, argv, CommandClassification.DANGEROUS,
                     f"{self._PYTHON_HINT} — so '{argv[0]}' as written is refused")
+
+            if binary in self._SCRIPT_SHELLS:
+                return self._assessment(command, argv, CommandClassification.DANGEROUS,
+                                        self._stage_danger(argv, 0))
 
             return self._assessment(
                 command, argv, CommandClassification.DANGEROUS,

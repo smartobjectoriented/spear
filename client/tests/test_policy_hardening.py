@@ -91,7 +91,9 @@ class InterpreterIndirection(unittest.TestCase):
 
 
 class TestModulesWrittenThisSession(unittest.TestCase):
-    """A test runner is not a way to run what the interpreter rule refuses."""
+    """A test runner is not a way to run what the interpreter rule refuses:
+    the modules it imports that the session wrote are found, and such a run
+    gets the trees read-only (test_session_cleanup proves the effect)."""
 
     def setUp(self):
         self.root = tempfile.mkdtemp()
@@ -103,31 +105,29 @@ class TestModulesWrittenThisSession(unittest.TestCase):
         path.write_text(text)
 
         if age:
-            stamp = time.time() - age - (time.time() - write_protection._STARTED)
+            stamp = write_protection._STARTED - age
             os.utime(path, (stamp, stamp))
 
-    def effects(self, command, cwd=None):
-        return write_protection.authored_test_effects(command, [self.root],
-                                                      cwd=cwd or self.root)
+    def authored(self, command, cwd=None):
+        return [os.path.basename(path) for path in write_protection.authored_test_modules(
+            command, [self.root], cwd=cwd or self.root)]
 
-    def test_a_new_module_that_removes_files_or_runs_processes_is_refused(self):
-        self.write("tests_cfg.py", "import os, unittest\nclass T(unittest.TestCase):\n"
-                                   "    def test_x(self):\n        os.remove('a.c')\n")
+    def test_a_module_the_session_wrote_is_found_however_the_runner_names_it(self):
+        self.write("tests_cfg.py", "import os\n")
         self.write("ec_config_test.py", "import subprocess\n")
+        self.write("fat_check.py", "open('a', 'w')\n")
 
-        for command in ("python3 -m unittest tests_cfg -v", "python3 -m unittest ec_config_test",
-                        "python3 -m unittest discover -s . -p 'tests_cfg.py'"):
+        for command, name in (("python3 -m unittest tests_cfg -v", "tests_cfg.py"),
+                              ("python3 -m unittest ec_config_test", "ec_config_test.py"),
+                              ("python3 -m unittest discover -s . -p 'fat_check.py'", "fat_check.py")):
             with self.subTest(command=command):
-                self.assertIn("written in this session", self.effects(command))
+                self.assertIn(name, self.authored(command))
 
-    def test_the_projects_own_tests_and_plain_new_tests_still_run(self):
-        self.write("tests/test_new.py", "import unittest\nclass T(unittest.TestCase):\n"
-                                        "    def test_x(self):\n        self.assertEqual(1, 1)\n")
-
+    def test_the_projects_own_tests_are_not_the_sessions(self):
         for command in ("python3 -m unittest discover -s tests", "python3 -m unittest tests.test_old",
-                        "python3 -m unittest tests.test_new", "make test"):
+                        "make test"):
             with self.subTest(command=command):
-                self.assertEqual(self.effects(command), "")
+                self.assertEqual(self.authored(command), [])
 
 
 class ControlPlaneMetadata(unittest.TestCase):

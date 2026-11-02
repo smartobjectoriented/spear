@@ -35,6 +35,7 @@ from cli import rag_chat, session_workspace, tool_routing
 from agent import dispatch, tools
 from agent.host import CommandOutcome
 from runtime.cancellation import NEVER_CANCELLED
+from harness import provenance
 from harness.tool_primitives import ExecutionMode, decode_command_output
 from harness.workspace import Workspace
 
@@ -91,6 +92,12 @@ class Envelope(unittest.TestCase):
         self.root = os.path.realpath(tempfile.mkdtemp(prefix="envelope-", dir=str(ROOT)))
         self.records = []
         self.fill()
+
+        # The session starts on the filled tree: its start inventory is this,
+        # as a session's is taken when it binds its workspace.
+
+        provenance.forget()
+        provenance.capture([self.root])
 
     def tearDown(self):
         shutil.rmtree(self.root, ignore_errors=True)

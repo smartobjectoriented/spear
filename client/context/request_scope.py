@@ -583,6 +583,38 @@ def shell_write_targets(command: str, scope: RequestScope, cwd: str | None = Non
     return list(dict.fromkeys(targets))
 
 
+def shell_removal_targets(command: str, scope: RequestScope, cwd: str | None = None) -> list[str]:
+    """The paths a command removes by name: rm, rmdir and unlink operands,
+    and the start points of a find that deletes. A subset of
+    shell_write_targets, judged as deletions (target_policy, provenance)."""
+    if not command:
+        return []
+
+    words = _with_assignments(list(_split_stages(command)))
+    directories = _stage_directories(words, cwd or scope.root or ".")
+    found = []
+
+    for argv, directory in zip(words, directories):
+        name = Path(argv[0]).name
+
+        if name in ("rm", "rmdir", "unlink"):
+            found += [_at(directory, arg) for arg in argv[1:] if not arg.startswith("-")]
+        elif name == "find" and ("-delete" in argv or any(
+                argv[index] == "-exec" and index + 1 < len(argv) and argv[index + 1] in ("rm", "rmdir")
+                for index in range(len(argv)))):
+            starts = []
+
+            for arg in argv[1:]:
+                if arg.startswith(("-", "(", "!")):
+                    break
+
+                starts.append(_at(directory, arg))
+
+            found += starts
+
+    return list(dict.fromkeys(found))
+
+
 def shell_write_refusal(command: str, scope: RequestScope | None,
                         cwd: str | None = None) -> str:
     """Why this command writes outside the requested target, or "".

@@ -50,6 +50,8 @@ _SAVED_CONFIG = re.compile(r"(?:^|_)defconfig$")
 _FINGERPRINT_SUFFIXES = frozenset({"sha1", "sha256", "sha512", "md5", "fingerprint",
                                    "stamp", "manifest"})
 
+_GENERATED = " is a generated file — change its source"
+
 # Every file a refusal named in this session. The sandbox binds them back
 # read-only under a command that is not a build (write_protection.py).
 
@@ -169,16 +171,26 @@ def _head(path: str) -> str:
         return ""
 
 
-def refusal(path: str, label: str | None = None, *, follow: bool = True) -> str:
+def refusal(path: str, label: str | None = None, *, follow: bool = True,
+            deleting: bool = False) -> str:
     """Why `path` may not be mutated, or "". `label` names it in the answer.
 
     `follow=False` judges a symbolic link as itself, for deleting it: what
-    it points at is not what changes.
+    it points at is not what changes. `deleting`: generated output the
+    session created itself may be removed as cleanup (provenance.py); git
+    state, snapshot copies and control-plane metadata may not, whoever
+    made them.
     """
     if not path:
         return ""
 
     answer = _judge(str(path), label or str(path), follow)
+
+    if deleting and answer.endswith(_GENERATED):
+        from harness import provenance
+
+        if not provenance.removal_refusal(str(path)):
+            return ""
 
     if answer and follow:
         _REFUSED.add(os.path.realpath(path))
@@ -224,13 +236,13 @@ def _judge(path: str, label: str, follow: bool) -> str:
 
     for candidate in candidates:
         if _GENERATED_PATH.search(candidate):
-            return f"{label} is a generated file — change its source"
+            return f"{label}{_GENERATED}"
 
         if is_snapshot(candidate):
             return f"{label} is a snapshot copy"
 
     if (follow and os.path.isfile(real) and not _SAVED_CONFIG.search(os.path.basename(real))
             and says_generated(_head(real))):
-        return f"{label} is a generated file — change its source"
+        return f"{label}{_GENERATED}"
 
     return ""

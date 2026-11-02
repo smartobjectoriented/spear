@@ -15,6 +15,7 @@ file, and no walk reads contents.
 
 from __future__ import annotations
 
+import glob
 import os
 import re
 import time
@@ -393,29 +394,25 @@ def command_files(command: str, roots, *, cwd: str | None = None,
 
 
 # A test runner runs the modules it imports, and a module this session wrote
-# is code the model wrote: `python3 -m unittest x` ran the same file removals
-# and processes that `python3 x.py` was refused. The project's own tests are
-# not judged; one written or changed since SPEAR started is, by what it calls.
+# is code the model wrote: `python3 -m unittest x` ran the same writes that
+# `python3 x.py` was refused. Such a run gets no more authority than the
+# model has: the trees read-only. The project's own tests, unchanged, run as
+# they always did.
 
 _STARTED = time.time()
-_CODE_EFFECTS = re.compile(
-    r"\bsubprocess\b|\bos\.(?:system|popen|exec\w*|spawn\w*|remove|unlink|rmdir|removedirs"
-    r"|rename|replace|chmod|chown|kill)\b|\bpty\.spawn\b|\bshutil\.(?:rmtree|move|chown)\b"
-    r"|\.(?:unlink|rmdir|rename)\(|\bctypes\b")
 
 
-def authored_test_effects(command: str, roots, *, cwd: str | None = None,
-                          aliases=None) -> str:
-    """Why a test run may not import what this session wrote, or "".
+def authored_test_modules(command: str, roots, *, cwd: str | None = None,
+                          aliases=None) -> tuple[str, ...]:
+    """The modules a test run imports that changed since SPEAR started.
 
     The modules are the ones its words name, as files or dotted modules, and
-    the ones a runner discovers where it looks. A module counts as written
-    in this session when it changed since SPEAR started.
+    the ones a runner discovers where it looks.
     """
     words = _words(command)
 
     if not any(word in _TEST_RUNNERS for word in words):
-        return ""
+        return ()
 
     roots = [str(root) for root in roots]
     aliases = dict(aliases or {})
@@ -440,23 +437,29 @@ def authored_test_effects(command: str, roots, *, cwd: str | None = None,
                 elif os.path.isdir(candidate):
                     directories.append(candidate)
 
-    for directory in (directories[:20] or [cwd or roots[0]]):
+    # What discovery imports, when the runner discovers (`discover`, or no
+    # module named): test-named modules, and those its own -p pattern names.
+
+    patterns = [word for previous, word in zip(words, words[1:])
+                if previous in ("-p", "--pattern")]
+    discovers = "discover" in words or not modules
+
+    for directory in (directories[:20] or [cwd or roots[0]]) if discovers else ():
         modules.update(dict.fromkeys(os.path.realpath(path) for path in _test_files(directory)))
+
+        for pattern in patterns[:5]:
+            modules.update(dict.fromkeys(
+                os.path.realpath(path)
+                for path in glob.glob(os.path.join(directory, "**", pattern), recursive=True)[:_MAX_SCANNED]
+                if path.endswith(".py")))
+
+    found = []
 
     for path in list(modules)[:_MAX_SCANNED]:
         try:
-            if os.path.getmtime(path) < _STARTED or os.path.getsize(path) >= _SCAN_LIMIT:
-                continue
-
-            with open(path, "r", encoding="utf-8", errors="replace") as handle:
-                found = _CODE_EFFECTS.search(handle.read(_SCAN_LIMIT))
+            if os.path.getmtime(path) >= _STARTED:
+                found.append(path)
         except OSError:
             continue
 
-        if found:
-            return (f"{os.path.basename(path)}, written in this session, calls "
-                    f"{found.group(0).rstrip('(')}: a test runner is not a way to run "
-                    f"what the interpreter rule refuses. Change files with the editing "
-                    f"tools and run commands as commands.")
-
-    return ""
+    return tuple(found)

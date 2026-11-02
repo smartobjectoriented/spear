@@ -57,12 +57,16 @@ class ExecutionProfile:
     guard_outputs: bool = False
     #: Further protected host paths the command names or reaches.
     protected_paths: tuple[str, ...] = ()
+    #: What a session-cleanup command removes (provenance.py), each verified
+    #: created in this session: its directory is bound writable again.
+    cleanup_paths: tuple[str, ...] = ()
 
     @classmethod
     def from_capabilities(cls, capabilities: Sequence[Capability],
                           host_read_paths: Sequence[str] = (), *,
                           git_dirs: Sequence[str] = (), guard_outputs: bool = False,
-                          protected_paths: Sequence[str] = ()) -> "ExecutionProfile":
+                          protected_paths: Sequence[str] = (),
+                          cleanup_paths: Sequence[str] = ()) -> "ExecutionProfile":
         granted = frozenset(capabilities)
         workspace_read = Capability.FILESYSTEM_READ in granted
         workspace_write = Capability.WORKSPACE_WRITE in granted
@@ -95,6 +99,7 @@ class ExecutionProfile:
             git_dirs=tuple(git_dirs),
             guard_outputs=guard_outputs,
             protected_paths=tuple(protected_paths),
+            cleanup_paths=tuple(cleanup_paths),
         )
 
     def audit_metadata(self) -> Mapping[str, bool]:

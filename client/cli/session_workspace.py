@@ -6,6 +6,7 @@ import sys
 import hashlib
 import readline
 import subprocess
+from dataclasses import replace
 from pathlib import Path
 from runtime import work_phase
 from harness.command_policy import AuthorizationResult, CommandPolicy, ToolPolicy
@@ -16,7 +17,7 @@ from harness.tool_primitives import (
 )
 from harness.tool_runtime import CommandRunner
 from harness.workspace import SandboxSpec, Workspace, effective_mount_root
-from harness import write_protection
+from harness import provenance, write_protection
 from runtime.tracing import EventStatus, EventType, new_action_id
 from cli.chat_settings import AUDIT_LOGGER, STATE_DIR
 from cli.corpus_registry import load_projects
@@ -155,6 +156,11 @@ def set_project(spec):
 
     if "COMMAND_POLICY" in globals():
         COMMAND_POLICY.bind_workspace(WORKSPACE)
+
+    # What the trees hold now is what the session did not create: only the
+    # rest is its to clean up (provenance.py).
+
+    provenance.capture(WORKSPACE.roots)
 
     PROJECT_KIND = spec["kind"]
 
@@ -564,6 +570,60 @@ def _git_is_steered(cmd, script, aliases):
     return False
 
 
+def _session_cleanup(cmd, cwd):
+    """(objects, refusal) for a command that only removes named objects.
+
+    ((), "") when the command is not such a command; the objects, as host
+    paths, when every one was created in this session; a refusal naming the
+    first that was not.
+    """
+    plan = COMMAND_POLICY.cleanup_plan(cmd)
+
+    if plan is None:
+        return (), ""
+
+    mount = effective_mount_root(WORKSPACE.root)
+    aliases = {inside: host for host, inside in WORKSPACE.mount_map(
+        mount, identity=mount != SandboxSpec().workspace_mount).items() if inside != host}
+
+    def host(path):
+        for inside, outside in aliases.items():
+            if path == inside or path.startswith(inside.rstrip("/") + "/"):
+                return outside + path[len(inside):]
+
+        return path
+
+    directory, targets = host(cwd), []
+
+    for kind, words, _ in plan:
+        if kind == "cd":
+            directory = os.path.normpath(os.path.join(directory, host(words[0])))
+            continue
+
+        for word in words:
+            path = os.path.normpath(os.path.join(directory, host(word)))
+
+            if not os.path.lexists(path):
+                continue
+
+            # With no start state for the tree, nothing is the session's: the
+            # command keeps the refusal it had.
+
+            if not provenance.known(path):
+                return (), ""
+
+            refusal = provenance.removal_refusal(path, word)
+
+            if refusal:
+                return (), (f"{refusal}. A command removes only what this session created; "
+                            f"a file from the start state is deleted with delete_file.")
+
+            targets.append(os.path.join(os.path.realpath(os.path.dirname(path)),
+                                        os.path.basename(path)))
+
+    return tuple(targets), ""
+
+
 def run_cmd_result(cmd, need_confirm=True, cancellation=None, execution_mode=None,
                    exec_cmd=None, timeout=None, output_chars=None, cwd=None):
     """Return the security substrate's structured command result.
@@ -590,16 +650,34 @@ def run_cmd_result(cmd, need_confirm=True, cancellation=None, execution_mode=Non
     authorization = COMMAND_POLICY.authorize(assessment, mode,
                                                approve=confirm)
 
-    # A test runner imports code; what this session wrote is judged by what
-    # it calls (write_protection.authored_test_effects).
+    # A command that only removes what this session created gets the
+    # authority delete_file has, no more (provenance.py): every object it
+    # names must have been created in this session.
+
+    cleanup = ()
+
+    if assessment.classification == CommandClassification.DANGEROUS and WORKSPACE is not None:
+        cleanup, refusal = _session_cleanup(cmd, cwd or str(WORKSPACE.root))
+
+        if refusal:
+            authorization = AuthorizationResult(ToolResult("denied", f"command denied: {refusal}"))
+        elif cleanup:
+            assessment = replace(
+                assessment, classification=CommandClassification.WORKSPACE_MUTATING,
+                reason="session cleanup", required_capabilities=frozenset({
+                    Capability.FILESYSTEM_READ, Capability.WORKSPACE_WRITE,
+                    Capability.SHELL_COMPLEX}))
+            authorization = COMMAND_POLICY.authorize(assessment, mode, approve=confirm)
+
+    # A test runner is no authority: a test module this session wrote runs
+    # with the trees read-only, so it reaches nothing the model could not
+    # reach directly (write_protection.authored_test_modules).
+
+    authored = ()
 
     if authorization.allowed and WORKSPACE is not None:
-        authored = write_protection.authored_test_effects(
+        authored = write_protection.authored_test_modules(
             cmd, WORKSPACE.roots, cwd=cwd or str(WORKSPACE.root))
-
-        if authored:
-            authorization = AuthorizationResult(
-                ToolResult("denied", f"command denied: {authored}"))
 
     if authorization.result is not None:
         if (assessment.classification != CommandClassification.READ_ONLY
@@ -613,6 +691,10 @@ def run_cmd_result(cmd, need_confirm=True, cancellation=None, execution_mode=Non
         return authorization.result
 
     granted_capabilities = authorization.granted_capabilities
+
+    if authored:
+        granted_capabilities = granted_capabilities - {Capability.WORKSPACE_WRITE}
+
     builds = COMMAND_POLICY.builds(cmd)
     protected = ()
     git_dirs = ()
@@ -632,6 +714,9 @@ def run_cmd_result(cmd, need_confirm=True, cancellation=None, execution_mode=Non
         protected = write_protection.command_files(
             cmd, WORKSPACE.roots, cwd=cwd or str(WORKSPACE.root), build=builds,
             aliases=aliases)
+        protected = tuple(path for path in protected
+                          if not any(path == target or path.startswith(target + "/")
+                                     for target in cleanup))
 
         # A git command keeps its own repository's records, and only when the
         # command is git's alone, run as itself (CommandPolicy.git_writes).
@@ -646,6 +731,7 @@ def run_cmd_result(cmd, need_confirm=True, cancellation=None, execution_mode=Non
         granted_capabilities,
         assessment.host_read_paths if Capability.HOST_READ in granted_capabilities else (),
         git_dirs=git_dirs, guard_outputs=not builds, protected_paths=protected,
+        cleanup_paths=cleanup,
     )
     sandboxed = False
 

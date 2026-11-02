@@ -719,6 +719,105 @@ class CommandPolicy:
 
         return ""
 
+    # Session cleanup (provenance.py): a command that only removes named
+    # objects may run when every one of them was created in this session.
+    # The shape is read here, the objects are judged where the command's
+    # directory is known. Anything this cannot read literally -- a variable,
+    # a glob, a substitution, another program -- leaves the command refused.
+
+    _REMOVERS = frozenset({"rm", "rmdir", "unlink"})
+    _REMOVE_OPTION = re.compile(r"-[rRfvd]+|--(?:recursive|force|verbose|dir)")
+    _BESIDE_CLEANUP = frozenset({"ls", "echo", "true", "false", "test", "[", "pwd", "stat",
+                                 "cat", "head", "tail", "wc", "du"})
+    _FIND_VALUED = frozenset({"-name", "-iname", "-path", "-ipath", "-type", "-maxdepth",
+                              "-mindepth"})
+    _UNREAD = re.compile(r"[$`*?\[\]{}~]")
+
+    def cleanup_plan(self, command: str) -> "list[tuple[str, tuple[str, ...], bool]] | None":
+        """[(kind, words, recursive)] when `command` only removes named objects.
+
+        Kinds: "cd" (words: the directory) and "remove" (words: the objects;
+        recursive for -r and for find's -delete and -exec rm, whose start
+        points are removed in full). None for anything else.
+        """
+        command = re.sub(r"(?:^|\s)\d*(?:>>?\s*/dev/null|>&\d)(?=\s|$|[;&|])", " ", command or "")
+
+        if not command.strip() or re.search(r"[$`<>]", command):
+            return None
+
+        plan = []
+
+        for argv in self.stage_argvs(command):
+            name = argv[0]
+
+            if name == "cd" and len(argv) == 2 and not self._UNREAD.search(argv[1]):
+                plan.append(("cd", (argv[1],), False))
+            elif name in self._REMOVERS:
+                options = [arg for arg in argv[1:] if arg.startswith("-") and arg != "--"]
+                operands = [arg for arg in argv[1:] if not arg.startswith("-")]
+
+                if (not operands or not all(self._REMOVE_OPTION.fullmatch(arg) for arg in options)
+                        or any(self._UNREAD.search(arg) for arg in operands)):
+                    return None
+
+                plan.append(("remove", tuple(operands),
+                             any(re.search(r"[rR]|recursive", arg) for arg in options)))
+            elif name == "find":
+                found = self._find_removal(argv)
+
+                if found is None:
+                    return None
+
+                if found:
+                    plan.append(("remove", found, True))
+            elif name not in self._BESIDE_CLEANUP:
+                return None
+
+        return plan if any(kind == "remove" for kind, _, _ in plan) else None
+
+    def _find_removal(self, argv: Sequence[str]) -> "tuple[str, ...] | None":
+        """find's start points when it deletes, () when it only lists, None
+        when its expression is not one read here."""
+        index = 1
+
+        while index < len(argv) and not argv[index].startswith(("-", "(", "!")):
+            index += 1
+
+        starts, expression = tuple(argv[1:index]), list(argv[index:])
+        removes = False
+
+        if any(self._UNREAD.search(start) for start in starts):
+            return None
+
+        while expression:
+            word = expression.pop(0)
+
+            if word in self._FIND_VALUED and expression:
+                expression.pop(0)
+            elif word in ("-delete",):
+                removes = True
+            elif word in ("-print", "-depth", "-xdev"):
+                continue
+            elif word == "-exec" and expression and expression[0] in self._REMOVERS:
+                command = []
+
+                while expression and expression[0] not in (";", "+"):
+                    command.append(expression.pop(0))
+
+                if not expression or not all(self._REMOVE_OPTION.fullmatch(arg) or arg == "{}"
+                                             for arg in command[1:]):
+                    return None
+
+                expression.pop(0)
+                removes = True
+            else:
+                return None
+
+        if removes and not starts:
+            return None
+
+        return starts if removes else ()
+
     def _sensitive_classification(
         self, argv: Sequence[str]
     ) -> CommandClassification:

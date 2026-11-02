@@ -1,6 +1,7 @@
 """The concrete tool handlers the registry routes to, and their bookkeeping."""
 
 import os
+import shutil
 import re
 import sys
 import shlex
@@ -464,7 +465,7 @@ def _sandbox_down_result(label, path):
     )
 
 
-def _protected_result(action, path, fpath, *, follow=True):
+def _protected_result(action, path, fpath, *, follow=True, deleting=False):
     """The target policy's refusal of `fpath`, shown and audited, or None.
 
     The same question the coding core's write and delete ports ask: a file
@@ -472,7 +473,7 @@ def _protected_result(action, path, fpath, *, follow=True):
     """
     from harness import target_policy
 
-    refusal = target_policy.refusal(str(fpath), path, follow=follow)
+    refusal = target_policy.refusal(str(fpath), path, follow=follow, deleting=deleting)
 
     if not refusal:
         return None
@@ -630,6 +631,53 @@ def named_link(path):
     return named if named.is_symlink() else None
 
 
+def _delete_session_tree(context, path, fpath):
+    """Remove a directory the session created, with everything in it.
+
+    Only when the directory and every object under it were created in this
+    session and none is protected (provenance.removal_refusal): a tree that
+    holds one file from the start state is refused whole, never pruned.
+    """
+    from harness import provenance
+
+    refusal = provenance.removal_refusal(str(fpath), path)
+
+    if refusal:
+        result = (f"ERROR: {path} is a directory, and delete_file removes one only when "
+                  f"this session created it and everything in it: {refusal}. Nothing was "
+                  f"deleted.")
+        audit_rejected_mutation("delete_file", "not session-created", paths=(fpath,))
+        tool_result(result)
+        print()
+
+        return _classified_handler_result(result)
+
+    blocked = authorize_mutation(
+        f"Delete the directory {C_BOLD}{path}{C_RST} ?", action="delete_file", paths=(fpath,))
+
+    if blocked is not None:
+        result = blocked.to_legacy_text()
+    else:
+        count = sum(len(subdirectories) + len(files)
+                    for _, subdirectories, files in os.walk(fpath, followlinks=False))
+
+        try:
+            shutil.rmtree(fpath)
+            result = (f"OK: deleted the directory {path} and the {count} objects this "
+                      f"session created in it")
+            _forget_cached_reads(context)
+        except OSError as exc:
+            result = f"ERROR: could not delete {path}: {exc.strerror}"
+
+        audit_mutation_result("delete_file", result, paths=(fpath,))
+
+    tool_result(result)
+    print()
+    affected = (_workspace_label(fpath),) if result.startswith("OK") else ()
+
+    return _classified_handler_result(result, mutation=True, affected_paths=affected)
+
+
 def _registered_delete_file(context, args):
     """Remove a file, having first captured it so /undo can bring it back.
 
@@ -662,11 +710,11 @@ def _registered_delete_file(context, args):
 
         return _classified_handler_result(result)
 
+    if os.path.isdir(fpath) and not os.path.islink(fpath):
+        return _delete_session_tree(context, path, fpath)
+
     if not os.path.isfile(fpath) and not os.path.islink(fpath):
-        result = (f"ERROR: {path} is not an existing regular file. Nothing "
-                  f"was deleted." if not os.path.isdir(fpath) else
-                  f"ERROR: {path} is a directory. delete_file removes one "
-                  f"file at a time.")
+        result = f"ERROR: {path} is not an existing regular file. Nothing was deleted."
         tool_result(result)
         print()
 
@@ -675,7 +723,7 @@ def _registered_delete_file(context, args):
     # A link is judged as itself: deleting it leaves what it names alone.
 
     protected = _protected_result("delete_file", path, fpath,
-                                  follow=not os.path.islink(fpath))
+                                  follow=not os.path.islink(fpath), deleting=True)
 
     if protected is not None:
         return protected

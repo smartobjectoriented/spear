@@ -257,6 +257,11 @@ class BubblewrapSandbox:
         """
         roots = [str(root) for root in workspace.roots]
         unlocked = {os.path.realpath(path) for path in profile.git_dirs}
+
+        # A cleanup removes what the session created; the directory it sits
+        # in may lie in a tree bound read-only, and removing needs it writable.
+
+        unlocked |= {os.path.dirname(path.rstrip("/")) for path in profile.cleanup_paths}
         found: dict[str, bool] = {}
 
         for root in roots:

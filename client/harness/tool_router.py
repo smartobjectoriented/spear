@@ -388,10 +388,13 @@ class ToolRouter:
             if not refusal:
                 from harness import target_policy
 
+                cwd = (context.metadata or {}).get("command_cwd")
+                removed = set(request_scope.shell_removal_targets(
+                    arguments["command"], context.scope, cwd=cwd))
+
                 for target in request_scope.shell_write_targets(
-                        arguments["command"], context.scope,
-                        cwd=(context.metadata or {}).get("command_cwd")):
-                    refusal = target_policy.refusal(target)
+                        arguments["command"], context.scope, cwd=cwd):
+                    refusal = target_policy.refusal(target, deleting=target in removed)
 
                     if refusal:
                         refusal += (". A shell command is not a way around this: "

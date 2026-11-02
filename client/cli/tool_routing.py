@@ -136,7 +136,8 @@ def coding_host(agent_context, cache, record):
 
         # A file no write may change may not be deleted either: deleted, it
         # could be written afresh, with nothing left to say it was protected.
-        protected = target_policy.refusal(resolved, _workspace_label(Path(resolved)))
+        protected = target_policy.refusal(resolved, _workspace_label(Path(resolved)),
+                                          deleting=True)
 
         if protected:
             return protected

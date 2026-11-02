@@ -425,7 +425,8 @@ class AProtectedTargetStaysProtected(Targets):
                "kconfig output": ("linux/.config", KCONFIG),
                "generated dir": ("out/generated/table.h", "int table;\n"),
                "build/tmp": ("build/tmp/work/x/post.sh", "#!/bin/sh\n"),
-               "snapshot": ("u-boot.back/board.c", "int board;\n")}
+               "snapshot": ("u-boot.back/board.c", "int board;\n"),
+               "fingerprint": ("linux.attach.sha256", "0123  ./linux/.config\n")}
 
     def fill(self):
         super().fill()
@@ -443,7 +444,8 @@ class AProtectedTargetStaysProtected(Targets):
         Path(self.root, "Makefile").write_text(
             "all:\n\t@echo built\npoke:\n\t@echo P >> $(T)\n"
             "regen:\n\t@printf '/* DO NOT EDIT */\\n' > gen/config.h\n"
-            "\t@echo n > out/generated/new.h\n\t@echo n > build/tmp/work/x/new.sh\n")
+            "\t@echo n > out/generated/new.h\n\t@echo n > build/tmp/work/x/new.sh\n"
+            "attach:\n\t@sha256sum linux/.config > linux.attach.sha256\n")
         write_protection.forget()
 
     def run_primitive(self, target, primitive):
@@ -522,6 +524,13 @@ class AProtectedTargetStaysProtected(Targets):
         self.assertEqual(Path(self.root, "out/generated/new.h").read_text(), "n\n")
         self.assertEqual(Path(self.root, "build/tmp/work/x/new.sh").read_text(), "n\n")
         self.assertEqual(Path(self.root, "gen/config.h").read_text(), "/* DO NOT EDIT */\n")
+
+    def test_a_build_still_writes_its_fingerprint(self):
+        text, record = self.call("terminal", command="make attach")
+
+        self.assertFalse(record.refused, text)
+        self.assertEqual(record.exit_code, 0, text)
+        self.assertIn("linux/.config", Path(self.root, "linux.attach.sha256").read_text())
 
     def test_the_legacy_tools_are_refused(self):
         for label, (target, _) in self.CLASSES.items():

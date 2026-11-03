@@ -109,6 +109,22 @@ def coding_host(agent_context, cache, record):
         if protected:
             return protected
 
+        # And what the write would say: a line that throws a guard's
+        # override switch is the operator's to write (control_overrides.py).
+
+        from harness import control_overrides
+
+        try:
+            with open(resolved, encoding="utf-8", errors="replace") as handle:
+                before = handle.read()
+        except OSError:
+            before = ""
+
+        override = control_overrides.content_refusal(before, content)
+
+        if override:
+            return override
+
         blocked = authorize_mutation(f"Modify {C_BOLD}{label}{C_RST} ?",
                                      action=action, paths=(Path(resolved),))
 

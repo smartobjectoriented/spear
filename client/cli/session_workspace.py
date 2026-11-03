@@ -17,7 +17,7 @@ from harness.tool_primitives import (
 )
 from harness.tool_runtime import CommandRunner
 from harness.workspace import SandboxSpec, Workspace, effective_mount_root
-from harness import provenance, write_protection
+from harness import provenance, target_policy, write_protection
 from runtime.tracing import EventStatus, EventType, new_action_id
 from cli.chat_settings import AUDIT_LOGGER, STATE_DIR
 from cli.corpus_registry import load_projects
@@ -570,6 +570,205 @@ def _git_is_steered(cmd, script, aliases):
     return False
 
 
+def _host_paths():
+    """A function from a path as the sandbox names it to the host's."""
+    mount = effective_mount_root(WORKSPACE.root)
+    aliases = {inside: host for host, inside in WORKSPACE.mount_map(
+        mount, identity=mount != SandboxSpec().workspace_mount).items() if inside != host}
+
+    def host(path):
+        for inside, outside in aliases.items():
+            if path == inside or path.startswith(inside.rstrip("/") + "/"):
+                return outside + path[len(inside):]
+
+        return path
+
+    return host
+
+
+_UNREAD_WORD = re.compile(r"[$`*?\[\]{}~]")
+
+
+def _stages_where(cmd, cwd, host):
+    """(directory, argv) for each stage of `cmd`, its `cd`s followed.
+
+    The directory is None once a `cd` names a place that cannot be read.
+    """
+    directory = host(cwd)
+
+    for argv in COMMAND_POLICY.stage_argvs(cmd):
+        if argv[0] == "cd":
+            operands = [word for word in argv[1:] if word not in ("-P", "-L", "--")]
+
+            if directory is None or len(operands) != 1 or _UNREAD_WORD.search(operands[0]):
+                directory = None
+            else:
+                directory = os.path.normpath(os.path.join(directory, host(operands[0])))
+
+            continue
+
+        yield directory, argv
+
+
+def _sourced_refusal(cmd, cwd):
+    """Why `cmd` may not source a script, or "".
+
+    `. ./x.sh` runs the script's commands in the shell itself, none of them
+    judged. A script from the start state (env.sh) is the project's own; one
+    written or changed in this session is the model's, and would run what
+    the model may not.
+    """
+    host = _host_paths()
+
+    for directory, argv in _stages_where(cmd, cwd, host):
+        if argv[0] not in (".", "source") or len(argv) < 2:
+            continue
+
+        word = argv[1]
+
+        if _UNREAD_WORD.search(word) or (directory is None and not word.startswith("/")):
+            return (f"'{argv[0]} {word}': which script it runs cannot be read here, so "
+                    f"the command cannot run")
+
+        path = os.path.normpath(os.path.join(directory or "/", host(word)))
+
+        try:
+            changed = os.path.getmtime(path) >= write_protection.started()
+        except OSError:
+            continue
+
+        if changed or provenance.created(path):
+            return (f"'{argv[0]} {word}' runs a script written in this session, whose "
+                    f"commands would run unjudged: run them as commands instead")
+
+    return ""
+
+
+def _authored_programs(cmd, cwd):
+    """The programs `cmd` runs by path that this session made.
+
+    A binary the session compiled, a script of the project it rewrote, or
+    anything it put in its scratch, runs code the model wrote: `gcc -o t t.c
+    && ./t` did what `python3 t.py` was refused. Such a program gets what a
+    test module the session wrote gets: the trees read-only. A program of the
+    start state, unchanged, runs as it always did.
+    """
+    host = _host_paths()
+    found = []
+
+    for directory, argv in _stages_where(cmd, cwd, host):
+        program = argv[0]
+
+        if "/" not in program:
+            continue
+
+        if directory is None or _UNREAD_WORD.search(program):
+            found.append(program)
+            continue
+
+        path = os.path.normpath(os.path.join(directory, host(program)))
+
+        if path.startswith(("/tmp/", SandboxSpec().tmpdir.rstrip("/") + "/")) or (
+                provenance.known(path) and (not os.path.lexists(path) or provenance.created(path)
+                                            or _changed_since_start(path))):
+            found.append(path)
+
+    return tuple(found)
+
+
+def _changed_since_start(path):
+    try:
+        return os.path.getmtime(path) >= write_protection.started()
+    except OSError:
+        return False
+
+
+def _git_clean_targets(cmd, cwd):
+    """(objects, refusal) for the `git clean` stages of `cmd`.
+
+    What git clean removes is listed first by the same command with -n, and
+    each object is judged as delete_file would judge it (provenance.py): the
+    session's own objects may go; one from the start state, a protected one
+    or one in a tree whose start state is unknown stops the command. A clean
+    whose deletion set cannot be listed does not run.
+    """
+    host = _host_paths()
+    targets = []
+
+    for directory, argv in _stages_where(cmd, cwd, host):
+        if argv[0] != "git":
+            continue
+
+        parsed = COMMAND_POLICY.git_command(argv)
+
+        if parsed is None or parsed[0] != "clean":
+            if parsed is None and "clean" in argv:
+                return (), "git clean with these options cannot be read here, so it cannot run"
+
+            continue
+
+        if (directory is None or COMMAND_POLICY.steers_git(cmd)
+                or any(_UNREAD_WORD.search(word) for word in argv)):
+            return (), "what this git clean would remove cannot be read here, so it cannot run"
+
+        for word in parsed[1]:
+            directory = os.path.normpath(os.path.join(directory, host(word)))
+
+        options = []
+        arguments = argv[argv.index("clean") + 1:]
+
+        # A dry run removes nothing.
+
+        if any(word in ("-n", "--dry-run") or (re.fullmatch(r"-[a-zA-Z]+", word) and "n" in word)
+               for word in arguments if word != "--"):
+            continue
+
+        for word in arguments:
+            if word in ("-i", "--interactive") or (
+                    re.fullmatch(r"-[a-zA-Z]+", word) and "i" in word):
+                return (), "an interactive git clean cannot run here"
+
+            if word in ("-q", "--quiet"):
+                continue
+
+            options.append(word.replace("q", "") if re.fullmatch(r"-[a-zA-Z]+", word) else word)
+
+        try:
+            listing = subprocess.run(
+                ["git", "-c", "core.fsmonitor=false", "clean", "-n",
+                 *options],
+                cwd=directory, capture_output=True, text=True, timeout=60,
+                env={key: value for key, value in os.environ.items()
+                     if not key.startswith("GIT_")})
+        except (OSError, subprocess.TimeoutExpired):
+            return (), "what this git clean would remove could not be listed, so it cannot run"
+
+        if listing.returncode != 0:
+            return (), "what this git clean would remove could not be listed, so it cannot run"
+
+        for line in listing.stdout.splitlines():
+            if not line.startswith("Would remove "):
+                continue
+
+            name = line[len("Would remove "):]
+            path = os.path.normpath(os.path.join(directory, name))
+
+            if not provenance.known(path):
+                return (), (f"git clean would remove {name}, in a tree whose start state is "
+                            f"not known, so it cannot run")
+
+            refusal = provenance.removal_refusal(path, name.rstrip("/"))
+
+            if refusal:
+                return (), (f"git clean: {target_policy.deletion_set_refusal(refusal)}. "
+                            f"git clean removes only what this session created")
+
+            targets.append(os.path.join(os.path.realpath(os.path.dirname(path)),
+                                        os.path.basename(path)))
+
+    return tuple(targets), ""
+
+
 def _session_cleanup(cmd, cwd):
     """(objects, refusal) for a command that only removes named objects.
 
@@ -582,17 +781,7 @@ def _session_cleanup(cmd, cwd):
     if plan is None:
         return (), ""
 
-    mount = effective_mount_root(WORKSPACE.root)
-    aliases = {inside: host for host, inside in WORKSPACE.mount_map(
-        mount, identity=mount != SandboxSpec().workspace_mount).items() if inside != host}
-
-    def host(path):
-        for inside, outside in aliases.items():
-            if path == inside or path.startswith(inside.rstrip("/") + "/"):
-                return outside + path[len(inside):]
-
-        return path
-
+    host = _host_paths()
     directory, targets = host(cwd), []
 
     for kind, words, _ in plan:
@@ -669,6 +858,22 @@ def run_cmd_result(cmd, need_confirm=True, cancellation=None, execution_mode=Non
                     Capability.SHELL_COMPLEX}))
             authorization = COMMAND_POLICY.authorize(assessment, mode, approve=confirm)
 
+    # The other routes to a deletion or to unjudged commands: git clean
+    # removes only what this session created, and a script this session
+    # wrote is not sourced.
+
+    if authorization.allowed and WORKSPACE is not None:
+        refusal = _sourced_refusal(cmd, cwd or str(WORKSPACE.root))
+        cleaned = ()
+
+        if not refusal:
+            cleaned, refusal = _git_clean_targets(cmd, cwd or str(WORKSPACE.root))
+
+        if refusal:
+            authorization = AuthorizationResult(ToolResult("denied", f"command denied: {refusal}"))
+        else:
+            cleanup = tuple(cleanup) + cleaned
+
     # A test runner is no authority: a test module this session wrote runs
     # with the trees read-only, so it reaches nothing the model could not
     # reach directly (write_protection.authored_test_modules).
@@ -678,6 +883,7 @@ def run_cmd_result(cmd, need_confirm=True, cancellation=None, execution_mode=Non
     if authorization.allowed and WORKSPACE is not None:
         authored = write_protection.authored_test_modules(
             cmd, WORKSPACE.roots, cwd=cwd or str(WORKSPACE.root))
+        authored += _authored_programs(cmd, cwd or str(WORKSPACE.root))
 
     if authorization.result is not None:
         if (assessment.classification != CommandClassification.READ_ONLY

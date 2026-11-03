@@ -402,6 +402,11 @@ def command_files(command: str, roots, *, cwd: str | None = None,
 _STARTED = time.time()
 
 
+def started() -> float:
+    """When SPEAR started: a file changed since is this session's work."""
+    return _STARTED
+
+
 def authored_test_modules(command: str, roots, *, cwd: str | None = None,
                           aliases=None) -> tuple[str, ...]:
     """The modules a test run imports that changed since SPEAR started.

@@ -486,6 +486,38 @@ def _protected_result(action, path, fpath, *, follow=True, deleting=False):
     return _classified_handler_result(result)
 
 
+def _override_result(action, fpath, content, *, appending=False):
+    """The refusal of a write that throws a guard's override switch, or None
+    (control_overrides.py)."""
+    from harness import control_overrides
+
+    try:
+        with open(fpath, encoding="utf-8", errors="replace") as handle:
+            before = handle.read()
+    except OSError:
+        before = ""
+
+    # A diff adds its "+" lines to what is there.
+
+    if looks_like_diff(content):
+        content = "\n".join(line[1:] for line in content.splitlines()
+                             if line.startswith("+") and not line.startswith("+++"))
+        appending = True
+
+    refusal = control_overrides.content_refusal(
+        before, before + "\n" + content if appending else content)
+
+    if not refusal:
+        return None
+
+    result = f"ERROR: {refusal}."
+    audit_rejected_mutation(action, "control-plane override", paths=(fpath,))
+    tool_result(result)
+    print()
+
+    return _classified_handler_result(result)
+
+
 def _registered_edit_file(context, args):
     path = (args.get("path") or "").strip()
 
@@ -518,7 +550,8 @@ def _registered_edit_file(context, args):
             result = f"ERROR: {exc}"
             audit_rejected_mutation("apply_patch", str(exc), paths=(path,))
         else:
-            protected = _protected_result("apply_patch", path, fpath)
+            protected = (_protected_result("apply_patch", path, fpath)
+                         or _override_result("apply_patch", fpath, diff))
 
             if protected is not None:
                 return protected
@@ -586,6 +619,10 @@ def _registered_append_file(context, args):
     fpath = find_file(path)
 
     if fpath and (protected := _protected_result("append_file", path, fpath)) is not None:
+        return protected
+
+    if fpath and (protected := _override_result("append_file", fpath, content,
+                                                appending=True)) is not None:
         return protected
 
     if not fpath:
@@ -816,6 +853,9 @@ def _registered_write_file(context, args):
     protected = _protected_result("write_file", path, fpath)
 
     if protected is not None:
+        return protected
+
+    if (protected := _override_result("write_file", fpath, content)) is not None:
         return protected
 
     if looks_like_diff(content) and os.path.isfile(fpath):

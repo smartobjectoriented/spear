@@ -267,7 +267,8 @@ class GitCleanByProvenance(Targets):
     # D. A fingerprint stays, whoever made it.
 
     def test_control_plane_metadata_is_refused(self):
-        self.run_command("mkdir -p uboot && echo h > uboot.attach.sha256")
+        os.makedirs(f"{self.root}/uboot", exist_ok=True)
+        Path(self.root, "uboot.attach.sha256").write_text("h\n")
 
         for name in ("kernel.attach.sha256", "uboot.attach.sha256"):
             with self.subTest(name=name):

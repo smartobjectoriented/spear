@@ -192,8 +192,8 @@ class GitMetadataIsNeverMutated(Targets):
 
     def test_ordinary_files_beside_it_stay_writable(self):
         for name, arguments in (("write_file", {"path": "new.c", "content": "int n;\n"}),
-                                ("terminal", {"command": "echo more >> a.txt"}),
-                                ("terminal", {"command": "echo s >> sub2/s.txt"}),
+                                ("terminal", {"command": "echo more >> new.c"}),
+                                ("terminal", {"command": "echo s >> sub2/t.txt"}),
                                 ("terminal", {"command": "cp a.txt b.txt"}),
                                 ("write_file", {"path": ".gitignore", "content": "*.o\n"})):
             with self.subTest(tool=name, arguments=arguments):
@@ -201,7 +201,7 @@ class GitMetadataIsNeverMutated(Targets):
 
                 self.assertFalse(record.refused, text)
 
-        self.assertIn("more", Path(self.root, "a.txt").read_text())
+        self.assertIn("more", Path(self.root, "new.c").read_text())
         self.assertTrue(Path(self.root, "b.txt").is_file())
         self.assertIn("OK", self.legacy("append_file", path="a.txt", content="tail"))
 
@@ -274,9 +274,14 @@ class GitKeepsItsOwnRecords(Targets):
         Path(self.root, "junk/deep").mkdir(parents=True)
         Path(self.root, "junk/deep/j.o").write_text("j\n")
         Path(self.root, "stray.txt").write_text("s\n")
-        self.assertEqual(self.terminal("git clean -fd")["exit_code"], 0)
+
+        # git clean removes what the session made; the start state's own
+        # untracked objects (sub/deep) are not its to remove.
+
+        self.assertEqual(self.terminal("git clean -fd junk stray.txt")["exit_code"], 0)
         self.assertFalse(Path(self.root, "junk").exists())
         self.assertFalse(Path(self.root, "stray.txt").exists())
+        self.assertTrue(Path(self.root, "sub/deep").is_dir())
 
     def test_a_submodule_and_a_worktree_keep_their_own_records(self):
         superproject = fingerprint(Path(self.root, ".git/index"))
@@ -316,7 +321,8 @@ class GitKeepsItsOwnRecords(Targets):
         Path(self.root, "out/generated/new.h").write_text("int n;\n")
         nested = fingerprint(Path(self.root, "vendor/.git"))
         write_protection.forget()
-        self.terminal("git clean -ffdx")
+        self.call = self.spear_session(self.OBJECTIVE)
+        self.call("terminal", command="git clean -ffdx")
 
         self.assertEqual(fingerprint(Path(self.root, "vendor/.git")), nested)
         self.assertTrue(Path(self.root, "out/generated/new.h").is_file())
@@ -496,16 +502,40 @@ class AProtectedTargetStaysProtected(Targets):
                     self.call = self.spear_session(self.OBJECTIVE)
                     self.assertUnchanged(target, [("core", "terminal", {"command": command})])
 
+    # A file of the start state changes through the checkpointed tools and the
+    # project's own build; a shell writer writes only what the session made
+    # (HARDENED-V3), so the shell's controls are copies the session wrote.
+
+    SHELL_WRITERS = (">>", "x>>t", "tee", "patch -p1 <", "$VAR target", "cd + relative")
+
     def test_the_controls_stay_writable_through_the_same_primitives(self):
         for target in ("a.txt", "configs/x_defconfig.patch", "configs/x_defconfig"):
-            for primitive in ("patch tool", ">>", "x>>t", "tee", "patch -p1 <", "executed script",
-                              "$VAR target", "cd + relative", "make rule", "write_file"):
+            for primitive in ("patch tool", "make rule", "write_file"):
                 with self.subTest(target=target, primitive=primitive):
                     before = Path(self.root, target).read_text()
                     texts = [self.call(name, **arguments)[0] for _, name, arguments
                              in self.run_primitive(target, primitive)]
 
                     self.assertNotEqual(Path(self.root, target).read_text(), before, texts)
+
+            copy = os.path.join(os.path.dirname(target), "s-" + os.path.basename(target))
+            self.call("write_file", path=copy, content=Path(self.root, target).read_text())
+
+            for primitive in self.SHELL_WRITERS:
+                with self.subTest(target=copy, primitive=primitive):
+                    before = Path(self.root, copy).read_text()
+                    texts = [self.call(name, **arguments)[0] for _, name, arguments
+                             in self.run_primitive(copy, primitive)]
+
+                    self.assertNotEqual(Path(self.root, copy).read_text(), before, texts)
+
+    def test_a_start_file_is_refused_to_the_shell_writers(self):
+        for primitive in self.SHELL_WRITERS + ("executed script",):
+            with self.subTest(primitive=primitive):
+                text = self.assertUnchanged("a.txt", self.run_primitive("a.txt", primitive))
+
+                if primitive != "executed script":
+                    self.assertIn("[policy: start_state_edit]", text)
 
     def test_the_controls_stay_writable_through_the_legacy_tools(self):
         for target, old in (("configs/x_defconfig.patch", "+# BR2_PACKAGE_STRACE is not set"),
@@ -582,6 +612,13 @@ class ProjectBuildDrivers(Targets):
 
         for script in ("updiff.sh", "build.sh", "run.sh"):
             os.chmod(f"{self.root}/scripts/{script}", 0o755)
+
+        # The project's scripts predate the session, as a checkout's do.
+
+        stamp = write_protection.started() - 3600
+
+        for name in ("env.sh", "scripts/updiff.sh", "scripts/build.sh", "scripts/run.sh"):
+            os.utime(f"{self.root}/{name}", (stamp, stamp))
 
         write_protection.forget()
 

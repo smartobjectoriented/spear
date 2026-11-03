@@ -191,8 +191,12 @@ class SessionCleanup(Targets):
     # F. A control-plane file the session created.
 
     def test_a_session_created_control_plane_file_is_still_refused(self):
-        self.run_command("echo h > uboot.attach.sha256 && mkdir -p uboot && echo b > uboot/b.c")
-        self.assertTrue(os.path.exists(f"{self.root}/uboot.attach.sha256"))
+        # Made after the inventory, as an attach the session ran would make
+        # it: a command of the model's may not create one (HARDENED-V4).
+
+        os.makedirs(f"{self.root}/uboot")
+        Path(self.root, "uboot/b.c").write_text("b\n")
+        Path(self.root, "uboot.attach.sha256").write_text("h\n")
 
         for step in (("delete_file", {"path": "uboot.attach.sha256", "reason": "r"}),
                      ("terminal", {"command": "rm -f uboot.attach.sha256"})):

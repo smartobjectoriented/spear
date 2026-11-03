@@ -140,7 +140,7 @@ class ControlPlaneMetadata(unittest.TestCase):
             os.makedirs(f"{self.root}/{directory}")
 
         for name in ("linux.attach.sha256", "u-boot.attach.sha256", "linux-6.12.attach.sha256",
-                     "notes.sha256", "linux.c", "u-boot.attach.sha256.txt"):
+                     "notes.sha256", "linux.c", "u-boot.sha256.txt"):
             Path(self.root, name).write_text("0123  ./x\n")
 
     def test_a_fingerprint_beside_its_tree_is_control_plane_metadata(self):
@@ -151,7 +151,7 @@ class ControlPlaneMetadata(unittest.TestCase):
                 self.assertEqual(control_plane.policy_class(refusal), "control_plane")
 
     def test_a_file_that_only_looks_like_one_is_not(self):
-        for name in ("notes.sha256", "linux.c", "u-boot.attach.sha256.txt", "new.sha256"):
+        for name in ("notes.sha256", "linux.c", "u-boot.sha256.txt", "new.sha256"):
             with self.subTest(name=name):
                 self.assertEqual(target_policy.refusal(f"{self.root}/{name}"), "")
 

@@ -73,7 +73,7 @@ echo "NOTE: updiff of $1 done" > $w/temp/log.do_updiff
 MAKEFILE = """all:
 \t@echo built
 distclean:
-\trm -f comp/gen.o out.gen
+\trm -f comp/gen.o out.gen comp/tools/wrap.c
 \t@echo clean
 rmsrc:
 \trm -f sub/b.c
@@ -95,6 +95,8 @@ class AttachFixture(Targets):
             f"{SERIES}-patches.inc": 'SRC_URI += "file://0001-file.c.patch"\n',
             "scripts/build.sh": BUILD, "scripts/updiff.sh": UPDIFF, "Makefile": MAKEFILE,
             "comp2/x.c": "int x;\n", "out.gen": "generated\n",
+            f"{WORK}/pristine/.gitignore": "/tools/\n",
+            f"{WORK}/pristine/tools/wrap.c": "#include <../lib/x.c>\n",
         }
 
         for path, text in files.items():
@@ -249,6 +251,7 @@ class ABuildRemovesOnlyItsOwnOutput(AttachFixture):
         self.assertNotIn("policy violation", text)
         self.assertFalse(os.path.exists(f"{self.root}/comp/gen.o"))
         self.assertFalse(os.path.exists(f"{self.root}/out.gen"))
+        self.assertFalse(os.path.exists(f"{self.root}/comp/tools/wrap.c"))
         self.assertTrue(os.path.exists(f"{self.root}/comp/file.c"))
 
     def test_a_source_removed_by_a_build_is_a_violation(self):
@@ -266,6 +269,8 @@ class ABuildRemovesOnlyItsOwnOutput(AttachFixture):
 
     def test_the_classification_reads_the_project(self):
         self.assertTrue(attach_control.build_owned(f"{self.root}/comp/gen.o"))
+        self.assertIn("./tools/wrap.c", self.read("comp.attach.sha256"))
+        self.assertTrue(attach_control.build_owned(f"{self.root}/comp/tools/wrap.c"))
         self.assertFalse(attach_control.build_owned(f"{self.root}/comp/file.c"))
         self.assertTrue(attach_control.build_owned(f"{self.root}/out.gen"))
         self.assertFalse(attach_control.build_owned(f"{self.root}/sub/b.c"))

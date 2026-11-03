@@ -1,6 +1,6 @@
 """Switches that turn an integrity guard off, and who may throw them.
 
-Infrabase's attach guard refuses to re-attach a tree whose fingerprint no
+A layered build's attach guard refuses to re-attach a tree whose fingerprint no
 longer matches it; IB_FORCE_ATTACH=1 tells it to proceed anyway. The switch
 is documented, which makes it the operator's, not the model's: a model that
 had its deletion of the fingerprint refused set the variable on the next
@@ -24,7 +24,7 @@ import re
 # Name -> the guard it turns off.
 
 OVERRIDES = {
-    "IB_FORCE_ATTACH": "the Infrabase attach guard",
+    "IB_FORCE_ATTACH": "the attach guard",
 }
 
 _AUTHORIZED_ENV = "SPEAR_AUTHORIZED_OVERRIDES"

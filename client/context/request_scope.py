@@ -583,6 +583,131 @@ def shell_write_targets(command: str, scope: RequestScope, cwd: str | None = Non
     return list(dict.fromkeys(targets))
 
 
+def shell_overwrite_targets(command: str, scope: RequestScope,
+                            cwd: str | None = None) -> list[str]:
+    """The files a shell command writes by name: a redirection, tee,
+    truncate, dd of=, and the destination of cp, install, ln and rsync (a
+    directory's entry named after each source). A destination only decided
+    at run time is "$" in the result: what it reaches cannot be read."""
+    if not command:
+        return []
+
+    words = _with_assignments(list(_split_stages(command)))
+    directories = _stage_directories(words, cwd or scope.root or ".")
+    found = []
+
+    # Scratch is no start file: /tmp, and a directory mktemp made.
+
+    scratch = re.findall(r"\b([A-Za-z_]\w*)=[\"']?(?:\$\(mktemp\b|/tmp/)", command)
+
+    def at_scratch(target):
+        return target.startswith("/tmp/") or any(
+            re.search(rf"(?:^|/)[\"']?\$\{{?{name}\b", target) for name in scratch)
+
+    # Where a `cd` to a name read at run time leads is not known here: a
+    # patch run after it changes files that cannot be named.
+
+    entered = "known"
+
+    for argv, directory in zip(words, directories):
+        binary = Path(argv[0]).name
+        operands = [arg for arg in argv[1:] if not arg.startswith("-")]
+
+        if binary in ("cd", "pushd") and operands and re.search(r"[$`]", operands[0]):
+            entered = "scratch" if at_scratch(operands[0]) else "unknown"
+
+        named = [target for target in _shell_destinations(argv)
+                 if binary not in ("rm", "rmdir", "unlink", "touch", "mkdir", "chmod",
+                                   "chown", "shred", "mv")]
+
+        if binary in ("cp", "install", "ln", "rsync") and len(operands) >= 2:
+            destination = _at(directory, operands[-1])
+
+            if os.path.isdir(destination):
+                named = [target for target in named if target != operands[-1]]
+                found += [os.path.join(destination, os.path.basename(source.rstrip("/")))
+                          for source in operands[:-1]]
+
+        for target in named:
+            if at_scratch(target):
+                continue
+
+            found.append("$" if "$" in target or "`" in target else _at(directory, target))
+
+        if binary == "patch" and entered == "unknown":
+            found.append("$")
+        elif binary == "patch" and entered == "known" and not directory.startswith("/tmp"):
+            found += _patched_files(argv, directory)
+
+    return list(dict.fromkeys(found))
+
+
+def _patched_files(argv, directory):
+    """The files a `patch` run changes, read from its diff: "$" when the
+    diff or the files cannot be read, none for a dry run."""
+    if "--dry-run" in argv:
+        return []
+
+    strip, source, named = 0, "", []
+    index = 1
+
+    while index < len(argv):
+        arg = argv[index]
+        value = argv[index + 1] if index + 1 < len(argv) else ""
+
+        if arg in ("-d", "--directory"):
+            directory, index = _at(directory, value), index + 2
+            continue
+
+        if arg in ("-i", "--input", "<"):
+            source, index = value, index + 2
+            continue
+
+        if arg.startswith("--input="):
+            source = arg.split("=", 1)[1]
+        elif arg.startswith("--directory="):
+            directory = _at(directory, arg.split("=", 1)[1])
+        elif re.fullmatch(r"-p\d+", arg):
+            strip = int(arg[2:])
+        elif arg in ("-p", "--strip") and value.isdigit():
+            strip, index = int(value), index + 2
+            continue
+        elif not arg.startswith("-"):
+            named.append(arg)
+
+        index += 1
+
+    if named:
+        return [_at(directory, named[0])]
+
+    if not source or "$" in source:
+        return ["$"]
+
+    try:
+        with open(_at(directory, source), encoding="utf-8", errors="replace") as handle:
+            lines = handle.read(4_000_000).splitlines()
+    except OSError:
+        return ["$"]
+
+    found = []
+
+    for previous, line in zip([""] + lines, lines):
+        if not line.startswith("+++ ") or not previous.startswith("--- "):
+            continue
+
+        name = line[4:].split("\t")[0].strip()
+
+        if name == "/dev/null":
+            name = previous[4:].split("\t")[0].strip()
+
+        parts = name.split("/")[strip:]
+
+        if parts:
+            found.append(_at(directory, "/".join(parts)))
+
+    return found
+
+
 def shell_removal_targets(command: str, scope: RequestScope, cwd: str | None = None) -> list[str]:
     """The paths a command removes by name: rm, rmdir and unlink operands,
     and the start points of a find that deletes. A subset of

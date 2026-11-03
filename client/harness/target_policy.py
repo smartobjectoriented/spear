@@ -147,20 +147,35 @@ def is_git_metadata(path: str) -> bool:
     (--separate-git-dir, a worktree's) or a bare repository, recognised by
     its HEAD beside its objects or its commondir.
     """
-    path = os.path.abspath(str(path))
+    path = _normal(path)
 
     if ".git" in path.split("/"):
         return True
 
     directory = path
 
-    while directory != "/":
+    while True:
         if _is_gitdir(directory):
             return True
 
-        directory = os.path.dirname(directory)
+        parent = os.path.dirname(directory)
 
-    return False
+        if parent == directory:
+            return False
+
+        directory = parent
+
+
+def _normal(path) -> str:
+    """`path` absolute and lexically normal, with one leading slash.
+
+    POSIX lets "//" be a root of its own, so abspath keeps it, and the
+    dirname of "//" is "//": a walk up to "/" never ended. On Linux "//x"
+    is "/x".
+    """
+    path = os.path.abspath(str(path))
+
+    return "/" + path.lstrip("/") if path.startswith("//") else path
 
 
 def _head(path: str) -> str:
@@ -186,16 +201,28 @@ def refusal(path: str, label: str | None = None, *, follow: bool = True,
 
     answer = _judge(str(path), label or str(path), follow)
 
+    # Refused, the deletion names what decided it: a snapshot copy deep in a
+    # build's work directory, not "a generated file".
+
     if deleting and answer.endswith(_GENERATED):
         from harness import provenance
 
-        if not provenance.removal_refusal(str(path)):
+        reason = provenance.removal_refusal(str(path), label or str(path))
+
+        if not reason:
             return ""
+
+        answer = deletion_set_refusal(reason)
 
     if answer and follow:
         _REFUSED.add(os.path.realpath(path))
 
     return answer
+
+
+def deletion_set_refusal(reason: str) -> str:
+    """A deletion refused for one object of what it would remove."""
+    return f"the deletion set holds protected or pre-existing content: {reason}"
 
 
 def refused_paths() -> frozenset[str]:

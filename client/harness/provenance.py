@@ -138,6 +138,17 @@ def created(path: str) -> bool:
     return _key(where) not in _paths and (status.st_dev, status.st_ino) not in _inodes
 
 
+def start_state_file(path: str) -> bool:
+    """Whether `path` is a file of the start state: inventoried, present,
+    and not this session's. Its changes go through the checkpointed tools."""
+    where = _where(path)
+
+    if not _inside(where) or not os.path.lexists(where) or os.path.isdir(where):
+        return False
+
+    return not created(where)
+
+
 def _protected(path: str) -> str:
     """What no provenance makes deletable: git state, a snapshot copy, a
     guard's fingerprint."""

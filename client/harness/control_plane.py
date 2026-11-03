@@ -71,10 +71,17 @@ CORE_VOCABULARY = (
 #: parsing prose. Generic on purpose: the class says what kind of rule
 #: refused, never how the rule decides.
 POLICY_CLASSES = (
+    ("control_plane_override", re.compile(r"control-plane override|name is built at run time")),
+    ("deletion_set", re.compile(r"deletion set holds protected or pre-existing content|"
+                                r"git clean")),
     ("control_plane", re.compile(r"control-plane metadata")),
+    ("start_state_edit", re.compile(r"a shell command does not overwrite it|"
+                                    r"file named only at run time")),
+    ("unreadable", re.compile(r"cannot be read here|quoting cannot be read|"
+                              r"substitution is not closed")),
     ("protected_target", re.compile(r"generated file|snapshot copy|git metadata")),
     ("interpreter", re.compile(r"interpreter|running a script file|python3 -m unittest|"
-                               r"awk program|test runner")),
+                               r"awk program|test runner|script written in this session")),
     ("outside_workspace", re.compile(r"outside the workspace|escapes the workspace|"
                                      r"leaves the workspace|another tree|outside the project|"
                                      r"sandbox's own mounts")),

@@ -14,7 +14,7 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import AbstractSet, Callable, Sequence
 
-from harness import target_policy
+from harness import control_overrides, target_policy
 from harness.tool_primitives import (
     DEFAULT_CAPABILITY_POLICY,
     Capability,
@@ -77,6 +77,8 @@ class CommandPolicy:
     # Matches -i, -i.bak, -ni and --in-place[=SUFFIX].
 
     _SED_IN_PLACE = re.compile(r"^(--in-place|-[a-hj-zA-Z]*i)")
+    _SHELL_EDITORS = frozenset({"ed", "red", "ex", "vi", "vim", "nvim", "view", "vimdiff",
+                                "emacs", "nano", "pico", "joe", "mcedit"})
     GIT_READ_ONLY = frozenset({
         "status", "log", "diff", "show", "branch", "ls-files", "blame", "describe",
         "rev-parse", "reflog",
@@ -973,13 +975,33 @@ class CommandPolicy:
         while index < length:
             char = command[index]
 
+            # Inside double quotes a backslash still escapes: `"a \" ; b"` is
+            # one word. Read as the closing quote, `\"` let the `;` after it
+            # split a `python3 -c "..."` program into stages, none of which
+            # was the interpreter.
+
             if quote:
                 current.append(char)
+
+                if quote == '"' and char == "\\" and index + 1 < length:
+                    current.append(command[index + 1])
+                    index += 2
+
+                    continue
 
                 if char == quote:
                     quote = ""
 
                 index += 1
+
+                continue
+
+            # A `#` that starts a word starts a comment, to the end of the
+            # line: its apostrophes open no quote.
+
+            if char == "#" and (not current or current[-1] in " \t"):
+                end = command.find("\n", index)
+                index = length if end < 0 else end
 
                 continue
 
@@ -1056,6 +1078,79 @@ class CommandPolicy:
 
         return parts
 
+    @staticmethod
+    def _substitutions(command: str) -> "list[str] | None":
+        """The commands substituted where the stages cannot see them.
+
+        A `$(...)` outside quotes splits into stages of its own; one inside
+        double quotes, and any backquoted one, does not, and ran unjudged:
+        `echo "$(rm -rf src)"`. Their bodies, or None when one is not closed.
+        """
+        bodies: list[str] = []
+        quote = ""
+        index, length = 0, len(command)
+
+        while index < length:
+            char = command[index]
+
+            if quote == "'":
+                quote = "" if char == "'" else quote
+                index += 1
+
+                continue
+
+            if char == "\\":
+                index += 2
+
+                continue
+
+            if char == "`":
+                end = index + 1
+
+                while end < length and command[end] != "`":
+                    end += 2 if command[end] == "\\" else 1
+
+                if end >= length:
+                    return None
+
+                bodies.append(command[index + 1:end].replace("\\`", "`"))
+                index = end + 1
+
+                continue
+
+            if quote == '"' and command.startswith("$(", index) \
+                    and not command.startswith("$((", index):
+                depth, end, inner = 1, index + 2, ""
+
+                while end < length and depth:
+                    if inner:
+                        inner = "" if command[end] == inner else inner
+                    elif command[end] == "\\":
+                        end += 1
+                    elif command[end] in "'\"":
+                        inner = command[end]
+                    elif command[end] == "(":
+                        depth += 1
+                    elif command[end] == ")":
+                        depth -= 1
+
+                    end += 1
+
+                if depth:
+                    return None
+
+                bodies.append(command[index + 2:end - 1])
+                index = end
+
+                continue
+
+            if char in "'\"" and not (quote == '"' and char == "'"):
+                quote = "" if quote == char else char
+
+            index += 1
+
+        return bodies
+
     def _shell_capabilities(
         self, command: str, depth: int = 0
     ) -> "tuple[frozenset[Capability], str, list[str], str]":
@@ -1090,6 +1185,25 @@ class CommandPolicy:
             })
 
         danger = ""
+
+        substituted = self._substitutions(command)
+
+        if substituted is None:
+            danger = "a command substitution is not closed, so what it runs cannot be read."
+            substituted = []
+
+        for body in substituted:
+            if depth >= self._MAX_UNWRAP:
+                danger = danger or "substitutions nested this deep cannot be read."
+                break
+
+            found, inner_danger, inner_outside, inner_refusal = self._shell_capabilities(
+                self._strip_heredoc_bodies(body), depth + 1)
+            capabilities.update(found)
+            danger = danger or inner_danger
+            refusal = refusal or inner_refusal
+            outside.extend(path for path in inner_outside if path not in outside)
+
         stages = self._shell_stages(command)
         stdin_from_pipeline = False
         redirect_target = False
@@ -1161,9 +1275,14 @@ class CommandPolicy:
                 if not token:
                     continue
 
+            # A stage whose quoting does not close cannot be read, and what
+            # cannot be read does not run.
+
             try:
                 argv = tuple(shlex.split(token, posix=True))
             except ValueError:
+                danger = danger or (f"its quoting cannot be read ({token[:40]!r}): "
+                                    f"close every quote, or write the text with write_file.")
                 continue
 
             # After a process substitution, the words are the operands of the
@@ -1236,6 +1355,14 @@ class CommandPolicy:
                     "be rolled back: use edit_file. To insert a line, pass the "
                     "existing surrounding line(s) as old_text and those same "
                     "lines plus the new one as new_text.")
+
+            # An editor run from the shell edits in place as `sed -i` does:
+            # `printf '1a\nX\n.\nw\n' | ed -s f` wrote what sed -i was refused.
+
+            if binary in self._SHELL_EDITORS:
+                danger = danger or (
+                    f"'{binary}' edits files in place, outside the checkpoint, so its "
+                    f"change cannot be rolled back: use edit_file.")
 
             danger = danger or self._stage_danger(argv, depth)
 
@@ -1574,6 +1701,10 @@ class CommandPolicy:
     _GIT_STEERING = re.compile(
         r"GIT_|(?:^|[^\w$])(?:HOME|PATH|XDG_\w+|LD_\w+|BASH_ENV|ENV|EDITOR|VISUAL|PAGER)=")
 
+    def steers_git(self, command: str) -> bool:
+        """Whether `command` steers git, or a program it runs, from the environment."""
+        return bool(self._GIT_STEERING.search(command))
+
     def git_writes(self, command: str) -> "list[tuple[str, tuple[str, ...]]] | None":
         """Where the git commands that write their repository's records run.
 
@@ -1630,6 +1761,14 @@ class CommandPolicy:
         if "\x00" in command:
             return self._assessment(command, (), CommandClassification.DANGEROUS, "NUL byte")
 
+        # Read before the heredoc bodies go: a line written into a script or
+        # a configuration file throws the same switch later.
+
+        override = control_overrides.command_refusal(command)
+
+        if override:
+            return self._assessment(command, (), CommandClassification.DANGEROUS, override)
+
         command = self._strip_heredoc_bodies(command)
 
         if self._SHELL_SYNTAX.search(command):
@@ -1651,9 +1790,9 @@ class CommandPolicy:
             argv = tuple(shlex.split(command, posix=True))
         except ValueError as exc:
             return self._assessment(
-                command, (), CommandClassification.SHELL_COMPLEX, str(exc),
-                (Capability.SHELL_COMPLEX,),
-            )
+                command, (), CommandClassification.DANGEROUS,
+                f"its quoting cannot be read ({exc}): close every quote, or write the "
+                f"text with write_file.")
 
         if not argv:
             return self._assessment(command, (), CommandClassification.DANGEROUS, "empty argv")
@@ -1699,6 +1838,9 @@ class CommandPolicy:
         refused, with its own reason.
         """
         assessment = self.classify(command)
+
+        if control_overrides.command_refusal(command or ""):
+            return assessment
 
         if (assessment.classification != CommandClassification.DANGEROUS
                 or not command or not command.strip() or "\x00" in command

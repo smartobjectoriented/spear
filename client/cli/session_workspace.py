@@ -17,7 +17,7 @@ from harness.tool_primitives import (
 )
 from harness.tool_runtime import CommandRunner
 from harness.workspace import SandboxSpec, Workspace, effective_mount_root
-from harness import provenance, target_policy, write_protection
+from harness import attach_control, provenance, target_policy, write_protection
 from runtime.tracing import EventStatus, EventType, new_action_id
 from cli.chat_settings import AUDIT_LOGGER, STATE_DIR
 from cli.corpus_registry import load_projects
@@ -956,6 +956,14 @@ def run_cmd_result(cmd, need_confirm=True, cancellation=None, execution_mode=Non
         default_timeout = getattr(sandbox, "timeout_seconds", None)
         default_chars = getattr(sandbox, "max_output_chars", None)
 
+        # The attach state is the attach's own, and what a build removes from
+        # the start state must be its own output (attach_control.py).
+
+        watched = Capability.WORKSPACE_WRITE in granted_capabilities and WORKSPACE is not None
+        attach_before = attach_control.snapshot() if watched else {}
+        objects_before = attach_control.present_start_objects() if watched and builds else []
+        started = attach_control.now()
+
         try:
             if timeout and default_timeout is not None:
                 sandbox.timeout_seconds = timeout
@@ -973,6 +981,10 @@ def run_cmd_result(cmd, need_confirm=True, cancellation=None, execution_mode=Non
 
             if default_chars is not None:
                 sandbox.max_output_chars = default_chars
+
+        if watched:
+            result = _attach_and_build_effects(cmd, result, mode, attach_before, objects_before,
+                                               started, builds)
 
         # A clone adds a repository, and a build a generated tree, that the
         # next command must find protected.
@@ -1015,6 +1027,64 @@ def run_cmd_result(cmd, need_confirm=True, cancellation=None, execution_mode=Non
         return ToolResult("timeout", f"timed out ({timeout or 45}s){hint}")
 
     return result
+
+
+def _attach_and_build_effects(cmd, result, mode, attach_before, objects_before, started, builds):
+    """Undo what a command did to the attach state, report what a build
+    removed that it did not own, and, after a successful updiff, record the
+    attached tree as the state its series reproduces."""
+    notes = []
+    restored = attach_control.enforce(attach_before, build=builds)
+
+    if restored:
+        notes.append(f"policy: the attach state is control-plane metadata; restored "
+                     f"{', '.join(_label(path) for path in restored[:5])}")
+        AUDIT_LOGGER.record_mutation(
+            action="attach_metadata_restored", mode=mode, workspace=WORKSPACE,
+            paths=restored, command=cmd, approved=False,
+            result=ToolResult("denied", "attach metadata changed by a command, restored"))
+
+    if builds:
+        bad = attach_control.violations(attach_control.removed_by(objects_before))
+
+        if bad:
+            notes.append(f"policy violation: the build removed {len(bad)} object(s) of the start "
+                         f"state it does not own (sources, not build output): "
+                         f"{', '.join(_label(path) for path in bad[:5])}")
+            AUDIT_LOGGER.record_mutation(
+                action="build_effect_violation", mode=mode, workspace=WORKSPACE,
+                paths=bad[:200], command=cmd, approved=False,
+                result=ToolResult("denied", f"build removed {len(bad)} start-state source objects"))
+
+        if result.status == "ok" and result.exit_code in (None, 0):
+            for recipe in attach_control.updiff_recipes(COMMAND_POLICY.stage_argvs(cmd)):
+                written, why = attach_control.refresh(recipe, started)
+
+                if written:
+                    notes.append(f"SPEAR recorded the attached tree of {recipe} as the state its "
+                                 f"patch series now reproduces ({_label(written)}): the next "
+                                 f"attach re-attaches from the series")
+                    AUDIT_LOGGER.record_mutation(
+                        action="attach_state_refresh", mode=mode, workspace=WORKSPACE,
+                        paths=(written,), command=cmd, approved=True,
+                        result=ToolResult("ok", f"trusted attach-state refresh after updiff of {recipe}"))
+                else:
+                    AUDIT_LOGGER.record_mutation(
+                        action="attach_state_refresh", mode=mode, workspace=WORKSPACE,
+                        paths=(), command=cmd, approved=False,
+                        result=ToolResult("denied", f"no refresh after updiff of {recipe}: {why}"))
+
+    if not notes:
+        return result
+
+    return replace(result, stderr=(result.stderr + "\n" if result.stderr else "") + "\n".join(notes))
+
+
+def _label(path):
+    try:
+        return WORKSPACE.relative(path)
+    except Exception:
+        return path
 
 
 def command_result_text(result):

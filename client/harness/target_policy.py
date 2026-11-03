@@ -96,14 +96,40 @@ def is_snapshot(path: str) -> bool:
     return False
 
 
+def attach_metadata_tree(path: str) -> str:
+    """The attached tree whose attach metadata `path` is, or "".
+
+    The attach mechanism keeps its state beside the tree it attached, as
+    `<tree>.attach.<anything>`: the manifest (.sha256), the owner (.pf), and
+    whatever it records next. Only beside a directory of that name.
+    """
+    directory, name = os.path.split(str(path).rstrip("/"))
+    marker = name.find(".attach.")
+
+    while marker > 0:
+        tree = name[:marker]
+
+        if os.path.isdir(os.path.join(directory or ".", tree)):
+            return os.path.join(directory, tree)
+
+        marker = name.find(".attach.", marker + 1)
+
+    return ""
+
+
 def fingerprinted_tree(path: str) -> str:
     """The directory `path` is the fingerprint of, or "".
 
     `name.sha256` or `name.<tag>.sha256` beside a directory `name`: every
     dotted prefix of the file name is tried, so `linux-6.12.attach.sha256`
-    finds `linux-6.12/`.
+    finds `linux-6.12/`. Any attach metadata of a tree is one too.
     """
     path = str(path).rstrip("/")
+    attached = attach_metadata_tree(path)
+
+    if attached:
+        return attached
+
     directory, name = os.path.split(path)
     parts = name.split(".")
 

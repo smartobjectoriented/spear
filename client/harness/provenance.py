@@ -28,6 +28,8 @@ _MAX_REMOVED = 200_000
 
 _paths: set[int] = set()
 _inodes: set[tuple[int, int]] = set()
+# The start objects by name, for what a build removed (attach_control.py).
+_names: list[str] = []
 # The roots last asked for, so that a rebind of the same workspace keeps its
 # inventory, and the ones whose walk completed: only those hold created objects.
 _asked: tuple[str, ...] = ()
@@ -47,8 +49,9 @@ def _where(path: str) -> str:
 
 
 def _walk(root: str):
-    """(path keys, inodes) of everything under `root`, or None past the bound."""
-    paths, inodes = {_key(root)}, set()
+    """(path keys, inodes, names) of everything under `root`, or None past
+    the bound."""
+    paths, inodes, names = {_key(root)}, set(), []
     pending = [root]
     count = 0
 
@@ -65,6 +68,7 @@ def _walk(root: str):
                 return None
 
             paths.add(_key(entry.path))
+            names.append(entry.path)
 
             try:
                 status = entry.stat(follow_symlinks=False)
@@ -76,7 +80,7 @@ def _walk(root: str):
             if entry.is_dir(follow_symlinks=False):
                 pending.append(entry.path)
 
-    return paths, inodes
+    return paths, inodes, names
 
 
 def capture(roots) -> None:
@@ -90,6 +94,7 @@ def capture(roots) -> None:
 
     _paths.clear()
     _inodes.clear()
+    _names.clear()
     complete = []
 
     for root in roots:
@@ -98,6 +103,7 @@ def capture(roots) -> None:
         if found is not None:
             _paths.update(found[0])
             _inodes.update(found[1])
+            _names.extend(found[2])
             complete.append(root)
 
     _asked, _complete = roots, tuple(complete)
@@ -109,7 +115,13 @@ def forget() -> None:
 
     _paths.clear()
     _inodes.clear()
+    _names.clear()
     _asked, _complete = (), ()
+
+
+def start_paths() -> list[str]:
+    """Every object of the inventoried trees at the start, by name."""
+    return _names
 
 
 def known(path: str) -> bool:

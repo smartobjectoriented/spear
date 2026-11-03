@@ -131,8 +131,11 @@ def build_owned(path: str) -> bool:
 
     tree = _attached_tree(path)
 
-    # In an attached tree the attach's own manifest names the sources: what
-    # it did not write, a build made. A re-attach moves the tree to .back.
+    # In an attached tree the attach's own manifest names what it wrote:
+    # what it did not write, a build made. What it wrote the component's own
+    # ignore rules may still call generated (U-Boot ships tools/lib/*.c
+    # wrappers and ignores them as build output). A re-attach moves the
+    # tree to .back.
 
     if tree:
         relative = os.path.relpath(path, tree)
@@ -142,7 +145,10 @@ def build_owned(path: str) -> bool:
 
         listed = _manifest_files(tree)
 
-        return listed is not None and relative not in listed
+        if listed is not None and relative not in listed:
+            return True
+
+        return _component_ignored(tree, relative)
 
     return _ignored(path)
 
@@ -172,6 +178,26 @@ def _manifest_files(tree: str) -> set[str] | None:
             _LISTED[tree] = None
 
     return _LISTED[tree]
+
+
+_EMPTY_GIT: list[str] = []
+
+
+def _component_ignored(tree: str, relative: str) -> bool:
+    """Whether the attached tree's own .gitignore files ignore `relative`,
+    read alone: the project's rules, which ignore the whole tree, are not."""
+    import tempfile
+
+    if not _EMPTY_GIT:
+        directory = tempfile.mkdtemp(prefix="spear-attach-git-")
+        subprocess.run(["git", "init", "-q", directory], capture_output=True, check=True)
+        _EMPTY_GIT.append(os.path.join(directory, ".git"))
+
+    done = subprocess.run(["git", "-c", "core.excludesFile=/dev/null", "--git-dir", _EMPTY_GIT[0],
+                           "--work-tree", tree, "check-ignore", "-q", "--no-index", "--", relative],
+                          capture_output=True, timeout=30)
+
+    return done.returncode == 0
 
 
 def _ignored(path: str) -> bool:

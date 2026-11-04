@@ -582,9 +582,12 @@ class TaskController:
 
         bound = context.standard_binding is not None
         coding = context.execution_core == "coding"
-        scope = answer_scope.of(request.objective, standard_bound=bound,
+        workspace = getattr(context, "workspace_context", None)
+        project = bool(workspace is not None and workspace.project_bound)
+        scope = answer_scope.of(request.objective, standard_bound=bound, project_bound=project,
                                 prior=answer_scope.prior_scope(context.conversation,
-                                                               standard_bound=bound))
+                                                               standard_bound=bound,
+                                                               project_bound=project))
         phase = context_selection.primary_phase(scope, bound=bound)
         gateway = getattr(context, "capability_gateway", None)
         selection = tool_selection.DeterministicToolSelector().select(

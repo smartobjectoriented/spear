@@ -91,6 +91,12 @@ class WorkspaceContext:
 
         return frozenset(names)
 
+    @property
+    def project_bound(self) -> bool:
+        """A registered project that declares a family: a request that names
+        no subject is about its tree (answer_scope.of)."""
+        return self.registered and bool(self.project_families)
+
     def under(self, directory: str) -> bool:
         """Whether this workspace's trees lie under a host directory."""
         base = os.path.realpath(os.path.expanduser(directory)).rstrip("/")
@@ -126,6 +132,11 @@ def _declared_standards(spec) -> tuple[tuple[str, str], ...]:
                 found.append((str(entry["standard"]), str(entry.get("revision") or "")))
 
     return tuple(dict.fromkeys(found))
+
+
+def project_bound(*, registered: bool, spec) -> bool:
+    """WorkspaceContext.project_bound, before the workspace is built."""
+    return bool(registered) and bool(project_families(spec)[0])
 
 
 def from_session(*, project: str, spec: dict | None, registered: bool, project_root: str,

@@ -161,6 +161,7 @@ def set_project(spec):
     # rest is its to clean up (provenance.py).
 
     provenance.capture(WORKSPACE.roots)
+    attach_control.pin_pristine()
 
     PROJECT_KIND = spec["kind"]
 
@@ -962,6 +963,7 @@ def run_cmd_result(cmd, need_confirm=True, cancellation=None, execution_mode=Non
         watched = Capability.WORKSPACE_WRITE in granted_capabilities and WORKSPACE is not None
         attach_before = attach_control.snapshot() if watched else {}
         objects_before = attach_control.present_start_objects() if watched and builds else []
+        pristine_before = attach_control.pristine_state() if watched and builds else {}
         started = attach_control.now()
 
         try:
@@ -984,7 +986,7 @@ def run_cmd_result(cmd, need_confirm=True, cancellation=None, execution_mode=Non
 
         if watched:
             result = _attach_and_build_effects(cmd, result, mode, attach_before, objects_before,
-                                               started, builds)
+                                               pristine_before, started, builds)
 
         # A clone adds a repository, and a build a generated tree, that the
         # next command must find protected.
@@ -1029,7 +1031,8 @@ def run_cmd_result(cmd, need_confirm=True, cancellation=None, execution_mode=Non
     return result
 
 
-def _attach_and_build_effects(cmd, result, mode, attach_before, objects_before, started, builds):
+def _attach_and_build_effects(cmd, result, mode, attach_before, objects_before, pristine_before,
+                              started, builds):
     """Undo what a command did to the attach state, report what a build
     removed that it did not own, and, after a successful updiff, record the
     attached tree as the state its series reproduces."""
@@ -1045,6 +1048,7 @@ def _attach_and_build_effects(cmd, result, mode, attach_before, objects_before, 
             result=ToolResult("denied", "attach metadata changed by a command, restored"))
 
     if builds:
+        attach_control.pin_pristine(pristine_before)
         bad = attach_control.violations(attach_control.removed_by(objects_before))
 
         if bad:
@@ -1058,7 +1062,20 @@ def _attach_and_build_effects(cmd, result, mode, attach_before, objects_before, 
 
         if result.status == "ok" and result.exit_code in (None, 0):
             for recipe in attach_control.updiff_recipes(COMMAND_POLICY.stage_argvs(cmd)):
-                written, why = attach_control.refresh(recipe, started)
+                written, why, check = attach_control.refresh(recipe, started)
+
+                if check is not None:
+                    AUDIT_LOGGER.record_mutation(
+                        action="persistence_verification", mode=mode, workspace=WORKSPACE,
+                        paths=(), command=cmd, approved=check.verified,
+                        result=ToolResult("ok" if check.verified else "denied", check.summary()))
+
+                    if not check.verified:
+                        shown = "; ".join(check.differences[:5])
+                        notes.append(f"SPEAR did not record the attached tree of {recipe}: {why}"
+                                     f"{f' ({shown})' if shown else ''}. The updiff captured what "
+                                     f"it could, the attach guard stays in force, and a re-attach "
+                                     f"will refuse until the series reproduces the tree")
 
                 if written:
                     notes.append(f"SPEAR recorded the attached tree of {recipe} as the state its "

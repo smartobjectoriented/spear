@@ -248,6 +248,20 @@ def _pristine_copies() -> list[str]:
     return found
 
 
+def _rules_root(tree: str) -> str:
+    """The project above `tree`, by its class: a start state may have built
+    nothing yet, so there is no build/tmp/work to find it by."""
+    directory = os.path.dirname(tree)
+
+    while directory and directory != os.path.dirname(directory):
+        if os.path.isfile(os.path.join(directory, persistence_check.CLASS)):
+            return directory
+
+        directory = os.path.dirname(directory)
+
+    return ""
+
+
 def _signature(path: str) -> tuple[int, int]:
     status = os.stat(path)
 
@@ -283,7 +297,7 @@ def pin_pristine(before: dict[str, tuple[int, int]] | None = None) -> None:
         _PINS.clear()
         _RULES.clear()
 
-        for root in {_project_root(tree) for tree, _ in _owners()} - {""}:
+        for root in {_rules_root(tree) for tree, _ in _owners()} - {""}:
             try:
                 _RULES[root] = persistence_check.exclude_patterns(root)
             except (OSError, ValueError, SyntaxError):

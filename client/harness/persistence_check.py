@@ -47,7 +47,7 @@ from dataclasses import dataclass
 
 TIMEOUT_SECONDS = 300
 PATCH = ("patch", "-p1", "--forward", "--batch", "--quiet", "--no-backup-if-mismatch")
-_CLASS = "build/meta/classes/patch.bbclass"
+CLASS = "build/meta/classes/patch.bbclass"
 
 # What the attach leaves at the top of a tree and no series describes: the
 # quilt staging do_patch made, and a fetched repository's own metadata.
@@ -141,7 +141,7 @@ def series_digest(patch_dir: str, listed: list[str]) -> str:
 
 def exclude_patterns(project: str) -> list[str]:
     """do_diffcompose's exclude list, read from the project's own class."""
-    with open(os.path.join(project, _CLASS), encoding="utf-8") as handle:
+    with open(os.path.join(project, CLASS), encoding="utf-8") as handle:
         source = handle.read()
 
     block = source[source.index("exclude_patterns = ["):]

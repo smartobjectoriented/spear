@@ -126,6 +126,18 @@ class ValidPersistence(Workflow):
         self.assertIn("SPEAR recorded", self.run_edit())
 
 
+    def test_a_project_that_has_built_nothing_at_bind_is_verified(self):
+        work = Path(self.root, "build/tmp/work")
+        work.rename(Path(self.root, "build/tmp/later"))
+        attach_control._PIN_SCOPE.clear()
+        attach_control.pin_pristine()
+        Path(self.root, "build/tmp/later").rename(work)
+        before = {}
+        attach_control.pin_pristine(before)
+
+        self.assertIn("SPEAR recorded", self.run_edit())
+
+
 class FalsePersistence(Workflow):
     """B and C. A successful updiff that does not reproduce the tree."""
 

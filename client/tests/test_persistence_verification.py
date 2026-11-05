@@ -296,6 +296,15 @@ class TheTurnDoesNotDecide(Workflow):
 
         self.assertEqual(attach_control._PINS[path], pinned)
 
+    def test_a_later_build_does_not_adopt_a_copy_it_did_not_make(self):
+        path = f"{self.root}/{PRISTINE}"
+        del attach_control._PINS[path]
+        attach_control.pin_pristine(attach_control.pristine_state())
+
+        self.assertNotIn(path, attach_control._PINS)
+        self.run_edit("skip")
+        self.assertIn("was never pinned", self.audit("attach_state_refresh")[-1]["summary"])
+
     def test_a_turn_cannot_extend_the_exclude_list(self):
         self.call("read_file", path="comp/other.c")
         Path(self.root, "build/meta/classes/patch.bbclass").write_text(

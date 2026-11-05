@@ -27,6 +27,7 @@ from tests.test_spear_envelope import SANDBOX
 PF = "comp-1.0-r0"
 SERIES = f"build/meta-x/recipes-x/comp/files/0001-{PF}"
 WORK = f"build/tmp/work/{PF}"
+PRISTINE = f"{WORK}/comp-1.0.pristine"
 
 # What the attach task does: refuse over files the manifest no
 # longer matches, else rebuild the tree from the pristine copy and the
@@ -42,7 +43,7 @@ if [ -d $t ] && [ -f $m ]; then
     exit 1
   fi
 fi
-rm -rf {WORK}/src && cp -r {WORK}/pristine {WORK}/src
+rm -rf {WORK}/src && cp -r {PRISTINE} {WORK}/src
 for p in $(sed -n 's|.*file://\\([^ ]*\\.patch\\).*|\\1|p' {SERIES}-patches.inc); do
   patch -d {WORK}/src -p1 --quiet < {SERIES}/$p
 done
@@ -54,16 +55,18 @@ echo {PF} > $t.attach.pf
 echo attached
 """
 
-# updiff.sh RECIPE [fail|bad]: the series rewritten from the attached tree
-# against the pristine copy, as one patch per file; "fail" reports an error,
-# "bad" leaves a patch whose hunk disagrees with its header.
+# updiff.sh RECIPE [fail|bad|skip]: the series rewritten from the attached
+# tree against the pristine copy, as one patch per file; "fail" reports an
+# error, "bad" leaves a patch whose hunk disagrees with its header, "skip"
+# succeeds without capturing the edit, as do_updiff does on a patch chain.
 
 UPDIFF = f"""#!/bin/sh
 w={WORK}; s={SERIES}
 mkdir -p $w/temp
 if [ "$2" = fail ]; then echo "ERROR: updiff failed" > $w/temp/log.do_updiff; exit 1; fi
-cd $w && diff -u pristine/file.c ../../../../comp/file.c \\
-  | sed 's|^--- pristine/file.c.*|--- a/file.c|; s|^+++ ../../../../comp/file.c.*|+++ b/file.c|' \\
+if [ "$2" = skip ]; then echo "WARNING: chain, 1 skipped" > $w/temp/log.do_updiff; exit 0; fi
+cd $w && diff -u comp-1.0.pristine/file.c ../../../../comp/file.c \\
+  | sed 's|^--- comp-1.0.pristine/file.c.*|--- a/file.c|; s|^+++ ../../../../comp/file.c.*|+++ b/file.c|' \\
   > ../../../../$s/0001-file.c.patch
 cd ../../../..
 if [ "$2" = bad ]; then sed -i 's/^@@ -1 +1 @@/@@ -1,5 +1,5 @@/' $s/0001-file.c.patch; fi
@@ -89,14 +92,15 @@ class AttachFixture(Targets):
         root = self.root
         files = {
             ".gitignore": "comp/\ncomp.back/\ncomp2/\n*.attach.*\nbuild/tmp/\n*.gen\n",
-            f"{WORK}/pristine/file.c": "int v = 1;\n",
-            f"{WORK}/pristine/other.c": "int o;\n",
+            f"{PRISTINE}/file.c": "int v = 1;\n",
+            f"{PRISTINE}/other.c": "int o;\n",
             f"{SERIES}/0001-file.c.patch": "--- a/file.c\n+++ b/file.c\n@@ -1 +1 @@\n-int v = 1;\n+int v = 2;\n",
             f"{SERIES}-patches.inc": 'SRC_URI += "file://0001-file.c.patch"\n',
             "scripts/build.sh": BUILD, "scripts/updiff.sh": UPDIFF, "Makefile": MAKEFILE,
             "comp2/x.c": "int x;\n", "out.gen": "generated\n",
-            f"{WORK}/pristine/.gitignore": "/tools/\n",
-            f"{WORK}/pristine/tools/wrap.c": "#include <../lib/x.c>\n",
+            f"{PRISTINE}/.gitignore": "/tools/\n",
+            f"{PRISTINE}/tools/wrap.c": "#include <../lib/x.c>\n",
+            "build/meta/classes/patch.bbclass": "exclude_patterns = ['*.o', 'file.h']\n",
         }
 
         for path, text in files.items():
@@ -107,7 +111,7 @@ class AttachFixture(Targets):
             os.chmod(f"{root}/scripts/{script}", 0o755)
 
         git = ["git", "-C", root, "-c", "user.name=t", "-c", "user.email=t@t"]
-        subprocess.run(git + ["add", ".gitignore", "build/meta-x", "scripts", "Makefile"], check=True)
+        subprocess.run(git + ["add", ".gitignore", "build/meta-x", "build/meta", "scripts", "Makefile"], check=True)
         subprocess.run(git + ["commit", "-qm", "project"], check=True)
         subprocess.run(["sh", "scripts/build.sh"], cwd=root, check=True, capture_output=True)
         Path(root, "comp/gen.o").write_text("object\n")
@@ -126,6 +130,7 @@ class AttachFixture(Targets):
     def setUp(self):
         super().setUp()
         target_policy.forget_refused()
+        attach_control.pin_pristine()
 
     def run_command(self, command):
         return self.call("terminal", command=command)

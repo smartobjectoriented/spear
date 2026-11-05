@@ -10,11 +10,13 @@ whatever wrote it -- a tool, git apply, a wrapped script.
 Two trusted effects maintain it instead:
 
 - a build (bitbake, a build driver) attaches and records, as it always did;
-- after a successful updiff, SPEAR records the attached tree as the state
-  the patch series now reproduces. The build's updiff folds an edit into the
-  series but leaves the manifest naming the pre-edit tree, so the guard
-  refused every later rebuild as "not captured in the patch set", and the
-  only exits were the override or a hand-edited manifest.
+- after an updiff, SPEAR records the attached tree as the state the patch
+  series reproduces, once a clean reconstruction has shown that it does
+  (persistence_check.py). The build's updiff folds an edit into the series
+  but leaves the manifest naming the pre-edit tree, so the guard refused
+  every later rebuild as "not captured in the patch set", and the only exits
+  were the override or a hand-edited manifest. An updiff that succeeded has
+  only captured something: until it is verified the guard stays armed.
 
 A build may also remove what it owns: an object of the start state it
 removes is allowed when the project itself marks it generated (under
@@ -26,13 +28,14 @@ attach state is put back.
 
 from __future__ import annotations
 
+import glob
 import hashlib
 import os
 import re
 import subprocess
 import time
 
-from harness import provenance, target_policy
+from harness import persistence_check, provenance, target_policy
 
 _MANIFEST = ".attach.sha256"
 _OWNER = ".attach.pf"
@@ -224,6 +227,76 @@ def violations(removed: list[str]) -> list[str]:
             if not is_attach_metadata(path) and not build_owned(path)]
 
 
+# What the persistence check starts from, pinned before a turn can reach it:
+# each pristine copy, again when a build rewrites one, and the project's
+# build-output rules, once.
+
+_PINS: dict[str, str] = {}
+_RULES: dict[str, list[str]] = {}
+_PIN_SCOPE: list[set[str]] = []
+
+
+def _pristine_copies() -> list[str]:
+    found = []
+
+    for tree, pf in _owners():
+        root = _project_root(tree)
+
+        if root:
+            found += glob.glob(os.path.join(root, "build/tmp/work", pf, "*.pristine"))
+
+    return found
+
+
+def _signature(path: str) -> tuple[int, int]:
+    status = os.stat(path)
+
+    return status.st_ino, status.st_ctime_ns
+
+
+def pristine_state() -> dict[str, tuple[int, int]]:
+    """Each pristine copy as it stands, to tell what a build then changed."""
+    found = {}
+
+    for path in _pristine_copies():
+        try:
+            found[path] = _signature(path)
+        except OSError:
+            pass
+
+    return found
+
+
+def pin_pristine(before: dict[str, tuple[int, int]] | None = None) -> None:
+    """Pin what a session finds when it first looks; given the state before a
+    build, pin what that build changed. A copy changed by anything else
+    keeps its pin, and fails the check."""
+    directories = _directories()
+    first = not _PIN_SCOPE or _PIN_SCOPE[0] != directories
+
+    if before is None and not first:
+        return
+
+    _PIN_SCOPE[:] = [directories]
+
+    if first:
+        _PINS.clear()
+        _RULES.clear()
+
+        for root in {_project_root(tree) for tree, _ in _owners()} - {""}:
+            try:
+                _RULES[root] = persistence_check.exclude_patterns(root)
+            except (OSError, ValueError, SyntaxError):
+                pass
+
+    for path, signature in pristine_state().items():
+        if first or before is None or path not in _PINS or before.get(path) != signature:
+            try:
+                _PINS[path] = persistence_check.tree_digest(path)
+            except OSError:
+                _PINS.pop(path, None)
+
+
 # The trusted refresh after an updiff.
 
 def updiff_recipes(stages) -> list[str]:
@@ -243,8 +316,8 @@ def updiff_recipes(stages) -> list[str]:
     return found
 
 
-def refresh(recipe: str, started: float) -> tuple[str, str]:
-    """(manifest written, "") after a successful updiff of `recipe`, or ("", why not)."""
+def _owners() -> list[tuple[str, str]]:
+    """(attached tree, recipe PF) of every tree with an owner beside it."""
     owners = []
 
     for directory in _directories():
@@ -257,42 +330,81 @@ def refresh(recipe: str, started: float) -> tuple[str, str]:
             if entry.name.endswith(_OWNER) and os.path.isdir(entry.path[:-len(_OWNER)]):
                 try:
                     with open(entry.path, encoding="utf-8") as handle:
-                        pf = handle.read().strip()
+                        owners.append((entry.path[:-len(_OWNER)], handle.read().strip()))
                 except OSError:
                     continue
 
-                if pf == recipe or pf.startswith(recipe + "-"):
-                    owners.append((entry.path[:-len(_OWNER)], pf))
+    return owners
+
+
+def refresh(recipe: str, started: float) -> tuple[str, str, persistence_check.Verification | None]:
+    """After an updiff of `recipe`: (manifest written, why not, the check).
+
+    UPDIFF_CAPTURED is what the log says; PERSISTENCE_VERIFIED is the check.
+    The manifest is written only on the second, and the check runs only on the
+    first: without a capture the third item is None.
+    """
+    owners = [(tree, pf) for tree, pf in _owners()
+              if pf == recipe or pf.startswith(recipe + "-")]
 
     if len(owners) != 1:
-        return "", f"{len(owners)} attached trees belong to {recipe}"
+        return "", f"{len(owners)} attached trees belong to {recipe}", None
 
     tree, pf = owners[0]
     root = _project_root(tree)
 
     if not root:
-        return "", f"no project build directory above {tree}"
+        return "", f"no project build directory above {tree}", None
 
     log = os.path.join(root, "build/tmp/work", pf, "temp/log.do_updiff")
 
     try:
         if os.path.getmtime(log) < started:
-            return "", "updiff did not run in this command"
+            return "", "updiff did not run in this command", None
 
         with open(log, encoding="utf-8", errors="replace") as handle:
             if re.search(r"^ERROR:", handle.read(), re.MULTILINE):
-                return "", "updiff reported an error"
+                return "", "updiff reported an error", None
     except OSError:
-        return "", "no updiff log"
+        return "", "no updiff log", None
 
     problem = _series_problem(root, pf)
 
     if problem:
-        return "", problem
+        return "", problem, None
+
+    check = _verify(root, tree, pf)
+
+    if not check.verified:
+        return "", check.reason, check
 
     _write_manifest(tree)
 
-    return tree + _MANIFEST, ""
+    return tree + _MANIFEST, "", check
+
+
+def _verify(root: str, tree: str, pf: str) -> persistence_check.Verification:
+    def failed(reason: str) -> persistence_check.Verification:
+        return persistence_check.Verification(False, reason)
+
+    if not os.path.isfile(tree + _MANIFEST):
+        return failed(f"no attach manifest beside {os.path.basename(tree)}")
+
+    copies = glob.glob(os.path.join(root, "build/tmp/work", pf, "*.pristine"))
+
+    if len(copies) != 1:
+        return failed(f"{len(copies)} pristine copies for {pf}")
+
+    if copies[0] not in _PINS:
+        return failed(f"the pristine copy of {pf} was never pinned")
+
+    if root not in _RULES:
+        return failed("the project's build-output rules were not readable")
+
+    patch_dir, listed = _series(root, pf)
+
+    return persistence_check.verify(tree, copies[0], _PINS[copies[0]], _RULES[root],
+                                    patch_dir, listed)
 
 
 def _project_root(tree: str) -> str:
@@ -307,10 +419,16 @@ def _project_root(tree: str) -> str:
     return ""
 
 
+def _series(root: str, pf: str) -> tuple[str, list[str]]:
+    """The patch directory of `pf` and the patches its series lists, in order."""
+    patch_dir = glob.glob(os.path.join(root, "build", "*", "recipes-*", "*", "files", f"0001-{pf}"))[0]
+
+    with open(patch_dir + "-patches.inc", encoding="utf-8", errors="replace") as handle:
+        return patch_dir, re.findall(r"file://([^\s\\\"']+\.patch)", handle.read())
+
+
 def _series_problem(root: str, pf: str) -> str:
     """Why the patch series of `pf` is not one the attach can apply, or ""."""
-    import glob
-
     patchsets = glob.glob(os.path.join(root, "build", "*", "recipes-*", "*", "files", f"0001-{pf}"))
 
     if len(patchsets) != 1:
@@ -320,11 +438,17 @@ def _series_problem(root: str, pf: str) -> str:
 
     try:
         with open(series, encoding="utf-8", errors="replace") as handle:
-            listed = re.findall(r"file://([^\s\\\"']+\.patch)", handle.read())
+            text = handle.read()
     except OSError:
         return f"no series file for {pf}"
 
-    for name in listed:
+    # A parameter (;striplevel=, ;patchdir=) changes how a patch applies, and
+    # the check applies every patch alike.
+
+    if re.search(r"\.patch;", text):
+        return f"the series of {pf} carries patch parameters"
+
+    for name in re.findall(r"file://([^\s\\\"']+\.patch)", text):
         path = os.path.join(patchsets[0], name)
 
         try:

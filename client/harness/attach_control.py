@@ -269,8 +269,8 @@ def pristine_state() -> dict[str, tuple[int, int]]:
 
 def pin_pristine(before: dict[str, tuple[int, int]] | None = None) -> None:
     """Pin what a session finds when it first looks; given the state before a
-    build, pin what that build changed. A copy changed by anything else
-    keeps its pin, and fails the check."""
+    build, pin what that build changed. A copy anything else changed or made
+    keeps its pin or has none, and fails the check."""
     directories = _directories()
     first = not _PIN_SCOPE or _PIN_SCOPE[0] != directories
 
@@ -290,7 +290,7 @@ def pin_pristine(before: dict[str, tuple[int, int]] | None = None) -> None:
                 pass
 
     for path, signature in pristine_state().items():
-        if first or before is None or path not in _PINS or before.get(path) != signature:
+        if first or before.get(path) != signature:
             try:
                 _PINS[path] = persistence_check.tree_digest(path)
             except OSError:

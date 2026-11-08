@@ -181,21 +181,27 @@ for spec in "${OPTIONAL[@]}"; do
     IFS=: read -r name var fallback label <<<"$spec"
     dir="${!var:-$fallback}"
 
+    # A reds image's content is staged below, once every tree is known: the
+    # machine's own directories when they exist, then SPEAR_CONTENT_TREES.
+    if [ "$PROFILE" = reds ]; then
+        case "$name" in
+            rules|skills|benches)
+                [ -d "$dir" ] && CONTENT_SRC+=("--$name" "$dir")
+                continue ;;
+        esac
+    fi
+
     if [ ! -d "$dir" ]; then
         printf '   %-8s (absent — image carries no %s)\n' "$name" "$label"
         dir="$EMPTY"
     elif [ "$PROFILE" = reds ]; then
-        # Cut to the baked corpora: the index to their collections, the
-        # content to what its scopes admit (below, once all three are known).
-        # The notes corpus is one deployment's own writing about every tree it
-        # has, and declares no scope at all.
+        # Cut to the baked corpora: the index to their collections. The notes
+        # corpus is one deployment's own writing about every tree it has, and
+        # declares no scope at all.
         case "$name" in
             index)
                 "$HERE/stage-index.py" --bake "$BAKE" --index "$dir" "$STAGE/optional/index"
                 dir="$STAGE/optional/index" ;;
-            rules|skills|benches)
-                CONTENT_SRC+=("--$name" "$dir")
-                continue ;;
             notes)
                 printf '   %-8s %s  WITHHELD — a reds image carries no notes corpus\n' \
                     "$name" "$dir"
@@ -217,15 +223,22 @@ for spec in "${OPTIONAL[@]}"; do
     CONTEXTS+=(--build-context "$name=$dir")
 done
 
-if [ "$PROFILE" = reds ] && [ "${#CONTENT_SRC[@]}" -gt 0 ]; then
-    "$HERE/stage-content.py" --bake "$BAKE" "${CONTENT_SRC[@]}" "$STAGE/content"
-    for flag in "${CONTENT_SRC[@]}"; do
-        case "$flag" in
-            --rules)   CONTEXTS+=(--build-context "rules=$STAGE/content/rules.d") ;;
-            --skills)  CONTEXTS+=(--build-context "skills=$STAGE/content/skills") ;;
-            --benches) CONTEXTS+=(--build-context "benches=$STAGE/content/benches") ;;
-        esac
+# Further content trees, one per project the image serves: a checkout that
+# carries its own rules.d/, skills/ and benches/ (an OpenCN tree's
+# spear-private/, for one). Colon-separated, merged after the machine's own.
+if [ "$PROFILE" = reds ] && [ -n "${SPEAR_CONTENT_TREES:-}" ]; then
+    IFS=: read -r -a _trees <<<"$SPEAR_CONTENT_TREES"
+    for tree in "${_trees[@]}"; do
+        [ -d "$tree" ] && CONTENT_SRC+=(--tree "$tree") \
+            || echo "   content  $tree  (absent — not a content tree)" >&2
     done
+fi
+
+if [ "$PROFILE" = reds ]; then
+    "$HERE/stage-content.py" --bake "$BAKE" "${CONTENT_SRC[@]}" "$STAGE/content"
+    CONTEXTS+=(--build-context "rules=$STAGE/content/rules.d"
+               --build-context "skills=$STAGE/content/skills"
+               --build-context "benches=$STAGE/content/benches")
 fi
 
 # The normative store and the baked trees are staged rather than pointed at:

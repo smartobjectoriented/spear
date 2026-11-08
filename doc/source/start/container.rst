@@ -295,6 +295,10 @@ to anyone.
        collections, of rules, skills and benches only what their scopes admit
        (a rule scoped to an absent corpus, a skill written for a customer,
        stay out), ``PUBLIC`` normative documents only, no notes corpus. The
+       machine's own content tree is read first; ``SPEAR_CONTENT_TREES``, a
+       colon-separated list of further trees (a project checkout's
+       ``spear-private/`` with its ``rules.d/``, ``skills/``, ``benches/``),
+       is merged after it, each file by the same scope rule. The
        build prints ``LEFT OUT`` beside each thing it cut. Labelled
        ``redistributable=false``: it goes to the institute's registry, and
        ``push.sh`` refuses any other without ``--allow-push``.

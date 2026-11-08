@@ -79,7 +79,8 @@ The build takes a while, mostly for the embedding model. See :ref:`Container
 <container>` for what the image carries, what it expects mounted, and the
 three security options without which the harness refuses to run any command.
 Without ``--profile`` it builds the ``public`` image; ``--profile private``
-builds the one ``spear-docker.sh`` runs on this machine.
+builds the one ``spear-docker.sh`` runs on this machine, and ``--profile reds``
+the one handed to the institute, cut to the corpora it bakes.
 
 The inference runtime
 *********************

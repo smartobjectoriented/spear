@@ -1,12 +1,14 @@
 .. _container_run:
 
-==========================
-Running the public image
-==========================
+==================
+Running the images
+==================
 
 This chapter is for a colleague who has **never built SPEAR** and wants to use
 it: pull the image, give it your checkouts and a model endpoint, and start
 asking.  How the image is made is in :ref:`container`; nothing here needs it.
+At the institute, skip to `Running the reds image`_: that image brings its
+own trees and index.
 
 What you need
 =============
@@ -33,6 +35,112 @@ release:
 
 ``<version>`` is the release you want, e.g. ``0.3.0-rc1``.  The image is labelled
 ``redistributable=true``: you may pass it on.
+
+**At the institute**, the image to use is the ``reds`` one: it carries the
+shared trees themselves, their retrieval index and the rules written for them,
+so nothing below about laying out checkouts is needed to start.  It lives in
+the institute's own GitLab registry and is for its members; log in with your
+GitLab account (a personal access token with the ``read_registry`` scope as
+the password) and pull:
+
+.. code-block:: console
+
+   $ docker login reds-gitlab.heig-vd.ch:5050
+   $ docker pull reds-gitlab.heig-vd.ch:5050/reds-general/spear/spear-registry/spear:<version>-reds
+
+Until that registry's certificate is renewed, the same image is on the GitHub
+container registry as a private package of the organisation, for its members:
+
+.. code-block:: console
+
+   $ echo <token with read:packages> | docker login ghcr.io -u <github user> --password-stdin
+   $ docker pull ghcr.io/smartobjectoriented/spear-reds:<version>-reds
+
+It is labelled ``redistributable=false``: it stays within the institute.  A
+checkout of your own mounted at ``/corpora`` shadows the baked copy of the same
+tree, so you can work on your branch and keep the index.
+
+.. _container_run_reds:
+
+Running the ``reds`` image
+==========================
+
+The ``reds`` image carries the trees, their index and the rules, so there is
+nothing to lay out and nothing to index: the steps below are all of it.  What
+it does not carry is a model, which the institute serves on its GPU host; the
+container reaches it through an SSH tunnel you open on your machine.
+
+1. **Access.** Be on the HEIG-VD VPN, and have an SSH key authorised on the
+   inference host's account (ask whoever administers it, giving them your
+   ``~/.ssh/id_reds.pub``).  The host has a low ``MaxAuthTries``: always name
+   the key and ``IdentitiesOnly``, or ssh is disconnected before it offers the
+   right one.
+
+2. **Pull** the image, as above.
+
+3. **Get the launcher.** ``spear-run.sh`` needs only docker, ssh and curl; it
+   opens the tunnel, mounts your state and runs the image.  It is in the
+   repository under ``scripts/docker/``, and inside the image:
+
+   .. code-block:: console
+
+      $ docker run --rm --entrypoint cat \
+            ghcr.io/smartobjectoriented/spear-reds:<version>-reds /opt/spear/spear-run.sh \
+            > ~/bin/spear-run.sh && chmod +x ~/bin/spear-run.sh
+
+4. **Run** it on the corpus you want to work in, by its path under
+   ``/corpora``.  The tunnel to the inference server (port 8010 there, 8082
+   here) is opened the first time and reused while it lasts; the image prints
+   the corpora it found (29) and the standard it bound, then opens the chat.
+
+   .. code-block:: console
+
+      $ spear-run.sh --reds <account>@<inference host> --key ~/.ssh/id_reds \
+            --corpus opencn/opencn-ng --ask
+      $ spear-run.sh --list                       # every corpus and its path
+
+   ``SPEAR_REDS_HOST`` and ``SPEAR_REDS_KEY`` in your environment save the two
+   options.  Without the script, the same run by hand:
+
+   .. code-block:: console
+
+      $ ssh -o IdentitiesOnly=yes -i ~/.ssh/id_reds -N -f \
+            -L 8082:localhost:8010 <account>@<inference host>
+
+      $ mkdir -p ~/.spear/state
+      $ docker run --rm -it \
+            --security-opt seccomp=unconfined \
+            --security-opt apparmor=unconfined \
+            --security-opt systempaths=unconfined \
+            --network host \
+            --user "$(id -u):$(id -g)" \
+            -e SPEAR_API_BASE=http://127.0.0.1:8082/v1 \
+            -e SPEAR_MODEL_NAME=qwen3 \
+            -e SPEAR_STATE_DIR=/state -e HOME=/state/home \
+            -v ~/.spear/state:/state \
+            -w /corpora/opencn/opencn-ng \
+            ghcr.io/smartobjectoriented/spear-reds:<version>-reds --ask
+
+   The paths under ``/corpora`` are those of the building machine, relative to
+   its home: ``opencn/opencn-ng`` (and ``opencn/opencn-ng/linux/usr``),
+   ``soo/so3/so3``, ``soo/so3/doc``, ``sye/sye_sol``,
+   ``pos/pos_sol/so3`` and so on; ``spear-run.sh --list`` prints them all.
+
+5. **Work on your own checkout** rather than the baked copy: mount it at the
+   same path, and it shadows the copy while the index keeps serving.
+
+   .. code-block:: console
+
+      $ spear-run.sh --reds <account>@<inference host> --key ~/.ssh/id_reds \
+            --mount ~/opencn/opencn-ng:opencn/opencn-ng --corpus opencn/opencn-ng --ask
+
+   The index describes the baked revision; after large changes to your tree,
+   ``/reindex`` inside the session rebuilds its collection into your state
+   volume, on the CPU (minutes for a small tree, an hour for a large one).
+
+The ``--ask`` at the end is the permission mode (:ref:`usage`): confirm each
+edit and command.  ``--safe`` is read-only, ``--auto`` runs without asking.
+Everything a session accumulates stays in ``~/.spear/state`` on your machine.
 
 .. _container_run_layout:
 

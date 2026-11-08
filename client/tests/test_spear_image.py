@@ -59,7 +59,7 @@ class SpearImageTests(unittest.TestCase):
     def test_build_needs_a_profile(self):
         result = self.run_image("build")
         self.assertNotEqual(result.returncode, 0)
-        self.assertIn("public or private", result.stderr)
+        self.assertIn("public, reds or private", result.stderr)
 
     def test_an_unknown_name_is_refused_not_guessed(self):
         result = self.run_image("erase", "engagement")

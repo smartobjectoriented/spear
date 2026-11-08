@@ -1,15 +1,15 @@
 #!/bin/bash
 # Manage SPEAR container images: one entry point over scripts/docker/.
 #
-#     spear-image build   <public|private> [--bake a,b,...] [--knowledge a,b,...|all]
+#     spear-image build   <public|reds|private> [--bake a,b,...] [--knowledge a,b,...|all]
 #                         [--tag TAG]
 #     spear-image list
-#     spear-image inspect <public|private|TAG>
-#     spear-image run     <public|private|TAG> [spear-docker options] [-- harness args]
-#     spear-image save    <public|private|TAG> [FILE]
+#     spear-image inspect <public|reds|private|TAG>
+#     spear-image run     <public|reds|private|TAG> [spear-docker options] [-- harness args]
+#     spear-image save    <public|reds|private|TAG> [FILE]
 #     spear-image load    FILE
-#     spear-image push    <public|private|TAG> [--allow-push]
-#     spear-image erase   <public|private|all|TAG> [--cache]
+#     spear-image push    <public|reds|private|TAG> [--allow-push]
+#     spear-image erase   <public|reds|private|all|TAG> [--cache]
 #
 # A profile names the image scripts/docker/build.sh tags by default,
 # spear:<version>-<profile>, the version being scripts/spearversion.sh's.
@@ -38,10 +38,10 @@ die() { echo "spear-image: $*" >&2; exit 1; }
 # profile or tag -> tag
 image_of() {
     case "$1" in
-        "") die "name an image: public, private or a tag" ;;
-        public|private) echo "spear:$VERSION-$1" ;;
+        "") die "name an image: public, reds, private or a tag" ;;
+        public|reds|private) echo "spear:$VERSION-$1" ;;
         *:*) echo "$1" ;;
-        *) die "'$1' is neither a profile (public, private) nor a tag" ;;
+        *) die "'$1' is neither a profile (public, reds, private) nor a tag" ;;
     esac
 }
 
@@ -62,8 +62,8 @@ case "$action" in
     build)
         profile="$1"
         case "$profile" in
-            public|private) shift ;;
-            *) die "build needs a profile: public or private" ;;
+            public|reds|private) shift ;;
+            *) die "build needs a profile: public, reds or private" ;;
         esac
 
         tag="" bake=() knowledge=()

@@ -44,14 +44,20 @@ while [ $# -gt 0 ]; do
         --knowledge=*) KNOWLEDGE="${1#*=}"; shift ;;
         -h|--help)
             cat <<'USAGE'
-scripts/docker/build.sh [TAG] [--profile public|private] [--bake name,name,...]
+scripts/docker/build.sh [TAG] [--profile public|reds|private] [--bake name,name,...]
                         [--knowledge name,name,...|all]
 
   --profile public       (default) only normative documents that declare
                          themselves PUBLIC, and of rules, skills, benches and
                          notes only what the repository tracks; no retrieval
                          index, no baked corpus. Safe to hand over.
-  --profile private   everything this machine has, licensed documents and
+  --profile reds         for the people of the institute: the corpora named
+                         by --bake (required), their collections of the index
+                         and nothing else of it, the rules, skills and benches
+                         their scopes admit, PUBLIC normative documents only.
+                         Pushed to the institute's registry and refused
+                         elsewhere unless you say --allow-push.
+  --profile private      everything this machine has, licensed documents and
                          the original PDFs included. NOT redistributable; the
                          image is labelled so, and push is refused unless you
                          say --allow-push.
@@ -69,8 +75,8 @@ USAGE
 done
 
 case "$PROFILE" in
-    public|private) ;;
-    *) echo "--profile must be public or private, not '$PROFILE'" >&2; exit 1 ;;
+    public|reds|private) ;;
+    *) echo "--profile must be public, reds or private, not '$PROFILE'" >&2; exit 1 ;;
 esac
 
 # A baked corpus is a tree off this host, and nothing records whether it may
@@ -87,6 +93,15 @@ fi
 if [ "$PROFILE" = public ] && [ -n "$KNOWLEDGE" ]; then
     echo "--knowledge needs --profile private: a public image carries no" \
          "workspace knowledge, since nothing says which of it may be redistributed" >&2
+    exit 1
+fi
+
+# A reds image exists for people who have none of the trees: what it carries
+# is what it bakes, and everything else it takes -- index, rules, skills -- is
+# cut to those corpora. Without a bake list there is nothing to cut to.
+if [ "$PROFILE" = reds ] && [ -z "$BAKE" ]; then
+    echo "--profile reds needs --bake: the image carries the corpora it bakes," \
+         "and its index and rules are cut to them" >&2
     exit 1
 fi
 
@@ -110,6 +125,19 @@ fi
 
 EMPTY="$(mktemp -d)"
 trap 'rm -rf "$EMPTY"' EXIT
+
+# Generate the registry the image carries. It is BUILD OUTPUT and is not in the
+# repository: a committed copy would be one machine's corpus graph, published,
+# and stale the moment a corpus is added. Generating it here is also what stops
+# it drifting from projects.json — a corpus added on the host would otherwise be
+# absent from the image with no sign but a "missing" line at startup.
+REGISTRY="$REPO/docker/projects.docker.json"
+"$HERE/gen-registry.py" --profile "$PROFILE" || echo "   (some corpora were skipped, see above)" >&2
+[ -f "$REGISTRY" ] || {
+    echo "gen-registry.py produced no $REGISTRY — the image needs one" >&2
+    exit 1
+}
+
 
 # name : environment override : in-tree default : what it is
 OPTIONAL=(
@@ -148,6 +176,7 @@ publishable() {
 }
 
 CONTEXTS=()
+CONTENT_SRC=()
 for spec in "${OPTIONAL[@]}"; do
     IFS=: read -r name var fallback label <<<"$spec"
     dir="${!var:-$fallback}"
@@ -155,6 +184,23 @@ for spec in "${OPTIONAL[@]}"; do
     if [ ! -d "$dir" ]; then
         printf '   %-8s (absent — image carries no %s)\n' "$name" "$label"
         dir="$EMPTY"
+    elif [ "$PROFILE" = reds ]; then
+        # Cut to the baked corpora: the index to their collections, the
+        # content to what its scopes admit (below, once all three are known).
+        # The notes corpus is one deployment's own writing about every tree it
+        # has, and declares no scope at all.
+        case "$name" in
+            index)
+                "$HERE/stage-index.py" --bake "$BAKE" --index "$dir" "$STAGE/optional/index"
+                dir="$STAGE/optional/index" ;;
+            rules|skills|benches)
+                CONTENT_SRC+=("--$name" "$dir")
+                continue ;;
+            notes)
+                printf '   %-8s %s  WITHHELD — a reds image carries no notes corpus\n' \
+                    "$name" "$dir"
+                dir="$EMPTY" ;;
+        esac
     elif [ "$PROFILE" = public ]; then
         if publishable "$dir" "$STAGE/optional/$name"; then
             printf '   %-8s %s  (tracked files only)\n' "$name" "$dir"
@@ -171,17 +217,16 @@ for spec in "${OPTIONAL[@]}"; do
     CONTEXTS+=(--build-context "$name=$dir")
 done
 
-# Generate the registry the image carries. It is BUILD OUTPUT and is not in the
-# repository: a committed copy would be one machine's corpus graph, published,
-# and stale the moment a corpus is added. Generating it here is also what stops
-# it drifting from projects.json — a corpus added on the host would otherwise be
-# absent from the image with no sign but a "missing" line at startup.
-REGISTRY="$REPO/docker/projects.docker.json"
-"$HERE/gen-registry.py" --profile "$PROFILE" || echo "   (some corpora were skipped, see above)" >&2
-[ -f "$REGISTRY" ] || {
-    echo "gen-registry.py produced no $REGISTRY — the image needs one" >&2
-    exit 1
-}
+if [ "$PROFILE" = reds ] && [ "${#CONTENT_SRC[@]}" -gt 0 ]; then
+    "$HERE/stage-content.py" --bake "$BAKE" "${CONTENT_SRC[@]}" "$STAGE/content"
+    for flag in "${CONTENT_SRC[@]}"; do
+        case "$flag" in
+            --rules)   CONTEXTS+=(--build-context "rules=$STAGE/content/rules.d") ;;
+            --skills)  CONTEXTS+=(--build-context "skills=$STAGE/content/skills") ;;
+            --benches) CONTEXTS+=(--build-context "benches=$STAGE/content/benches") ;;
+        esac
+    done
+fi
 
 # The normative store and the baked trees are staged rather than pointed at:
 # what may travel is a per-document decision (see stage-standards.py), and
@@ -208,10 +253,10 @@ LABELS=(
     --label "ch.heig-vd.reds.spear.built=$(date -Iseconds)"
 )
 
-if [ "$PROFILE" = private ]; then
-    LABELS+=(--label "ch.heig-vd.reds.spear.redistributable=false")
-else
+if [ "$PROFILE" = public ]; then
     LABELS+=(--label "ch.heig-vd.reds.spear.redistributable=true")
+else
+    LABELS+=(--label "ch.heig-vd.reds.spear.redistributable=false")
 fi
 
 echo "== building $TAG =="
@@ -223,6 +268,18 @@ docker build --build-context "repo=$REPO" "${CONTEXTS[@]}" "${LABELS[@]}" \
 
 echo
 echo "built $TAG ($PROFILE)"
+
+if [ "$PROFILE" = reds ]; then
+    cat <<MSG
+
+  This image carries the institute's trees and their index, for the institute's
+  own registry. Tag it there and push; scripts/docker/push.sh refuses any other
+  registry without --allow-push:
+
+      docker tag $TAG reds-gitlab.heig-vd.ch:5050/<group>/spear:${TAG#spear:}
+      scripts/docker/push.sh reds-gitlab.heig-vd.ch:5050/<group>/spear:${TAG#spear:}
+MSG
+fi
 
 if [ "$PROFILE" = private ]; then
     cat <<MSG

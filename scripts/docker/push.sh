@@ -7,7 +7,12 @@
 # time, travelling with the bytes through `docker save`, a registry and back.
 #
 #     scripts/docker/push.sh ghcr.io/<org>/spear:<version>-public
+#     scripts/docker/push.sh reds-gitlab.heig-vd.ch:5050/<group>/spear:<version>-reds
 #     scripts/docker/push.sh --allow-push ghcr.io/<org>/spear-private:<version>-private
+#
+# A reds image goes to the institute's registry and nowhere else without
+# --allow-push: the image name must start with that host (any port), and
+# SPEAR_REDS_REGISTRY overrides the default host.
 #
 # --allow-push is not a formality. A private image carries a licensed
 # normative corpus -- the original document included, where the store retained
@@ -50,6 +55,35 @@ case "$PROFILE" in
         echo "It was not built by scripts/docker/build.sh; refusing to guess." >&2
         exit 1 ;;
     public) ;;
+    reds)
+        # Built for the people of one institute: its registry, and no other.
+        # The registry is a prefix of the image name, so a retag to anywhere
+        # else is what gets refused.
+        REGISTRY="${SPEAR_REDS_REGISTRY:-reds-gitlab.heig-vd.ch}"
+        case "$IMAGE" in
+            "$REGISTRY"/*|"$REGISTRY":*) ;;
+            *)
+                if [ "$ALLOW" != 1 ]; then
+                    cat >&2 <<MSG
+Refusing to push $IMAGE.
+
+  profile          $PROFILE
+  redistributable  $OK
+
+This image was built with --profile reds: it carries the institute's source
+trees, their index and the rules written for them, for the institute's own
+registry, $REGISTRY. Tag it there:
+
+    docker tag $IMAGE $REGISTRY:5050/<group>/spear:<tag>
+
+or, to publish it elsewhere on your own authority:
+
+    scripts/docker/push.sh --allow-push $IMAGE
+MSG
+                    exit 1
+                fi
+                echo "!! pushing a reds image outside $REGISTRY on --allow-push: $IMAGE" >&2 ;;
+        esac ;;
     private)
         if [ "$ALLOW" != 1 ]; then
             cat >&2 <<MSG

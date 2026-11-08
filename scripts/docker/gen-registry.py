@@ -21,7 +21,9 @@ Two rewrites happen here, and both are about things that move:
   profile     A public image carries only the corpora marked "public": true.
               The registry is a map of the building machine's trees -- names,
               paths, federations -- and a private tree must not be named in an
-              image anyone may pull. Unmarked means private.
+              image anyone may pull. Unmarked means private. The other two
+              profiles take the whole map here; a reds image is then cut down
+              to what it bakes (stage-corpora.py --restrict-registry).
 
   collections The chroma collection is named EXPLICITLY, computed from the
               resolved HOST path. The derivation is an md5 of the absolute

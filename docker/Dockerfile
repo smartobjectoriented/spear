@@ -138,6 +138,11 @@ COPY --from=baked --chmod=0777 . /corpora/
 # per document -- see scripts/docker/stage-standards.py), and the workspace
 # knowledge the build was asked to ship (stage-knowledge.py).
 COPY --from=common . /opt/spear/common/
+
+# The launcher for a machine that has this image and nothing else: a recipient
+# copies it out (`docker run --rm --entrypoint cat <image> /opt/spear/spear-run.sh`)
+# and runs the image with it, tunnel included.
+COPY --from=repo scripts/docker/spear-run.sh /opt/spear/spear-run.sh
 ENV SPEAR_COMMON_STATE_DIR=/opt/spear/common
 # The standards store stays writable, so that a standard ingested in the
 # container can be bound there; it is kept apart from the state directory

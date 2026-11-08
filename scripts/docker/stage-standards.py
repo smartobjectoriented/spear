@@ -13,9 +13,10 @@ exclude it, would go stale the first time a document is ingested, and would
 put the whole decision one forgotten edit away from shipping a licensed PDF.
 
     stage-standards.py --profile public      OUT
+    stage-standards.py --profile reds        OUT
     stage-standards.py --profile private  OUT
 
-`public` takes only what declares itself PUBLIC. `private` takes
+`public` and `reds` take only what declares itself PUBLIC. `private` takes
 everything, and says plainly what that means.
 
 The active binding travels only if the document it names travelled: a binding
@@ -48,7 +49,7 @@ def documents(root: pathlib.Path):
 
 def main() -> int:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--profile", choices=("public", "private"), required=True)
+    ap.add_argument("--profile", choices=("public", "reds", "private"), required=True)
     ap.add_argument("--store", default=None,
                     help="the normative store (default: $SPEAR_STATE_DIR/standards)")
     ap.add_argument("out", help="directory to stage into (emptied first)")
@@ -77,7 +78,7 @@ def main() -> int:
         # Unknown provenance is treated as licensed. A document that does not
         # say what it is has not earned the benefit of the doubt in an image
         # somebody is about to hand to someone else.
-        if args.profile == "public" and origin != PUBLIC:
+        if args.profile != "private" and origin != PUBLIC:
             left.append((name, origin))
             continue
 
@@ -99,7 +100,7 @@ def main() -> int:
     for name, origin in taken:
         print(f"   standards {name}  ({origin})")
     for name, origin in left:
-        print(f"   standards {name}  ({origin}) — LEFT OUT of a public image")
+        print(f"   standards {name}  ({origin}) — LEFT OUT of a {args.profile} image")
 
     # The binding, only if its document came along.
     binding = store / ".active-binding.json"

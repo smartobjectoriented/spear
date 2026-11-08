@@ -1,3 +1,22 @@
+Unreleased
+
+	•	Image profile reds, between public and private: the image for the
+		people of one institute. It bakes the corpora named by --bake and is
+		cut to them -- of the index only their collections, of rules, skills
+		and benches only what their scopes admit, PUBLIC normative documents
+		only, no notes corpus. Several content trees are merged
+		(SPEAR_CONTENT_TREES), so a project checkout's own rules travel with
+		its corpus. push.sh accepts such an image for the institute's registry
+		host only, unless told --allow-push.
+
+	•	Baking copies a checkout as git has it and a fetched component without
+		its build output or its *.back snapshots, honours the registry's
+		exclusions, and bakes a corpus nested in another by its own rule.
+
+	•	spear-run.sh runs a published image on a machine that has docker and
+		nothing else: tunnel to the inference host, state volume, own
+		checkouts over the baked trees. It is copied into the image.
+
 v0.3.0 (8 oct 2026)
 
 First stable release of the 0.3 line: v0.3.0-rc1, below, with the fixes and

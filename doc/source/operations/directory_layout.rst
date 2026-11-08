@@ -228,6 +228,12 @@ answers to an environment variable:
    * - ``SPEAR_BENCH_DIR``
      - ``<app>/benches``
      - the acceptance benches a project declares by bare name
+   * - ``SPEAR_CONTENT_TREES``
+     - unset
+     - further content trees, colon-separated, each holding ``rules.d/``,
+       ``skills/`` and ``benches/`` (a project checkout's ``spear-private/``);
+       read by ``build.sh`` for a ``reds`` image and merged after the three
+       above, same-named files replacing earlier ones
 
 The default is the in-tree directory, so a plain checkout behaves exactly as it
 did; **no default points outside the checkout**, which is what keeps a private
@@ -315,7 +321,12 @@ arrangement, and the rest of this documentation uses the names:
      - ``llama-server`` alone
    * - ``spear-docker``
      - ``scripts/docker/spear-docker.sh``
-     - the assistant in a container (:doc:`/start/container`)
+     - the assistant in a container, this machine's trees mounted
+       (:doc:`/start/container`)
+   * - ``spear-run.sh``
+     - ``scripts/docker/spear-run.sh``, also ``/opt/spear/spear-run.sh`` in the image
+     - a published image on a machine that has docker and nothing else
+       (:ref:`container_run_reds`)
 
 ``spear-chat --help`` lists every flag — permissions, model, corpus — and is
 answered before any server is started or any corpus resolved, so it costs

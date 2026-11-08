@@ -263,8 +263,8 @@ registry that may run to hundreds of gigabytes.
 
 .. _image-profiles:
 
-Two profiles
-============
+Three profiles
+==============
 
 An image that carries a normative store is one somebody can be handed. What it
 may carry is decided per build, and the default is the one that is safe to give
@@ -273,6 +273,7 @@ to anyone.
 .. code-block:: console
 
    $ scripts/docker/build.sh --profile public
+   $ scripts/docker/build.sh --profile reds --bake so3,so3-doc,acme-firmware
    $ scripts/docker/build.sh --profile private --bake so3,acme-firmware
 
 .. list-table::
@@ -288,6 +289,15 @@ to anyone.
        baked tree or workspace knowledge (``--bake`` and ``--knowledge`` are
        refused). Anything withheld is printed as
        ``WITHHELD``. Labelled ``redistributable=true``.
+   * - ``reds``
+     - for the people of one institute, who have none of the trees: the
+       corpora ``--bake`` names (required), of the index only their
+       collections, of rules, skills and benches only what their scopes admit
+       (a rule scoped to an absent corpus, a skill written for a customer,
+       stay out), ``PUBLIC`` normative documents only, no notes corpus. The
+       build prints ``LEFT OUT`` beside each thing it cut. Labelled
+       ``redistributable=false``: it goes to the institute's registry, and
+       ``push.sh`` refuses any other without ``--allow-push``.
    * - ``private``
      - everything the building host has, licensed documents and the original
        PDFs included where the store retained them. Labelled
@@ -489,14 +499,18 @@ Publishing, and not publishing
 
    $ docker tag spear:<version>-public ghcr.io/smartobjectoriented/spear:<version>-public
    $ scripts/docker/push.sh ghcr.io/smartobjectoriented/spear:<version>-public
+   $ scripts/docker/push.sh reds-gitlab.heig-vd.ch:5050/<group>/spear:<version>-reds
+   $ scripts/docker/push.sh ghcr.io/someone/spear:<version>-reds                  # refused
    $ scripts/docker/push.sh <private-registry>/spear:<version>-private            # refused
    $ scripts/docker/push.sh --allow-push <private-registry>/spear:<version>-private
 
 A ``public`` image goes to the GitHub container registry of the project, where
-:ref:`container_run` tells colleagues to pull it from.  A ``private`` image
-goes only to the private registry of the organisation that owns its content;
-where that is, and how its users run it, is documented with that content, not
-here.
+:ref:`container_run` tells colleagues to pull it from.  A ``reds`` image goes
+to the institute's own registry, ``reds-gitlab.heig-vd.ch`` unless
+``SPEAR_REDS_REGISTRY`` names another host: the image name must start with
+that host, or the push is refused without ``--allow-push``.  A ``private`` image goes only
+to the private registry of the organisation that owns its content; where that
+is, and how its users run it, is documented with that content, not here.
 
 The guard reads the **label**, not the tag. A tag gets retyped, shortened and
 reused; a label travels with the bytes through ``docker save``, a registry and

@@ -35,7 +35,7 @@ spear-image erase private --cache         # image and the build cache holding it
 `spear-image --help` lists the rest. It only drives the scripts in
 `scripts/docker/`, which keep every rule below.
 
-## Two profiles
+## Three profiles
 
 The image can carry a normative store and the corpus trees themselves, which
 is what makes it something you hand over rather than something you mount into.
@@ -43,6 +43,7 @@ What it may carry is a per-build decision, and it defaults to the safe one.
 
 ```sh
 scripts/docker/build.sh --profile public
+scripts/docker/build.sh --profile reds --bake so3,so3-doc,acme-firmware
 scripts/docker/build.sh --profile private --bake so3,acme-firmware
 ```
 
@@ -51,6 +52,14 @@ themselves `PUBLIC`, and of rules, skills, benches and notes only what the
 repository tracks: no retrieval index, no baked tree (`--bake` is refused),
 nothing from a deployment's private tree. The build prints `WITHHELD` beside
 whatever it left out. Safe to give to anyone.
+
+**`reds`** is the image handed to the people of the institute, who have none
+of the trees: the corpora `--bake` names (required), of the index only their
+collections, of rules, skills and benches only what their scopes admit, `PUBLIC`
+normative documents only, no notes corpus. The build prints `LEFT OUT` beside
+each thing it cut. It goes to the institute's registry
+(`reds-gitlab.heig-vd.ch:5050`, or the host `SPEAR_REDS_REGISTRY` names); `scripts/docker/push.sh`
+refuses any other without `--allow-push`.
 
 **`private`** takes everything this machine has — licensed documents, and
 the original PDFs where the store retained them. The image is labelled

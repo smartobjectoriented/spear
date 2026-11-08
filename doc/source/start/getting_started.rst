@@ -48,7 +48,9 @@ which is the image to hand to someone else (:ref:`image-profiles`). The image
 carries the harness and the embedder; you mount your own source trees. :doc:`/start/container_run` is the user's guide, and
 :doc:`/start/container` describes what is baked, what is mounted, and the three
 ``--security-opt`` flags without which the harness refuses to run any command
-at all.
+at all.  At the institute there is a shorter path still: the ``reds`` image
+carries the shared trees and their index, and ``spear-run.sh`` runs it with
+nothing but Docker (:ref:`container_run_reds`).
 
 The native path
 ---------------

@@ -123,6 +123,37 @@ class ContentIsCutToTheBakedCorpora(unittest.TestCase):
 
         self.assertEqual(self.staged("benches"), ["README.md", "so3-ls.sh"])
 
+    def test_a_second_content_tree_is_merged_by_the_same_rule(self):
+        """A project's own tree (rules.d/, skills/, benches/ in its checkout)
+        adds what its corpora admit and nothing else; a file both trees name
+        is taken from the later one."""
+        tree = Path(self.temp.name) / "project-tree"
+        (tree / "rules.d" / "corpora").mkdir(parents=True)
+        (tree / "skills").mkdir()
+        (tree / "rules.d" / "25-cnc-build.md").write_text(
+            "---\nscope: corpus cnc, cnc-usr\n---\nthe cnc build\n")
+        (tree / "rules.d" / "20-global.md").write_text(
+            "---\nscope: global\n---\nthe project's conventions\n")
+        (tree / "rules.d" / "corpora" / "cnc.md").write_text("cnc map\n")
+        (tree / "skills" / "for-cnc.md").write_text(
+            "---\nname: for-cnc\nscope: [cnc]\n---\n## Procedure\n1. do\n")
+        registry = json.loads(self.registry.read_text())
+        registry["cnc"] = {"path": "cnc/tree"}
+        self.registry.write_text(json.dumps(registry))
+
+        result = run("stage-content.py", "--bake", "so3,cnc", "--registry", str(self.registry),
+                     "--rules", str(self.rules), "--skills", str(self.skills),
+                     "--benches", str(self.benches), "--tree", str(tree), str(self.out))
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(self.staged("rules.d"),
+                         ["20-global.md", "25-cnc-build.md", "25-shared.md", "README"])
+        self.assertEqual((self.out / "rules.d" / "20-global.md").read_text(),
+                         "---\nscope: global\n---\nthe project's conventions\n")
+        self.assertIn("20-global.md  (global)  replaces the earlier one", result.stdout)
+        self.assertEqual(self.staged("rules.d/corpora"), ["cnc.md", "so3.md"])
+        self.assertIn("for-cnc.md", self.staged("skills"))
+
     def test_the_build_says_what_it_left_out_and_why(self):
         out = self.stage("so3,buildsys")
 
@@ -270,6 +301,10 @@ class TheBuilderHonoursTheProfile(unittest.TestCase):
 
     def test_the_registry_exists_before_the_cut_needs_it(self):
         self.assertLess(BUILD_SH.index("gen-registry.py"), BUILD_SH.index("stage-index.py"))
+
+    def test_further_content_trees_are_read_from_the_environment(self):
+        self.assertIn("SPEAR_CONTENT_TREES", BUILD_SH)
+        self.assertIn('CONTENT_SRC+=(--tree "$tree")', BUILD_SH)
 
     def test_the_notes_corpus_is_withheld(self):
         self.assertIn("a reds image carries no notes corpus", BUILD_SH)

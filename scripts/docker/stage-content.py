@@ -8,8 +8,14 @@ travels is read the way the harness reads it -- a rule's `scope:` header, a
 skill's `scope:` front matter -- and matched against what the image carries:
 the baked corpora and the families they declare.
 
-    stage-content.py --bake a,b [--registry FILE] --rules DIR --skills DIR \
-        --benches DIR OUT
+    stage-content.py --bake a,b [--registry FILE] [--rules DIR] [--skills DIR]
+        [--benches DIR] [--tree DIR]... OUT
+
+A deployment usually has one content tree, named by --rules, --skills and
+--benches. An image for several projects takes the trees of each: --tree
+names a directory holding rules.d/, skills/ and benches/, and may repeat. The
+trees are merged in the order given; a file a later tree names again replaces
+the earlier one, and the build says so.
 
 Kept: rules declared global, rules and skills scoped to a baked corpus or to a
 family a baked corpus declares, skills declared `any`, the orientation map of
@@ -90,6 +96,13 @@ def skill_verdict(text: str, corpora: set[str], families: set[str]) -> tuple[boo
     return bool(hit), ", ".join(hit or scope)
 
 
+def place(path: pathlib.Path, dst: pathlib.Path, label: str, why: str) -> None:
+    target = dst / path.name
+    note = "  replaces the earlier one" if target.exists() else ""
+    shutil.copy2(path, target)
+    print(f"   {label:<8} {path.name}  ({why}){note}")
+
+
 def stage_dir(src: pathlib.Path, dst: pathlib.Path, label: str, verdict,
               corpora: set[str], families: set[str]) -> None:
     dst.mkdir(parents=True, exist_ok=True)
@@ -109,8 +122,7 @@ def stage_dir(src: pathlib.Path, dst: pathlib.Path, label: str, verdict,
                             corpora, families)
 
         if kept:
-            shutil.copy2(path, dst / path.name)
-            print(f"   {label:<8} {path.name}  ({why})")
+            place(path, dst, label, why)
         else:
             print(f"   {label:<8} {path.name}  LEFT OUT — {why}")
 
@@ -122,6 +134,8 @@ def main() -> int:
     ap.add_argument("--rules", default="")
     ap.add_argument("--skills", default="")
     ap.add_argument("--benches", default="")
+    ap.add_argument("--tree", action="append", default=[],
+                    help="a content tree holding rules.d/, skills/, benches/; repeatable")
     ap.add_argument("out")
     args = ap.parse_args()
 
@@ -139,37 +153,45 @@ def main() -> int:
         raw = spec.get("families") or ()
         families |= {str(f).casefold() for f in ((raw,) if isinstance(raw, str) else raw)}
 
-    rules, skills, benches = (pathlib.Path(p) if p else None
-                              for p in (args.rules, args.skills, args.benches))
+    for sub in ("rules.d", "skills", "benches"):
+        (out / sub).mkdir(parents=True, exist_ok=True)
 
-    if rules:
+    trees = [pathlib.Path(d) for d in args.tree]
+    rules_dirs = ([pathlib.Path(args.rules)] if args.rules else []) + [d / "rules.d" for d in trees]
+    skills_dirs = ([pathlib.Path(args.skills)] if args.skills else []) + [d / "skills" for d in trees]
+    benches_dirs = ([pathlib.Path(args.benches)] if args.benches else []) + [d / "benches" for d in trees]
+
+    for tree in trees:
+        print(f"   content  {tree}")
+
+    for rules in rules_dirs:
         stage_dir(rules, out / "rules.d", "rules", rule_verdict, corpora, families)
         maps = rules / "corpora"
 
         if maps.is_dir():
-            (out / "rules.d" / "corpora").mkdir(parents=True)
+            (out / "rules.d" / "corpora").mkdir(parents=True, exist_ok=True)
 
             for path in sorted(maps.glob("*.md")):
                 if path.stem in corpora:
-                    shutil.copy2(path, out / "rules.d" / "corpora" / path.name)
-                    print(f"   rules    corpora/{path.name}  (map of a baked corpus)")
+                    place(path, out / "rules.d" / "corpora", "rules",
+                          f"corpora/ map of {path.stem}")
                 else:
                     print(f"   rules    corpora/{path.name}  LEFT OUT — not a baked corpus")
 
-    if skills:
+    for skills in skills_dirs:
         stage_dir(skills, out / "skills", "skills", skill_verdict, corpora, families)
 
-    if benches:
+    named = {spec["bench"]: name for name, spec in specs.items() if spec.get("bench")}
+
+    for benches in benches_dirs:
         (out / "benches").mkdir(parents=True, exist_ok=True)
-        named = {spec["bench"]: name for name, spec in specs.items() if spec.get("bench")}
 
         for path in sorted(benches.iterdir()) if benches.is_dir() else []:
             if path.is_dir():
                 continue
 
             if path.name in named:
-                shutil.copy2(path, out / "benches" / path.name)
-                print(f"   benches  {path.name}  (bench of {named[path.name]})")
+                place(path, out / "benches", "benches", f"bench of {named[path.name]}")
             elif path.suffix in (".md", ".txt", ""):
                 shutil.copy2(path, out / "benches" / path.name)
             else:

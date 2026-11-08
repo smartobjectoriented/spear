@@ -55,8 +55,10 @@ whatever it left out. Safe to give to anyone.
 
 **`reds`** is the image handed to the people of the institute, who have none
 of the trees: the corpora `--bake` names (required), of the index only their
-collections, of rules, skills and benches only what their scopes admit, `PUBLIC`
-normative documents only, no notes corpus. The build prints `LEFT OUT` beside
+collections, of rules, skills and benches only what their scopes admit (from the
+machine's own content tree, then the trees `SPEAR_CONTENT_TREES` lists, such as a
+project checkout's `spear-private/`), `PUBLIC` normative documents only, no notes
+corpus. The build prints `LEFT OUT` beside
 each thing it cut. It goes to the institute's registry
 (`reds-gitlab.heig-vd.ch:5050`, or the host `SPEAR_REDS_REGISTRY` names); `scripts/docker/push.sh`
 refuses any other without `--allow-push`.

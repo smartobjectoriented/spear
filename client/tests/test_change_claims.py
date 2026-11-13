@@ -181,7 +181,7 @@ class ConcludeDemandTests(unittest.TestCase):
                 self.assertTrue(is_write_request(question))
 
     def test_a_question_keeps_both_branches(self):
-        for question in ("How should the ACK be managed with VITA49.2?",
+        for question in ("How should the ACK be managed with EXAMPLE-STD-1.0?",
                          "what does Rule 8.4.1.1-3 require?",
                          "explain how cmdlink.c dispatches a request"):
             with self.subTest(question=question):

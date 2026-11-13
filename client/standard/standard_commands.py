@@ -66,7 +66,19 @@ class StandardOperator:
                 != (current.retrieval_fingerprint or current.index_fingerprint)):
             self._write_active(current)
 
+        self._register_profile(current)
+
         return current
+
+    def _register_profile(self, binding) -> None:
+        """Register the role taxonomy this standard ships in its store, if any.
+
+        Best-effort: a standard with no profile keeps the conventional reading.
+        """
+        from standard import standard_profiles
+
+        standard_profiles.register_for(
+            self.store, binding.standard_id, binding.revision)
 
     def use(self, standard_id: str, revision: str) -> StandardBinding:
         binding = self.store.binding(
@@ -74,6 +86,7 @@ class StandardOperator:
             bound_at=datetime.now(timezone.utc).isoformat(timespec="seconds"),
         )
         self._write_active(binding)
+        self._register_profile(binding)
 
         return binding
 

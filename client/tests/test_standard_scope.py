@@ -2,7 +2,7 @@
 
 The binding attached to every prompt of every session. Asked to download the
 RS274/NGC G-code specification, the assistant spent eleven turns explaining
-that the system is bound to ANSI-VITA-49.2 and not RS274/NGC. The word that
+that the system is bound to EXAMPLE-STD-1.0 and not RS274/NGC. The word that
 put it there was "standard", in "inject it in our RAG as a standard".
 """
 import os
@@ -15,7 +15,7 @@ from standard import standard_scope  # noqa: E402
 from standard.standard_schema import StandardBinding                    # noqa: E402
 
 
-def binding(standard_id="ANSI-VITA-49.2", revision="2017-R2024"):
+def binding(standard_id="EXAMPLE-STD-1.0", revision="2024"):
     return StandardBinding(standard_id, revision, "a" * 64, "b" * 64,
                            "c" * 64, "extractor-1")
 
@@ -46,10 +46,10 @@ class EngagementTests(unittest.TestCase):
             self.assertFree(question)
 
     def test_naming_the_standard_binds(self):
-        for question in ("summarise the ANSI-VITA-49.2 conformance rules",
-                         "what does VITA 49.2 say about it?",
-                         "in vita-49.2, is that mandatory?",
-                         "does 2017-R2024 change that?"):
+        for question in ("summarise the EXAMPLE-STD-1.0 conformance rules",
+                         "what does EXAMPLE-STD-1.0 say about it?",
+                         "in example-std-1.0, is that mandatory?",
+                         "does 2024 change that?"):
             self.assertEngages(question)
 
     def test_the_subject_matter_binds_without_the_name(self):
@@ -66,7 +66,7 @@ class EngagementTests(unittest.TestCase):
         self.assertEngages("what is in vgr-deadbeef12?")
 
     def test_no_binding_means_no_engagement(self):
-        self.assertFalse(standard_scope.engages(None, "what about VITA 49.2?"))
+        self.assertFalse(standard_scope.engages(None, "what about EXAMPLE-STD-1.0?"))
 
     def test_an_empty_question_does_not_bind(self):
         self.assertFree("")
@@ -153,7 +153,7 @@ class ReadFileContextTests(unittest.TestCase):
     def test_the_line_that_started_this(self):
         question = "carry out the task in doc/ack-task.md"
         task = ("[file: doc/ack-task.md]\n# Task\nThe bound standard is "
-                "ANSI-VITA-49.2 2017-R2024. Every normative claim ...")
+                "EXAMPLE-STD-1.0 2024. Every normative claim ...")
 
         self.assertFalse(standard_scope.engages(self.binding, question))
         self.assertTrue(standard_scope.engages(self.binding, question,
@@ -168,4 +168,4 @@ class ReadFileContextTests(unittest.TestCase):
 
     def test_context_never_binds_without_a_binding(self):
         self.assertFalse(standard_scope.engages(
-            None, "do it", context="ANSI-VITA-49.2 2017-R2024"))
+            None, "do it", context="EXAMPLE-STD-1.0 2024"))

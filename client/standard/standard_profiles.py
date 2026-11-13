@@ -1,49 +1,38 @@
-"""What the provision roles of a particular document mean.
+"""Per-standard role profiles, loaded from the store — never hardcoded here.
 
-The guard is generic: it knows that a role has a ceiling and that a modal
-verb is evidence only up to it. WHICH ceiling belongs to WHICH role is a
-statement about one document's drafting conventions, and it belongs here
-rather than inside the guard.
-
-Most specification-style documents follow the conventional reading, which is
-why `normative_force.CONVENTIONAL` is the default. A profile is written when
-a document's own front matter says something different, or -- as below -- when
-it is worth recording explicitly that the conventional reading was checked
-against the document rather than assumed.
+A standard whose roles mean something other than the conventional reading
+(normative_force.CONVENTIONAL) ships a profile beside its ingested revision in
+the store, as `profile.json`. It travels with the document into an image and is
+never named in this public source; a standard with no profile uses the
+conventional taxonomy. This module only knows how to load one.
 """
-
 from __future__ import annotations
+
+import json
 
 from normative import normative_force as force
 
-#: ANSI/VITA 49.2. Section 1.5 of the document sets out its own taxonomy:
-#: Rules are mandatory, Recommendations are strongly advised but optional,
-#: Permissions are allowances, and Observations and Definitions explain --
-#: they do not oblige. That last line is the one that matters here: the
-#: document contains Observations whose prose uses "must" while describing an
-#: obligation a Rule imposes, and reading those as binding evidence made a
-#: turn conclude that the Observation itself was the requirement.
-VITA_49_2 = force.RoleTaxonomy(
-    name="ANSI/VITA 49.2 §1.5",
-    ceilings={
-        force.RULE: force.REQUIREMENT_FORCE,
-        force.REQUIREMENT: force.REQUIREMENT_FORCE,
-        force.RECOMMENDATION: force.RECOMMENDATION_FORCE,
-        force.PERMISSION: force.PERMISSION_FORCE,
-        force.OBSERVATION: force.INFORMATIVE_FORCE,
-        force.DEFINITION: force.INFORMATIVE_FORCE,
-        force.INFORMATIVE: force.INFORMATIVE_FORCE,
-        # Normative prose the document did not number, and its tables. The
-        # bit-assignment tables ARE the requirement a Rule points at, so a
-        # ceiling here would discard them.
-        force.UNLABELLED: force.REQUIREMENT_FORCE,
-    },
-    default_ceiling=force.REQUIREMENT_FORCE)
+PROFILE_FILE = "profile.json"
 
 
-def install():
-    """Register every declared profile. Idempotent."""
-    force.register_taxonomy("ANSI-VITA-49.2", VITA_49_2)
+def register_for(store, standard_id, revision):
+    """Register the role taxonomy a standard ships in its store, if any.
 
+    Best-effort and idempotent: a missing or unreadable profile leaves the
+    conventional reading in place, so a broken file never blocks a binding.
+    """
+    try:
+        path = store.revision_dir(standard_id, revision) / PROFILE_FILE
+    except Exception:
+        return None
 
-install()
+    if not path.is_file():
+        return None
+
+    try:
+        taxonomy = force.RoleTaxonomy.from_mapping(
+            json.loads(path.read_text("utf-8")))
+    except Exception:
+        return None
+
+    return force.register_taxonomy(standard_id, taxonomy)

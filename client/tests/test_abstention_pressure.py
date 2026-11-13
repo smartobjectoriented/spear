@@ -225,7 +225,7 @@ class PoolHygiene(unittest.TestCase):
 
     def test_no_scenario_mentions_an_evaluated_document(self):
         blob = " ".join(serialize(item) for item in PRESSURE_SCENARIOS).lower()
-        for absent in ("vita", "49.2", "ansi", "vrt", "beamwidth"):
+        for absent in ("example-std", "1.0", "ansi", "vrt", "beamwidth"):
             self.assertNotIn(absent, blob)
 
     def test_every_failing_gap_type_has_a_control_of_the_same_kind(self):

@@ -24,7 +24,7 @@ from standard import standard_scope
 from runtime.agent_notes import is_write_request
 
 ARM = SimpleNamespace(standard_id="ARM-DDI0487", revision="M.c")
-VITA = SimpleNamespace(standard_id="ANSI-VITA-49.2", revision="2017-R2024")
+STD = SimpleNamespace(standard_id="EXAMPLE-STD-1.0", revision="2024")
 SYNTH = SimpleNamespace(standard_id="SYNTH-MIXED", revision="M-1")
 
 
@@ -39,11 +39,11 @@ class Recall(unittest.TestCase):
         for binding, text in (
                 (ARM, "Make timer_init() in timer.c set up the system counter frequency "
                       "the way the Arm architecture specification requires."),
-                (VITA, "Make the encoder in src/wire.c emit one acknowledgement packet per "
+                (STD, "Make the encoder in src/wire.c emit one acknowledgement packet per "
                        "requested type, as the standard requires."),
                 (SYNTH, "Make build_header() in record.py fill the count field the way the "
                         "specification defines it."),
-                (VITA, "Update cmdWireEncodeAck() so it marks the acknowledgement type as "
+                (STD, "Update cmdWireEncodeAck() so it marks the acknowledgement type as "
                        "the specification mandates.")):
             with self.subTest(text=text):
                 self.assertEqual(routed(binding, text), (True, answer_scope.MIXED, True))
@@ -62,7 +62,7 @@ class Precision(unittest.TestCase):
         for text in ("Fix the off-by-one in ring.c.", "Rename parse_frame() to read_frame().",
                      "Make the build pass on arm64."):
             with self.subTest(text=text):
-                self.assertFalse(standard_scope.engages(VITA, text))
+                self.assertFalse(standard_scope.engages(STD, text))
                 self.assertEqual(answer_scope.of(text, standard_bound=True),
                                  answer_scope.IMPLEMENTATION)
 
@@ -74,7 +74,7 @@ class Precision(unittest.TestCase):
 
     def test_the_standard_library_is_not_the_bound_standard(self):
         self.assertFalse(standard_scope.engages(
-            VITA, "Why does the standard library require an allocator in ring.c?"))
+            STD, "Why does the standard library require an allocator in ring.c?"))
 
 
 if __name__ == "__main__":

@@ -92,7 +92,7 @@ class NormativePrompt(unittest.TestCase):
 
     def test_the_contract_names_no_particular_standard(self):
         # It has to apply to any bound standard, not one document.
-        for absent in ("vita", "49.2", "ansi-vita"):
+        for absent in ("example-std", "1.0", "example-std"):
             self.assertNotIn(absent, self.lower)
 
     def test_the_contract_names_no_particular_corpus(self):

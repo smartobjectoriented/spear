@@ -1,8 +1,7 @@
 """What a bound answer may say about compliance, checked against what it read.
 
 The failing control read the code, read nothing of the standard on its own,
-and declared the implementation "correct and compliant with ANSI/VITA
-49.2-2017 (R2024)". It is not. The sentence binds no range and cites nothing
+and declared the implementation "correct and compliant with EXAMPLE-STD-1.0". It is not. The sentence binds no range and cites nothing
 fabricated, so every earlier guard let it through. The rule here is
 entitlement, not truth: an affirmative verdict survives only when it names a
 clause the turn actually read and does not quantify over the whole standard.
@@ -94,7 +93,7 @@ class Verdicts(unittest.TestCase):
         self.assertEqual([item["kind"] for item in found], [UNSCOPED_VERDICT])
 
     def test_the_other_form_it_took(self):
-        text = ("The implementation correctly follows the VITA 49.2 "
+        text = ("The implementation correctly follows the EXAMPLE-STD-1.0 "
                 "specification for ACK management, properly echoing CAM "
                 "control bits.")
 
@@ -183,12 +182,12 @@ class Replacement(unittest.TestCase):
 class BoundStandardUrls(unittest.TestCase):
     """A web page naming the bound standard is not the bound standard.
 
-    An unbound turn fetched file:///.../ref-vita492-standard.md, then
-    https://standards.example/doc/vita492-standard/, and edited five source
+    An unbound turn fetched file:///.../ref-examplestd10-standard.md, then
+    https://standards.example/doc/examplestd10-standard/, and edited five source
     files against what it found.
     """
 
-    BOUND = "https://standards.example/doc/vita492-standard/"
+    BOUND = "https://standards.example/doc/examplestd10-standard/"
 
     def setUp(self):
         from cli import standard_session
@@ -203,7 +202,7 @@ class BoundStandardUrls(unittest.TestCase):
         # empty store `active_binding()` is None, the refusal short-circuits,
         # and all three tests report on nothing -- two of them by passing.
 
-        self.bind(StandardBinding("ANSI-VITA-49.2", "2017-R2024",
+        self.bind(StandardBinding("EXAMPLE-STD-1.0", "2024",
                                   "a" * 64, "b" * 64, "c" * 64, "extractor-1"))
 
     def bind(self, binding):
@@ -214,14 +213,14 @@ class BoundStandardUrls(unittest.TestCase):
 
     def test_the_two_urls_that_started_this(self):
         for url in (self.BOUND,
-                    "file:///opt/llm/spear/claude/ref-vita492-standard.md"):
+                    "file:///opt/llm/spear/claude/ref-examplestd10-standard.md"):
             found = self.standard_session.standard_url_refusal(url)
             self.assertIn("standard.search", found, url)
 
     def test_the_refusal_names_the_standard_it_is_bound_to(self):
         found = self.standard_session.standard_url_refusal(self.BOUND)
 
-        self.assertIn("ANSI-VITA-49.2 2017-R2024", found)
+        self.assertIn("EXAMPLE-STD-1.0 2024", found)
         self.assertIn("sha256", found)
 
     def test_an_unrelated_url_is_untouched(self):
@@ -249,7 +248,7 @@ class TheClearanceThatPassed(unittest.TestCase):
 
     def test_no_adaptations_are_needed(self):
         text = ("No adaptations are needed — the current implementation is "
-                "compliant with ANSI-VITA-49.2.")
+                "compliant with EXAMPLE-STD-1.0.")
 
         self.assertEqual(findings(text, self.ledger)[0]["kind"],
                          UNSCOPED_VERDICT)
@@ -264,14 +263,14 @@ class TheClearanceThatPassed(unittest.TestCase):
                                  UNSCOPED_VERDICT)
 
     def test_the_standard_under_its_canonical_name(self):
-        for name in ("VITA 49.2", "VITA49.2", "ANSI-VITA-49.2",
-                     "ANSI/VITA 49.2", "ANSI-VITA-49.2-2017"):
+        for name in ("EXAMPLE-STD-1.0", "EXAMPLE-STD-1.0", "EXAMPLE-STD-1.0",
+                     "EXAMPLE-STD-1.0", "EXAMPLE-STD-1.0"):
             text = f"The encoder conforms to {name}."
             with self.subTest(name=name):
                 self.assertTrue(findings(text, self.ledger), name)
 
     def test_the_adverb_after_the_verb(self):
-        text = ("The codebase already implements the VITA49.2 ACK management "
+        text = ("The codebase already implements the EXAMPLE-STD-1.0 ACK management "
                 "correctly.")
 
         self.assertTrue(findings(text, self.ledger))
@@ -287,36 +286,36 @@ class TheClearanceThatPassed(unittest.TestCase):
 class TheStandardsOwnName(unittest.TestCase):
     """Which standard counts comes from the binding, not from a pattern.
 
-    The first version spelled VITA 49.2 into the regex, which made a guard
+    The first version spelled EXAMPLE-STD-1.0 into the regex, which made a guard
     that exists to catch an unscoped claim work for exactly one standard and
     pass the same sentence about any other.
     """
 
-    VITA = {"standard_id": "ANSI-VITA-49.2", "revision": "2017-R2024"}
+    STD = {"standard_id": "EXAMPLE-STD-1.0", "revision": "2024"}
     ISO = {"standard_id": "ISO-26262", "revision": "2018"}
 
     def test_each_binding_recognises_only_its_own(self):
-        vita = conformance_guard.bare_standard(self.VITA)
+        std = conformance_guard.bare_standard(self.STD)
         iso = conformance_guard.bare_standard(self.ISO)
 
-        self.assertTrue(vita.search("compliant with ANSI-VITA-49.2"))
-        self.assertFalse(vita.search("compliant with ISO 26262"))
+        self.assertTrue(std.search("compliant with EXAMPLE-STD-1.0"))
+        self.assertFalse(std.search("compliant with ISO 26262"))
         self.assertTrue(iso.search("compliant with ISO 26262"))
-        self.assertFalse(iso.search("compliant with ANSI-VITA-49.2"))
+        self.assertFalse(iso.search("compliant with EXAMPLE-STD-1.0"))
 
     def test_however_the_writer_punctuated_it(self):
-        vita = conformance_guard.bare_standard(self.VITA)
+        std = conformance_guard.bare_standard(self.STD)
 
-        for spelling in ("ANSI-VITA-49.2", "ANSI/VITA 49.2", "VITA 49.2",
-                         "vita-49.2"):
+        for spelling in ("EXAMPLE-STD-1.0", "EXAMPLE-STD-1.0", "EXAMPLE-STD-1.0",
+                         "example-std-1.0"):
             with self.subTest(spelling=spelling):
-                self.assertTrue(vita.search(f"conforms to {spelling}"),
+                self.assertTrue(std.search(f"conforms to {spelling}"),
                                 spelling)
 
     def test_with_no_binding_no_name_can_match(self):
         none = conformance_guard.bare_standard(None)
 
-        self.assertFalse(none.search("compliant with ANSI-VITA-49.2"))
+        self.assertFalse(none.search("compliant with EXAMPLE-STD-1.0"))
         self.assertFalse(none.search("compliant with anything at all"))
 
     def test_a_binding_is_accepted_as_a_dict_or_an_object(self):
@@ -324,27 +323,27 @@ class TheStandardsOwnName(unittest.TestCase):
         in the operator plane; read as attributes only, a dict yielded
         nothing and the pattern matched nothing at all."""
         class Bound:
-            standard_id = "ANSI-VITA-49.2"
-            revision = "2017-R2024"
+            standard_id = "EXAMPLE-STD-1.0"
+            revision = "2024"
 
         self.assertTrue(conformance_guard.bare_standard(Bound()).search(
-            "compliant with ANSI-VITA-49.2"))
-        self.assertTrue(conformance_guard.bare_standard(self.VITA).search(
-            "compliant with ANSI-VITA-49.2"))
+            "compliant with EXAMPLE-STD-1.0"))
+        self.assertTrue(conformance_guard.bare_standard(self.STD).search(
+            "compliant with EXAMPLE-STD-1.0"))
 
     def test_a_short_initial_cannot_bind_on_noise(self):
         """Terms of three characters or fewer are initials; matching them
         would flag any sentence containing them."""
-        vita = conformance_guard.bare_standard(self.VITA)
+        std = conformance_guard.bare_standard(self.STD)
 
-        self.assertFalse(vita.search("compliant with is"))
+        self.assertFalse(std.search("compliant with is"))
 
 
 class ObjectOrAttribute(unittest.TestCase):
     """Naming the standard is a claim on the whole of it -- unless the name
     is there only to say which rule is meant."""
 
-    BOUND = {"standard_id": "ANSI-VITA-49.2", "revision": "2017-R2024"}
+    BOUND = {"standard_id": "EXAMPLE-STD-1.0", "revision": "2024"}
 
     def setUp(self):
         self.ledger = ClauseLedger()
@@ -357,15 +356,15 @@ class ObjectOrAttribute(unittest.TestCase):
     def test_the_standard_as_the_object_of_the_verdict(self):
         """A cited rule does not narrow a claim made on the document."""
         self.assertEqual(
-            self.kinds("The encoder conforms to ANSI-VITA-49.2, see "
+            self.kinds("The encoder conforms to EXAMPLE-STD-1.0, see "
                        "Rule 8.4.1.1-2."),
             [UNSCOPED_VERDICT])
 
     def test_the_standard_as_the_attribute_of_a_clause(self):
-        for sentence in ("Rule 8.4.1.1-2 of ANSI-VITA-49.2 is satisfied by "
+        for sentence in ("Rule 8.4.1.1-2 of EXAMPLE-STD-1.0 is satisfied by "
                          "cmdWireEncodeAck.",
-                         "§8.4.1.1 of VITA 49.2 is satisfied.",
-                         "Section 8.2 in ANSI-VITA-49.2 is satisfied."):
+                         "§8.4.1.1 of EXAMPLE-STD-1.0 is satisfied.",
+                         "Section 8.2 in EXAMPLE-STD-1.0 is satisfied."):
             with self.subTest(sentence=sentence):
                 self.assertEqual(self.kinds(sentence), [], sentence)
 
@@ -376,12 +375,12 @@ class ObjectOrAttribute(unittest.TestCase):
 
     def test_naming_it_with_no_clause_at_all_is_still_unscoped(self):
         self.assertEqual(
-            self.kinds("The encoder is compliant with ANSI-VITA-49.2."),
+            self.kinds("The encoder is compliant with EXAMPLE-STD-1.0."),
             [UNSCOPED_VERDICT])
 
     def test_an_unread_clause_is_still_reported_as_such(self):
         self.assertEqual(
-            self.kinds("Rule 9.9.9-1 of ANSI-VITA-49.2 is satisfied."),
+            self.kinds("Rule 9.9.9-1 of EXAMPLE-STD-1.0 is satisfied."),
             [UNREAD_CLAUSE])
 
 

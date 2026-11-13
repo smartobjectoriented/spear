@@ -1137,14 +1137,14 @@ class WhoIsAskingTests(unittest.TestCase):
     def test_a_harness_nudge_is_not_the_users_request(self):
         conversation = [
             ConversationMessage("user", (TextBlock(
-                "How should the ACK be managed in VITA 49.2?"),)),
+                "How should the ACK be managed in EXAMPLE-STD-1.0?"),)),
             ConversationMessage("assistant", (TextBlock("Rule 8.4.1.1-2 ..."),)),
             ConversationMessage("user", (TextBlock("Conclude now and fix it."),),
                                 authored_by="harness"),
         ]
 
         self.assertEqual(_asked(conversation),
-                         "How should the ACK be managed in VITA 49.2?")
+                         "How should the ACK be managed in EXAMPLE-STD-1.0?")
         self.assertFalse(is_write_request(_asked(conversation)))
 
     def test_the_conclude_nudge_would_read_as_a_write_request(self):

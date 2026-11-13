@@ -26,7 +26,7 @@ from evidence.evidence_guard import (
     validate,
 )
 
-SID, REV = "ANSI-VITA-49.2", "2017-R2024"
+SID, REV = "EXAMPLE-STD-1.0", "2024"
 #: The shape the recovery exists for: a packet diagram flattened into one
 #: line, each cell still carrying its own range. Written out here rather than
 #: read from a store, because a source_id names a unit inside ONE extraction

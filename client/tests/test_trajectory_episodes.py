@@ -14,7 +14,7 @@ def row(**overrides):
     sample = {
         "verdict": "pass",
         "source": "project_build",
-        "project": "adhoc:vita492",
+        "project": "adhoc:examplestd10",
         "task_id": "task_1",
         "bench": "",
         "question": "can you validate and make changes in the code accordingly",

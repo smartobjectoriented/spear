@@ -146,7 +146,7 @@ class CorpusKindDoesNotDecide(unittest.TestCase):
         one project whose prompt used to carry it."""
         lower = normative_precedence.EVIDENCE_RULE.lower()
 
-        for absent in ("edgem", "verdin", "virt64", "bitbake", "vita"):
+        for absent in ("edgem", "verdin", "virt64", "bitbake", "example-std"):
             with self.subTest(word=absent):
                 self.assertNotIn(absent, lower)
 

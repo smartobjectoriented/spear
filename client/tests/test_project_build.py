@@ -18,7 +18,7 @@ sys.path.insert(0, str(ROOT))
 from evidence import project_build
 from runtime.agent_verification import project_build_gap, project_build_runs
 
-VITA_CMAKE = """cmake_minimum_required(VERSION 3.16)
+EXAMPLE_CMAKE = """cmake_minimum_required(VERSION 3.16)
 project(v492c LANGUAGES C)
 set(V492C_SIDE "target" CACHE STRING "which side")
 if(V492C_SIDE STREQUAL "target")
@@ -39,7 +39,7 @@ class Probe(unittest.TestCase):
         return str(root)
 
     def test_the_cmake_option_that_cost_ten_rounds_a_run(self):
-        found = project_build.probe(self.tree(**{"CMakeLists.txt": VITA_CMAKE}))
+        found = project_build.probe(self.tree(**{"CMakeLists.txt": EXAMPLE_CMAKE}))
 
         self.assertIn("-DV492C_SIDE=host", found.build)
         self.assertIn("cmake --build", found.build)
@@ -98,7 +98,7 @@ class Probe(unittest.TestCase):
         self.assertEqual(found.source, "none")
 
     def test_projects_json_wins_over_every_probe(self):
-        root = self.tree(**{"CMakeLists.txt": VITA_CMAKE})
+        root = self.tree(**{"CMakeLists.txt": EXAMPLE_CMAKE})
         found = project_build.commands(
             root, spec={"build_commands": ["ninja -C out"],
                         "test_commands": "ninja -C out test"})
@@ -107,7 +107,7 @@ class Probe(unittest.TestCase):
         self.assertEqual(found.source, "projects.json")
 
     def test_the_answer_is_remembered(self):
-        root = self.tree(**{"CMakeLists.txt": VITA_CMAKE})
+        root = self.tree(**{"CMakeLists.txt": EXAMPLE_CMAKE})
         cache = tempfile.mkdtemp()
         first = project_build.commands(root, cache_dir=cache)
 

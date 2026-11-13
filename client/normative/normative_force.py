@@ -43,6 +43,8 @@ FORCE_NAME = {INFORMATIVE_FORCE: "informative", PERMISSION_FORCE: "permission",
               RECOMMENDATION_FORCE: "recommendation",
               REQUIREMENT_FORCE: "requirement"}
 
+_FORCE_BY_NAME = {name: value for value, name in FORCE_NAME.items()}
+
 # ── roles ────────────────────────────────────────────────────────────
 # The names a document prints. Not an exhaustive list of what documents do:
 # a taxonomy may add its own.
@@ -88,6 +90,31 @@ class RoleTaxonomy:
     name: str = "conventional"
     ceilings: dict = field(default_factory=dict)
     default_ceiling: int = REQUIREMENT_FORCE
+
+    @classmethod
+    def from_mapping(cls, data):
+        """Build a taxonomy from a stored profile (a standard's profile.json).
+
+        Roles are printed names (RULE, OBSERVATION …); a ceiling is a force
+        name (informative, permission, recommendation, requirement) or its
+        integer. A standard that reads its roles unconventionally ships this
+        beside its data in the store, so the meaning travels with the document
+        and no particular standard is named in this file.
+        """
+        def as_force(value):
+            if isinstance(value, bool):
+                raise ValueError("a force is a name or an integer, not a bool")
+            if isinstance(value, int):
+                return value
+            return _FORCE_BY_NAME[str(value).strip().lower()]
+
+        ceilings = {role_of(role): as_force(value)
+                    for role, value in (data.get("ceilings") or {}).items()}
+
+        return cls(name=str(data.get("name", "declared")),
+                   ceilings=ceilings,
+                   default_ceiling=as_force(
+                       data.get("default_ceiling", REQUIREMENT_FORCE)))
 
     def ceiling(self, role):
         """The strongest force a provision of this role may establish."""

@@ -1,6 +1,6 @@
 """A task file with lettered sections is a list, and the turn is judged by it.
 
-Handed the seven-section VITA 49.2 acknowledge work order, the model changed
+Handed the seven-section EXAMPLE-STD-1.0 acknowledge work order, the model changed
 the signature section A asks for, propagated it until the tree compiled, and
 answered "The changes have been made successfully". C, D and E were untouched
 — twice, at 60 rounds and at 120, so the budget was not the reason.
@@ -18,7 +18,7 @@ sys.path.insert(0, str(ROOT))
 from runtime import work_order
 from models.model_backend import ConversationMessage, TextBlock
 
-ORDER = """# Task: VITA 49.2 Acknowledge handling
+ORDER = """# Task: EXAMPLE-STD-1.0 Acknowledge handling
 
 ## Scope
 

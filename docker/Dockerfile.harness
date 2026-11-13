@@ -1,0 +1,100 @@
+# SPEAR harness — the application only, no content. Public and shippable.
+#
+# First link of the FROM chain: Dockerfile.base builds a company's commons on
+# top of this, and Dockerfile.project bakes one project's delta on top of that.
+# This image carries the venv, the embedder and the harness code -- the
+# expensive layers every image above reuses -- and nothing a deployment could
+# not publish: no index, no corpus, no standards, no rules or skills content.
+#
+# Default build context is client/ (the harness); `repo` is a named context for
+# the two files that live outside it. See scripts/docker/build.sh.
+
+FROM ubuntu:24.04
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+# bubblewrap is not optional: the harness runs every command in it. The build
+# tools are there because a sandboxed command is often `make`. The second block
+# is bitbake's host prerequisites; without a generated en_US.UTF-8 bitbake
+# refuses to start.
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        python3 python3-venv python3-dev \
+        bubblewrap ca-certificates curl git openssh-client \
+        build-essential cmake ninja-build pkg-config \
+        ripgrep less file \
+        locales \
+        gawk diffstat chrpath socat zstd lz4 texinfo \
+        python3-pexpect python3-git python3-jinja2 \
+        bison flex bc cpio unzip rsync device-tree-compiler u-boot-tools \
+    && sed -i "s/^# *en_US.UTF-8/en_US.UTF-8/" /etc/locale.gen \
+    && locale-gen en_US.UTF-8 \
+    && rm -rf /var/lib/apt/lists/*
+
+ARG APP=/opt/spear/client
+WORKDIR $APP
+
+# Dependencies first; they change far less often than the harness code. CPU
+# torch before sentence-transformers, so pip never pulls the CUDA build.
+
+COPY deploy/requirements.txt deploy/requirements.txt
+RUN python3 -m venv "$APP" \
+    && "$APP/bin/pip" install --no-cache-dir --upgrade pip \
+    && "$APP/bin/pip" install --no-cache-dir \
+        --index-url https://download.pytorch.org/whl/cpu torch \
+    && "$APP/bin/pip" install --no-cache-dir -r deploy/requirements.txt
+
+# The embedder (bge-m3) and Chroma's default MiniLM, baked at build time so a
+# fresh container neither downloads 4.3 GB on first run nor fails offline.
+
+ENV HF_HOME=/opt/spear/hf
+ENV HF_HUB_DISABLE_XET=1
+RUN "$APP/bin/python" -c "\
+from sentence_transformers import SentenceTransformer; \
+SentenceTransformer('BAAI/bge-m3')" \
+    && find /opt/spear/hf -name '*.onnx' -delete 2>/dev/null || true
+
+RUN HOME=/opt/spear/chroma-home "$APP/bin/python" -c "\
+from chromadb.utils.embedding_functions import ONNXMiniLM_L6_V2; \
+ONNXMiniLM_L6_V2()(['warm'])" \
+    && chmod -R a+rX /opt/spear/chroma-home
+
+# The harness code.
+
+COPY *.md $APP/
+COPY agent/ $APP/agent/
+COPY cli/ $APP/cli/
+COPY context/ $APP/context/
+COPY evidence/ $APP/evidence/
+COPY harness/ $APP/harness/
+COPY models/ $APP/models/
+COPY normative/ $APP/normative/
+COPY retrieval/ $APP/retrieval/
+COPY runtime/ $APP/runtime/
+COPY standard/ $APP/standard/
+COPY training/ $APP/training/
+COPY eval/ $APP/eval/
+COPY deploy/ $APP/deploy/
+
+# Empty content, corpus and state directories, and an empty registry, so the
+# harness finds a directory rather than nothing. A base image fills them.
+
+RUN mkdir -p "$APP/rules.d" "$APP/skills" "$APP/benches" "$APP/chromadb" \
+        /corpora /opt/spear/common/standards /opt/spear/state \
+    && printf '{}\n' > "$APP/projects.json" \
+    && chmod -R 0777 /corpora /opt/spear/common /opt/spear/state "$APP/chromadb"
+
+# The launcher a recipient copies out to run the image, and the entrypoint.
+# Both live in the repo, not in client/, so they come from the `repo` context.
+
+COPY --from=repo scripts/docker/spear-run.sh /opt/spear/spear-run.sh
+COPY --from=repo docker/entrypoint.sh /opt/spear/entrypoint.sh
+RUN chmod +x /opt/spear/entrypoint.sh /opt/spear/spear-run.sh
+
+ENV SPEAR_COMMON_STATE_DIR=/opt/spear/common
+ENV SPEAR_STANDARDS_ROOT=/opt/spear/common/standards
+ENV SPEAR_STATE_DIR=/opt/spear/state
+ENV SPEAR_CORPUS_ROOT=/corpora
+ENV PATH=$APP/bin:$PATH
+WORKDIR /corpora
+ENTRYPOINT ["/opt/spear/entrypoint.sh"]

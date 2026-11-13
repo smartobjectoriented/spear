@@ -1,24 +1,20 @@
 #!/bin/bash
 # Publish an image, unless it is one that must not be published.
 #
-# The two profiles differ in exactly one way that matters once the image
-# exists: whether its contents may leave. A tag does not carry that -- it gets
-# retyped, shortened and reused -- so the answer is a LABEL, written at build
-# time, travelling with the bytes through `docker save`, a registry and back.
+# Whether an image's contents may leave is a LABEL written at build time, not
+# the tag -- a tag gets retyped, shortened and reused. `redistributable=true`
+# (the harness, a public image) goes anywhere. A private image (a base or a
+# project, or a legacy reds/private) goes to its entity's own registry, and
+# anywhere else only on --allow-push.
 #
-#     scripts/docker/push.sh ghcr.io/<org>/spear:<version>-public
-#     scripts/docker/push.sh reds-gitlab.heig-vd.ch:5050/<group>/spear:<version>-reds
-#     scripts/docker/push.sh --allow-push ghcr.io/<org>/spear-private:<version>-private
+#     scripts/docker/push.sh ghcr.io/<org>/spear:<version>-harness
+#     scripts/docker/push.sh reds-gitlab.heig-vd.ch:5050/<group>/spear:<version>-base
+#     scripts/docker/push.sh --allow-push <registry>/<org>/spear:<version>-project
 #
-# A reds image goes to the institute's registry and nowhere else without
-# --allow-push: the image name must start with that host (any port), and
-# SPEAR_REDS_REGISTRY overrides the default host.
-#
-# --allow-push is not a formality. A private image carries a licensed
-# normative corpus -- the original document included, where the store retained
-# it -- and a customer's source tree. Publishing one is a decision about a
-# licence and a contract, not about a registry, and it should cost a
-# deliberate word.
+# An entity's registry is SPEAR_<ENTITY>_REGISTRY, with reds and edgemtech
+# defaulted. --allow-push is not a formality: a private image carries a build
+# system, a customer's source tree, or a licensed normative corpus, and
+# publishing one is a decision about a licence and a contract.
 set -e
 # The release this is: "[spear vX.Y.Z] <script> <args>" on stderr, once.
 _banner="$(dirname "$(readlink -f "$0")")/../common/banner.sh"
@@ -38,75 +34,99 @@ done
 [ "${#ARGS[@]}" -eq 1 ] || { echo "usage: scripts/docker/push.sh [--allow-push] <image>" >&2; exit 1; }
 IMAGE="${ARGS[0]}"
 
+docker image inspect "$IMAGE" >/dev/null 2>&1 || {
+    echo "no such image: $IMAGE" >&2; exit 1; }
+
+# The label, from the neutral namespace, falling back to the old one so images
+# built before the rename still read.
+
 label() {
+    local v
+    v="$(docker image inspect "$IMAGE" \
+        --format "{{ index .Config.Labels \"spear.$1\" }}" 2>/dev/null)"
+    [ -n "$v" ] && { printf '%s' "$v"; return; }
     docker image inspect "$IMAGE" \
         --format "{{ index .Config.Labels \"ch.heig-vd.reds.spear.$1\" }}" 2>/dev/null
 }
 
-docker image inspect "$IMAGE" >/dev/null 2>&1 || {
-    echo "no such image: $IMAGE" >&2; exit 1; }
-
 PROFILE="$(label profile)"
 OK="$(label redistributable)"
+ENTITY="$(label entity)"
+
+[ -n "$PROFILE" ] || {
+    echo "$IMAGE carries no SPEAR profile label." >&2
+    echo "It was not built by SPEAR's build scripts; refusing to guess." >&2
+    exit 1; }
+
+# The registry a private image belongs to, if one is known: an entity's own
+# (SPEAR_<ENTITY>_REGISTRY, reds and edgemtech defaulted), or the institute's
+# for a legacy reds image. A legacy private image, or an entity with no
+# registry, has none -- and then publishing always needs --allow-push.
+
+entity_registry() {
+    case "$1" in
+        reds)      echo "${SPEAR_REDS_REGISTRY:-reds-gitlab.heig-vd.ch}" ;;
+        edgemtech) echo "${SPEAR_EDGEMTECH_REGISTRY:-gitlab.edgemtech.ch}" ;;
+        ""|local)  echo "" ;;
+        *) local var="SPEAR_$(printf '%s' "$1" | tr '[:lower:]-' '[:upper:]_')_REGISTRY"
+           echo "${!var:-}" ;;
+    esac
+}
 
 case "$PROFILE" in
-    "")
-        echo "$IMAGE carries no SPEAR profile label." >&2
-        echo "It was not built by scripts/docker/build.sh; refusing to guess." >&2
-        exit 1 ;;
-    public) ;;
-    reds)
-        # Built for the people of one institute: its registry, and no other.
-        # The registry is a prefix of the image name, so a retag to anywhere
-        # else is what gets refused.
-        REGISTRY="${SPEAR_REDS_REGISTRY:-reds-gitlab.heig-vd.ch}"
-        case "$IMAGE" in
-            "$REGISTRY"/*|"$REGISTRY":*) ;;
-            *)
-                if [ "$ALLOW" != 1 ]; then
-                    cat >&2 <<MSG
+    reds)         REGISTRY="${SPEAR_REDS_REGISTRY:-reds-gitlab.heig-vd.ch}" ;;
+    base|project) REGISTRY="$(entity_registry "$ENTITY")" ;;
+    *)            REGISTRY="" ;;
+esac
+
+# Redistributable (harness, public) goes anywhere.
+
+if [ "$OK" = true ]; then
+    exec docker push "$IMAGE"
+fi
+
+# Private, but headed for its own registry: allowed. The registry is a prefix
+# of the image name, so a retag anywhere else is what gets caught.
+
+if [ -n "$REGISTRY" ]; then
+    case "$IMAGE" in
+        "$REGISTRY"/*|"$REGISTRY":*) exec docker push "$IMAGE" ;;
+    esac
+fi
+
+# Private, headed elsewhere: only on --allow-push.
+
+if [ "$ALLOW" != 1 ]; then
+    cat >&2 <<MSG
 Refusing to push $IMAGE.
 
   profile          $PROFILE
-  redistributable  $OK
+  entity           ${ENTITY:-<none>}
+  redistributable  ${OK:-false}
 
-This image was built with --profile reds: it carries the institute's source
-trees, their index and the rules written for them, for the institute's own
-registry, $REGISTRY. Tag it there:
-
-    docker tag $IMAGE $REGISTRY:5050/<group>/spear:<tag>
-
-or, to publish it elsewhere on your own authority:
-
-    scripts/docker/push.sh --allow-push $IMAGE
+This is a private SPEAR image: it carries a build system, a customer's source
+tree, or a licensed normative corpus.
 MSG
-                    exit 1
-                fi
-                echo "!! pushing a reds image outside $REGISTRY on --allow-push: $IMAGE" >&2 ;;
-        esac ;;
-    private)
-        if [ "$ALLOW" != 1 ]; then
-            cat >&2 <<MSG
-Refusing to push $IMAGE.
+    if [ -n "$REGISTRY" ]; then
+        cat >&2 <<MSG
+It belongs to its entity's registry, $REGISTRY. Tag it there:
 
-  profile          $PROFILE
-  redistributable  $OK
+    docker tag $IMAGE $REGISTRY:5050/<group>/spear:${IMAGE##*:}
+MSG
+    fi
+    cat >&2 <<MSG
 
-This image was built with --profile private: it carries licensed normative
-material and customer source. Publishing it puts both on the registry's
-infrastructure, under whatever access policy that registry has today.
-
-If that is covered by the agreement you are working under, say so explicitly:
+Or publish it elsewhere on your own authority -- a decision about a licence and
+a contract:
 
     scripts/docker/push.sh --allow-push $IMAGE
 
 To hand it over without a registry:
 
-    docker save $IMAGE | zstd -T0 -19 -o spear-private.tar.zst
+    docker save $IMAGE | zstd -T0 -19 -o spear-$PROFILE.tar.zst
 MSG
-            exit 1
-        fi
-        echo "!! pushing a private image on --allow-push: $IMAGE" >&2 ;;
-esac
+    exit 1
+fi
 
+echo "!! pushing a private image ($PROFILE, entity=${ENTITY:-none}) on --allow-push: $IMAGE" >&2
 exec docker push "$IMAGE"

@@ -1,9 +1,9 @@
 """What a bound answer may say about compliance, checked against what it read.
 
-Bound to ANSI-VITA-49.2, asked to validate the acknowledge path, a session ran
+Bound to EXAMPLE-STD-1.0, asked to validate the acknowledge path, a session ran
 twelve greps, called no normative tool of its own, and concluded:
 
-    The implementation is correct and compliant with ANSI/VITA 49.2-2017 (R2024).
+    The implementation is correct and compliant with EXAMPLE-STD-1.0.
 
 It is not. Rule 8.4.1.1-3 is not implemented, Req-V is never honoured, the
 execution acknowledge is unconditional. None of the guards before this one had
@@ -16,7 +16,7 @@ reading the code. What can be decided is whether the turn is ENTITLED to the
 sentence at all, and the distinction is the one evidence_guard already lives on:
 
     scoped     Rule 8.4.1.1-2 is satisfied: the encoder sets exactly one bit
-    unscoped   the implementation correctly follows the VITA 49.2 specification
+    unscoped   the implementation correctly follows the EXAMPLE-STD-1.0 specification
 
 The first names a clause and a fact. The second quantifies over the whole
 standard, which no finite set of retrievals establishes. So an affirmative
@@ -66,7 +66,7 @@ _VERDICT = re.compile(
     r"(?:correctly|properly)\s+" + _ACT
     # "implements it CORRECTLY": the adverb after the verb is as common as
     # before it, and only the first form was caught.
-    # The gap is [\w.\-]+, not \w+: "implements the VITA49.2 ACK management
+    # The gap is [\w.\-]+, not \w+: "implements the EXAMPLE-STD-1.0 ACK management
     # correctly" has a dot in the middle of it, and \w+ stops there.
     + r"|" + _ACT + r"\s+(?:[\w.\-]+\s+){0,5}?(?:correctly|properly)"
     # "is satisfied" and "is met" are how a rule is reported as done, and
@@ -112,11 +112,11 @@ _GLOBAL_SUBJECT = re.compile(
     re.I)
 
 # Naming the bound standard as the thing complied with -- "compliant with
-# ANSI-VITA-49.2", "follows the VITA 49.2 specification" -- without a clause
+# EXAMPLE-STD-1.0", "follows the EXAMPLE-STD-1.0 specification" -- without a clause
 # narrowing it.
 #
-# Built from the binding, never from a list. The first version spelled VITA
-# 49.2 into the pattern, which made a guard that exists to catch an unscoped
+# Built from the binding, never from a list. The first version spelled the
+# standard id into the pattern, which made a guard that exists to catch an unscoped
 # claim work for exactly one standard and silently pass the same sentence
 # about any other. standard_scope already derives a subject's names from its
 # own identifier; this is the same rule, and the reason is the same: a
@@ -143,7 +143,7 @@ def bare_standard(binding=None):
 def standard_names(binding=None):
     """The names this standard goes by, as one alternation, longest first.
 
-    Longest first so "ansi-vita-49.2" wins over "vita", and each name is
+    Longest first so "example-std-1.0" wins over "std", and each name is
     spelled loosely so the writer's punctuation does not decide the match.
 
     Public because two guards need the same spelling: this one asks whether
@@ -204,9 +204,9 @@ _ATTRIBUTIVE = re.compile(
 def names_standard_as_object(sentence, pattern):
     """Is the bound standard what this sentence claims conformance TO?
 
-    "conforms to ANSI-VITA-49.2, see Rule 8.4.1.1-2" claims the whole
+    "conforms to EXAMPLE-STD-1.0, see Rule 8.4.1.1-2" claims the whole
     document and cites one rule as support; the citation does not narrow it.
-    "Rule 8.4.1.1-2 of ANSI-VITA-49.2 is satisfied" claims the rule, and
+    "Rule 8.4.1.1-2 of EXAMPLE-STD-1.0 is satisfied" claims the rule, and
     names the standard only to say which rule it is.
 
     The difference is positional and that is the whole of it: in the second,

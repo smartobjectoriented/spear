@@ -57,11 +57,11 @@ def standard_url_refusal(url):
     binding pins by sha256.
 
     A URL is not prose, so the word boundaries the scope test relies on are
-    not there: "vita492" carries no separator and no dot. Both sides are
+    not there: "examplestd10" carries no separator and no dot. Both sides are
     stripped to letters and digits and matched as substrings, which is only
     safe for a term distinctive on its own -- so the short ones are dropped.
-    "ansi", "vita", "2017" and "492" would each match half the web; what
-    survives is "vita492", "ansivita492", "2017r2024".
+    "std", "1" and "0" would each match half the web; what
+    survives is "examplestd10" and "2024".
     """
     if not url or not STANDARD_ENGAGED_BEFORE:
         return ""
@@ -120,7 +120,7 @@ def standard_binding_for(question):
     It used to attach to EVERY prompt: the system rule, the standard.* tools
     and the evidence policy came along whatever was asked. Asked to download
     the RS274/NGC specification, the assistant answered "the system is bound to
-    ANSI-VITA-49.2, not RS274/NGC" eleven times over — the turn read as
+    EXAMPLE-STD-1.0, not RS274/NGC" eleven times over — the turn read as
     normative because the question contained the word "standard".
 
     Binding is announced when it happens. A frame that changes how an answer is

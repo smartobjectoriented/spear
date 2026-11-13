@@ -13,7 +13,7 @@ suggesting a binding makes none.
 
   {"normative_checks": [{
       "id": "ack-subtype",
-      "standard": "ANSI-VITA-49.2", "revision": "2017-R2024",
+      "standard": "EXAMPLE-STD-1.0", "revision": "2024",
       "provisions": ["Rule 8.4.1.1-2@9f4e826caf39"],
       "command": "ctest --test-dir build -R ack_subtype",
       "evidence": {"kind": "test", "success": "exit_zero",

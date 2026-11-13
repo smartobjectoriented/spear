@@ -103,7 +103,7 @@ class ProjectCommands:
 def _cmake_side(root):
     """A CMake option this tree needs before it will configure.
 
-    The VITA 49.2 converter has two sides and the target one wants a vendor
+    The EXAMPLE-STD-1.0 converter has two sides and the target one wants a vendor
     SDK that is not on a workstation; configuring without -DV492C_SIDE=host
     stops on "libusb-1.0 not found" and the turn concludes the project cannot
     be built. Read from the file rather than assumed: an option with a

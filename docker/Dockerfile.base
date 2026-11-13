@@ -1,0 +1,51 @@
+# A company's commons, built on the harness.
+#
+# It carries what every project of the company needs: the shared build system
+# and corpora (infrabase and its family included), the prebuilt index, the
+# common rules / skills / benches, the standards and the common knowledge seed.
+# It is private whenever it bakes a non-public tree -- which it does, so it is.
+# Dockerfile.project builds one project's delta on top of this.
+#
+# Every addition overlays the empty directory the harness created, from a named
+# build context staged by scripts/docker/build.sh.
+
+ARG HARNESS_IMAGE
+FROM ${HARNESS_IMAGE}
+
+ARG APP=/opt/spear/client
+
+# The prebuilt index, cut to the commons corpora. ChromaDB opens its sqlite
+# read-write even to query, so it must be writable by whichever uid runs.
+
+COPY --chmod=0777 --from=index . $APP/chromadb/
+
+# The common content, merged over the harness's empty directories.
+
+COPY --from=rules . $APP/rules.d/
+COPY --from=skills . $APP/skills/
+COPY --from=benches . $APP/benches/
+
+# The commons registry, and the repo's own corpora -- the API references and the
+# shared notes. A bind mount on /corpora/spear shadows these for a host that has
+# the spear checkout.
+
+COPY --from=repo docker/projects.docker.json $APP/projects.json
+COPY --from=notes . /corpora/spear/claude/
+COPY --from=repo corpora/ /corpora/spear/corpora/
+
+# The baked common corpora, the build system (infrabase) among them, writable so
+# the assistant can build them. Shadowed by a bind mount when the host has them.
+# Toolchains are NOT baked: spear-docker.sh mounts them from the host.
+
+COPY --from=baked --chmod=0777 . /corpora/
+
+# The common knowledge seed and the standards store (which documents travel is
+# decided per document -- see scripts/docker/stage-standards.py).
+
+COPY --from=common . /opt/spear/common/
+COPY --from=standards --chmod=0777 . /opt/spear/common/standards/
+
+# What this base contains, for the companies and projects that build on it: the
+# baked corpus list, the index build date and the standards manifest.
+
+COPY --from=manifest base-manifest.json /opt/spear/common/base-manifest.json

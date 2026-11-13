@@ -145,7 +145,7 @@ _STATES = (r"(?:require(?:s|d)?|mandate[sd]?|oblige[sd]?|permit(?:s|ted)?|"
 # standard's own names are added from the binding, never spelled here.
 _GENERIC_SUBJECT = r"(?:the|this)\s+(?:bound\s+)?(?:standard|specification|spec)"
 
-# Between subject and verb: "the standard explicitly requires", "VITA 49.2
+# Between subject and verb: "the standard explicitly requires", "EXAMPLE-STD-1.0
 # section 8.4 states". Bounded, so a subject in one clause of a sentence does
 # not capture a verb belonging to another.
 _GAP = r"(?:\s+[\w.,§\-()]+){0,4}?\s+"

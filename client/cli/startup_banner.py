@@ -191,8 +191,8 @@ def standard_row():
 
     It decides how every normative answer is grounded, and it lives in ONE file
     under the state directory, shared by every session on this machine. A
-    binding left behind by other work is therefore inherited in silence: a VITA
-    49.2 question was once answered against an RS274/NGC binding, and the only
+    binding left behind by other work is therefore inherited in silence: a
+    question for one standard was once answered against an RS274/NGC binding, and the only
     thing that ever said so was the per-turn line, printed after the question
     had already been asked. A session-wide property belongs with the other
     session-wide properties.

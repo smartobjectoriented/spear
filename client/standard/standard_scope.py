@@ -1,17 +1,17 @@
 """Does THIS question engage the bound standard?
 
 The binding used to attach to every prompt of every session. Once an operator
-bound ANSI-VITA-49.2, each turn carried the "BOUND STANDARD … normative claims
+bound EXAMPLE-STD-1.0, each turn carried the "BOUND STANDARD … normative claims
 must use retrieved canonical sources" system rule, the standard.* tools, and
 the evidence policy that fires when such a turn is about to answer with nothing
 retrieved.
 
 Asked to download the RS274/NGC G-code specification, the assistant therefore
-spent a whole task explaining that "the system is bound to ANSI-VITA-49.2, not
+spent a whole task explaining that "the system is bound to EXAMPLE-STD-1.0, not
 RS274/NGC" — correct, irrelevant, and repeated eleven times. The word that
 dragged it there was "standard", in "inject it in our RAG as a standard": it
 sits in the normative vocabulary, so the turn read as normative and the
-orchestration fetched VITA evidence for a question about a PDF download.
+orchestration fetched standard evidence for a question about a PDF download.
 
 The binding is decided per turn now, from two kinds of sign:
 
@@ -33,15 +33,15 @@ Checking the question ALONE is what the remaining two signs fix, and both are
 about the turn's surroundings rather than its words.
 
 A file the operator put in front of the model counts. "carry out the task in
-doc/ack-task.md" names nothing; the file it points at said ANSI-VITA-49.2
-2017-R2024 in its third paragraph, and the turn ran free. Only the standard's
+doc/ack-task.md" names nothing; the file it points at said EXAMPLE-STD-1.0
+2024 in its third paragraph, and the turn ran free. Only the standard's
 NAME is looked for there — never the subject nouns, because any C file says
 "bit" and "packet" and that would bind every turn after reading one.
 
 And a session that has engaged the standard once stays engaged until /clear.
 That began as a narrow rule — follow-up vocabulary, anaphora — and the narrow
 rule kept being outrun. "can you validate the implementation ?" ran free and
-declared the code "correct and compliant with ANSI/VITA 49.2-2017 (R2024)" on
+declared the code "correct and compliant with EXAMPLE-STD-1.0" on
 the strength of twelve greps; it is not. Later a stray "/quit" reached the
 model as a prompt, matched no follow-up word either, and the unbound turn that
 followed went looking for the specification on the public web and edited five
@@ -150,8 +150,8 @@ def asks_what_the_document_settles(text):
 def identity_terms(binding):
     """Every way a user might name this standard, taken from the binding.
 
-    ANSI-VITA-49.2 / 2017-R2024 yields ansi-vita-49.2, vita, 49.2, vita-49.2,
-    vita 49.2, 2017-r2024, r2024 … Single short parts with no digit are
+    EXAMPLE-STD-1.0 / 2024 yields example-std-1.0, example, 1.0, example-std,
+    std-1.0, 2024 … Single short parts with no digit are
     dropped: they are initials, and matching them would bind on noise.
     """
     terms = set()
@@ -168,7 +168,7 @@ def identity_terms(binding):
         terms.update(part for part in parts
                      if len(part) > 3 or any(c.isdigit() for c in part))
 
-        # Adjacent pairs, so "vita 49.2" and "vita-49.2" both land even though
+        # Adjacent pairs, so "example std" and "example-std" both land even though
         # the identifier spells it with one separator.
 
         for first, second in zip(parts, parts[1:]):
@@ -188,7 +188,7 @@ def engages(binding, question, *, engaged_before=False, context=""):
                            this turn without typing it -- a !read file. Only
                            the standard's own NAME counts there: "carry out
                            the task in doc/ack-task.md" engaged nothing, while
-                           the file it named said "ANSI-VITA-49.2 2017-R2024"
+                           the file it named said "EXAMPLE-STD-1.0 2024"
                            in its third paragraph. The subject nouns are not
                            consulted in context on purpose: any C file says
                            "bit" and "packet", and that would bind every turn

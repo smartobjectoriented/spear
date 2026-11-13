@@ -258,7 +258,7 @@ without a restriction.
 A document with no role labels
 ==============================
 
-Most documents do not label their provisions the way a VITA-style standard
+Most documents do not label their provisions the way a rule-labelled standard
 does, and they do not need to. Where there are no labels, the kind is read from
 the **modal verb**: *must* makes a requirement, *should* a recommendation,
 *may* a permission, and prose with no modal verb stays informative.

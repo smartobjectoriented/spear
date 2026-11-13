@@ -1,7 +1,7 @@
 """MODEL_USE_V1 harness: drive the real model against the frozen normative tools.
 
 Generic on purpose. It knows how to run a question through the live tool loop
-and record everything that happened; it knows nothing about VITA. The cases and
+and record everything that happened; it knows nothing about the standard. The cases and
 their ground truth live beside it and stay private, because they quote the
 document being evaluated.
 
@@ -34,8 +34,8 @@ from runtime.tracing import NullTraceRecorder, TraceEmitter
 # Which binding the battery drives. Overridable so the SAME cases, prompts
 # and policy can be run against a second extraction of the same document --
 # the store itself is selected by SPEAR_STANDARDS_ROOT.
-SID = os.environ.get("SPEAR_EVAL_STANDARD") or "ANSI-VITA-49.2"
-REV = os.environ.get("SPEAR_EVAL_REVISION") or "2017-R2024"
+SID = os.environ.get("SPEAR_EVAL_STANDARD") or "EXAMPLE-STD-1.0"
+REV = os.environ.get("SPEAR_EVAL_REVISION") or "2024"
 ENDPOINT = "http://127.0.0.1:8082/v1/chat/completions"
 MODEL = "qwen3"
 # Deterministic as far as llama-server allows.

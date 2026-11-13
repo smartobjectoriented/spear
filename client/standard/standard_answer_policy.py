@@ -51,11 +51,11 @@ EMPTY_STRUCTURE_RECOVERY = evidence_recovery.EMPTY_STRUCTURE_RECOVERY
 # The same retrieval as the zero-tool bootstrap, made before the model has said
 # anything rather than after it has finished.
 #
-# Bound to ANSI-VITA-49.2 and asked how ACK is managed, a session spent twelve
+# Bound to EXAMPLE-STD-1.0 and asked how ACK is managed, a session spent twelve
 # bash rounds in the C sources and made not one normative call. The bootstrap
 # fired at the boundary, as designed, and searched the standard once -- into a
 # context already holding twelve grep outputs and a finished answer. The answer
-# came back saying the implementation "correctly follows the VITA 49.2
+# came back saying the implementation "correctly follows the EXAMPLE-STD-1.0
 # specification". It does not.
 #
 # A retrieval that arrives after the conclusion is a rebuttal, and the model

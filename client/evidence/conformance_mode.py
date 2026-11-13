@@ -1,6 +1,6 @@
 """A turn that asks whether code conforms is shaped, not merely filtered.
 
-Asked to "validate the ACK implementation against VITA49.2", a bound session
+Asked to "validate the ACK implementation against EXAMPLE-STD-1.0", a bound session
 listed the structure registry, read all nine of its structures -- Tilt Angle,
 Bandwidth, Manufacturer OUI, none of them about acknowledgement -- and rendered
 them under "Validated Structures (PASS/ACCEPTABLE)". It never opened a source

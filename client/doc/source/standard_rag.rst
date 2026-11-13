@@ -92,7 +92,7 @@ data-format standard (bit, octet, offset, field, width, encoding…).  The
 generic words *standard*, *revision*, *rule* and *section* are excluded on
 purpose: bound to every prompt, the frame turned "get the RS274/NGC PDF so we
 can inject it as a standard" into eleven turns explaining that the system is
-bound to ANSI-VITA-49.2.  Erring towards binding remains the safe direction —
+bound to EXAMPLE-STD-1.0.  Erring towards binding remains the safe direction —
 an unnecessary binding costs a system rule and two tool schemas, a missing one
 costs grounding on a licensed source.
 
@@ -194,8 +194,8 @@ Operator flow
 
 ::
 
-  /standard ingest ./authorized.pdf --id ANSI-VITA-49.2 --revision 2017-R2024
-  /standard use ANSI-VITA-49.2 2017-R2024
+  /standard ingest ./authorized.pdf --id EXAMPLE-STD-1.0 --revision 2024
+  /standard use EXAMPLE-STD-1.0 2024
   /standard status
   /standard rebuild
   /standard unbind
@@ -237,11 +237,11 @@ retention requires the explicit ``--retain-pdf`` ingestion option.
 Re-extracting an already-ingested revision goes through a candidate rather than
 over the active corpus::
 
-  /standard ingest ./authorized.pdf --id ANSI-VITA-49.2 --revision 2017-R2024 --candidate --layout
-  /standard candidates ANSI-VITA-49.2 2017-R2024
-  /standard promote-candidate ANSI-VITA-49.2 2017-R2024 cand-<id>
-  /standard rebuild ANSI-VITA-49.2 2017-R2024
-  /standard use ANSI-VITA-49.2 2017-R2024
+  /standard ingest ./authorized.pdf --id EXAMPLE-STD-1.0 --revision 2024 --candidate --layout
+  /standard candidates EXAMPLE-STD-1.0 2024
+  /standard promote-candidate EXAMPLE-STD-1.0 2024 cand-<id>
+  /standard rebuild EXAMPLE-STD-1.0 2024
+  /standard use EXAMPLE-STD-1.0 2024
 
 Promotion archives the previous corpus as a recoverable generation, drops the
 derived indexes, and clears the binding so existing sessions fail closed.
@@ -253,7 +253,7 @@ A standard's contents table names each clause and the page it opens on. That is
 the one statement about structure that does not come from the extractor, so it is
 what an operator should trust over any internal verdict::
 
-  /standard verify ANSI-VITA-49.2 2017-R2024
+  /standard verify EXAMPLE-STD-1.0 2024
 
 The check measures the offset between printed and extracted page numbers from the
 clauses that are not in dispute, then reports how many headings land on the page
@@ -269,7 +269,7 @@ An automated extraction review is evidence, not approval. The operator walks the
 private review file row by row and records a human verdict beside the automated
 one::
 
-  python -m standard_review --standard ANSI-VITA-49.2 --revision 2017-R2024
+  python -m standard_review --standard EXAMPLE-STD-1.0 --revision 2024
 
 Keys are ``p`` PASS, ``w`` ACCEPTABLE_WARNING, ``f`` FAIL, ``n``
 NEEDS_FOLLOWUP, ``s`` skip, ``u`` clear a verdict, ``b`` back, ``q`` save and
@@ -293,7 +293,7 @@ Completing the review does not approve the corpus. Approval is a separate
 operator action, refused unless every row is human-reviewed with no ``FAIL`` and
 no ``NEEDS_FOLLOWUP``::
 
-  /standard approve ANSI-VITA-49.2 2017-R2024
+  /standard approve EXAMPLE-STD-1.0 2024
 
 It sets ``human_validation_status`` to ``APPROVED`` in the canonical manifest and
 writes reviewer, timestamp and summary to a private ``approval.json`` beside it.

@@ -1,8 +1,9 @@
 #!/bin/bash
 # Manage SPEAR container images: one entry point over scripts/docker/.
 #
+#     spear-image build   <harness|base|project> ...        (tiered, see build-tiered.sh)
 #     spear-image build   <public|reds|private> [--bake a,b,...] [--knowledge a,b,...|all]
-#                         [--tag TAG]
+#                         [--tag TAG]                         (legacy flat profiles)
 #     spear-image list
 #     spear-image inspect <public|reds|private|TAG>
 #     spear-image run     <public|reds|private|TAG> [spear-docker options] [-- harness args]
@@ -38,10 +39,10 @@ die() { echo "spear-image: $*" >&2; exit 1; }
 # profile or tag -> tag
 image_of() {
     case "$1" in
-        "") die "name an image: public, reds, private or a tag" ;;
-        public|reds|private) echo "spear:$VERSION-$1" ;;
+        "") die "name an image: harness, base, project, public, reds, private or a tag" ;;
+        harness|base|project|public|reds|private) echo "spear:$VERSION-$1" ;;
         *:*) echo "$1" ;;
-        *) die "'$1' is neither a profile (public, reds, private) nor a tag" ;;
+        *) die "'$1' is neither a profile (harness, base, project, public, reds, private) nor a tag" ;;
     esac
 }
 
@@ -62,8 +63,11 @@ case "$action" in
     build)
         profile="$1"
         case "$profile" in
+            harness|base|project)
+                shift
+                exec "$DOCKER_SCRIPTS/build-tiered.sh" "$profile" "$@" ;;
             public|reds|private) shift ;;
-            *) die "build needs a profile: public, reds or private" ;;
+            *) die "build needs a profile: harness, base, project (tiered) or public, reds, private (legacy)" ;;
         esac
 
         tag="" bake=() knowledge=()

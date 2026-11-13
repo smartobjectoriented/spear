@@ -1,0 +1,41 @@
+# One project's delta on a company's base.
+#
+# It merges a project's spear-private content over the commons and bakes the
+# project's own corpora, so the image is self-contained for that project. Always
+# non-redistributable. The default is NOT to build this at all: a project's
+# spear-private is mounted on the base at run time, and this image exists only
+# when a self-contained, nothing-mounted project image is wanted.
+#
+# The index context is the FULL index for the commons plus this project's
+# corpora (stage-index.py bakes it), so it replaces the base's rather than
+# merging into it.
+
+ARG BASE_IMAGE
+FROM ${BASE_IMAGE}
+
+ARG APP=/opt/spear/client
+
+# The project's content, merged over the base's commons.
+
+COPY --from=rules . $APP/rules.d/
+COPY --from=skills . $APP/skills/
+COPY --from=benches . $APP/benches/
+
+# The registry overlay (commons + project corpora) and the full index.
+
+COPY --from=repo docker/projects.docker.json $APP/projects.json
+COPY --chmod=0777 --from=index . $APP/chromadb/
+
+# The project's baked corpora, writable, at their registry-resolved paths.
+
+COPY --from=baked --chmod=0777 . /corpora/
+
+# The project's own standards, appended over the base's -- a licensed document
+# this project is entitled to (a private/commercial standard). Empty unless the build
+# was given --standards / --licensed.
+
+COPY --from=standards --chmod=0777 . /opt/spear/common/standards/
+
+# This image's own manifest, recording the base it was built on and its delta.
+
+COPY --from=manifest project-manifest.json /opt/spear/common/project-manifest.json

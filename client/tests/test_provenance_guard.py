@@ -63,9 +63,9 @@ class Contract(unittest.TestCase):
         self.assertEqual(found.paths, set())
 
     def test_a_url_a_tool_did_return_is_recorded(self):
-        found = ledger('{"link": "https://vita.com/spec.pdf"}')
+        found = ledger('{"link": "https://example.com/spec.pdf"}')
 
-        self.assertIn("https://vita.com/spec.pdf", found.urls)
+        self.assertIn("https://example.com/spec.pdf", found.urls)
 
     def test_an_empty_result_records_nothing(self):
         self.assertEqual(ledger("").source_ids, set())
@@ -84,15 +84,15 @@ class Detection(unittest.TestCase):
                          [FABRICATED_SOURCE_ID])
 
     def test_a_returned_url_passes(self):
-        found = ledger('{"link": "https://vita.com/spec.pdf"}')
+        found = ledger('{"link": "https://example.com/spec.pdf"}')
 
-        self.assertEqual(findings("See https://vita.com/spec.pdf.", found), [])
+        self.assertEqual(findings("See https://example.com/spec.pdf.", found), [])
 
     def test_a_returned_url_passes_mid_sentence_too(self):
-        found = ledger('{"link": "https://vita.com/spec.pdf"}')
+        found = ledger('{"link": "https://example.com/spec.pdf"}')
 
         self.assertEqual(
-            findings("See https://vita.com/spec.pdf, section 7.", found), [])
+            findings("See https://example.com/spec.pdf, section 7.", found), [])
 
     def test_a_fabricated_url_is_still_caught_before_a_full_stop(self):
         found = findings("See https://example.org/spec.pdf.", ledger())
@@ -115,7 +115,7 @@ class Detection(unittest.TestCase):
         self.assertEqual([item["kind"] for item in found], [FABRICATED_PATH])
 
     def test_a_windows_path_fails(self):
-        found = findings(r"Stored at C:\standards\vita.pdf.", ledger())
+        found = findings(r"Stored at C:\standards\example.pdf.", ledger())
 
         self.assertEqual([item["kind"] for item in found], [FABRICATED_PATH])
 
@@ -133,7 +133,7 @@ class Detection(unittest.TestCase):
                 self.assertEqual(findings(answer, ledger()), [])
 
     def test_a_code_example_with_a_relative_path_is_untouched(self):
-        answer = '#include "vita/packet.h"\nopen("data/frame.bin");'
+        answer = '#include "example/packet.h"\nopen("data/frame.bin");'
 
         self.assertEqual(findings(answer, ledger()), [])
 

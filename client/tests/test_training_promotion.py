@@ -16,7 +16,7 @@ def row(**overrides):
         "timestamp": "2026-09-09T10:00:00+00:00",
         "verdict": "pass",
         "source": "project_build",
-        "project": "adhoc:vita492",
+        "project": "adhoc:examplestd10",
         "task_id": "task_1",
         "question": "make the acknowledgement follow the rule",
         "answer": "Changed command_wire.c.",

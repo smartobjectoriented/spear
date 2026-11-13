@@ -21,7 +21,7 @@ from standard import standard_answer_policy as sap
 from evidence.conformance_guard import ClauseLedger
 from evidence.conformance_mode import CodeReadLedger, is_conformance_turn, record, render
 
-SID, REV = "ANSI-VITA-49.2", "2017-R2024"
+SID, REV = "EXAMPLE-STD-1.0", "2024"
 FETCH = {"unit": {"section": "8.4.1.1", "text": "Rule 8.4.1.1-2: only one bit"}}
 
 
@@ -38,11 +38,11 @@ class Detection(unittest.TestCase):
     def test_the_two_questions_that_started_this(self):
         for question in ("can you validate the implementation ?",
                          "can you validate the ACK implementation against "
-                         "VITA49.2 ?"):
+                         "EXAMPLE-STD-1.0 ?"):
             self.assertTrue(is_conformance_turn(question), question)
 
     def test_a_question_about_the_standard_alone_is_not_one(self):
-        for question in ("How should the ACK be managed when using VITA49.2 "
+        for question in ("How should the ACK be managed when using EXAMPLE-STD-1.0 "
                          "Commands packets?",
                          "what does Rule 8.4.1.1-3 require?",
                          "validate the config file"):
@@ -142,7 +142,7 @@ class Policy(unittest.TestCase):
 
     def test_any_other_bound_turn_is_untouched(self):
         policy, text = self.run_turn("How should the ACK be managed when "
-                                     "using VITA49.2 Commands packets?",
+                                     "using EXAMPLE-STD-1.0 Commands packets?",
                                      code_call="cat src/x.c")
 
         self.assertFalse(policy.conformance_turn)

@@ -274,7 +274,7 @@ class ProseQuestionEnding(unittest.TestCase):
         from evidence.evidence_progress import ProgressTracker, bounded_absence
 
         text = bounded_absence(
-            "How should the ACK be managed when using VITA49.2 Commands packets?",
+            "How should the ACK be managed when using EXAMPLE-STD-1.0 Commands packets?",
             EvidenceLedger(), ProgressTracker(), reason=BUDGET, rounds=14)
 
         self.assertNotIn("bit positions", text)

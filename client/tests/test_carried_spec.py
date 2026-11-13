@@ -33,7 +33,7 @@ class TheRequestThatCarriesIt(unittest.TestCase):
 
     def test_the_first_prompt_carries_nothing(self):
         self.assertFalse(is_write_request(
-            "How should the ACK be managed when using VITA49.2 Commands packets?"))
+            "How should the ACK be managed when using EXAMPLE-STD-1.0 Commands packets?"))
 
 
 class TheContextCarriesIt(unittest.TestCase):

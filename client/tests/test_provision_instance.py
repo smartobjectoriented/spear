@@ -1,6 +1,6 @@
 """The printed label is what the document calls a provision, not its identity.
 
-VITA 49.2 declares Rule 5.1.6-2 twice in section 5.1.6 -- page 75 about
+EXAMPLE-STD-1.0 declares Rule 5.1.6-2 twice in section 5.1.6 -- page 75 about
 Enable bits, page 76 about Packet Class documentation. Same section, same
 heading path, same printed label, both proper declarations, different
 normative content. Thirty-seven such labels exist in that one document.

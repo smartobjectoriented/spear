@@ -66,7 +66,7 @@ class ContentIsCutToTheBakedCorpora(unittest.TestCase):
         skill("for-family", "[family:buildsys]")
         skill("for-product", "[verdin, virt64]")
         skill("for-so3", "[so3]")
-        skill("customer", "[vita492]")
+        skill("customer", "[examplestd10]")
         (self.skills / "undeclared.md").write_text("## Procedure\n1. do\n")
         (self.skills / "README.md").write_text("# skills\n")
 
@@ -160,7 +160,7 @@ class ContentIsCutToTheBakedCorpora(unittest.TestCase):
         self.assertIn("10-product.md  LEFT OUT — corpus verdin, virt64", out)
         self.assertIn("40-host.md  LEFT OUT — scoped to a host path", out)
         self.assertIn("90-unscoped.md  LEFT OUT — declares no scope", out)
-        self.assertIn("customer.md  LEFT OUT — vita492", out)
+        self.assertIn("customer.md  LEFT OUT — examplestd10", out)
         self.assertIn("undeclared.md  LEFT OUT — declares no scope", out)
         self.assertIn("corpora/verdin.md  LEFT OUT", out)
         self.assertIn("product.sh  LEFT OUT", out)

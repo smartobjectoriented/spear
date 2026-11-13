@@ -29,19 +29,19 @@ read them:
                   needs a clause that states one; counting flags is not a
                   clause
 
-Nothing here names a standard, a section, a field or a packet. The VITA cases
+Nothing here names a standard, a section, a field or a packet. The cases
 that motivated it are in the tests, not in the code.
 """
 
 from __future__ import annotations
 
+import os
 import re
 from dataclasses import dataclass, field
 
 from normative import normative_force
 from normative import normative_precedence
 from normative import provision_identity
-from standard import standard_profiles  # noqa: F401  (registers declared role taxonomies)
 from context.context_selection import SourceType
 
 UNGROUNDED_IDENTIFIER = "UNGROUNDED_IDENTIFIER"
@@ -182,13 +182,22 @@ _IDENTIFIER = re.compile(
 #: Shapes the identifier pattern catches that are not field names. Kept short
 #: and generic: acronyms every technical document uses about ITSELF, and the
 #: words a normative answer says about its own sources.
-_NOT_IDENTIFIERS = frozenset({
+# Common technical acronyms and the standards bodies whose names recur
+# everywhere. A deployment names the bodies of its OWN corpora through
+# SPEAR_STANDARD_BODIES (comma or space separated), so this public source
+# carries only the ones every deployment sees and names no particular one.
+_BUILTIN_NOT_IDENTIFIERS = frozenset({
     "PDF", "HTML", "JSON", "XML", "ASCII", "UTF", "URL", "URI", "API", "CPU",
     "GPU", "RAM", "USB", "TODO", "NOTE", "WARNING", "ERROR", "INFO", "YES",
     "NO", "AND", "OR", "NOT", "THE", "ALL", "ANY", "ONE", "TWO", "MAY",
     "SHALL", "SHOULD", "MUST", "RULE", "SECTION", "TABLE", "FIGURE", "ANSI",
-    "IEEE", "ISO", "IEC", "RFC", "NIST", "VITA",
+    "IEEE", "ISO", "IEC", "RFC", "NIST",
 })
+
+_NOT_IDENTIFIERS = _BUILTIN_NOT_IDENTIFIERS | frozenset(
+    token.upper()
+    for token in re.split(r"[,\s]+", os.environ.get("SPEAR_STANDARD_BODIES", ""))
+    if token)
 
 
 def normalise(token):

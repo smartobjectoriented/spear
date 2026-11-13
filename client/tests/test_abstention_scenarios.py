@@ -48,7 +48,7 @@ class Families(unittest.TestCase):
 
     def test_no_scenario_mentions_an_evaluated_document(self):
         blob = " ".join(serialize(item) for item in SCENARIOS).lower()
-        for absent in ("vita", "49.2", "ansi", "vrt"):
+        for absent in ("example-std", "1.0", "ansi", "vrt"):
             self.assertNotIn(absent, blob)
 
 

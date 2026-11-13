@@ -86,7 +86,7 @@ def guard(answer, sections=(), binding=BINDING):
     ledger = ClauseLedger(sections=set(sections))
 
     return normative_precedence.guard(
-        answer, ledger, standard_id="ANSI-VITA-49.2", revision="2017-R2024",
+        answer, ledger, standard_id="EXAMPLE-STD-1.0", revision="2024",
         binding=binding)
 
 
@@ -153,7 +153,7 @@ class DeviationsAreReportable(unittest.TestCase):
         cleared = "The implementation correctly follows the standard."
         _, findings, _, fired = conformance_guard.guard(
             cleared, ClauseLedger(sections={CLAUSE}),
-            standard_id="ANSI-VITA-49.2", revision="2017-R2024",
+            standard_id="EXAMPLE-STD-1.0", revision="2024",
             binding=BINDING)
 
         self.assertTrue(fired)
@@ -276,8 +276,8 @@ class ProvenanceDecidesNormativity(unittest.TestCase):
         self.assertEqual(policy.clauses.sections, set())
 
         _, findings, _, fired = normative_precedence.guard(
-            self.CLAIM, policy.clauses, standard_id="ANSI-VITA-49.2",
-            revision="2017-R2024", binding=BINDING)
+            self.CLAIM, policy.clauses, standard_id="EXAMPLE-STD-1.0",
+            revision="2024", binding=BINDING)
 
         self.assertTrue(fired)
         self.assertEqual(len(findings), 1)
@@ -379,7 +379,7 @@ class TheGuardIsGeneric(unittest.TestCase):
         """
         body = executable_text(normative_precedence)
 
-        for token in ("VITA", "vita", "AckV", "AckX", "AckS", "8.4", "49.2"):
+        for token in ("EXAMPLE-STD", "example-std", "AckV", "AckX", "AckS", "8.4", "1.0"):
             with self.subTest(token=token):
                 self.assertNotIn(token, body)
 

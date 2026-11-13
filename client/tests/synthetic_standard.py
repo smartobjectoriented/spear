@@ -3,7 +3,7 @@
 The harness is bound, in production, to documents somebody licensed. Their
 clause text is theirs: it may be ingested into a user's own runtime state and
 read from there, and it may not be copied into this repository. Identifiers
-are a different matter -- "ANSI-VITA-49.2", "§8.4.1.1", "AckV" name a thing
+are a different matter -- "EXAMPLE-STD-1.0", "§8.4.1.1", "AckV" name a thing
 without reproducing it, and a test about binding or about name plumbing is
 entitled to use the real ones.
 

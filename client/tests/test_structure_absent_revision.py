@@ -28,7 +28,7 @@ class AnUnbuiltRevisionIsAState(unittest.TestCase):
     def refusal(self):
         reader = access.StandardStructureAccess(self.store)
         with self.assertRaises(access.StructureAccessError) as caught:
-            reader.index("ANSI-VITA-49.2", "never-built")
+            reader.index("EXAMPLE-STD-1.0", "never-built")
         return caught.exception
 
     def test_it_is_named_rather_than_raised_as_a_fault(self):

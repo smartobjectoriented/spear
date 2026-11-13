@@ -84,10 +84,10 @@ class StandardEndToEndTests(unittest.TestCase):
             self.assertIn("Normative claims must use retrieved", system)
             self.assertNotIn("Implementations shall reject reserved value", system)
 
-    def test_agent_runtime_has_no_standard_or_vita_orchestration_branch(self):
+    def test_agent_runtime_has_no_standard_orchestration_branch(self):
         runtime = Path(__file__).parents[1] / "runtime"
         text = "".join(path.read_text("utf-8")
                        for path in sorted(runtime.glob("agent_*.py")))
-        self.assertNotIn("VITA", text)
+        self.assertNotIn("EXAMPLE-STD", text)
         self.assertNotIn("standard.search", text)
         self.assertNotIn("standard.fetch", text)

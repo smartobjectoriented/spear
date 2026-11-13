@@ -33,7 +33,7 @@ from harness.tool_router import ToolResultEnvelope, ToolResultStatus
 from runtime.tracing import TraceEmitter
 from runtime.working_state import WorkingState
 
-BINDING = {"standard_id": "ANSI-VITA-49.2", "revision": "2017-R2024"}
+BINDING = {"standard_id": "EXAMPLE-STD-1.0", "revision": "2024"}
 REAL_ID = "std-5287d23d6932688558e46a628f8aaec2"
 OTHER_ID = "std-e1d69bac5d63695f703b9e201c727b5d"
 
@@ -131,7 +131,7 @@ class Activation(unittest.TestCase):
             make_context(ScriptedBackend([]), binding=BINDING))
 
         self.assertIsInstance(policy, StandardAnswerPolicy)
-        self.assertEqual(policy.standard_id, "ANSI-VITA-49.2")
+        self.assertEqual(policy.standard_id, "EXAMPLE-STD-1.0")
 
     def test_activation_never_reads_the_user_wording(self):
         context = make_context(
@@ -207,7 +207,7 @@ class BoundTurn(unittest.TestCase):
 
     def test_g_fabricated_provenance_is_removed(self):
         raw = (f"Phase Offset, Radians occupies bits 15..0 of word 1 "
-               f"([{REAL_ID}](file:///home/user/vita.pdf)), see also "
+               f"([{REAL_ID}](file:///home/user/example.pdf)), see also "
                f"std-deadbeefdeadbeefdeadbeefdeadbeef.")
         result, policy, _ = self.run_bound(
             [tool_turn("c1", "standard.get_structure",

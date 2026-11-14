@@ -1,0 +1,84 @@
+# client/local.conf -- this machine's single SPEAR configuration.
+#
+# One file for every operator choice: where a deployment's content lives, what
+# the image tiers bake, and which entity and registry an image belongs to. It
+# is the source of truth read by spear-chat, spear-corpus, spear-image
+# (build and push) and the docker build scripts. It is not tracked.
+#
+# Copy it to local.conf and uncomment what applies: a line left commented is a
+# choice not made, and the harness falls back to its default. `spear-configure`
+# writes the top block for you from what the machine has, and keeps everything
+# below the local marker untouched -- so the two ways of filling this file do
+# not fight.
+
+# ====================  Deployment: where content lives  ====================
+
+# Where sessions accumulate: history, memories, audit, the standard store.
+export SPEAR_STATE_DIR="$HOME/.local/state/spear"
+
+# The deployment's own content, from a private tree beside the checkout.
+export SPEAR_RULES_DIR=/path/to/spear-private/rules.d
+export SPEAR_SKILLS_DIR=/path/to/spear-private/skills
+export SPEAR_BENCH_DIR=/path/to/spear-private/benches
+[ -r /path/to/spear-private/engagement.env ] && . /path/to/spear-private/engagement.env
+
+# Document embedding for normative standards, on the GPU host. The revision is
+# what both ends' Hub caches resolve `main` to; a licensed standard never
+# leaves this machine unless an ingest/rebuild passes --allow-offload.
+#export SPEAR_STANDARD_EMBED_MODEL=BAAI/bge-m3
+#export SPEAR_STANDARD_EMBED_REVISION=<40-hex revision>
+#export SPEAR_STANDARD_EMBED_REMOTE=user@gpu-host
+
+# Retrieval mode and structural completion are set per document
+# (/standard retrieval), not here: exported, they would override every
+# document for every session.
+
+# --- local additions: kept as they are by spear-configure ---
+
+# =====================  Image tiers: spear-image build  =====================
+# These replace the build-tiered.sh flags. A flag given on the command line
+# still overrides the value set here, so an occasional one-off needs no edit.
+
+# The entity an image belongs to; it decides the registry a private image may
+# be pushed to (see Registries below). "local" (the default) means none.
+#export SPEAR_ENTITY=acme
+
+# base -- the common corpora baked into a company's commons image, the shared
+# build system included (was --commons).
+#export SPEAR_COMMONS=buildsystem,commons-docs
+
+# base -- the knowledge-seed workspaces to bake, or "all" (was --knowledge).
+#export SPEAR_KNOWLEDGE=all
+
+# project -- this project's own spear-private content trees, colon separated
+# (was --tree), and the base it builds on (was --from; empty => spear:<ver>-base).
+#export SPEAR_PROJECT_TREES=/path/to/project/spear-private
+#export SPEAR_FROM_BASE=
+
+# Corpora to bake writable into the image rather than mount at run time (was
+# --bake). Empty => the trees stay mounted and live.
+#export SPEAR_BAKE=
+
+# A store holding a standard this image is entitled to bake (was --standards),
+# and whether it carries that licensed document (was --licensed). A licensed
+# standard -- or the build system in a base -- makes the image
+# non-redistributable.
+#export SPEAR_STANDARDS_STORE=
+#export SPEAR_LICENSED=0
+
+# Further content trees a base merges after this machine's own, colon separated
+# (a project checkout carrying its own rules.d/, skills/, benches/).
+#export SPEAR_CONTENT_TREES=/path/to/project/spear-private
+
+# The standard bodies whose identifiers the harness recognises beyond the
+# built-in ones, comma or space separated (e.g. a body only this image serves).
+#export SPEAR_STANDARD_BODIES=
+
+# ==========================  Registries: push  =============================
+# Where a private image of each entity may be pushed. An image goes only to its
+# own entity's registry; anywhere else needs push --allow-push. Some entities
+# have a built-in default (see scripts/docker/push.sh); any other is named
+# here, one variable per entity:
+#
+#     export SPEAR_<ENTITY>_REGISTRY=<registry-host>
+#export SPEAR_ACME_REGISTRY=registry.example.com

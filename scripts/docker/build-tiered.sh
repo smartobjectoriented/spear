@@ -2,10 +2,15 @@
 # Build the tiered images: harness -> base -> project.
 #
 #   build-tiered.sh harness
-#   build-tiered.sh base    --commons a,b,c [--entity NAME] [--licensed]
+#   build-tiered.sh base    [--commons a,b,c] [--entity NAME] [--licensed]
 #                           [--knowledge p,q|all]
-#   build-tiered.sh project --from spear:<ver>-base --tree DIR
+#   build-tiered.sh project [--from spear:<ver>-base] [--tree DIR]
 #                           [--bake a,b] [--standards DIR] [--licensed] [--tag TAG]
+#
+# Every option has an equivalent in client/local.conf (SPEAR_COMMONS,
+# SPEAR_ENTITY, SPEAR_BAKE, SPEAR_PROJECT_TREES, ...), read before the flags; a
+# flag overrides the configured value. So on a machine whose local.conf names
+# its commons and entity, `build-tiered.sh base` alone is enough.
 #
 # A project adds its own standards too: --licensed takes the licensed documents
 # of --standards DIR (a store holding, say, only one private standard), appended over the
@@ -38,10 +43,34 @@ case "$TIER" in
     *) die "tier must be harness, base or project, not '$TIER'" ;;
 esac
 
-COMMONS="" BAKE="" KNOWLEDGE="" ENTITY="local" FROM_BASE="" TAG=""
-STANDARDS_STORE=""
-LICENSED=0
+# The machine's configuration, exactly as build.sh and the launchers read it:
+# the content locations a base bakes, and the tier choices that used to be
+# flags (SPEAR_COMMONS, SPEAR_BAKE, SPEAR_ENTITY, ...). local.conf, or the
+# legacy machine.env. Without it a base ships no rules and no skills.
+
+if [ -r "$APP/local.conf" ]; then
+    echo "   settings  $APP/local.conf"
+    # shellcheck disable=SC1091
+    . "$APP/local.conf"
+elif [ -r "$APP/machine.env" ]; then
+    echo "   settings  $APP/machine.env"
+    # shellcheck disable=SC1091
+    . "$APP/machine.env"
+fi
+
+# The choices come from the configuration above; a flag below overrides it, and
+# --tree adds to any SPEAR_PROJECT_TREES already set.
+
+COMMONS="${SPEAR_COMMONS:-}"
+BAKE="${SPEAR_BAKE:-}"
+KNOWLEDGE="${SPEAR_KNOWLEDGE:-}"
+ENTITY="${SPEAR_ENTITY:-local}"
+FROM_BASE="${SPEAR_FROM_BASE:-}"
+TAG="${SPEAR_TAG:-}"
+STANDARDS_STORE="${SPEAR_STANDARDS_STORE:-}"
+LICENSED="${SPEAR_LICENSED:-0}"
 TREES=()
+[ -n "${SPEAR_PROJECT_TREES:-}" ] && IFS=: read -r -a TREES <<<"$SPEAR_PROJECT_TREES"
 
 while [ $# -gt 0 ]; do
     case "$1" in
@@ -59,15 +88,6 @@ while [ $# -gt 0 ]; do
 done
 
 [ -f "$APP/cli/rag_chat.py" ] || die "no harness under $APP — set SPEAR_APP"
-
-# The machine's own content locations and content trees, exactly as build.sh and
-# the launchers read them. Without it a base ships no rules and no skills.
-
-if [ -r "$APP/machine.env" ]; then
-    echo "   settings  $APP/machine.env"
-    # shellcheck disable=SC1091
-    . "$APP/machine.env"
-fi
 
 EMPTY="$(mktemp -d)"
 STAGE="$(mktemp -d)"

@@ -32,7 +32,11 @@ PY="$SCRIPT_DIR/bin/python3"
 # where a session's state lives -- and `spear-corpus` silently created a second
 # state tree beside the code. SPEAR_CORPUS_ROOT, which decides what a relative
 # corpus path resolves against, was missed the same way.
-[ -r "$SCRIPT_DIR/machine.env" ] && . "$SCRIPT_DIR/machine.env"
+if [ -r "$SCRIPT_DIR/local.conf" ]; then
+	. "$SCRIPT_DIR/local.conf"
+elif [ -r "$SCRIPT_DIR/machine.env" ]; then
+	. "$SCRIPT_DIR/machine.env"
+fi
 
 exec "$PY" -c 'import sys
 sys.path.insert(0, sys.argv[1])

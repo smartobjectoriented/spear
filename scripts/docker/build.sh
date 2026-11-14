@@ -115,9 +115,13 @@ TAG="${TAG:-spear:$("$REPO/scripts/spearversion.sh")-$PROFILE}"
 # checkout. Without it the OPTIONAL table below resolves to the in-tree
 # directories -- which hold a README and nothing else -- and the build reports
 # them as found. The image then ships a harness with no rules and no skills,
-# announcing neither, which is exactly what machine.env exists to prevent on
-# the workstation.
-if [ -r "$APP/machine.env" ]; then
+# announcing neither, which is exactly what the configuration exists to prevent
+# on the workstation. local.conf, or the legacy machine.env.
+if [ -r "$APP/local.conf" ]; then
+    echo "   settings  $APP/local.conf"
+    # shellcheck disable=SC1091
+    . "$APP/local.conf"
+elif [ -r "$APP/machine.env" ]; then
     echo "   settings  $APP/machine.env"
     # shellcheck disable=SC1091
     . "$APP/machine.env"

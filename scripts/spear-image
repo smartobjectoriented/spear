@@ -56,7 +56,15 @@ image_of() {
 
 exists() { docker image inspect "$1" >/dev/null 2>&1; }
 
+# Labels moved to the neutral `spear.` namespace (build-tiered.sh); read it
+# first, falling back to the old one so images built before the rename still
+# show their profile.
+
 label() {
+    local v
+    v="$(docker image inspect "$1" \
+        --format "{{ index .Config.Labels \"spear.$2\" }}" 2>/dev/null)"
+    [ -n "$v" ] && { printf '%s' "$v"; return; }
     docker image inspect "$1" \
         --format "{{ index .Config.Labels \"$LABEL.$2\" }}" 2>/dev/null
 }
@@ -94,9 +102,13 @@ case "$action" in
 
     list)
         # The label, not the repository name: an image retagged for a registry
-        # is still one of ours, and says which profile it is.
-        docker images --filter "label=$LABEL.profile" \
-            --format '{{.Repository}}:{{.Tag}}\t{{.ID}}\t{{.Size}}\t{{.CreatedSince}}' |
+        # is still one of ours, and says which profile it is. Both namespaces:
+        # the tiered images carry spear.profile, the legacy ones the old one.
+        { docker images --filter "label=spear.profile" \
+              --format '{{.Repository}}:{{.Tag}}\t{{.ID}}\t{{.Size}}\t{{.CreatedSince}}'
+          docker images --filter "label=$LABEL.profile" \
+              --format '{{.Repository}}:{{.Tag}}\t{{.ID}}\t{{.Size}}\t{{.CreatedSince}}'
+        } | sort -u |
         while IFS=$'\t' read -r name id size created; do
             printf '%-40s %-11s %-9s redistributable=%-5s %s\n' "$name" \
                 "$(label "$id" profile)" "$size" "$(label "$id" redistributable)" \

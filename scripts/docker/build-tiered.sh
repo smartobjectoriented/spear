@@ -226,9 +226,12 @@ project)
 
     "$HERE/gen-registry.py" --profile private || echo "   (some corpora skipped)" >&2
 
-    # The index is the FULL set the base already has plus this project's corpora,
-    # so it replaces the base's rather than merging into it.
-    ALLBAKE="$BAKE"
+    # Dockerfile.project COPIES this index over the base's, replacing it rather
+    # than merging -- so when the project bakes corpora the staged index must
+    # carry the base's commons too, or they lose their retrieval. With nothing
+    # to bake it stays empty and the base's index is kept untouched.
+    ALLBAKE=""
+    [ -n "$BAKE" ] && ALLBAKE="${COMMONS:+$COMMONS,}$BAKE"
     IDX="${SPEAR_INDEX_DIR:-$APP/chromadb}"
     if [ -d "$IDX" ] && [ -n "$ALLBAKE" ]; then
         "$HERE/stage-index.py" --bake "$ALLBAKE" --index "$IDX" "$STAGE/index"

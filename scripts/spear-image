@@ -29,6 +29,14 @@ DOCKER_SCRIPTS="$HERE/docker"
 VERSION="$("$HERE/spearversion.sh")"
 LABEL=ch.heig-vd.reds.spear
 
+# This machine's configuration (untracked): the image-tier choices that used to
+# be flags and the entity registries push reads. local.conf, or the legacy
+# machine.env. Sourced once here, every action and the scripts it execs inherit
+# it; build-tiered.sh re-reads it so a direct call still works.
+CLIENT="$HERE/../client"
+if [ -r "$CLIENT/local.conf" ]; then . "$CLIENT/local.conf"
+elif [ -r "$CLIENT/machine.env" ]; then . "$CLIENT/machine.env"; fi
+
 usage() {
     sed -n '2,20p' "$0" | sed 's/^# \{0,1\}//'
     exit "${1:-0}"

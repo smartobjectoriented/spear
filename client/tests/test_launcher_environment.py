@@ -2,8 +2,9 @@
 
 `spear-corpus` and the in-chat `/corpus` are one implementation on purpose --
 a second one had already drifted. But the two entry points did not run in the
-same environment: `spear-chat.sh` sources the machine's untracked `machine.env`
-and `spear-corpus.sh` did not, so the CLI ran with `SPEAR_STATE_DIR` defaulting
+same environment: `spear-chat.sh` sources the machine's untracked `local.conf`
+(or legacy `machine.env`) and `spear-corpus.sh` did not, so the CLI ran with
+`SPEAR_STATE_DIR` defaulting
 to the app directory while the chat used the configured one. Importing the
 module creates that directory, so the CLI quietly grew a second state tree
 beside the code; and `SPEAR_CORPUS_ROOT`, which decides what a *relative*
@@ -40,7 +41,7 @@ exit 0
 class Deployment:
     """A throwaway app directory holding one launcher and a stub interpreter."""
 
-    def __init__(self, tmp, launcher, machine_env=None):
+    def __init__(self, tmp, launcher, machine_env=None, local_conf=None):
         self.dir = Path(tmp)
         (self.dir / "bin").mkdir(parents=True, exist_ok=True)
         shutil.copy(APP / launcher, self.dir / launcher)
@@ -50,6 +51,8 @@ class Deployment:
 
         if machine_env is not None:
             (self.dir / "machine.env").write_text(machine_env)
+        if local_conf is not None:
+            (self.dir / "local.conf").write_text(local_conf)
 
         self.launcher = self.dir / launcher
 
@@ -113,11 +116,27 @@ class TheLaunchersAgree(unittest.TestCase):
     def test_every_launcher_reads_the_machine_environment(self):
         for name in LAUNCHERS:
             with self.subTest(launcher=name):
+                text = (APP / name).read_text()
                 self.assertIn(
-                    '[ -r "$SCRIPT_DIR/machine.env" ] && . "$SCRIPT_DIR/machine.env"',
-                    (APP / name).read_text(),
-                    f"{name} does not read machine.env; the entry points would "
+                    '. "$SCRIPT_DIR/local.conf"', text,
+                    f"{name} does not read local.conf; the entry points would "
                     f"then disagree about where state lives")
+                self.assertIn(
+                    '. "$SCRIPT_DIR/machine.env"', text,
+                    f"{name} dropped the legacy machine.env fallback")
+
+    def test_local_conf_is_read_and_wins_over_machine_env(self):
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmp:
+            app = Deployment(
+                tmp, "spear-corpus.sh",
+                machine_env='export SPEAR_STATE_DIR="/var/tmp/legacy"\n',
+                local_conf='export SPEAR_STATE_DIR="/var/tmp/current"\n')
+            done, reported = app.run("list")
+
+        self.assertEqual(done.returncode, 0, done.stderr)
+        self.assertEqual(reported["SPEAR_STATE_DIR"], "/var/tmp/current")
 
     def test_the_chat_and_the_corpus_cli_report_the_same_environment(self):
         import tempfile
@@ -155,17 +174,23 @@ class TheLaunchersAgree(unittest.TestCase):
 class ThePublicCheckoutIsSelfContained(unittest.TestCase):
     """Sourcing a machine file must not make the repository need one."""
 
+    MACHINE_FILES = ("client/local.conf", "client/machine.env")
+
     def test_no_launcher_is_tracked_with_a_machine_file(self):
         tracked = subprocess.run(["git", "ls-files"], cwd=ROOT,
                                  capture_output=True, text=True, check=True)
-        self.assertNotIn("client/machine.env", tracked.stdout.split())
+        for path in self.MACHINE_FILES:
+            with self.subTest(path=path):
+                self.assertNotIn(path, tracked.stdout.split())
 
     def test_the_machine_file_is_ignored_rather_than_merely_absent(self):
-        done = subprocess.run(["git", "check-ignore", "-q",
-                               "client/machine.env"], cwd=ROOT)
-        self.assertEqual(done.returncode, 0,
-                         "client/machine.env is not gitignored, so a local "
-                         "deployment's paths could be committed by accident")
+        for path in self.MACHINE_FILES:
+            with self.subTest(path=path):
+                done = subprocess.run(["git", "check-ignore", "-q", path],
+                                      cwd=ROOT)
+                self.assertEqual(done.returncode, 0,
+                                 f"{path} is not gitignored, so a local "
+                                 "deployment's paths could be committed by accident")
 
     # Assembled from fragments, like the public-boundary scanner's own needles:
     # a test that spells a forbidden path out loud puts it in the tree it is

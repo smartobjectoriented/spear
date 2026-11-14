@@ -1,9 +1,10 @@
-"""Write client/machine.env from what this machine already has.
+"""Write client/local.conf from what this machine already has.
 
-machine.env is this machine's local configuration -- where the session
+local.conf is this machine's single configuration -- where the session
 accumulates, where a deployment's private content lives, which host embeds a
-standard and with which pinned model -- and it was written by hand, with no
-template, from reading the docs. Every value in it can be found instead:
+standard and with which pinned model, and the image-tier and registry choices
+below the local marker. This writes the derived top block; everything below
+the marker is the operator's own. Every derived value can be found instead:
 
     state          SPEAR_STATE_DIR, else the workstation default
     private tree   a sibling spear-private/ holding rules.d, skills, benches
@@ -35,7 +36,9 @@ if not __package__:
 
 APP_DIR = Path(__file__).resolve().parent.parent
 REPO = APP_DIR.parent
-TARGET = APP_DIR / "machine.env"
+TARGET = APP_DIR / "local.conf"
+LEGACY_TARGET = APP_DIR / "machine.env"
+EXAMPLE = APP_DIR / "local.conf.example"
 
 DEFAULT_STATE = "$HOME/.local/state/spear"
 LOCAL_MARKER = "# --- local additions: kept as they are by spear-configure ---"
@@ -199,9 +202,9 @@ def _comparable(text: str) -> list[str]:
 def main(argv=None, *, remote_revision=None, stdin=None) -> int:
     ap = argparse.ArgumentParser(
         prog="spear-configure",
-        description="Write client/machine.env from what this machine has.")
+        description="Write client/local.conf from what this machine has.")
     ap.add_argument("--check", action="store_true",
-                    help="say whether machine.env still matches; write nothing")
+                    help="say whether local.conf still matches; write nothing")
     ap.add_argument("--yes", action="store_true",
                     help="replace a differing machine.env without asking")
     ap.add_argument("--private", metavar="DIR",
@@ -236,7 +239,22 @@ def main(argv=None, *, remote_revision=None, stdin=None) -> int:
 
     existing = target.read_text() if target.exists() else None
     state = args.state or os.environ.get("SPEAR_STATE_DIR") or DEFAULT_STATE
-    text = render(state, private, embed, split_local(existing or ""))
+
+    # What goes below the marker: an existing file's own additions, else -- when
+    # first writing local.conf -- those migrated from a legacy machine.env, else
+    # the commented menu seeded from local.conf.example.
+    if existing is not None:
+        local = split_local(existing)
+    elif target.name == "local.conf" and LEGACY_TARGET.exists():
+        local = split_local(LEGACY_TARGET.read_text())
+        print(f"   adopting  {LEGACY_TARGET.name} -> {target.name} "
+              "(its settings carried over; it is no longer read)")
+    elif target.name == "local.conf" and EXAMPLE.exists():
+        local = split_local(EXAMPLE.read_text())
+    else:
+        local = ""
+
+    text = render(state, private, embed, local)
 
     print(f"   state     {state}")
     print(f"   private   {private or '(none: in-tree rules, skills, benches)'}")

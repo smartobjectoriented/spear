@@ -21,10 +21,15 @@ PY="$SCRIPT_DIR/bin/python3"
 export VIRTUAL_ENV="$SCRIPT_DIR"
 export PATH="$SCRIPT_DIR/bin:$PATH"
 
-# Settings specific to THIS machine (untracked). Used to point at an inference
-# endpoint that is already up: on a shared host the --local :8080 may well be
-# taken by something else entirely.
-[ -r "$SCRIPT_DIR/machine.env" ] && . "$SCRIPT_DIR/machine.env"
+# Settings specific to THIS machine (untracked): local.conf, or the legacy
+# machine.env if no local.conf has been written yet. Used to point at an
+# inference endpoint that is already up: on a shared host the --local :8080 may
+# well be taken by something else entirely.
+if [ -r "$SCRIPT_DIR/local.conf" ]; then
+	. "$SCRIPT_DIR/local.conf"
+elif [ -r "$SCRIPT_DIR/machine.env" ]; then
+	. "$SCRIPT_DIR/machine.env"
+fi
 
 # ── move under the user manager when needed ──
 # The sandbox's resource control needs delegated cgroup controllers, and

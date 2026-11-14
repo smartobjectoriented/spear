@@ -67,6 +67,8 @@ __pycache__/
 # GPU epingle sur machine partagee — voir embedding.py
 /client/active-gpu.conf
 # reglages propres a la machine, ecrits par scripts/spear-configure
+/client/local.conf
+/client/local.conf.bak
 /client/machine.env
 /client/machine.env.bak
 

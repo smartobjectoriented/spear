@@ -1,6 +1,6 @@
 #!/bin/bash
-# Write client/machine.env, this machine's local configuration, from what the
-# machine already has. See client/cli/machine_config.py, or spear-configure --help.
+# Write client/local.conf, this machine's configuration, from what the machine
+# already has. See client/cli/machine_config.py, or spear-configure --help.
 REPO="$(cd "$(dirname "$(readlink -f "$0")")/.." && pwd)"
 # The release this is: "[spear vX.Y.Z] <script> <args>" on stderr, once.
 [ -r "$REPO/scripts/common/banner.sh" ] && . "$REPO/scripts/common/banner.sh"

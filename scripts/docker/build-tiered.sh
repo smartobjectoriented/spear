@@ -36,6 +36,13 @@ LABEL=spear
 
 die() { echo "build-tiered: $*" >&2; exit 1; }
 
+# Buildkit's default provenance/SBOM attestations turn the image into a multi-
+# manifest index whose attestation blob some registries (GitLab's) reject on
+# push. These images record their own provenance in their manifest, so the
+# buildkit attestations add nothing here -- off they go.
+
+ATTEST=(--provenance=false --sbom=false)
+
 TIER="${1:-}"; shift || true
 case "$TIER" in
     harness|base|project) ;;
@@ -144,6 +151,7 @@ harness)
     TAG="${TAG:-spear:$VERSION-harness}"
     echo "== building $TAG (harness) =="
     docker build -f "$REPO/docker/Dockerfile.harness" \
+        "${ATTEST[@]}" \
         --build-context "repo=$REPO" \
         --label "$LABEL.profile=harness" \
         --label "$LABEL.built=$(date -Iseconds)" \
@@ -198,6 +206,7 @@ base)
 
     echo "== building $TAG (base, entity=$ENTITY, redistributable=$REDIST) =="
     docker build -f "$REPO/docker/Dockerfile.base" \
+        "${ATTEST[@]}" \
         --build-arg "HARNESS_IMAGE=$HARNESS" \
         --build-context "repo=$REPO" \
         --build-context "index=$STAGE/index" \
@@ -265,6 +274,7 @@ project)
 
     echo "== building $TAG (project, FROM $FROM_BASE) =="
     docker build -f "$REPO/docker/Dockerfile.project" \
+        "${ATTEST[@]}" \
         --build-arg "BASE_IMAGE=$FROM_BASE" \
         --build-context "repo=$REPO" \
         --build-context "index=$STAGE/index" \

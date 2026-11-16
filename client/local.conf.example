@@ -82,3 +82,18 @@ export SPEAR_BENCH_DIR=/path/to/spear-private/benches
 #
 #     export SPEAR_<ENTITY>_REGISTRY=<registry-host>
 #export SPEAR_ACME_REGISTRY=registry.example.com
+
+# ==========================  get / update  =================================
+# `spear-image get <base|project>` fetches an image without your having to know
+# where it lives; `spear-image update <base|project>` rebuilds it from the
+# settings above, refreshes the shared tarball and tries to push. Two paths let
+# them find an image, tried in this order:
+#
+# SPEAR_REGISTRY_IMAGE -- the full registry repository, no tag: what get pulls
+# from and update pushes to. Unset => the tarball is the only path.
+#export SPEAR_REGISTRY_IMAGE=reds-gitlab.heig-vd.ch:5050/<group>/spear/spear
+#
+# SPEAR_SHARE_DIR -- a directory of tarballs a colleague can reach, each named
+# spear-<tier>-<version>.tar.zst: get loads from it when the registry misses,
+# update writes it. Defaults to the SPEAR tree's parent.
+#export SPEAR_SHARE_DIR=/path/to/shared/dir

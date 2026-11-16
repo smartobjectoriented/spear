@@ -55,6 +55,38 @@ Only ``scripts/`` goes on ``PATH``.  ``scripts/docker/`` holds a ``build.sh``,
 and a shell that has also sourced another tree's ``env.sh`` with a
 ``build.sh`` of its own would then have two.
 
+Base and project: get and update
+---------------------------------
+
+The tiered images — ``harness`` → ``base`` → ``project`` — have two
+option-free verbs over ``build``, so that neither you nor a colleague has to
+remember where an image lives or which flags built it.  Everything they need is
+in ``client/local.conf``.
+
+.. code-block:: console
+
+   $ spear-image get base            # pull from the registry, else load the shared tarball
+   $ spear-image run base --reds     # start a session against the model endpoint
+   $ spear-image update base         # rebuild from local.conf, refresh the tarball, try to push
+   $ spear-image get project         # base + a deployment's spear-private
+   $ spear-image update project
+
+``get`` is idempotent: an image already present is left alone.  It tries the
+registry first (``SPEAR_REGISTRY_IMAGE``, the full repository path), then a
+directory of tarballs a colleague can reach (``SPEAR_SHARE_DIR``, default the
+tree's parent), each named ``spear-<tier>-<version>.tar.zst``.
+
+``update`` **rebuilds only** — from the contents ``local.conf`` names
+(``SPEAR_COMMONS`` for the base, ``SPEAR_PROJECT_TREES`` and ``SPEAR_BAKE`` for
+the project) — then refreshes that tarball and, if a registry is set, tries to
+push.  Re-indexing a corpus is a separate, deliberate step
+(`Refreshing the index`_): it takes hours, and a rebuild is not the place for
+it.  ``update base`` builds the harness first if it is missing; ``update
+project`` needs the base present and says so if it is not.
+
+The lower-level ``build`` commands, and the flat ``public``/``reds``/``private``
+profiles, follow.
+
 .. code-block:: console
 
    $ spear-image build private               # spear:<version>-private

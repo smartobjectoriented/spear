@@ -4,6 +4,8 @@
 #     spear-image build   <harness|base|project> ...        (tiered, see build-tiered.sh)
 #     spear-image build   <public|reds|private> [--bake a,b,...] [--knowledge a,b,...|all]
 #                         [--tag TAG]                         (legacy flat profiles)
+#     spear-image get     <base|project>                     (pull from the registry, else load the shared tarball)
+#     spear-image update  <base|project>                     (rebuild from local.conf, refresh the tarball, try to push)
 #     spear-image list
 #     spear-image inspect <public|reds|private|TAG>
 #     spear-image run     <public|reds|private|TAG> [spear-docker options] [-- harness args]
@@ -56,6 +58,18 @@ image_of() {
 
 exists() { docker image inspect "$1" >/dev/null 2>&1; }
 
+# Where images travel when a registry cannot or will not take them: a directory
+# of tarballs a colleague can reach (SPEAR_SHARE_DIR, default the SPEAR tree's
+# parent), each named spear-<tier>-<version>.tar.zst.
+SHARE_DIR="${SPEAR_SHARE_DIR:-$(cd "$HERE/../.." && pwd)}"
+
+# The registry repository to pull from and push to -- the full path, no tag
+# (e.g. reds-gitlab.heig-vd.ch:5050/reds-general/spear/spear). Left unset, get
+# goes straight to the tarball and update does not push.
+REGISTRY_IMAGE="${SPEAR_REGISTRY_IMAGE:-}"
+
+tarball_of() { printf '%s/spear-%s-%s.tar.zst' "$SHARE_DIR" "$1" "$VERSION"; }
+
 # Labels moved to the neutral `spear.` namespace (build-tiered.sh); read it
 # first, falling back to the old one so images built before the rename still
 # show their profile.
@@ -99,6 +113,83 @@ case "$action" in
 
         exec "$DOCKER_SCRIPTS/build.sh" ${tag:+"$tag"} --profile "$profile" "${bake[@]}" \
             "${knowledge[@]}" ;;
+
+    get)
+        # Obtain a tier's image without having to know where it lives: the
+        # registry if one is set and reachable, otherwise the shared tarball.
+        tier="$1"
+        case "$tier" in
+            harness|base|project) ;;
+            "") die "get needs a tier: base or project" ;;
+            *)  die "get takes a tier (base or project), not '$tier'" ;;
+        esac
+        tag="spear:$VERSION-$tier"
+
+        if exists "$tag"; then echo "already present: $tag"; exit 0; fi
+
+        if [ -n "$REGISTRY_IMAGE" ]; then
+            ref="$REGISTRY_IMAGE:$VERSION-$tier"
+            echo "pulling $ref ..."
+            if docker pull "$ref"; then
+                docker tag "$ref" "$tag"
+                echo "got $tag (from $ref)"; exit 0
+            fi
+            echo "registry pull failed; trying the shared tarball" >&2
+        fi
+
+        tb="$(tarball_of "$tier")"
+        if [ -f "$tb" ]; then
+            echo "loading $tb ..."
+            zstd -dc "$tb" | docker load
+            exit 0
+        fi
+
+        die "cannot get $tag: no registry hit and no tarball at $tb.
+Set SPEAR_REGISTRY_IMAGE or SPEAR_SHARE_DIR in client/local.conf, or put the tarball there." ;;
+
+    update)
+        # Rebuild a tier from this host's current state (local.conf drives the
+        # contents -- no flags), then refresh the shared tarball and, if a
+        # registry is set, try to push. Indexing stays a separate, explicit step.
+        tier="$1"
+        case "$tier" in
+            base|project) ;;
+            "") die "update needs a tier: base or project" ;;
+            *)  die "update takes base or project, not '$tier'" ;;
+        esac
+        tag="spear:$VERSION-$tier"
+
+        case "$tier" in
+            base)
+                harness="spear:$VERSION-harness"
+                exists "$harness" || "$DOCKER_SCRIPTS/build-tiered.sh" harness
+                "$DOCKER_SCRIPTS/build-tiered.sh" base ;;
+            project)
+                exists "spear:$VERSION-base" \
+                    || die "no base image yet -- run 'spear-image get base' or 'spear-image update base' first"
+                "$DOCKER_SCRIPTS/build-tiered.sh" project ;;
+        esac
+
+        command -v zstd >/dev/null || die "zstd is not installed"
+        tb="$(tarball_of "$tier")"
+        mkdir -p "$SHARE_DIR"
+        echo "refreshing $tb ..."
+        docker save "$tag" | zstd -T0 -19 -f -o "$tb"
+        [ "$(label "$tag" redistributable)" = false ] && echo \
+            "!! $tb carries licensed and customer material: not redistributable" >&2
+
+        if [ -n "$REGISTRY_IMAGE" ]; then
+            ref="$REGISTRY_IMAGE:$VERSION-$tier"
+            docker tag "$tag" "$ref"
+            echo "pushing $ref ..."
+            if "$DOCKER_SCRIPTS/push.sh" "$ref"; then
+                echo "pushed $ref"
+            else
+                echo "registry push failed -- the tarball at $tb is the usable copy" >&2
+            fi
+        fi
+
+        echo "updated $tag" ;;
 
     list)
         # The label, not the repository name: an image retagged for a registry

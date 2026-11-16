@@ -18,6 +18,38 @@ and have the same state you do.
 | corpus trees | **mounted**, or baked with `--bake` | working copies change daily; baked is for the container that is handed over with nothing to mount |
 | model weights | **neither** | the harness talks to an endpoint (`--endpoint`), it does not host a model |
 
+## Get, run, update
+
+The two commands a colleague needs, and the one a maintainer adds. None takes
+an option: `client/local.conf` holds the settings — the registry, the shared
+tarball directory, and what each tier bakes.
+
+```sh
+. ./env.sh                      # once per shell, from the tree root
+
+spear-image get base            # pull from the registry, else load the shared tarball
+spear-image run base --reds     # start a session against the model endpoint
+
+spear-image update base         # rebuild from local.conf, refresh the tarball, try to push
+spear-image get project         # the project image: base + a deployment's spear-private
+spear-image update project
+```
+
+`get` is idempotent — an image already present is left alone. `update` rebuilds
+**only**; re-indexing a corpus stays a separate, deliberate step (`spear-index`
+on the host, then `update`), because it takes hours and is not what a rebuild
+is for.
+
+Two settings in `local.conf` say where an image lives, tried in this order:
+
+- `SPEAR_REGISTRY_IMAGE` — the registry repository `get` pulls from and
+  `update` pushes to. Unset, both fall back to the tarball.
+- `SPEAR_SHARE_DIR` — a directory of `spear-<tier>-<version>.tar.zst` tarballs
+  a colleague can reach. Defaults to the SPEAR tree's parent.
+
+The tiers themselves — `harness` → `base` → `project` — and what each carries
+are below under the lower-level `build` commands.
+
 ## Managing images
 
 From the repository root, once per shell:

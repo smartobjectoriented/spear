@@ -751,9 +751,20 @@ def main():
         # follows the kind of request rather than being one number for both,
         # and an explicit SPEAR_MAX_TOOL_ROUNDS still wins.
 
-        if ("SPEAR_MAX_TOOL_ROUNDS" not in os.environ
-                and is_write_request_text(user_input)):
-            max_tool_rounds *= 2
+        writing = is_write_request_text(user_input)
+
+        if "SPEAR_MAX_TOOL_ROUNDS" not in os.environ:
+            if writing:
+                max_tool_rounds *= 2
+            else:
+                # The sixty rounds a question is said to need, actually given
+                # to it. On the writing budget a question that found nothing
+                # to conclude from kept searching until the operator stopped
+                # it; closing the tool window is what asks for the answer.
+
+                max_tool_rounds = int(
+                    os.environ.get("SPEAR_QUESTION_ROUNDS", "60"))
+
         max_commands = int(os.environ.get("SPEAR_MAX_COMMANDS", "500"))
 
         # The same reasoning as the round budget above, and it was half done
@@ -762,9 +773,13 @@ def main():
         # 120 with its rounds unspent. Repairing a build costs CALLS -- read
         # the error, edit, rebuild -- not deliberation.
 
-        if ("SPEAR_MAX_COMMANDS" not in os.environ
-                and is_write_request_text(user_input)):
-            max_commands *= 2
+        if "SPEAR_MAX_COMMANDS" not in os.environ:
+            if writing:
+                max_commands *= 2
+            else:
+                max_commands = int(
+                    os.environ.get("SPEAR_QUESTION_COMMANDS", "80"))
+
         working_state = WorkingState.start(
             new_task_id(), user_input,
             max_model_rounds=max_tool_rounds,

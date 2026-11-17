@@ -62,7 +62,8 @@ class CommandPolicy:
         "cat", "ls", "rg", "grep", "egrep", "fgrep", "find", "head", "tail",
         "wc", "stat", "file", "pwd", "tree", "du", "df", "which", "type",
         "readlink", "basename", "dirname", "md5sum", "sha256sum", "diff", "sort",
-        "uniq", "cut", "sed",
+        "uniq", "cut", "sed", "tr", "printf", "nl", "tac", "rev", "column",
+        "realpath", "nproc", "uname", "date", "id",
     })
 
     # `sed -i` edits in place. It is refused rather than granted workspace
@@ -636,9 +637,18 @@ class CommandPolicy:
         point.
         """
 
-        for match in re.finditer(r"(?<![=])\d*>{1,2}\s*(\S*)", command):
-            if match.group(1) not in cls._REDIRECT_SINKS:
-                return True
+        for match in re.finditer(r"(?<![=])\d*>{1,2}\s*(&\d+|&-|[^\s;|&()]*)",
+                                 command):
+            target = match.group(1)
+
+            # `2>&1` duplicates a descriptor and `2>&-` closes one: neither
+            # names a file. The target also stops at a control operator, so
+            # `2>/dev/null;` is the sink it reads as.
+
+            if target.startswith("&") or target in cls._REDIRECT_SINKS:
+                continue
+
+            return True
 
         return False
 
@@ -805,7 +815,12 @@ class CommandPolicy:
             })
 
         danger = ""
-        stages = self._shell_stages(command)
+
+        # `2>&1` names no file and no program. Left in, the stage splitter
+        # cuts it at `>` and `&` and reads the trailing `1` as a command,
+        # which no allowlist knows and which therefore asked for write.
+
+        stages = self._shell_stages(re.sub(r"\d*>&(\d+|-)", " ", command))
         stdin_from_pipeline = False
         redirect_target = False
         redirect_reads = False

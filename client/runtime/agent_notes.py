@@ -129,6 +129,29 @@ def strip_fabrications(text: str) -> str:
 _REFUSED = frozenset({ToolResultStatus.DENIED, ToolResultStatus.UNKNOWN_TOOL,
                       ToolResultStatus.INVALID_ARGUMENTS})
 
+#: Refusals in one turn before the result says the shell is not the way.
+
+_REFUSAL_NOTICE = 3
+
+
+def _with_refusal_note(envelope, count):
+    """A refusal, carrying the fact that it is not the first.
+
+    A refused command comes back rephrased, and the rephrasing is refused for
+    the same reason in different words: the result hash sees nothing repeat.
+    What repeats is the refusal itself, so that is what gets counted.
+    """
+
+    return replace(
+        envelope,
+        model_content=(
+            f"{envelope.model_content}\n\n[refusal {count} of this turn. "
+            f"Rephrasing the command will not change the answer. "
+            f"search_corpus, search_files and read_file reach the same trees "
+            f"without a shell: use them, or conclude from what you have read "
+            f"and say what could not be checked.]"),
+    )
+
 
 # Reading rounds a turn gets before it is asked to conclude. Scaled to the
 # budget, but CAPPED -- and the cap is the point. It used to be a plain

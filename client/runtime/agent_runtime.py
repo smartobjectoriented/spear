@@ -42,9 +42,10 @@ from runtime.agent_model_turn import ModelTurnMixin
 from runtime.agent_recording import RecordingMixin
 
 from runtime.agent_notes import (
-    _PLAN_TOOL, _REPEAT_NOTICE, _WRITE_TOOLS, _asked, _investigation_ceiling,
+    _PLAN_TOOL, _REFUSAL_NOTICE, _REFUSED, _REPEAT_NOTICE, _WRITE_TOOLS,
+    _asked, _investigation_ceiling,
     _past_wall_fraction, _repeated_result, _round_was_all_refused,
-    _tool_activity, _with_repeat_note, _write_round_tools,
+    _tool_activity, _with_refusal_note, _with_repeat_note, _write_round_tools,
     announced_but_unmade_change, carried_obligations, conclude_demand,
     looks_like_preamble, make_it_demand, may_demand_write,
     standard_policy_for, strip_fabrications, turn_evidence,
@@ -142,6 +143,7 @@ class AgentRuntime(CodingCoreMixin, FinalizationMixin, ModelTurnMixin,
                 requirements=context.carried_requirements)
 
         investigate_rounds = preamble_reprompts = repeats = make_reprompts = 0
+        refusals = 0
         scope_final = False
         context.finalization = Finalization()
         self._normative_event(context, EventType.NORMATIVE_INVESTIGATION_STARTED,
@@ -1041,6 +1043,12 @@ class AgentRuntime(CodingCoreMixin, FinalizationMixin, ModelTurnMixin,
                             context.observer.notice(
                                 "identical_result", {"tool": call.name,
                                                      "count": same})
+
+                    if envelope.status in _REFUSED:
+                        refusals += 1
+
+                        if refusals >= _REFUSAL_NOTICE:
+                            envelope = _with_refusal_note(envelope, refusals)
 
                     # The log is the short form the nudges quote back at the
                     # model; the trajectory keeps the fuller record.

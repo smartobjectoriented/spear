@@ -195,6 +195,15 @@ def init_chromadb():
             print(f"{C_DIM}No index for this corpus yet — use /reindex "
                   f"to build one (optional).{C_RST}")
 
+            # Launched from a directory that is nobody's corpus, the session
+            # answers without retrieval while the indexed trees sit one
+            # command away, and nothing on screen said so.
+
+            if not attached:
+                print(f"{C_WARN}This session has no retrieval. To use an "
+                      f"indexed corpus, launch from its tree, or attach one "
+                      f"with --with <name> (/corpus lists them).{C_RST}")
+
             if not attached:
                 return None
 

@@ -199,6 +199,29 @@ class CommandPolicyTests(unittest.TestCase):
         self.assertEqual(self.policy.classify("git reset --hard").classification,
                          CommandClassification.DANGEROUS)
 
+    def test_a_read_only_pipeline_asks_for_no_write(self):
+        """Idioms that write nothing must not ask for workspace:write.
+
+        SAFE refuses that capability, so each of these false positives cost a
+        read-only session the command, and the model a round retrying it.
+        """
+        from harness.command_policy import Capability
+
+        for command in ("ls a 2>/dev/null; ls b",
+                        "ls a 2>&1 | head",
+                        "ls a 2>&1; echo ===; ls b",
+                        "cat a.cmd | tr ' ' '\\n' | grep -- -I",
+                        "which gcc 2>/dev/null; grep -n X build/conf/local.conf"):
+            self.assertNotIn(Capability.WORKSPACE_WRITE,
+                             self.policy.classify(command).required_capabilities,
+                             command)
+
+        for command in ("ls > out.txt", "ls 2>err.log | head", "ls >&both.log",
+                        "ls >>log; ls", "make 2>&1 | tail"):
+            self.assertIn(Capability.WORKSPACE_WRITE,
+                          self.policy.classify(command).required_capabilities,
+                          command)
+
     def test_redirection_target_is_a_file_not_a_command(self):
         """`2>/dev/null` must not make a command dangerous.
 

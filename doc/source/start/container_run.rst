@@ -99,7 +99,7 @@ container reaches it through an SSH tunnel you open on your machine.
             --corpus opencn/opencn-ng --ask
       $ spear-run.sh --list                       # every corpus and its path
 
-   ``SPEAR_REDS_HOST`` and ``SPEAR_REDS_KEY`` in your environment save the two
+   ``REDS_HOST`` and ``SPEAR_REDS_KEY`` in your environment save the two
    options.  Without the script, the same run by hand:
 
    .. code-block:: console

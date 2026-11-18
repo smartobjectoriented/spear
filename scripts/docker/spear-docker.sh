@@ -134,14 +134,22 @@ TTY=(-i); [ -t 0 ] && TTY=(-i -t)
 # inside it. seccomp/apparmor cover the namespace; systempaths covers the mount
 # -- Docker masks paths under /proc and mounting proc over a masked proc fails
 # with EPERM. Measured: --cap-add SYS_ADMIN does NOT fix it.
-# --memory/--pids-limit/--cpus mirror DEFAULT_CGROUP_LIMITS. The harness cannot
+# --pids-limit/--cpus mirror DEFAULT_CGROUP_LIMITS. The harness cannot
 # build a systemd scope in here and is fail-closed about that; the flags below
 # are what make SPEAR_RESOURCE_CONTROL=delegated true rather than a claim.
+#
+# --memory cannot mirror it: the cgroup holds the harness too, and the harness
+# maps its vector index. A large corpus alone exceeds a per-command bound, and
+# the session is then killed before its first prompt. SPEAR_CONTAINER_MEMORY
+# sets it.
+
+MEMORY="${SPEAR_CONTAINER_MEMORY:-8g}"
+
 exec docker run --rm "${TTY[@]}" \
     --security-opt seccomp=unconfined \
     --security-opt apparmor=unconfined \
     --security-opt systempaths=unconfined \
-    --memory 2g --memory-swap 2g --pids-limit 256 --cpus 8 \
+    --memory "$MEMORY" --memory-swap "$MEMORY" --pids-limit 256 --cpus 8 \
     -e SPEAR_RESOURCE_CONTROL=delegated \
     --network host \
     --user "$(id -u):$(id -g)" \

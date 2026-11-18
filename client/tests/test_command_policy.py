@@ -222,6 +222,37 @@ class CommandPolicyTests(unittest.TestCase):
                           self.policy.classify(command).required_capabilities,
                           command)
 
+    def test_a_loop_is_as_privileged_as_its_body(self):
+        """A reserved word is not a program, and hides none either."""
+        from harness.command_policy import Capability
+
+        for command in ("for f in a.c b.c; do echo == $f; grep -n rtdm $f; done",
+                        "for f in $(grep -l x *.c | tr -d ' '); do g=${f%.c}; "
+                        "grep -lq y $g.h 2>/dev/null; done | sort -u",
+                        "if [ -f a ]; then cat a; else echo none; fi",
+                        "while read l; do echo $l; done < a.txt",
+                        "command -v gcc; echo rc=$?",
+                        "command ls a; ls b"):
+            self.assertNotIn(Capability.WORKSPACE_WRITE,
+                             self.policy.classify(command).required_capabilities,
+                             command)
+
+        for command in ("for f in a b; do cp $f $f.bak; done",
+                        "for f in a b; do ./tool $f; done",
+                        "if true; then touch a; fi",
+                        "for f in a b; do echo $f > $f.txt; done",
+                        "command touch a; ls",
+                        "while true; do make; done"):
+            self.assertIn(Capability.WORKSPACE_WRITE,
+                          self.policy.classify(command).required_capabilities,
+                          command)
+
+        for command in ("for f in a b; do rm $f; done",
+                        "for f in a b; do sed -i s/a/b/ $f; done",
+                        "if true; then bash -c 'rm a'; fi"):
+            self.assertEqual(self.policy.classify(command).classification,
+                             CommandClassification.DANGEROUS, command)
+
     def test_redirection_target_is_a_file_not_a_command(self):
         """`2>/dev/null` must not make a command dangerous.
 

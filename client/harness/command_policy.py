@@ -116,7 +116,7 @@ class CommandPolicy:
     # for write on every pipeline that merely changes directory.
 
     SHELL_BUILTINS = frozenset({"cd", ".", "source", "export", "set", "unset",
-                                "echo", "true", "false", "test", "["})
+                                "echo", "true", "false", "test", "[", "read"})
     NETWORK_BINS = frozenset({"curl", "wget"})
     SSH_BINS = frozenset({"ssh", "scp", "sftp"})
     CONTAINER_BINS = frozenset({"docker", "podman"})
@@ -781,6 +781,46 @@ class CommandPolicy:
 
         return parts
 
+    # Reserved words that introduce a command inside a compound one, and the
+    # ones that only close it.
+
+    _SHELL_OPENERS = frozenset({"do", "then", "else", "elif", "if", "while",
+                                "until", "!"})
+    _SHELL_CLOSERS = frozenset({"done", "fi"})
+
+    @classmethod
+    def _past_shell_keywords(cls, argv: "tuple[str, ...]") -> "tuple[str, ...]":
+        """The program a stage really runs, or () when it runs none.
+
+        A loop or a conditional is split into stages like any other command,
+        and each stage then began with a reserved word that no allowlist knows:
+        `for f in a b; do grep x $f; done` asked for workspace:write three
+        times over. The word is dropped and what follows is classified as the
+        command it is, so a loop is exactly as privileged as its body.
+
+        `for NAME in WORDS` runs nothing itself; a command substitution among
+        the words is its own stage. `command -v` only looks a name up, and
+        `command X` runs X.
+        """
+
+        while argv:
+            head = argv[0]
+
+            if head == "for" or head in cls._SHELL_CLOSERS:
+                return ()
+
+            if head == "command":
+                if len(argv) > 1 and argv[1] in ("-v", "-V"):
+                    return ()
+
+                argv = argv[1:]
+            elif head in cls._SHELL_OPENERS or cls._ASSIGNMENT.match(head):
+                argv = argv[1:]
+            else:
+                break
+
+        return argv
+
     def _shell_capabilities(
         self, command: str
     ) -> "tuple[frozenset[Capability], str, list[str], str]":
@@ -888,8 +928,7 @@ class CommandPolicy:
             # not the program. Read as argv[0], `BASE_DIR=/x/y ./post_image.sh`
             # was refused as a program named by an outside path.
 
-            while argv and self._ASSIGNMENT.match(argv[0]):
-                argv = argv[1:]
+            argv = self._past_shell_keywords(argv)
 
             if not argv:
                 continue

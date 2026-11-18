@@ -14,7 +14,7 @@
 #
 # A project adds its own standards too: --licensed takes the licensed documents
 # of --standards DIR (a store holding, say, only one private standard), appended over the
-# base's. So an edgemtech project image = the reds base + a private standard.
+# base's. So another entity's project image = the reds base + a private standard.
 #
 # This is the FROM chain of PACKAGING-REWORK.md. The legacy flat profiles
 # (public|reds|private) stay in build.sh, untouched; this script only knows the
@@ -161,7 +161,7 @@ harness)
     ;;
 
 base)
-    [ -n "$COMMONS" ] || die "base needs --commons a,b,c (the common corpora, infrabase included)"
+    [ -n "$COMMONS" ] || die "base needs --commons a,b,c (the common corpora, the build system included)"
     HARNESS="spear:$VERSION-harness"
     exists "$HARNESS" || die "$HARNESS not found — build it first: spear-image build harness"
     TAG="${TAG:-spear:$VERSION-base}"

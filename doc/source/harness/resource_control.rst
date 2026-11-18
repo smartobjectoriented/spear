@@ -145,9 +145,11 @@ Delegation to a container runtime
 
 Inside a container there is no systemd to make a scope with, but the cgroup
 belongs to the container runtime.  ``scripts/docker/spear-docker.sh`` starts
-the container with ``--memory``, ``--pids-limit`` and ``--cpus`` mirroring
+the container with ``--pids-limit`` and ``--cpus`` mirroring
 ``DEFAULT_CGROUP_LIMITS``, and sets ``SPEAR_RESOURCE_CONTROL=delegated`` on the
-same command line.  With that variable, availability is ``DELEGATED`` and the
+same command line.  ``--memory`` is larger than the per-command bound, because
+the container holds the harness and the vector index it maps as well as the
+command: 8 GiB unless ``SPEAR_CONTAINER_MEMORY`` says otherwise.  With that variable, availability is ``DELEGATED`` and the
 command runs unwrapped: the contract is honoured by the runtime that owns the
 cgroup, for the container as a whole rather than per command, not dropped.  Nothing in SPEAR can verify the claim, which is why the
 flags and the variable live together in one launcher.

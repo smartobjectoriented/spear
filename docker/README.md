@@ -35,6 +35,10 @@ spear-image get project         # the project image: base + a deployment's spear
 spear-image update project
 ```
 
+Run a session **from the tree it is about**: the launch directory selects the
+corpus, and one launched from anywhere else opens on a directory with no index
+and answers without retrieval (`--with <name>` attaches a registered corpus).
+
 `get` is idempotent — an image already present is left alone. `update` rebuilds
 **only**; re-indexing a corpus stays a separate, deliberate step (`spear-index`
 on the host, then `update`), because it takes hours and is not what a rebuild

@@ -246,7 +246,9 @@ class RedsIsNotOurs(unittest.TestCase):
         self.assertTrue({"REDS_HOST", "REDS_PORT", "REDS_MODEL"} <= names)
 
     def test_no_spear_reds_variable_was_invented(self):
-        """Except the one SPEAR already owned: the key path it reads."""
+        """Except the two SPEAR owns: the key path it reads, and the registry
+        of the entity of that name, an instance of SPEAR_<ENTITY>_REGISTRY.
+        """
         names = set()
 
         for path in tracked_files():
@@ -256,7 +258,7 @@ class RedsIsNotOurs(unittest.TestCase):
             except (UnicodeDecodeError, OSError):
                 continue
 
-        self.assertEqual(names, {"SPEAR_REDS_KEY"})
+        self.assertEqual(names, {"SPEAR_REDS_KEY", "SPEAR_REDS_REGISTRY"})
 
 
 if __name__ == "__main__":

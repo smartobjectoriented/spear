@@ -165,10 +165,10 @@ Permissions and execution
      - accept host absolute paths into the launch directory
    * - ``--max-commands`` · ``SPEAR_MAX_COMMANDS``
      - tool calls per task (default 500, doubled for a change request unless
-       set)
+       set; a question gets ``SPEAR_QUESTION_COMMANDS``, default 80)
    * - ``--max-tool-rounds`` · ``SPEAR_MAX_TOOL_ROUNDS``
      - model rounds per task (default 250, doubled for a change request unless
-       set)
+       set; a question gets ``SPEAR_QUESTION_ROUNDS``, default 60)
    * - ``SPEAR_REFUSAL_REPEATS``
      - how many times a turn may repeat an operation already refused before
        it is stopped (default 5)

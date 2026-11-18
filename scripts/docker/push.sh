@@ -11,7 +11,7 @@
 #     scripts/docker/push.sh reds-gitlab.heig-vd.ch:5050/<group>/spear:<version>-base
 #     scripts/docker/push.sh --allow-push <registry>/<org>/spear:<version>-project
 #
-# An entity's registry is SPEAR_<ENTITY>_REGISTRY, with reds and edgemtech
+# An entity's registry is SPEAR_<ENTITY>_REGISTRY, with reds
 # defaulted. --allow-push is not a formality: a private image carries a build
 # system, a customer's source tree, or a licensed normative corpus, and
 # publishing one is a decision about a licence and a contract.
@@ -59,14 +59,13 @@ ENTITY="$(label entity)"
     exit 1; }
 
 # The registry a private image belongs to, if one is known: an entity's own
-# (SPEAR_<ENTITY>_REGISTRY, reds and edgemtech defaulted), or the institute's
+# (SPEAR_<ENTITY>_REGISTRY, reds defaulted), or the institute's
 # for a legacy reds image. A legacy private image, or an entity with no
 # registry, has none -- and then publishing always needs --allow-push.
 
 entity_registry() {
     case "$1" in
         reds)      echo "${SPEAR_REDS_REGISTRY:-reds-gitlab.heig-vd.ch}" ;;
-        edgemtech) echo "${SPEAR_EDGEMTECH_REGISTRY:-gitlab.edgemtech.ch}" ;;
         ""|local)  echo "" ;;
         *) local var="SPEAR_$(printf '%s' "$1" | tr '[:lower:]-' '[:upper:]_')_REGISTRY"
            echo "${!var:-}" ;;

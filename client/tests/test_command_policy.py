@@ -199,6 +199,84 @@ class CommandPolicyTests(unittest.TestCase):
         self.assertEqual(self.policy.classify("git reset --hard").classification,
                          CommandClassification.DANGEROUS)
 
+    def test_a_read_only_pipeline_asks_for_no_write(self):
+        """Idioms that write nothing must not ask for workspace:write.
+
+        SAFE refuses that capability, so each of these false positives cost a
+        read-only session the command, and the model a round retrying it.
+        """
+        from harness.command_policy import Capability
+
+        for command in ("ls a 2>/dev/null; ls b",
+                        "ls a 2>&1 | head",
+                        "ls a 2>&1; echo ===; ls b",
+                        "cat a.cmd | tr ' ' '\\n' | grep -- -I",
+                        "which gcc 2>/dev/null; grep -n X build/conf/local.conf"):
+            self.assertNotIn(Capability.WORKSPACE_WRITE,
+                             self.policy.classify(command).required_capabilities,
+                             command)
+
+        for command in ("ls > out.txt", "ls 2>err.log | head", "ls >&both.log",
+                        "ls >>log; ls", "make 2>&1 | tail"):
+            self.assertIn(Capability.WORKSPACE_WRITE,
+                          self.policy.classify(command).required_capabilities,
+                          command)
+
+    def test_git_in_a_script_is_judged_like_git_alone(self):
+        """A history change needs write wherever it sits in the command."""
+        from harness.command_policy import Capability
+
+        for command in ("ls; git commit -am x", "true && git reset --hard",
+                        "git status && git add a", "git -C sub checkout main; ls",
+                        "for f in a b; do git add $f; done"):
+            self.assertIn(Capability.WORKSPACE_WRITE,
+                          self.policy.classify(command).required_capabilities,
+                          command)
+
+        self.assertIn(Capability.WORKSPACE_WRITE,
+                      self.policy.classify_script("git commit -am x")
+                      .required_capabilities)
+
+        for command in ("git status --short && git log --oneline -3",
+                        "git -C sub log -1 | head", "git --no-pager diff; ls"):
+            self.assertNotIn(Capability.WORKSPACE_WRITE,
+                             self.policy.classify(command).required_capabilities,
+                             command)
+
+        self.assertEqual(self.policy.classify("git -C sub status").classification,
+                         CommandClassification.READ_ONLY)
+
+    def test_a_loop_is_as_privileged_as_its_body(self):
+        """A reserved word is not a program, and hides none either."""
+        from harness.command_policy import Capability
+
+        for command in ("for f in a.c b.c; do echo == $f; grep -n rtdm $f; done",
+                        "for f in $(grep -l x *.c | tr -d ' '); do g=${f%.c}; "
+                        "grep -lq y $g.h 2>/dev/null; done | sort -u",
+                        "if [ -f a ]; then cat a; else echo none; fi",
+                        "while read l; do echo $l; done < a.txt",
+                        "command -v gcc; echo rc=$?",
+                        "command ls a; ls b"):
+            self.assertNotIn(Capability.WORKSPACE_WRITE,
+                             self.policy.classify(command).required_capabilities,
+                             command)
+
+        for command in ("for f in a b; do cp $f $f.bak; done",
+                        "for f in a b; do ./tool $f; done",
+                        "if true; then touch a; fi",
+                        "for f in a b; do echo $f > $f.txt; done",
+                        "command touch a; ls",
+                        "while true; do make; done"):
+            self.assertIn(Capability.WORKSPACE_WRITE,
+                          self.policy.classify(command).required_capabilities,
+                          command)
+
+        for command in ("for f in a b; do rm $f; done",
+                        "for f in a b; do sed -i s/a/b/ $f; done",
+                        "if true; then bash -c 'rm a'; fi"):
+            self.assertEqual(self.policy.classify(command).classification,
+                             CommandClassification.DANGEROUS, command)
+
     def test_redirection_target_is_a_file_not_a_command(self):
         """`2>/dev/null` must not make a command dangerous.
 

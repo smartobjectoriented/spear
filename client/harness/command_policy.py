@@ -62,7 +62,8 @@ class CommandPolicy:
         "cat", "ls", "rg", "grep", "egrep", "fgrep", "find", "head", "tail",
         "wc", "stat", "file", "pwd", "tree", "du", "df", "which", "type",
         "readlink", "basename", "dirname", "md5sum", "sha256sum", "diff", "sort",
-        "uniq", "cut", "sed",
+        "uniq", "cut", "sed", "tr", "printf", "nl", "tac", "rev", "column",
+        "realpath", "nproc", "uname", "date", "id",
     })
 
     # `sed -i` edits in place. It is refused rather than granted workspace
@@ -115,7 +116,7 @@ class CommandPolicy:
     # for write on every pipeline that merely changes directory.
 
     SHELL_BUILTINS = frozenset({"cd", ".", "source", "export", "set", "unset",
-                                "echo", "true", "false", "test", "["})
+                                "echo", "true", "false", "test", "[", "read"})
     NETWORK_BINS = frozenset({"curl", "wget"})
     SSH_BINS = frozenset({"ssh", "scp", "sftp"})
     CONTAINER_BINS = frozenset({"docker", "podman"})
@@ -519,7 +520,7 @@ class CommandPolicy:
             return frozenset({Capability.FILESYSTEM_READ, Capability.WORKSPACE_WRITE})
 
         if binary == "git":
-            subcommand = argv[1] if len(argv) > 1 else ""
+            subcommand = self._git_subcommand(argv)
 
             if subcommand in self.GIT_NETWORK_WRITE:
                 return frozenset({
@@ -534,7 +535,12 @@ class CommandPolicy:
             if subcommand in self.GIT_READ_ONLY:
                 return frozenset({Capability.FILESYSTEM_READ})
 
-            return frozenset()
+            # Anything else changes the index, the history or the tree. Inside
+            # a script this answered "no capability at all", so `ls; git commit`
+            # passed in SAFE while `git commit` alone was refused.
+
+            return frozenset({Capability.FILESYSTEM_READ,
+                              Capability.WORKSPACE_WRITE})
 
         if binary in self.READ_ONLY_BINS:
             # A bare filter in a pipeline consumes stdin rather than opening a
@@ -548,6 +554,21 @@ class CommandPolicy:
             return frozenset({Capability.FILESYSTEM_READ})
 
         return frozenset()
+
+    # Global git options that take their value as the next argument.
+
+    _GIT_VALUE_OPTIONS = frozenset({"-C", "-c", "--git-dir", "--work-tree",
+                                    "--namespace", "--exec-path"})
+
+    @classmethod
+    def _git_subcommand(cls, argv: Sequence[str]) -> str:
+        """The subcommand, past git's own options: `git -C dir status`."""
+        index = 1
+
+        while index < len(argv) and argv[index].startswith("-"):
+            index += 2 if argv[index] in cls._GIT_VALUE_OPTIONS else 1
+
+        return argv[index] if index < len(argv) else ""
 
     @staticmethod
     def _curl_remote_write(argv: Sequence[str]) -> bool:
@@ -636,9 +657,18 @@ class CommandPolicy:
         point.
         """
 
-        for match in re.finditer(r"(?<![=])\d*>{1,2}\s*(\S*)", command):
-            if match.group(1) not in cls._REDIRECT_SINKS:
-                return True
+        for match in re.finditer(r"(?<![=])\d*>{1,2}\s*(&\d+|&-|[^\s;|&()]*)",
+                                 command):
+            target = match.group(1)
+
+            # `2>&1` duplicates a descriptor and `2>&-` closes one: neither
+            # names a file. The target also stops at a control operator, so
+            # `2>/dev/null;` is the sink it reads as.
+
+            if target.startswith("&") or target in cls._REDIRECT_SINKS:
+                continue
+
+            return True
 
         return False
 
@@ -771,6 +801,46 @@ class CommandPolicy:
 
         return parts
 
+    # Reserved words that introduce a command inside a compound one, and the
+    # ones that only close it.
+
+    _SHELL_OPENERS = frozenset({"do", "then", "else", "elif", "if", "while",
+                                "until", "!"})
+    _SHELL_CLOSERS = frozenset({"done", "fi"})
+
+    @classmethod
+    def _past_shell_keywords(cls, argv: "tuple[str, ...]") -> "tuple[str, ...]":
+        """The program a stage really runs, or () when it runs none.
+
+        A loop or a conditional is split into stages like any other command,
+        and each stage then began with a reserved word that no allowlist knows:
+        `for f in a b; do grep x $f; done` asked for workspace:write three
+        times over. The word is dropped and what follows is classified as the
+        command it is, so a loop is exactly as privileged as its body.
+
+        `for NAME in WORDS` runs nothing itself; a command substitution among
+        the words is its own stage. `command -v` only looks a name up, and
+        `command X` runs X.
+        """
+
+        while argv:
+            head = argv[0]
+
+            if head == "for" or head in cls._SHELL_CLOSERS:
+                return ()
+
+            if head == "command":
+                if len(argv) > 1 and argv[1] in ("-v", "-V"):
+                    return ()
+
+                argv = argv[1:]
+            elif head in cls._SHELL_OPENERS or cls._ASSIGNMENT.match(head):
+                argv = argv[1:]
+            else:
+                break
+
+        return argv
+
     def _shell_capabilities(
         self, command: str
     ) -> "tuple[frozenset[Capability], str, list[str], str]":
@@ -805,7 +875,12 @@ class CommandPolicy:
             })
 
         danger = ""
-        stages = self._shell_stages(command)
+
+        # `2>&1` names no file and no program. Left in, the stage splitter
+        # cuts it at `>` and `&` and reads the trailing `1` as a command,
+        # which no allowlist knows and which therefore asked for write.
+
+        stages = self._shell_stages(re.sub(r"\d*>&(\d+|-)", " ", command))
         stdin_from_pipeline = False
         redirect_target = False
         redirect_reads = False
@@ -873,8 +948,7 @@ class CommandPolicy:
             # not the program. Read as argv[0], `BASE_DIR=/x/y ./post_image.sh`
             # was refused as a program named by an outside path.
 
-            while argv and self._ASSIGNMENT.match(argv[0]):
-                argv = argv[1:]
+            argv = self._past_shell_keywords(argv)
 
             if not argv:
                 continue
@@ -1097,15 +1171,17 @@ class CommandPolicy:
                 capabilities=(Capability.FILESYSTEM_READ, Capability.WORKSPACE_WRITE))
 
         if binary == "git":
-            if len(argv) > 1 and argv[1] in self.GIT_READ_ONLY:
+            subcommand = self._git_subcommand(argv)
+
+            if subcommand in self.GIT_READ_ONLY:
                 return self._assessment(command, argv, CommandClassification.READ_ONLY,
                                         capabilities=self._simple_capabilities(argv))
 
-            if len(argv) > 1 and argv[1] in self.GIT_NETWORK_ONLY:
+            if subcommand in self.GIT_NETWORK_ONLY:
                 return self._assessment(command, argv, CommandClassification.READ_ONLY,
                                         capabilities=self._simple_capabilities(argv))
 
-            if len(argv) > 1 and argv[1] in self.GIT_NETWORK_WRITE:
+            if subcommand in self.GIT_NETWORK_WRITE:
                 return self._assessment(command, argv, CommandClassification.WORKSPACE_MUTATING,
                                         capabilities=self._simple_capabilities(argv))
 

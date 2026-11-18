@@ -89,7 +89,8 @@ RUN mkdir -p "$APP/rules.d" "$APP/skills" "$APP/benches" "$APP/chromadb" \
 
 COPY --from=repo scripts/docker/spear-run.sh /opt/spear/spear-run.sh
 COPY --from=repo docker/entrypoint.sh /opt/spear/entrypoint.sh
-RUN chmod +x /opt/spear/entrypoint.sh /opt/spear/spear-run.sh
+COPY --from=repo docker/spear-mcp /usr/local/bin/spear-mcp
+RUN chmod +x /opt/spear/entrypoint.sh /opt/spear/spear-run.sh /usr/local/bin/spear-mcp
 
 ENV SPEAR_COMMON_STATE_DIR=/opt/spear/common
 ENV SPEAR_STANDARDS_ROOT=/opt/spear/common/standards

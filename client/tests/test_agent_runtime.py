@@ -1884,5 +1884,19 @@ class ProductionWiringTests(unittest.TestCase):
             self.assertEqual(result.working_state.created_files, {"created.txt"})
 
 
+class RefusalNoteTests(unittest.TestCase):
+    def test_a_repeated_refusal_says_the_shell_is_not_the_way(self):
+        from dataclasses import make_dataclass
+
+        from runtime.agent_notes import _REFUSAL_NOTICE, _with_refusal_note
+
+        envelope = make_dataclass("Envelope", ["model_content"])("denied: x")
+        noted = _with_refusal_note(envelope, _REFUSAL_NOTICE)
+
+        self.assertTrue(noted.model_content.startswith("denied: x"))
+        self.assertIn(f"refusal {_REFUSAL_NOTICE} of this turn", noted.model_content)
+        self.assertIn("search_files", noted.model_content)
+
+
 if __name__ == "__main__":
     unittest.main()

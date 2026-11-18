@@ -14,7 +14,7 @@
 #   --reds      the inference host, as ssh names it; a tunnel is opened from
 #               this machine to its port (--port, default 8010) unless one is
 #               already up. --key names the ssh identity when the host needs
-#               one named. SPEAR_REDS_HOST / SPEAR_REDS_KEY set the defaults.
+#               one named. REDS_HOST / SPEAR_REDS_KEY set the defaults.
 #   --endpoint  any OpenAI-compatible URL instead of the tunnel
 #   --corpus    where the session opens, as a path under /corpora
 #               (e.g. opencn/opencn-ng); the image lists them with --list
@@ -33,9 +33,9 @@ set -e
 HERE="$(cd "$(dirname "$0")" && pwd)"
 VERSION="$("$HERE/../spearversion.sh" 2>/dev/null || echo 0.3.0)"
 IMAGE="${SPEAR_IMAGE:-ghcr.io/smartobjectoriented/spear-reds:$VERSION-reds}"
-REDS_HOST="${SPEAR_REDS_HOST:-}"
+REDS_HOST="${REDS_HOST:-}"
 REDS_KEY="${SPEAR_REDS_KEY:-}"
-REDS_PORT="${SPEAR_REDS_PORT:-8010}"
+REDS_PORT="${REDS_PORT:-8010}"
 LPORT="${SPEAR_TUNNEL_PORT:-8082}"
 ENDPOINT="${SPEAR_API_BASE:-}"
 MODEL_NAME="${SPEAR_MODEL_NAME:-qwen3}"

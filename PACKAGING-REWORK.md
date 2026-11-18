@@ -8,10 +8,10 @@ The dividing line is **common across a company's projects vs specific to one
 project** — not "small/public vs large/private".
 
 - **The base image is a company's commons.** It carries what every project of
-  that company needs: the shared **build system** (`infrabase` and its family),
+  that company needs: the shared **build system** (and its family),
   the cross-project corpora, the common skills and rules, the standards, and the
-  common knowledge seed. `infrabase` belongs here — it underpins OpenCN, sye,
-  pos and edgem1 alike — and so do the other corpora that are not tied to a
+  common knowledge seed. The build system belongs here — it underpins every
+  project of the company — and so do the other corpora that are not tied to a
   single project.
 
 - **Project content is the delta.** What is specific to one project
@@ -30,7 +30,7 @@ private**. The only redistributable image is the content-free harness.
 ```
    spear:<ver>-harness      SPEAR app only — the one public, GitHub-shippable image
           |
-   spear:<ver>-base         a company's commons: build system (infrabase) + common
+   spear:<ver>-base         a company's commons: build system + common         
      (per company)          corpora + skills + rules + standards + knowledge seed
           |                 (private; the "company SPEAR image")
    mount (default) or bake
@@ -58,7 +58,7 @@ no baked corpus), `reds` (corpora named by `--bake` + cut index, HEIG registry),
 - **Named, lazy build contexts** keep the 4.3 GB embedder and venv cached.
 
 The gap: nothing today builds a **company commons** image — harness + the shared
-build system (`infrabase`) + common corpora + skills + rules + standards +
+build system + common corpora + skills + rules + standards +
 knowledge, as one reusable private image that projects then extend. `reds`/
 `private` are flat, HEIG-specific (`ch.heig-vd.reds.spear.*`), and rebuild the
 whole image each time instead of `base + delta`.
@@ -70,19 +70,19 @@ Three links in a `FROM` chain, so each layer is reused by the next:
 | tier | name | FROM | carries | redistributable |
 |---|---|---|---|---|
 | 0 | `harness` | `ubuntu` | SPEAR app, venv, embedder, empty content dirs | **true** (public, GitHub) |
-| 1 | `base` | `harness` | a company's commons: common corpora **and the build system `infrabase`** (writable + indexed), common skills, rules, standards, knowledge seed | **private** (carries private trees) |
+| 1 | `base` | `harness` | a company's commons: common corpora **and the build system** (writable + indexed), common skills, rules, standards, knowledge seed | **private** (carries private trees) |
 | 2 | project image | `base` | base + one project's `spear-private` + project corpora, baked | false |
 
 - **`base` is per company** and is the main deliverable — the private "company
-  SPEAR image". It bakes the common corpora **including full build trees like
-  `infrabase`** (`ib_so3`, `ib_u-boot`, `ib_avz`), writable under `/corpora` so
+  SPEAR image". It bakes the common corpora **including full build trees**
+  (the build system and its family), writable under `/corpora` so
   the assistant can build and modify them in the container. Cross-toolchains
   stay **mounted** from the host (decision 6), so the base carries the build
   *tree*, the host provides the compiler.
 
   ```
-  spear-image build base --entity edgemtech \
-      --commons infrabase,ib_so3,ib_u-boot,ib_avz,<other common corpora> \
+  spear-image build base --entity <entity> \
+      --commons <build system>,<its family>,<other common corpora> \
       [--knowledge <projects>]
   ```
 
@@ -98,14 +98,14 @@ Three links in a `FROM` chain, so each layer is reused by the next:
   ```
 
   A project also adds its **own standards**: `--licensed --standards <store>`
-  bakes the licensed documents of that store over the base's. So an edgemtech
+  bakes the licensed documents of that store over the base's. So another entity's
   project image is the **reds base + a private standard** -- the base is one entity's
   commons, the project adds another's licensed standard, and the result is a
   non-redistributable project image owned by whoever built it.
 
 - **Redistributability is derived, not a tier.** An image is `redistributable=
   true` only if every baked corpus is `public:true` and every standard is
-  PUBLIC. A commons base that carries `infrabase` (private) is therefore private.
+  PUBLIC. A commons base that carries a private build system is therefore private.
   A company whose commons happen to be all-public would get a public base; the
   guardrails decide, the tier does not.
 
@@ -117,22 +117,22 @@ Three links in a `FROM` chain, so each layer is reused by the next:
     Dockerfile minus the content COPYs.
   - `Dockerfile.base`: `FROM ${HARNESS_IMAGE}`, then bake the commons — the
     `index`, `rules`, `skills`, `benches`, `standards`, `common` (knowledge),
-    the baked common corpora **including `infrabase`** into `/corpora`, the
+    the baked common corpora **including the build system** into `/corpora`, the
     generated registry, and the base manifest.
   - `Dockerfile.project`: `FROM ${BASE_IMAGE}`, then COPY one project's delta
     (its `spear-private` content merged over the base, its project corpora into
     `/corpora`, its registry overlay).
 
 - **`scripts/docker/build.sh`.** Add `--profile harness | base | project`.
-  - `base`: bake the corpora named `--commons` (which may be full build trees
-    like `infrabase`, `public:false`) + their index + common content + standards
+  - `base`: bake the corpora named `--commons` (which may be full build trees,
+    `public:false`) + their index + common content + standards
     + knowledge; label `redistributable` by the derived rule and
     `entity=<name>`.
   - `project`: `FROM` the base tag, bake `--tree`'s content and `--bake` corpora.
   - Keep `public`/`reds`/`private` as thin aliases for one release (migration).
 
 - **`gen-registry.py`.** A `base` registry = that company's commons corpora
-  (common set, `infrabase` included); a `project` registry overlays the
+  (common set, the build system included); a `project` registry overlays the
   project's own corpora on top.
 
 - **`stage-standards.py`.** The base takes the standards its company may carry
@@ -150,7 +150,7 @@ Three links in a `FROM` chain, so each layer is reused by the next:
   without `--allow-push`.
 
 - **Base content manifest.** `Dockerfile.base` bakes
-  `/opt/spear/common/base-manifest.json` (baked corpus list incl. `infrabase`,
+  `/opt/spear/common/base-manifest.json` (baked corpus list, build system included,
   index build date, standards manifest); `spear-image inspect base` prints it, a
   project image records the base tag it came from.
 
@@ -160,7 +160,7 @@ Three links in a `FROM` chain, so each layer is reused by the next:
 ## 5. Redistributability guardrails
 
 - A corpus is baked redistributable **only** if `projects.json` marks it
-  `"public": true`; `infrabase` is `public:false`, so any image carrying it is
+  `"public": true`; the build system is `public:false`, so any image carrying it is
   `redistributable=false`. Unmarked ⇒ private.
 - A standard travels into a redistributable image **only** if `source_origin` is
   PUBLIC; unknown ⇒ licensed ⇒ withheld.
@@ -182,20 +182,20 @@ Three links in a `FROM` chain, so each layer is reused by the next:
 
 1. **Names.** `harness` (public, content-free) / `base` (a company's private
    commons) / `project` (optional, base + a baked project delta).
-2. **The base carries the build system.** `infrabase` and its family are
+2. **The base carries the build system.** It and its family are
    **commons**, baked into the base (trees **and** index, writable), not left to
    a per-project image. The base/delta line is "common across the company's
-   projects vs specific to one project", and `infrabase` is common.
+   projects vs specific to one project", and the build system is common.
 3. **A `FROM` chain**: `Dockerfile.harness` → `Dockerfile.base` →
    `Dockerfile.project`, so each tier reuses the one below.
 4. **Labels** renamed to neutral `spear.*` + `spear.entity=<name>`.
 5. **Base content manifest** baked into every base.
-6. **Toolchains stay mounted**, not baked: the base carries the build *tree*
-   (`infrabase`), the host provides the cross-toolchains at run time, as
+6. **Toolchains stay mounted**, not baked: the base carries the build *tree*,
+   the host provides the cross-toolchains at run time, as
    `spear-docker.sh` does today. (A later `--toolchains` flag could bake them for
    a fully standalone image; out of scope for now.)
 7. **Redistributability is derived** from content, not a tier: a base carrying
-   `infrabase` is private; only `harness` is public.
+   the build system is private; only `harness` is public.
 
 ## 8. Implementation status (branch `spear-packaging-rework`)
 
@@ -209,7 +209,7 @@ Added / changed:
 - `docker/Dockerfile.harness` — tier 0 (app only, empty content dirs, empty
   registry, public).
 - `docker/Dockerfile.base` — `FROM ${HARNESS_IMAGE}`, bakes the commons
-  (index, content, corpora incl. `infrabase`, standards, knowledge, manifest).
+  (index, content, corpora incl. the build system, standards, knowledge, manifest).
 - `docker/Dockerfile.project` — `FROM ${BASE_IMAGE}`, bakes one project's delta:
   its content, corpora, index overlay, and **its own standards** appended over
   the base's (the reds-base + a private standard case).
@@ -223,8 +223,7 @@ Added / changed:
 - `scripts/docker/push.sh` — decides on `redistributable` + `entity` instead of
   the profile name, reads the neutral `spear.*` labels (falling back to the old
   `ch.heig-vd.reds.spear.*`), and routes a private image to its entity's own
-  registry (`SPEAR_<ENTITY>_REGISTRY`; `reds` → reds-gitlab, `edgemtech` →
-  gitlab.edgemtech). A base/project headed for its entity's registry pushes
+  registry (`SPEAR_<ENTITY>_REGISTRY`; `reds` defaults to reds-gitlab). A base/project headed for its entity's registry pushes
   without `--allow-push`; anywhere else still needs it. Legacy `reds`/`private`
   behaviour is preserved.
 
@@ -236,7 +235,7 @@ real `docker build` (it needs the configured build host — the one with
 
 ```sh
 spear-image build harness
-spear-image build base --commons infrabase,ib_so3,ib_u-boot,ib_avz,<others> --entity edgemtech
+spear-image build base --commons <build system>,<its family>,<others> --entity <entity>
 spear-image build project --from spear:0.3.0-base --tree /path/to/opencn-ng/spear-private --bake <project corpora>
 ```
 

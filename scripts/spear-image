@@ -63,6 +63,11 @@ exists() { docker image inspect "$1" >/dev/null 2>&1; }
 # parent), each named spear-<tier>-<version>.tar.zst.
 SHARE_DIR="${SPEAR_SHARE_DIR:-$(cd "$HERE/../.." && pwd)}"
 
+# The archive of a tier is dominated by an embedding index, which barely
+# compresses: a high level costs many minutes of CPU for almost no size.
+
+ZSTD_LEVEL="${SPEAR_ZSTD_LEVEL:-3}"
+
 # The registry repository to pull from and push to -- the full path, no tag
 # (e.g. reds-gitlab.heig-vd.ch:5050/reds-general/spear/spear). Left unset, get
 # goes straight to the tarball and update does not push.
@@ -174,7 +179,7 @@ Set SPEAR_REGISTRY_IMAGE or SPEAR_SHARE_DIR in client/local.conf, or put the tar
         tb="$(tarball_of "$tier")"
         mkdir -p "$SHARE_DIR"
         echo "refreshing $tb ..."
-        docker save "$tag" | zstd -T0 -19 -f -o "$tb"
+        docker save "$tag" | zstd -T0 "-$ZSTD_LEVEL" -f -o "$tb"
         [ "$(label "$tag" redistributable)" = false ] && echo \
             "!! $tb carries licensed and customer material: not redistributable" >&2
 
@@ -228,7 +233,7 @@ Set SPEAR_REGISTRY_IMAGE or SPEAR_SHARE_DIR in client/local.conf, or put the tar
         [ -e "$out" ] && die "$out exists; name another file or remove it"
         command -v zstd >/dev/null || die "zstd is not installed"
         echo "saving $image -> $out"
-        docker save "$image" | zstd -T0 -19 -o "$out"
+        docker save "$image" | zstd -T0 "-$ZSTD_LEVEL" -o "$out"
 
         [ "$(label "$image" redistributable)" = false ] && echo \
             "!! $out carries licensed and customer material: not redistributable" >&2

@@ -222,6 +222,30 @@ class CommandPolicyTests(unittest.TestCase):
                           self.policy.classify(command).required_capabilities,
                           command)
 
+    def test_git_in_a_script_is_judged_like_git_alone(self):
+        """A history change needs write wherever it sits in the command."""
+        from harness.command_policy import Capability
+
+        for command in ("ls; git commit -am x", "true && git reset --hard",
+                        "git status && git add a", "git -C sub checkout main; ls",
+                        "for f in a b; do git add $f; done"):
+            self.assertIn(Capability.WORKSPACE_WRITE,
+                          self.policy.classify(command).required_capabilities,
+                          command)
+
+        self.assertIn(Capability.WORKSPACE_WRITE,
+                      self.policy.classify_script("git commit -am x")
+                      .required_capabilities)
+
+        for command in ("git status --short && git log --oneline -3",
+                        "git -C sub log -1 | head", "git --no-pager diff; ls"):
+            self.assertNotIn(Capability.WORKSPACE_WRITE,
+                             self.policy.classify(command).required_capabilities,
+                             command)
+
+        self.assertEqual(self.policy.classify("git -C sub status").classification,
+                         CommandClassification.READ_ONLY)
+
     def test_a_loop_is_as_privileged_as_its_body(self):
         """A reserved word is not a program, and hides none either."""
         from harness.command_policy import Capability

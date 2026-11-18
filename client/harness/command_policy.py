@@ -520,7 +520,7 @@ class CommandPolicy:
             return frozenset({Capability.FILESYSTEM_READ, Capability.WORKSPACE_WRITE})
 
         if binary == "git":
-            subcommand = argv[1] if len(argv) > 1 else ""
+            subcommand = self._git_subcommand(argv)
 
             if subcommand in self.GIT_NETWORK_WRITE:
                 return frozenset({
@@ -535,7 +535,12 @@ class CommandPolicy:
             if subcommand in self.GIT_READ_ONLY:
                 return frozenset({Capability.FILESYSTEM_READ})
 
-            return frozenset()
+            # Anything else changes the index, the history or the tree. Inside
+            # a script this answered "no capability at all", so `ls; git commit`
+            # passed in SAFE while `git commit` alone was refused.
+
+            return frozenset({Capability.FILESYSTEM_READ,
+                              Capability.WORKSPACE_WRITE})
 
         if binary in self.READ_ONLY_BINS:
             # A bare filter in a pipeline consumes stdin rather than opening a
@@ -549,6 +554,21 @@ class CommandPolicy:
             return frozenset({Capability.FILESYSTEM_READ})
 
         return frozenset()
+
+    # Global git options that take their value as the next argument.
+
+    _GIT_VALUE_OPTIONS = frozenset({"-C", "-c", "--git-dir", "--work-tree",
+                                    "--namespace", "--exec-path"})
+
+    @classmethod
+    def _git_subcommand(cls, argv: Sequence[str]) -> str:
+        """The subcommand, past git's own options: `git -C dir status`."""
+        index = 1
+
+        while index < len(argv) and argv[index].startswith("-"):
+            index += 2 if argv[index] in cls._GIT_VALUE_OPTIONS else 1
+
+        return argv[index] if index < len(argv) else ""
 
     @staticmethod
     def _curl_remote_write(argv: Sequence[str]) -> bool:
@@ -1151,15 +1171,17 @@ class CommandPolicy:
                 capabilities=(Capability.FILESYSTEM_READ, Capability.WORKSPACE_WRITE))
 
         if binary == "git":
-            if len(argv) > 1 and argv[1] in self.GIT_READ_ONLY:
+            subcommand = self._git_subcommand(argv)
+
+            if subcommand in self.GIT_READ_ONLY:
                 return self._assessment(command, argv, CommandClassification.READ_ONLY,
                                         capabilities=self._simple_capabilities(argv))
 
-            if len(argv) > 1 and argv[1] in self.GIT_NETWORK_ONLY:
+            if subcommand in self.GIT_NETWORK_ONLY:
                 return self._assessment(command, argv, CommandClassification.READ_ONLY,
                                         capabilities=self._simple_capabilities(argv))
 
-            if len(argv) > 1 and argv[1] in self.GIT_NETWORK_WRITE:
+            if subcommand in self.GIT_NETWORK_WRITE:
                 return self._assessment(command, argv, CommandClassification.WORKSPACE_MUTATING,
                                         capabilities=self._simple_capabilities(argv))
 

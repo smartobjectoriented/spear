@@ -69,8 +69,7 @@ print(f"corpora: {found} present, {miss} missing "
 # is the entire reason the tool exists.
 import textwrap
 
-import chromadb
-have = {c.name for c in chromadb.PersistentClient(path=chat_settings.DB_PATH).list_collections()}
+have = {c.name for c in corpus_search._db().list_collections()}
 absent = sorted(n for n, spec in corpus_registry.load_projects().items()
                 if os.path.isdir(spec["path"])
                 and corpus_search.collection_name_for(spec) not in have)

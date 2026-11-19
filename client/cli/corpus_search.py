@@ -7,7 +7,7 @@ import hashlib
 import subprocess
 from retrieval import embedding
 from cli import session_workspace
-from cli.chat_settings import APP_DIR, DB_PATH
+from cli.chat_settings import APP_DIR, DB_PATH, SHIPPED_DB_PATH
 from cli.corpus_registry import corpora_below, load_projects
 from cli.terminal_ui import C_DIM, C_RST, C_WARN
 
@@ -603,7 +603,40 @@ def _db():
     """
     import chromadb
 
-    return chromadb.PersistentClient(path=DB_PATH)
+    own = chromadb.PersistentClient(path=DB_PATH)
+
+    if (SHIPPED_DB_PATH and os.path.isdir(SHIPPED_DB_PATH)
+            and os.path.realpath(SHIPPED_DB_PATH) != os.path.realpath(DB_PATH)):
+        return LayeredIndex(own, chromadb.PersistentClient(path=SHIPPED_DB_PATH))
+
+    return own
+
+
+class LayeredIndex:
+    """The user's index over the one an image ships.
+
+    A collection is looked up in the user's first, so a corpus indexed again
+    by the user answers from that; everything that writes goes to the user's.
+    """
+
+    def __init__(self, own, shipped):
+        self._own, self._shipped = own, shipped
+
+    def get_collection(self, name, **kwargs):
+        try:
+            return self._own.get_collection(name, **kwargs)
+        except Exception:
+            return self._shipped.get_collection(name, **kwargs)
+
+    def list_collections(self):
+        mine = list(self._own.list_collections())
+        names = {collection.name for collection in mine}
+
+        return mine + [collection for collection in self._shipped.list_collections()
+                       if collection.name not in names]
+
+    def __getattr__(self, name):
+        return getattr(self._own, name)
 
 
 def archive_index(rec):

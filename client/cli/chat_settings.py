@@ -148,6 +148,17 @@ RULES_DIR = resource_dir("SPEAR_RULES_DIR", "rules.d")
 STATE_DIR = os.environ.get("SPEAR_STATE_DIR") or _TEST_STATE or APP_DIR
 os.makedirs(STATE_DIR, exist_ok=True)
 
+# An image ships its index and names it here. What a session indexes then goes
+# beside its other state, where it outlives the container, and is read before
+# the shipped one. The indexers are separate programs and learn the place from
+# the environment.
+
+SHIPPED_DB_PATH = os.environ.get("SPEAR_SHIPPED_DB_PATH") or ""
+
+if SHIPPED_DB_PATH and not os.environ.get("SPEAR_DB_PATH") and not _TEST_STATE:
+    DB_PATH = f"{STATE_DIR}/chromadb"
+    os.environ["SPEAR_DB_PATH"] = DB_PATH
+
 # All of these accumulate, so all of them live under STATE_DIR: the audit
 # trail, the runtime trace, the tool results a later turn may re-read, the
 # session records and the file checkpoints an undo restores from. Rooting them

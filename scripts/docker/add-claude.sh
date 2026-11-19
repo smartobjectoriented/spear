@@ -4,7 +4,7 @@
 #     add-claude.sh IMAGE [TAG]
 #
 # TAG defaults to IMAGE itself: the image gains a layer and keeps its name.
-# Run it with spear-run.sh --claude.
+# The image has to be built from a harness that has the `claude` command.
 
 set -e
 
@@ -14,9 +14,6 @@ TAG="${2:-$1}"
 
 [ -n "$IMAGE" ] || { sed -n '2,7p' "$0" | sed 's/^# \{0,1\}//'; exit 1; }
 
-ROOT="$(cd "$HERE/../.." && pwd)"
-
-docker build --build-arg "BASE=$IMAGE" --build-context "repo=$ROOT" -t "$TAG" \
-    -f "$ROOT/docker/Dockerfile.claude" "$ROOT/docker"
+docker build --build-arg "BASE=$IMAGE" -t "$TAG" - < "$HERE/../../docker/Dockerfile.claude"
 
 echo "built $TAG"

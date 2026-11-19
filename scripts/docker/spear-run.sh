@@ -1,43 +1,47 @@
 #!/bin/bash
 # Run a published SPEAR image with nothing but docker: no checkout of this
-# repository, no registry of your own. Made for the reds image, which carries
-# its trees and their index; it serves any image whose corpora are baked.
+# repository, no registry of your own. It serves any image whose corpora are
+# baked.
+#
+#     cd <your tree> && spear-run.sh
+#
+# opens a shell in the container, in that tree, bound at the place the image
+# knows it by when it is a checkout of one of its corpora (same path under
+# your home as under /corpora) and at its own path otherwise. Two commands
+# are there: `spear-chat` for SPEAR, `claude` for Claude Code, each with the
+# rules, skills and index of the corpus.
 #
 #     spear-run.sh [--image IMAGE] [--pull]
 #                  [--reds USER@HOST [--key FILE] [--port N] | --endpoint URL
 #                   | --provider anthropic [--model NAME]]
-#                  [--tree NAME | --here | --corpus PATH]
+#                  [--tree NAME | --corpus PATH]
 #                  [--mount HOST_DIR:PATH]... [--state DIR]
-#                  [--claude]
-#                  [--] [harness args, e.g. --ask, --auto, --fresh]
+#                  [-- harness args, e.g. --ask, --auto, --fresh]
 #
 #   --image     the image to run; default ghcr.io/smartobjectoriented/spear-reds
 #               at this release
 #   --pull      docker pull it first
-#   --reds      the inference host, as ssh names it; a tunnel is opened from
-#               this machine to its port (--port, default 8010) unless one is
-#               already up. --key names the ssh identity when the host needs
-#               one named.
+#   --reds      the inference host SPEAR talks to, as ssh names it; a tunnel
+#               is opened from this machine to its port (--port, default 8010)
+#               unless one is already up. --key names the ssh identity when
+#               the host needs one named.
 #   --endpoint  any OpenAI-compatible URL instead of the tunnel
 #   --provider  a hosted model instead of an endpoint: anthropic, with --model
 #               naming the model. Its key is ANTHROPIC_API_KEY.
 #   --tree      the current directory is your checkout of the image's corpus
-#               NAME: it is bound over the baked tree and the session opens
-#               there, on that corpus's index
-#   --here      the current directory is a tree the image does not know: it
-#               is bound at its own path and the session opens there
-#   --corpus    where the session opens, as a path under /corpora
-#               (e.g. opencn/opencn-ng); the image lists them with --list
-#   --mount     bind your own checkout over a baked tree: HOST_DIR:PATH, with
+#               NAME, wherever it is on this machine
+#   --corpus    work in the image's own copy of a tree, named by its path
+#               under /corpora (e.g. opencn/opencn-ng); nothing of this
+#               machine is bound. --list prints them.
+#   --mount     bind another checkout over a baked tree: HOST_DIR:PATH, with
 #               PATH the tree's path under /corpora. Repeatable.
-#   --state     where conversations, knowledge and audit land on this machine
-#               (default ~/.spear/state)
-#   --claude    start Claude Code in the container instead of SPEAR, on the
-#               same tree, with the corpus's rules, skills and index in place.
-#               No model is named: it logs in with your own account, once, and
-#               the login stays in --state. The arguments after -- are its own.
-#               The image needs it: scripts/docker/add-claude.sh.
+#   --state     where conversations, knowledge, audit and the logins land on
+#               this machine (default ~/.spear/state)
 #   --list      print the image's corpora and exit
+#
+# With harness args, SPEAR starts at once instead of the shell, and a model
+# has to be named. In the shell a model is needed by spear-chat only: Claude
+# Code logs in with your own account, once.
 #
 # What does not change from one run to the next goes in a configuration file,
 # read before the options: client/local.conf of the repository this script is
@@ -48,8 +52,8 @@
 #     SPEAR_MODEL=<model name>
 #     ANTHROPIC_API_KEY=<key>
 #
-# or REDS_HOST and SPEAR_REDS_KEY for an inference host, or SPEAR_CLI=claude
-# for --claude on every run. An option overrides the file.
+# or REDS_HOST and SPEAR_REDS_KEY for an inference host. An option overrides
+# the file.
 #
 # spear-docker.sh is the other launcher: for a workstation that has the
 # repository and mounts its own registered trees. This one is for everyone else.
@@ -78,16 +82,14 @@ MODEL_NAME="${SPEAR_MODEL_NAME:-qwen3}"
 PROVIDER="${SPEAR_PROVIDER:-}"
 MODEL="${SPEAR_MODEL:-}"
 STATE="${SPEAR_STATE_DIR:-$HOME/.spear/state}"
-CLI="${SPEAR_CLI:-}"
 CORPUS=""
 TREE=""
-OPEN_HERE=0
 PULL=0
 LIST=0
 MOUNTS=()
 ARGS=()
 
-usage() { sed -n '2,55p' "$0" | sed 's/^# \{0,1\}//'; exit "${1:-0}"; }
+usage() { sed -n '2,59p' "$0" | sed 's/^# \{0,1\}//'; exit "${1:-0}"; }
 die() { echo "spear-run: $*" >&2; exit 1; }
 
 while [ $# -gt 0 ]; do
@@ -101,11 +103,9 @@ while [ $# -gt 0 ]; do
         --provider) PROVIDER="$2"; shift 2 ;;
         --model)    MODEL="$2"; shift 2 ;;
         --tree)     TREE="$2"; shift 2 ;;
-        --here)     OPEN_HERE=1; shift ;;
         --corpus)   CORPUS="$2"; shift 2 ;;
         --mount)    MOUNTS+=("$2"); shift 2 ;;
         --state)    STATE="$2"; shift 2 ;;
-        --claude)   CLI=claude; shift ;;
         --list)     LIST=1; shift ;;
         -h|--help)  usage ;;
         --)         shift; ARGS=("$@"); break ;;
@@ -117,55 +117,85 @@ command -v docker >/dev/null || die "docker is not installed"
 [ "$PULL" = 1 ] && docker pull "$IMAGE"
 docker image inspect "$IMAGE" >/dev/null 2>&1 || die "no image $IMAGE here; add --pull, or docker login first"
 
-if [ "$LIST" = 1 ]; then
-    docker run --rm --entrypoint "/opt/spear/client/bin/python" "$IMAGE" -c '
+# The image's corpora: a name and a path under /corpora on each line.
+REGISTRY="$(docker run --rm --entrypoint /opt/spear/client/bin/python "$IMAGE" -c '
 import json
 for name, spec in sorted(json.load(open("/opt/spear/client/projects.json")).items()):
-    print(name.ljust(18), "/corpora/" + spec["path"])'
+    print(name, spec["path"])')"
+
+if [ "$LIST" = 1 ]; then
+    while read -r name rel; do
+        [ -n "$name" ] && printf '%-18s /corpora/%s\n' "$name" "$rel"
+    done <<< "$REGISTRY"
     exit 0
 fi
 
-# The model. The tunnel stays on this machine: the image carries no key, and
-# with host networking 127.0.0.1 is the same thing on both sides.
+# The model SPEAR talks to. The tunnel stays on this machine: the image
+# carries no key, and with host networking 127.0.0.1 is the same thing on
+# both sides. On failure WHY says what is missing.
 BACKEND=()
+WHY=""
 
-[ -z "$CLI" ] || [ "$CLI" = claude ] || die "SPEAR_CLI knows claude, not '$CLI'"
+backend() {
+    if [ -n "$PROVIDER" ]; then
+        [ "$PROVIDER" = anthropic ] || die "--provider knows anthropic, not '$PROVIDER'"
 
-if [ -n "$CLI" ]; then
-    # It names its own model and holds its own login.
+        if [ -z "${ANTHROPIC_API_KEY:-}" ]; then
+            WHY="--provider anthropic needs ANTHROPIC_API_KEY; set it in the configuration file (see --help)"
+            return 1
+        fi
 
-    PROVIDER=""
-elif [ -n "$PROVIDER" ]; then
-    [ "$PROVIDER" = anthropic ] || die "--provider knows anthropic, not '$PROVIDER'"
-    [ -n "${ANTHROPIC_API_KEY:-}" ] \
-        || die "--provider anthropic needs ANTHROPIC_API_KEY; set it in the configuration file (see --help)"
-    export ANTHROPIC_API_KEY
+        export ANTHROPIC_API_KEY
 
-    # The name alone: the value reaches the container from this environment
-    # and never appears in a process list.
+        # The name alone: the value reaches the container from this
+        # environment and never appears in a process list.
 
-    BACKEND=(-e ANTHROPIC_API_KEY)
-    ARGS=(--provider anthropic ${MODEL:+--model "$MODEL"} "${ARGS[@]}")
-elif [ -z "$ENDPOINT" ]; then
-    [ -n "$REDS_HOST" ] || die "name the model: --reds USER@HOST, --endpoint URL or --provider anthropic"
-    ENDPOINT="http://127.0.0.1:$LPORT/v1"
-
-    if ! curl -sf -m 3 "$ENDPOINT/models" >/dev/null 2>&1; then
-        SSH_OPTS=(-o ConnectTimeout=12 -o ExitOnForwardFailure=yes -o ServerAliveInterval=30)
-
-        # A host with a low MaxAuthTries disconnects ssh before it reaches the
-        # right key unless that key is the only one offered.
-        [ -n "$REDS_KEY" ] && SSH_OPTS+=(-o IdentitiesOnly=yes -i "$REDS_KEY")
-        echo "opening the tunnel :$LPORT -> $REDS_HOST:$REDS_PORT" >&2
-        ssh "${SSH_OPTS[@]}" -L "$LPORT:localhost:$REDS_PORT" -N -f "$REDS_HOST" \
-            || die "tunnel failed: is $REDS_HOST reachable (VPN?) and your key authorised?"
+        BACKEND=(-e ANTHROPIC_API_KEY -e "SPEAR_CHAT_PROVIDER=anthropic" -e "SPEAR_CHAT_MODEL=$MODEL")
+        return 0
     fi
 
-    curl -sf -m 5 "$ENDPOINT/models" >/dev/null 2>&1 \
-        || die "the tunnel is up but nothing answers on $REDS_HOST:$REDS_PORT"
-fi
+    if [ -z "$ENDPOINT" ]; then
+        if [ -z "$REDS_HOST" ]; then
+            WHY="name the model: --reds USER@HOST, --endpoint URL or --provider anthropic"
+            return 1
+        fi
 
-[ -z "$PROVIDER" ] && [ -z "$CLI" ] && BACKEND=(-e "SPEAR_API_BASE=$ENDPOINT" -e "SPEAR_MODEL_NAME=$MODEL_NAME")
+        ENDPOINT="http://127.0.0.1:$LPORT/v1"
+
+        if ! curl -sf -m 3 "$ENDPOINT/models" >/dev/null 2>&1; then
+            SSH_OPTS=(-o ConnectTimeout=12 -o ExitOnForwardFailure=yes -o ServerAliveInterval=30)
+
+            # A host with a low MaxAuthTries disconnects ssh before it reaches
+            # the right key unless that key is the only one offered.
+
+            [ -n "$REDS_KEY" ] && SSH_OPTS+=(-o IdentitiesOnly=yes -i "$REDS_KEY")
+            echo "opening the tunnel :$LPORT -> $REDS_HOST:$REDS_PORT" >&2
+
+            if ! ssh "${SSH_OPTS[@]}" -L "$LPORT:localhost:$REDS_PORT" -N -f "$REDS_HOST"; then
+                WHY="tunnel failed: is $REDS_HOST reachable (VPN?) and your key authorised?"
+                return 1
+            fi
+        fi
+
+        if ! curl -sf -m 5 "$ENDPOINT/models" >/dev/null 2>&1; then
+            WHY="the tunnel is up but nothing answers on $REDS_HOST:$REDS_PORT"
+            return 1
+        fi
+    fi
+
+    BACKEND=(-e "SPEAR_API_BASE=$ENDPOINT" -e "SPEAR_MODEL_NAME=$MODEL_NAME")
+}
+
+# A shell needs no model to open; a session started at once does.
+ENTRY=()
+
+if [ ${#ARGS[@]} -eq 0 ]; then
+    ENTRY=(--entrypoint spear-shell)
+    backend || echo "spear-run: no model for spear-chat ($WHY)" >&2
+else
+    backend || die "$WHY"
+    [ -n "$PROVIDER" ] && ARGS=(--provider "$PROVIDER" ${MODEL:+--model "$MODEL"} "${ARGS[@]}")
+fi
 
 # Your own checkouts over the baked trees, at the baked paths.
 BINDS=()
@@ -175,26 +205,29 @@ for spec in "${MOUNTS[@]}"; do
     BINDS+=(-v "$(readlink -f "$host"):/corpora/${rel#/corpora/}")
 done
 
-WORKDIR="/corpora${CORPUS:+/${CORPUS#/corpora/}}"
-
-if [ -n "$TREE" ]; then
-    rel="$(docker run --rm --entrypoint /opt/spear/client/bin/python "$IMAGE" -c '
-import json, sys
-spec = json.load(open("/opt/spear/client/projects.json")).get(sys.argv[1])
-print(spec["path"] if isinstance(spec, dict) else "")' "$TREE")"
+# Where the work happens: the image's copy when one is named, else this
+# directory -- over the baked tree it is a checkout of, or at its own path.
+if [ -n "$CORPUS" ]; then
+    WORKDIR="/corpora/${CORPUS#/corpora/}"
+elif [ -n "$TREE" ]; then
+    rel="$(while read -r name path; do [ "$name" = "$TREE" ] && echo "$path"; done <<< "$REGISTRY")"
     [ -n "$rel" ] || die "the image has no corpus named '$TREE' (--list names them)"
     BINDS+=(-v "$PWD:/corpora/$rel")
     WORKDIR="/corpora/$rel"
-elif [ "$OPEN_HERE" = 1 ]; then
+else
     BINDS+=(-v "$PWD:$PWD")
     WORKDIR="$PWD"
-fi
 
-ENTRY=()
+    while read -r name rel; do
+        [ -n "$rel" ] || continue
 
-if [ -n "$CLI" ]; then
-    ENTRY=(--entrypoint spear-claude)
-    ARGS=(${TREE:+--corpus "$TREE"} "${ARGS[@]}")
+        case "$PWD/" in
+            "$HOME/$rel/"*)
+                BINDS[${#BINDS[@]}-1]="$HOME/$rel:/corpora/$rel"
+                WORKDIR="/corpora/$rel${PWD#"$HOME/$rel"}"
+                break ;;
+        esac
+    done <<< "$REGISTRY"
 fi
 
 mkdir -p "$STATE/home"

@@ -400,8 +400,8 @@ class TheStandaloneLauncherNeedsOnlyDocker(unittest.TestCase):
         out = self.run_it("--help").stdout
 
         for option in ("--image", "--pull", "--reds", "--key", "--endpoint",
-                       "--provider", "--model", "--tree", "--here",
-                       "--corpus", "--mount", "--state", "--list", "--claude"):
+                       "--provider", "--model", "--tree",
+                       "--corpus", "--mount", "--state", "--list"):
             with self.subTest(option=option):
                 self.assertIn(option, out)
 
@@ -414,7 +414,7 @@ class TheStandaloneLauncherNeedsOnlyDocker(unittest.TestCase):
             env = {k: v for k, v in os.environ.items()
                    if not k.startswith("SPEAR_")}
             env["PATH"] = f"{bin_dir}:{env['PATH']}"
-            result = self.run_it("--corpus", "x", env=env)
+            result = self.run_it("--corpus", "x", "--ask", env=env)
 
         self.assertEqual(result.returncode, 1)
         self.assertIn("--reds USER@HOST, --endpoint URL or --provider anthropic",
@@ -427,7 +427,7 @@ class TheStandaloneLauncherNeedsOnlyDocker(unittest.TestCase):
         (bin_dir / "docker").write_text(
             "#!/bin/bash\n"
             "case \"$*\" in\n"
-            "  *projects.json*) echo some/tree ;;\n"
+            "  *projects.json*) echo name some/tree ;;\n"
             f"  run*) printf '%s\\n' \"$@\" > {tmp}/run ;;\n"
             "esac\n")
         (bin_dir / "docker").chmod(0o755)
@@ -440,7 +440,7 @@ class TheStandaloneLauncherNeedsOnlyDocker(unittest.TestCase):
     def test_a_hosted_model_needs_its_key_and_gets_only_its_name(self):
         with tempfile.TemporaryDirectory() as tmp:
             env = self.docker_recording(tmp)
-            refused = self.run_it("--provider", "anthropic", env=env)
+            refused = self.run_it("--provider", "anthropic", "--ask", env=env)
 
             self.assertEqual(refused.returncode, 1)
             self.assertIn("ANTHROPIC_API_KEY", refused.stderr)
@@ -459,18 +459,32 @@ class TheStandaloneLauncherNeedsOnlyDocker(unittest.TestCase):
         self.assertEqual(sent[sent.index("-w") + 1], "/corpora/some/tree")
         self.assertEqual(sent[-6:-1], ["--provider", "anthropic", "--model", "m1", "--ask"])
 
-    def test_the_assistant_needs_no_model_and_gets_the_corpus(self):
+    def test_without_harness_args_it_opens_a_shell_in_this_directory(self):
         with tempfile.TemporaryDirectory() as tmp:
             env = self.docker_recording(tmp)
-            result = self.run_it("--claude", "--tree", "name", "--state", f"{tmp}/state",
-                                 "--", "--continue", env=env)
+            result = self.run_it("--state", f"{tmp}/state", env=env)
             sent = (Path(tmp) / "run").read_text().split("\n")
 
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertEqual(sent[sent.index("--entrypoint") + 1], "spear-claude")
-        self.assertNotIn("SPEAR_API_BASE", " ".join(sent))
-        self.assertEqual(sent[sent.index("-w") + 1], "/corpora/some/tree")
-        self.assertEqual(sent[-4:-1], ["--corpus", "name", "--continue"])
+        self.assertIn("no model for spear-chat", result.stderr)
+        self.assertEqual(sent[sent.index("--entrypoint") + 1], "spear-shell")
+        self.assertIn(f"{os.getcwd()}:{os.getcwd()}", sent)
+        self.assertEqual(sent[sent.index("-w") + 1], os.getcwd())
+
+    def test_a_checkout_at_the_image_s_path_is_bound_over_the_baked_tree(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            env = self.docker_recording(tmp)
+            env["HOME"] = tmp
+            below = Path(tmp) / "some/tree/src"
+            below.mkdir(parents=True)
+            result = subprocess.run([str(self.SCRIPT), "--state", f"{tmp}/state"],
+                                    env=env, cwd=below, capture_output=True,
+                                    text=True, timeout=30)
+            sent = (Path(tmp) / "run").read_text().split("\n")
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn(f"{tmp}/some/tree:/corpora/some/tree", sent)
+        self.assertEqual(sent[sent.index("-w") + 1], "/corpora/some/tree/src")
 
     def test_the_image_carries_it(self):
         dockerfile = (REPO / "docker" / "Dockerfile").read_text()

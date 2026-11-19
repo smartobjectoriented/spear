@@ -142,46 +142,54 @@ container reaches it through an SSH tunnel you open on your machine.
    ``/reindex`` inside the session rebuilds its collection into your state
    volume, on the CPU (minutes for a small tree, an hour for a large one).
 
-6. **Use a hosted model** instead of an inference host: no tunnel is opened,
-   and the key is read from the configuration file.
+6. **Open a shell on your own tree** instead of starting a session at once:
+   run the launcher from the tree, with no harness argument.
 
    .. code-block:: console
 
-      $ cat ~/.config/spear/local.conf
-      SPEAR_IMAGE=<registry>/spear:<version>-<entity>
-      SPEAR_PROVIDER=anthropic
-      SPEAR_MODEL=<model name>
-      ANTHROPIC_API_KEY=<key>
+      $ cd ~/src/my-checkout && spear-run.sh
+      SPEAR image, in /corpora/<path of the corpus>
+        corpus      <corpus name>
+        spear-chat  SPEAR on this tree (--ask, --safe, --auto)
+        claude      Claude Code on this tree, with the rules, skills and index of the corpus
+      spear:/corpora/<path of the corpus>$
 
-      $ cd ~/src/my-checkout && spear-run.sh --tree <corpus name> --ask
+   The current directory is bound into the container.  When it is a checkout
+   of one of the image's corpora, at the same path under your home as the
+   corpus has under ``/corpora``, it takes the place of the baked tree and
+   keeps its index; ``--tree <corpus name>`` says so for a checkout that is
+   elsewhere.  Any other directory is bound at its own path: it has no index
+   of its own, gets the rules that apply everywhere, and can search every
+   corpus of the image.
 
-   ``--tree`` says that the current directory is your checkout of one of the
-   image's corpora: it is bound over the baked tree and the session opens
-   there, on that corpus's index.  ``--here`` opens the session in a
-   directory the image does not know, bound at its own path; ``/reindex``
-   then builds its index into your state volume.
+   Two commands are there:
 
-7. **Use Claude Code** in the container instead of SPEAR, on your own tree,
-   with the corpus's rules, skills and index already in place.  The image
-   gains it as one more layer:
+   ``spear-chat``
+      SPEAR, as the steps above start it.  It needs a model: the inference
+      host, or a hosted one named in the configuration file, in which case no
+      tunnel is opened.
+
+      .. code-block:: console
+
+         $ cat ~/.config/spear/local.conf
+         SPEAR_IMAGE=<registry>/spear:<version>-<entity>
+         SPEAR_PROVIDER=anthropic
+         SPEAR_MODEL=<model name>
+         ANTHROPIC_API_KEY=<key>
+
+   ``claude``
+      Claude Code, when the image carries it.  It names no model and no key:
+      it asks you to log in with your own account on the first run, and the
+      login stays in your state volume.  The rules and skills that apply to
+      the corpus are laid out in the container's home, never in your tree,
+      and the corpus index is its ``spear-corpus`` MCP server
+      (:ref:`mcp_server`).
+
+   An image gains Claude Code as one more layer, once it is built:
 
    .. code-block:: console
 
       $ scripts/docker/add-claude.sh <registry>/spear:<version>-<entity>
-
-   Then, from your checkout:
-
-   .. code-block:: console
-
-      $ cd ~/src/my-checkout && spear-run.sh --claude --tree <corpus name>
-
-   No model and no key are named: it asks you to log in with your own
-   account on the first run, and the login stays in your state volume.  The
-   rules and skills that apply to the corpus are laid out in the container's
-   home, never in your tree, and the corpus index is its ``spear-corpus`` MCP
-   server (:ref:`mcp_server`).  ``--here`` works as above: the tree gets the
-   rules that apply everywhere and can search every corpus of the image.
-   ``SPEAR_CLI=claude`` in the configuration file makes it the default.
 
 The ``--ask`` at the end is the permission mode (:ref:`usage`): confirm each
 edit and command.  ``--safe`` is read-only, ``--auto`` runs without asking.

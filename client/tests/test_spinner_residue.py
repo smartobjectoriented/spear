@@ -263,5 +263,43 @@ class AToolLooksLikeWorkNotLikeAFreeze(unittest.TestCase):
         self.assertNotIn("tokens", tool)
 
 
+
+class AToolRunIsOneBlock(unittest.TestCase):
+    def output(self, steps):
+        import contextlib
+        import io
+
+        from cli import terminal_ui
+
+        terminal_ui._TOOL_BLOCK["open"] = False
+        out = io.StringIO()
+
+        with contextlib.redirect_stdout(out):
+            for name, result in steps:
+                terminal_ui.tool_step(name, "x")
+                terminal_ui.tool_step_result(result)
+
+            terminal_ui.print_assistant("done")
+
+        return out.getvalue().split("\n")
+
+    def test_successes_follow_one_another_and_the_answer_is_set_apart(self):
+        import re
+
+        lines = [re.sub(r"\x1b\[[0-9;]*m", "", line)
+                 for line in self.output([("Search", ""), ("Terminal", ""), ("Read", "")])]
+
+        self.assertEqual(lines, ["", "⏺ Search(x)", "⏺ Terminal(x)", "⏺ Read(x)",
+                                 "", "⏺ done", ""])
+
+    def test_a_failure_keeps_its_line(self):
+        import re
+
+        lines = [re.sub(r"\x1b\[[0-9;]*m", "", line)
+                 for line in self.output([("Terminal", "failed (exit 2)"), ("Read", "")])]
+
+        self.assertEqual(lines[1:4], ["⏺ Terminal(x)", "  ⎿  failed (exit 2)", "⏺ Read(x)"])
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -45,14 +45,19 @@ RUN python3 -m venv "$APP" \
     && "$APP/bin/pip" install --no-cache-dir -r deploy/requirements.txt
 
 # The embedder (bge-m3) and Chroma's default MiniLM, baked at build time so a
-# fresh container neither downloads 4.3 GB on first run nor fails offline.
+# fresh container neither downloads them on first run nor fails offline.
+#
+# bge-m3 publishes its weights as pytorch_model.bin. Left to itself,
+# transformers also fetches the safetensors conversion of them, which is the
+# same 2.3 GB a second time and is never loaded.
 
 ENV HF_HOME=/opt/spear/hf
 ENV HF_HUB_DISABLE_XET=1
+ENV DISABLE_SAFETENSORS_CONVERSION=1
 RUN "$APP/bin/python" -c "\
 from sentence_transformers import SentenceTransformer; \
 SentenceTransformer('BAAI/bge-m3')" \
-    && find /opt/spear/hf -name '*.onnx' -delete 2>/dev/null || true
+    && find /opt/spear/hf -name '*.onnx' -delete
 
 RUN HOME=/opt/spear/chroma-home "$APP/bin/python" -c "\
 from chromadb.utils.embedding_functions import ONNXMiniLM_L6_V2; \
@@ -89,7 +94,18 @@ RUN mkdir -p "$APP/rules.d" "$APP/skills" "$APP/benches" "$APP/chromadb" \
 
 COPY --from=repo scripts/docker/spear-run.sh /opt/spear/spear-run.sh
 COPY --from=repo docker/entrypoint.sh /opt/spear/entrypoint.sh
-RUN chmod +x /opt/spear/entrypoint.sh /opt/spear/spear-run.sh
+COPY --from=repo docker/spear-mcp /usr/local/bin/spear-mcp
+COPY --from=repo docker/spear-claude-export /usr/local/bin/spear-claude-export
+
+# What a shell in the container offers: SPEAR, and Claude Code prepared for
+# the corpus. The latter is only the preparation; docker/Dockerfile.claude
+# adds the program itself to the images that are to carry it.
+
+COPY --from=repo docker/spear-shell docker/spear-chat docker/spear-where /usr/local/bin/
+COPY --from=repo docker/claude-launcher /usr/local/bin/claude
+RUN chmod +x /opt/spear/entrypoint.sh /opt/spear/spear-run.sh /usr/local/bin/spear-mcp \
+    /usr/local/bin/spear-claude-export /usr/local/bin/spear-shell /usr/local/bin/spear-chat \
+    /usr/local/bin/spear-where /usr/local/bin/claude
 
 ENV SPEAR_COMMON_STATE_DIR=/opt/spear/common
 ENV SPEAR_STANDARDS_ROOT=/opt/spear/common/standards

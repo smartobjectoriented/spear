@@ -1,0 +1,13 @@
+#!/bin/bash
+# SPEAR on the current directory, from a shell in the container. The model is
+# the one the launcher was given; an option here overrides it.
+
+MODEL=()
+
+case " $* " in
+    *" --provider"*) ;;
+    *) [ -n "$SPEAR_CHAT_PROVIDER" ] \
+           && MODEL=(--provider "$SPEAR_CHAT_PROVIDER" ${SPEAR_CHAT_MODEL:+--model "$SPEAR_CHAT_MODEL"}) ;;
+esac
+
+exec /opt/spear/entrypoint.sh "${MODEL[@]}" "$@"

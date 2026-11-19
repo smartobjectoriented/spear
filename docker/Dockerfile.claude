@@ -1,0 +1,22 @@
+# Claude Code on top of a SPEAR image: one more layer, so the image that
+# carries the corpora, their index, the rules and the skills also carries the
+# assistant that reads them.
+#
+#     scripts/docker/add-claude.sh IMAGE [TAG]
+#
+# The harness image already has the `claude` command, which prepares the
+# rules, skills and index; this layer brings what it starts.
+
+ARG BASE=scratch
+FROM ${BASE}
+
+USER root
+
+# Installed under a home of its own and made readable by all: the container
+# runs as whoever launches it. It never updates itself, an image is rebuilt.
+
+ENV DISABLE_AUTOUPDATER=1
+
+RUN HOME=/opt/claude bash -c 'curl -fsSL https://claude.ai/install.sh | bash' \
+    && chmod -R a+rX /opt/claude \
+    && /opt/claude/.local/bin/claude --version

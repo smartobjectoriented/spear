@@ -295,6 +295,70 @@ class AnthropicBackendTests(unittest.TestCase):
         self.assertEqual([call.name for call in turn.tool_calls],
                          ["standard.search"])
 
+    def test_the_agent_core_call_is_translated_both_ways(self):
+        """complete_messages: an OpenAI-format history in, a RawTurn out."""
+        final = self.message(
+            content=(SimpleNamespace(type="text", text="Looking."),
+                     SimpleNamespace(type="tool_use", id="c2", name="standard_search",
+                                     input={"query": "x"})),
+            stop_reason="tool_use",
+            usage=SimpleNamespace(input_tokens=10, output_tokens=4,
+                                  cache_read_input_tokens=90),
+        )
+        backend, client, _ = self.backend(final, deltas=("Looking.",))
+        ticks = []
+        turn = backend.complete_messages(
+            [{"role": "system", "content": "Be exact."},
+             {"role": "user", "content": "Find it"},
+             {"role": "assistant", "content": "", "tool_calls": [
+                 {"id": "c1", "type": "function",
+                  "function": {"name": "bash", "arguments": '{"command": "ls"}'}},
+                 {"id": "c1b", "type": "function",
+                  "function": {"name": "bash", "arguments": "not json"}}]},
+             {"role": "tool", "tool_call_id": "c1", "content": "a.c"},
+             {"role": "tool", "tool_call_id": "c1b", "content": ""},
+             {"role": "user", "content": "And then?"}],
+            [{"type": "function", "function": {
+                "name": "standard.search", "description": "Search",
+                "parameters": {"type": "object", "properties": {}}}}],
+            max_tokens=500, on_token=lambda: ticks.append(1))
+        sent = client.messages.calls[0]
+
+        self.assertEqual(sent["system"], "Be exact.")
+        self.assertEqual(sent["max_tokens"], 500)
+        self.assertEqual(sent["tools"][0]["name"], "standard_search")
+        self.assertEqual([m["role"] for m in sent["messages"]],
+                         ["user", "assistant", "user"])
+        self.assertEqual(sent["messages"][1]["content"], [
+            {"type": "tool_use", "id": "c1", "name": "bash", "input": {"command": "ls"}},
+            {"type": "tool_use", "id": "c1b", "name": "bash", "input": {}}])
+        self.assertEqual(sent["messages"][2]["content"], [
+            {"type": "tool_result", "tool_use_id": "c1", "content": "a.c"},
+            {"type": "tool_result", "tool_use_id": "c1b", "content": "(no output)"},
+            {"type": "text", "text": "And then?"}])
+
+        self.assertEqual(turn.text, "Looking.")
+        self.assertEqual(turn.calls, ({"id": "c2", "name": "standard.search",
+                                       "arguments": '{"query": "x"}'},))
+        self.assertEqual(turn.finish_reason, "tool_calls")
+        self.assertEqual(turn.usage, {"prompt_tokens": 100, "completion_tokens": 4})
+        self.assertEqual(len(ticks), 1)
+        self.assertIsNone(turn.error)
+
+    def test_the_agent_core_call_reports_a_cut_reply_and_a_failure(self):
+        backend, _, _ = self.backend(self.message(
+            content=(SimpleNamespace(type="text", text="par"),), stop_reason="max_tokens"))
+        turn = backend.complete_messages([{"role": "user", "content": "q"}], [],
+                                         max_tokens=5)
+
+        self.assertEqual((turn.text, turn.finish_reason), ("par", "length"))
+
+        backend, _, _ = self.backend(self.message(stop_reason="refusal"))
+        turn = backend.complete_messages([{"role": "user", "content": "q"}], [],
+                                         max_tokens=5)
+
+        self.assertIn("refusal", turn.error)
+
     def test_history_replays_a_dotted_call_under_its_wire_name(self):
         """The assistant's own earlier block is validated by the same rule."""
         conversation = [

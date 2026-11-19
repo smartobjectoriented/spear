@@ -412,8 +412,12 @@ class TheStandaloneLauncherNeedsOnlyDocker(unittest.TestCase):
             (bin_dir / "docker").write_text("#!/bin/bash\nexit 0\n")
             (bin_dir / "docker").chmod(0o755)
             env = {k: v for k, v in os.environ.items()
-                   if not k.startswith("SPEAR_")}
+                   if not k.startswith(("SPEAR_", "REDS_"))}
             env["PATH"] = f"{bin_dir}:{env['PATH']}"
+
+            # The user's own configuration file may name a model.
+
+            env["XDG_CONFIG_HOME"] = tmp
             result = self.run_it("--corpus", "x", "--ask", env=env)
 
         self.assertEqual(result.returncode, 1)
@@ -432,8 +436,9 @@ class TheStandaloneLauncherNeedsOnlyDocker(unittest.TestCase):
             "esac\n")
         (bin_dir / "docker").chmod(0o755)
         env = {k: v for k, v in os.environ.items()
-               if not k.startswith(("SPEAR_", "ANTHROPIC_"))}
+               if not k.startswith(("SPEAR_", "ANTHROPIC_", "REDS_"))}
         env["PATH"] = f"{bin_dir}:{env['PATH']}"
+        env["XDG_CONFIG_HOME"] = str(tmp)
 
         return env
 

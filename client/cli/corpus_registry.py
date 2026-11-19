@@ -72,17 +72,42 @@ def _warn_once(message):
         print(message, file=sys.stderr)
 
 
+def _read_registry(path):
+    try:
+        with open(path) as f:
+            raw = json.load(f)
+    except (OSError, json.JSONDecodeError):
+        return {}
+
+    return raw if isinstance(raw, dict) else {}
+
+
+def user_projects_file():
+    """Where the user's own corpora are kept when the registry is not theirs
+    to write: a container ships it in the image, and what a session registers
+    there lands in the state directory instead. None when the state directory
+    is the install itself."""
+    from cli import chat_settings
+
+    if os.path.realpath(chat_settings.STATE_DIR) == os.path.realpath(APP_DIR):
+        return None
+
+    return os.path.join(chat_settings.STATE_DIR, "projects.json")
+
+
 def load_projects():
     """Return {name: {"path","kind", ...}}. Tolerates the legacy {name: path} format (treated as
     generic). Extra keys (exclude, include_build — see reindex_options) are
     PRESERVED: rebuilding specs from path/kind alone erased them at the first
     save_projects()."""
 
-    try:
-        with open(PROJECTS_FILE) as f:
-            raw = json.load(f)
-    except (OSError, json.JSONDecodeError):
-        raw = {}
+    raw = _read_registry(PROJECTS_FILE)
+    own = user_projects_file()
+
+    # The shipped registry wins on a name: the user's file only adds.
+
+    if own:
+        raw = {**_read_registry(own), **raw}
 
     projects = {}
 
@@ -122,9 +147,25 @@ def save_projects(projects):
         with open(PROJECTS_FILE, "w") as f:
             json.dump(projects, f, indent=2)
     except OSError as exc:
-        # The registry is shipped configuration, not session state: in a
-        # container it lives in the image and is not the user's to change.
-        # Say where it has to be done instead of raising a stack trace.
+        # The registry is shipped configuration: in a container it lives in
+        # the image and is not the user's to change. What the session adds to
+        # it goes to the user's own file; without one, say where it has to be
+        # done instead of raising a stack trace.
+
+        own = user_projects_file()
+        shipped = _read_registry(PROJECTS_FILE)
+
+        if own:
+            try:
+                os.makedirs(os.path.dirname(own), exist_ok=True)
+
+                with open(own, "w") as f:
+                    json.dump({name: spec for name, spec in projects.items()
+                               if name not in shipped}, f, indent=2)
+
+                return
+            except OSError:
+                pass
 
         raise SystemExit(
             f"cannot write the corpus registry ({PROJECTS_FILE}): {exc}\n"

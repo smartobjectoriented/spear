@@ -193,6 +193,26 @@ container reaches it through an SSH tunnel you open on your machine.
 
       $ scripts/docker/add-claude.sh <registry>/spear:<version>-<entity>
 
+7. **Hand your work on** as an image.  What a session registers, indexes and
+   records stays in your state directory (``~/.spear/state``): the corpora
+   added with ``/corpus add``, the index ``/reindex`` builds, the knowledge
+   you accepted.  ``--build`` writes all of it into a new image:
+
+   .. code-block:: console
+
+      $ spear-run.sh --build <registry>/spear:<version>-<name>
+         registry  1 added: <corpus>
+         index     <collection>  (<n> chunks)
+         knowledge <n> active records
+      built <registry>/spear:<version>-<name>
+
+   The source trees are not copied.  A corpus whose tree is under your home
+   is named by its path relative to it, so whoever runs the new image from a
+   checkout at the same place under their own home, or names it with
+   ``--tree``, gets its index and picks the work up.  A tree that was only
+   opened, never registered, is left out: its index is tied to its path on
+   your machine.
+
 The ``--ask`` at the end is the permission mode (:ref:`usage`): confirm each
 edit and command.  ``--safe`` is read-only, ``--auto`` runs without asking.
 Everything a session accumulates stays in ``~/.spear/state`` on your machine.

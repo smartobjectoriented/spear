@@ -400,6 +400,7 @@ class TheStandaloneLauncherNeedsOnlyDocker(unittest.TestCase):
         out = self.run_it("--help").stdout
 
         for option in ("--image", "--pull", "--reds", "--key", "--endpoint",
+                       "--provider", "--model", "--tree", "--here",
                        "--corpus", "--mount", "--state", "--list"):
             with self.subTest(option=option):
                 self.assertIn(option, out)
@@ -416,7 +417,47 @@ class TheStandaloneLauncherNeedsOnlyDocker(unittest.TestCase):
             result = self.run_it("--corpus", "x", env=env)
 
         self.assertEqual(result.returncode, 1)
-        self.assertIn("--reds USER@HOST, or --endpoint URL", result.stderr)
+        self.assertIn("--reds USER@HOST, --endpoint URL or --provider anthropic",
+                      result.stderr)
+
+    def docker_recording(self, tmp):
+        """A docker on the PATH that records the `run` it is asked for."""
+        bin_dir = Path(tmp) / "bin"
+        bin_dir.mkdir()
+        (bin_dir / "docker").write_text(
+            "#!/bin/bash\n"
+            "case \"$*\" in\n"
+            "  *projects.json*) echo some/tree ;;\n"
+            f"  run*) printf '%s\\n' \"$@\" > {tmp}/run ;;\n"
+            "esac\n")
+        (bin_dir / "docker").chmod(0o755)
+        env = {k: v for k, v in os.environ.items()
+               if not k.startswith(("SPEAR_", "ANTHROPIC_"))}
+        env["PATH"] = f"{bin_dir}:{env['PATH']}"
+
+        return env
+
+    def test_a_hosted_model_needs_its_key_and_gets_only_its_name(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            env = self.docker_recording(tmp)
+            refused = self.run_it("--provider", "anthropic", env=env)
+
+            self.assertEqual(refused.returncode, 1)
+            self.assertIn("ANTHROPIC_API_KEY", refused.stderr)
+
+            env["ANTHROPIC_API_KEY"] = "the-key"
+            result = self.run_it("--provider", "anthropic", "--model", "m1",
+                                 "--tree", "name", "--state", f"{tmp}/state",
+                                 "--", "--ask", env=env)
+            sent = (Path(tmp) / "run").read_text().split("\n")
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("ANTHROPIC_API_KEY", sent)
+        self.assertNotIn("the-key", " ".join(sent))
+        self.assertNotIn("SPEAR_API_BASE", " ".join(sent))
+        self.assertIn(f"{os.getcwd()}:/corpora/some/tree", sent)
+        self.assertEqual(sent[sent.index("-w") + 1], "/corpora/some/tree")
+        self.assertEqual(sent[-6:-1], ["--provider", "anthropic", "--model", "m1", "--ask"])
 
     def test_the_image_carries_it(self):
         dockerfile = (REPO / "docker" / "Dockerfile").read_text()

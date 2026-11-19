@@ -99,8 +99,12 @@ container reaches it through an SSH tunnel you open on your machine.
             --corpus opencn/opencn-ng --ask
       $ spear-run.sh --list                       # every corpus and its path
 
-   ``REDS_HOST`` and ``SPEAR_REDS_KEY`` in your environment save the two
-   options.  Without the script, the same run by hand:
+   What does not change from one run to the next goes in a configuration
+   file rather than on every command line: ``~/.config/spear/local.conf``
+   (``client/local.conf`` when the launcher runs from the repository), one
+   shell assignment per line.  ``REDS_HOST`` and ``SPEAR_REDS_KEY`` there
+   save the two options above, ``SPEAR_IMAGE`` saves ``--image``.  Without
+   the script, the same run by hand:
 
    .. code-block:: console
 
@@ -137,6 +141,25 @@ container reaches it through an SSH tunnel you open on your machine.
    The index describes the baked revision; after large changes to your tree,
    ``/reindex`` inside the session rebuilds its collection into your state
    volume, on the CPU (minutes for a small tree, an hour for a large one).
+
+6. **Use a hosted model** instead of an inference host: no tunnel is opened,
+   and the key is read from the configuration file.
+
+   .. code-block:: console
+
+      $ cat ~/.config/spear/local.conf
+      SPEAR_IMAGE=<registry>/spear:<version>-<entity>
+      SPEAR_PROVIDER=anthropic
+      SPEAR_MODEL=<model name>
+      ANTHROPIC_API_KEY=<key>
+
+      $ cd ~/src/my-checkout && spear-run.sh --tree <corpus name> --ask
+
+   ``--tree`` says that the current directory is your checkout of one of the
+   image's corpora: it is bound over the baked tree and the session opens
+   there, on that corpus's index.  ``--here`` opens the session in a
+   directory the image does not know, bound at its own path; ``/reindex``
+   then builds its index into your state volume.
 
 The ``--ask`` at the end is the permission mode (:ref:`usage`): confirm each
 edit and command.  ``--safe`` is read-only, ``--auto`` runs without asking.

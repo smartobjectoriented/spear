@@ -38,6 +38,9 @@
 #   --state     where conversations, knowledge, audit and the logins land on
 #               this machine (default ~/.spear/state)
 #   --list      print the image's corpora and exit
+#   --install   copy this script to ~/.local/bin and, when there is none yet,
+#               write the configuration file with the image named by --image;
+#               nothing is run
 #
 # With harness args, SPEAR starts at once instead of the shell, and a model
 # has to be named. In the shell a model is needed by spear-chat only: Claude
@@ -86,10 +89,11 @@ CORPUS=""
 TREE=""
 PULL=0
 LIST=0
+INSTALL=0
 MOUNTS=()
 ARGS=()
 
-usage() { sed -n '2,59p' "$0" | sed 's/^# \{0,1\}//'; exit "${1:-0}"; }
+usage() { sed -n '2,62p' "$0" | sed 's/^# \{0,1\}//'; exit "${1:-0}"; }
 die() { echo "spear-run: $*" >&2; exit 1; }
 
 while [ $# -gt 0 ]; do
@@ -107,11 +111,54 @@ while [ $# -gt 0 ]; do
         --mount)    MOUNTS+=("$2"); shift 2 ;;
         --state)    STATE="$2"; shift 2 ;;
         --list)     LIST=1; shift ;;
+        --install)  INSTALL=1; shift ;;
         -h|--help)  usage ;;
         --)         shift; ARGS=("$@"); break ;;
         *)          ARGS+=("$1"); shift ;;
     esac
 done
+
+if [ "$INSTALL" = 1 ]; then
+    BIN="$HOME/.local/bin"
+    CONF="${XDG_CONFIG_HOME:-$HOME/.config}/spear/local.conf"
+    mkdir -p "$BIN" "$(dirname "$CONF")"
+
+    # A link to this very file is already the install; anything else is
+    # replaced, a link first so that the copy does not go through it.
+
+    if [ "$(readlink -f "$BIN/spear-run.sh")" != "$(readlink -f "$0")" ]; then
+        rm -f "$BIN/spear-run.sh"
+        cp "$0" "$BIN/spear-run.sh"
+        chmod 755 "$BIN/spear-run.sh"
+    fi
+
+    echo "installed $BIN/spear-run.sh"
+
+    if [ -e "$CONF" ]; then
+        echo "kept      $CONF"
+    else
+        cat > "$CONF" <<EOF
+# Read by spear-run.sh before its options; shell, one assignment per line.
+SPEAR_IMAGE=$IMAGE
+
+# The model spear-chat talks to: a hosted one,
+#SPEAR_PROVIDER=anthropic
+#SPEAR_MODEL=<model name>
+#ANTHROPIC_API_KEY=<key>
+# or an inference host reached through ssh.
+#REDS_HOST=<account>@<host>
+#SPEAR_REDS_KEY=<ssh identity file>
+EOF
+        echo "wrote     $CONF"
+    fi
+
+    case ":$PATH:" in
+        *":$BIN:"*) ;;
+        *) echo "$BIN is not on your PATH: add it in your shell's startup file" >&2 ;;
+    esac
+
+    exit 0
+fi
 
 command -v docker >/dev/null || die "docker is not installed"
 [ "$PULL" = 1 ] && docker pull "$IMAGE"

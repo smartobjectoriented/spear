@@ -16,15 +16,15 @@ HTML = """<!doctype html><meta charset="utf-8"><style>
  .n{{color:#8b98a5;font-size:11px;margin:2px 24px}}
 </style><h1>SPEAR identity</h1>
 <div class="r"><div class="l">mark</div>
- <div class="b w"><img src="{i}/spear-mark.svg" height="16">
-  <img src="{i}/spear-mark.svg" height="24"><img src="{i}/spear-mark.svg" height="32">
-  <img src="{i}/spear-mark.svg" height="48"><img src="{i}/spear-mark.svg" height="64"></div>
- <div class="b d"><img src="{i}/spear-mark.svg" height="16">
-  <img src="{i}/spear-mark.svg" height="32"><img src="{i}/spear-mark.svg" height="64"></div></div>
-<div class="n">16 · 24 · 32 · 48 · 64 px</div>
+ <div class="b w"><img src="{i}/spear-favicon.svg" height="16">
+  <img src="{i}/spear-favicon.svg" height="24"><img src="{i}/spear-favicon.svg" height="32">
+  <img src="{i}/spear-favicon.svg" height="48"><img src="{i}/spear-mark.svg" height="64"></div>
+ <div class="b d"><img src="{i}/spear-favicon.svg" height="16">
+  <img src="{i}/spear-favicon.svg" height="32"><img src="{i}/spear-mark.svg" height="64"></div></div>
+<div class="n">favicon at 16 · 24 · 32 · 48 px, then the lined mark at 64 px</div>
 <div class="r"><div class="l">sidebar</div>
- <div class="b s"><img src="{i}/spear-mark.svg" height="48"></div>
- <div class="b c"><div><img src="{i}/spear-mark.svg" height="48"></div></div></div>
+ <div class="b s"><img src="{i}/spear-mark.svg" height="64"></div>
+ <div class="b c"><div><img src="{i}/spear-mark.svg" height="64"></div></div></div>
 <div class="n">bare theme blue, then on the light card the CSS adds</div>
 <div class="r"><div class="l">horizontal</div>
  <div class="b w"><img src="{i}/spear-logo-horizontal.svg" height="60"></div></div>
@@ -32,8 +32,8 @@ HTML = """<!doctype html><meta charset="utf-8"><style>
  <div class="b w"><img src="{i}/spear-logo.svg" height="104"></div></div>
 <div class="r m"><div class="l">monochrome</div>
  <div class="b w"><img src="{i}/spear-logo-horizontal.svg" height="46">
-  <img src="{i}/spear-mark.svg" height="32"><img src="{i}/spear-mark.svg" height="16"></div>
- <div class="b d"><img src="{i}/spear-mark.svg" height="32"></div></div>
+  <img src="{i}/spear-favicon.svg" height="32"><img src="{i}/spear-favicon.svg" height="16"></div>
+ <div class="b d"><img src="{i}/spear-favicon.svg" height="32"></div></div>
 """
 p = HERE / ".proof.html"
 p.write_text(HTML.format(i=IMG.as_uri()))

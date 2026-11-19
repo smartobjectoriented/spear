@@ -8,6 +8,7 @@
 #                   | --provider anthropic [--model NAME]]
 #                  [--tree NAME | --here | --corpus PATH]
 #                  [--mount HOST_DIR:PATH]... [--state DIR]
+#                  [--claude]
 #                  [--] [harness args, e.g. --ask, --auto, --fresh]
 #
 #   --image     the image to run; default ghcr.io/smartobjectoriented/spear-reds
@@ -31,6 +32,11 @@
 #               PATH the tree's path under /corpora. Repeatable.
 #   --state     where conversations, knowledge and audit land on this machine
 #               (default ~/.spear/state)
+#   --claude    start Claude Code in the container instead of SPEAR, on the
+#               same tree, with the corpus's rules, skills and index in place.
+#               No model is named: it logs in with your own account, once, and
+#               the login stays in --state. The arguments after -- are its own.
+#               The image needs it: scripts/docker/add-claude.sh.
 #   --list      print the image's corpora and exit
 #
 # What does not change from one run to the next goes in a configuration file,
@@ -42,8 +48,8 @@
 #     SPEAR_MODEL=<model name>
 #     ANTHROPIC_API_KEY=<key>
 #
-# or REDS_HOST and SPEAR_REDS_KEY for an inference host. An option overrides
-# the file.
+# or REDS_HOST and SPEAR_REDS_KEY for an inference host, or SPEAR_CLI=claude
+# for --claude on every run. An option overrides the file.
 #
 # spear-docker.sh is the other launcher: for a workstation that has the
 # repository and mounts its own registered trees. This one is for everyone else.
@@ -72,6 +78,7 @@ MODEL_NAME="${SPEAR_MODEL_NAME:-qwen3}"
 PROVIDER="${SPEAR_PROVIDER:-}"
 MODEL="${SPEAR_MODEL:-}"
 STATE="${SPEAR_STATE_DIR:-$HOME/.spear/state}"
+CLI="${SPEAR_CLI:-}"
 CORPUS=""
 TREE=""
 OPEN_HERE=0
@@ -80,7 +87,7 @@ LIST=0
 MOUNTS=()
 ARGS=()
 
-usage() { sed -n '2,52p' "$0" | sed 's/^# \{0,1\}//'; exit "${1:-0}"; }
+usage() { sed -n '2,55p' "$0" | sed 's/^# \{0,1\}//'; exit "${1:-0}"; }
 die() { echo "spear-run: $*" >&2; exit 1; }
 
 while [ $# -gt 0 ]; do
@@ -98,6 +105,7 @@ while [ $# -gt 0 ]; do
         --corpus)   CORPUS="$2"; shift 2 ;;
         --mount)    MOUNTS+=("$2"); shift 2 ;;
         --state)    STATE="$2"; shift 2 ;;
+        --claude)   CLI=claude; shift ;;
         --list)     LIST=1; shift ;;
         -h|--help)  usage ;;
         --)         shift; ARGS=("$@"); break ;;
@@ -121,7 +129,13 @@ fi
 # with host networking 127.0.0.1 is the same thing on both sides.
 BACKEND=()
 
-if [ -n "$PROVIDER" ]; then
+[ -z "$CLI" ] || [ "$CLI" = claude ] || die "SPEAR_CLI knows claude, not '$CLI'"
+
+if [ -n "$CLI" ]; then
+    # It names its own model and holds its own login.
+
+    PROVIDER=""
+elif [ -n "$PROVIDER" ]; then
     [ "$PROVIDER" = anthropic ] || die "--provider knows anthropic, not '$PROVIDER'"
     [ -n "${ANTHROPIC_API_KEY:-}" ] \
         || die "--provider anthropic needs ANTHROPIC_API_KEY; set it in the configuration file (see --help)"
@@ -151,7 +165,7 @@ elif [ -z "$ENDPOINT" ]; then
         || die "the tunnel is up but nothing answers on $REDS_HOST:$REDS_PORT"
 fi
 
-[ -z "$PROVIDER" ] && BACKEND=(-e "SPEAR_API_BASE=$ENDPOINT" -e "SPEAR_MODEL_NAME=$MODEL_NAME")
+[ -z "$PROVIDER" ] && [ -z "$CLI" ] && BACKEND=(-e "SPEAR_API_BASE=$ENDPOINT" -e "SPEAR_MODEL_NAME=$MODEL_NAME")
 
 # Your own checkouts over the baked trees, at the baked paths.
 BINDS=()
@@ -176,7 +190,14 @@ elif [ "$OPEN_HERE" = 1 ]; then
     WORKDIR="$PWD"
 fi
 
-mkdir -p "$STATE"
+ENTRY=()
+
+if [ -n "$CLI" ]; then
+    ENTRY=(--entrypoint spear-claude)
+    ARGS=(${TREE:+--corpus "$TREE"} "${ARGS[@]}")
+fi
+
+mkdir -p "$STATE/home"
 TTY=(-i); [ -t 0 ] && TTY=(-i -t)
 
 # The three --security-opt are what bubblewrap, the harness's sandbox, needs
@@ -193,4 +214,5 @@ exec docker run --rm "${TTY[@]}" \
     -v "$STATE:/state" \
     "${BINDS[@]}" \
     -w "$WORKDIR" \
+    "${ENTRY[@]}" \
     "$IMAGE" "${ARGS[@]}"

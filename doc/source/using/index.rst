@@ -17,4 +17,5 @@ that changes them.
    context
    knowledge
    capabilities
+   mcp_server
    configuration

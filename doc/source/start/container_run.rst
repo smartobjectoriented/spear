@@ -99,8 +99,12 @@ container reaches it through an SSH tunnel you open on your machine.
             --corpus opencn/opencn-ng --ask
       $ spear-run.sh --list                       # every corpus and its path
 
-   ``REDS_HOST`` and ``SPEAR_REDS_KEY`` in your environment save the two
-   options.  Without the script, the same run by hand:
+   What does not change from one run to the next goes in a configuration
+   file rather than on every command line: ``~/.config/spear/local.conf``
+   (``client/local.conf`` when the launcher runs from the repository), one
+   shell assignment per line.  ``REDS_HOST`` and ``SPEAR_REDS_KEY`` there
+   save the two options above, ``SPEAR_IMAGE`` saves ``--image``.  Without
+   the script, the same run by hand:
 
    .. code-block:: console
 
@@ -137,6 +141,55 @@ container reaches it through an SSH tunnel you open on your machine.
    The index describes the baked revision; after large changes to your tree,
    ``/reindex`` inside the session rebuilds its collection into your state
    volume, on the CPU (minutes for a small tree, an hour for a large one).
+
+6. **Open a shell on your own tree** instead of starting a session at once:
+   run the launcher from the tree, with no harness argument.
+
+   .. code-block:: console
+
+      $ cd ~/src/my-checkout && spear-run.sh
+      SPEAR image, in /corpora/<path of the corpus>
+        corpus      <corpus name>
+        spear-chat  SPEAR on this tree (--ask, --safe, --auto)
+        claude      Claude Code on this tree, with the rules, skills and index of the corpus
+      spear:/corpora/<path of the corpus>$
+
+   The current directory is bound into the container.  When it is a checkout
+   of one of the image's corpora, at the same path under your home as the
+   corpus has under ``/corpora``, it takes the place of the baked tree and
+   keeps its index; ``--tree <corpus name>`` says so for a checkout that is
+   elsewhere.  Any other directory is bound at its own path: it has no index
+   of its own, gets the rules that apply everywhere, and can search every
+   corpus of the image.
+
+   Two commands are there:
+
+   ``spear-chat``
+      SPEAR, as the steps above start it.  It needs a model: the inference
+      host, or a hosted one named in the configuration file, in which case no
+      tunnel is opened.
+
+      .. code-block:: console
+
+         $ cat ~/.config/spear/local.conf
+         SPEAR_IMAGE=<registry>/spear:<version>-<entity>
+         SPEAR_PROVIDER=anthropic
+         SPEAR_MODEL=<model name>
+         ANTHROPIC_API_KEY=<key>
+
+   ``claude``
+      Claude Code, when the image carries it.  It names no model and no key:
+      it asks you to log in with your own account on the first run, and the
+      login stays in your state volume.  The rules and skills that apply to
+      the corpus are laid out in the container's home, never in your tree,
+      and the corpus index is its ``spear-corpus`` MCP server
+      (:ref:`mcp_server`).
+
+   An image gains Claude Code as one more layer, once it is built:
+
+   .. code-block:: console
+
+      $ scripts/docker/add-claude.sh <registry>/spear:<version>-<entity>
 
 The ``--ask`` at the end is the permission mode (:ref:`usage`): confirm each
 edit and command.  ``--safe`` is read-only, ``--auto`` runs without asking.

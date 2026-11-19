@@ -1,0 +1,9 @@
+#!/bin/bash
+# The corpus index of this image as an MCP server on stdio:
+#
+#     docker run --rm -i --entrypoint spear-mcp IMAGE [--corpus NAME]
+#
+# It bypasses the entrypoint, which checks a sandbox and mounted trees that a
+# search server needs neither of.
+
+exec /opt/spear/client/bin/python /opt/spear/client/cli/corpus_mcp.py "$@"

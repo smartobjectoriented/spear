@@ -1,0 +1,18 @@
+#!/bin/bash
+# A shell in the container, in the tree the launcher bound: SPEAR and Claude
+# Code are two commands of it.
+
+CORPUS="$(spear-where 2>/dev/null)"
+
+echo "SPEAR image, in $PWD"
+echo "  corpus      ${CORPUS:-none of this image: no index of its own, the rules that apply everywhere}"
+echo "  spear-chat  SPEAR on this tree (--ask, --safe, --auto)"
+
+if [ -x /opt/claude/.local/bin/claude ]; then
+    echo "  claude      Claude Code on this tree, with the rules, skills and index of the corpus"
+fi
+
+# The user the container runs as has no entry in its passwd: bash would call
+# it "I have no name!".
+
+exec env PS1='spear:\w\$ ' bash --norc --noprofile -i

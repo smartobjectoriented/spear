@@ -80,13 +80,15 @@ container reaches it through an SSH tunnel you open on your machine.
 
 3. **Get the launcher.** ``spear-run.sh`` needs only docker, ssh and curl; it
    opens the tunnel, mounts your state and runs the image.  It is in the
-   repository under ``scripts/docker/``, and inside the image:
+   repository under ``scripts/docker/``, and inside the image; ``--install``
+   copies it to ``~/.local/bin`` and writes ``~/.config/spear/local.conf``
+   with the image's name, so that ``spear-run.sh`` alone is enough afterwards:
 
    .. code-block:: console
 
-      $ docker run --rm --entrypoint cat \
-            ghcr.io/smartobjectoriented/spear-reds:<version>-reds /opt/spear/spear-run.sh \
-            > ~/bin/spear-run.sh && chmod +x ~/bin/spear-run.sh
+      $ IMAGE=ghcr.io/smartobjectoriented/spear-reds:<version>-reds
+      $ docker run --rm --entrypoint cat $IMAGE /opt/spear/spear-run.sh > /tmp/spear-run.sh
+      $ bash /tmp/spear-run.sh --install --image $IMAGE
 
 4. **Run** it on the corpus you want to work in, by its path under
    ``/corpora``.  The tunnel to the inference server (port 8010 there, 8082

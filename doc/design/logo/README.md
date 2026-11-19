@@ -22,7 +22,8 @@ this directory holds only the source that generates them.
 
 | Asset | Role |
 |---|---|
-| `spear-mark.svg` | the mark alone: `html_logo` (sidebar) and `html_favicon` |
+| `spear-mark.svg` | the mark alone, with its line: `html_logo` (sidebar, 64 px) |
+| `spear-favicon.svg` | the mark without the line: `html_favicon` |
 | `spear-logo.svg` | the landing-page lockup, mark + SPEAR |
 | `spear-logo-horizontal.svg` | mark + SPEAR, for use outside the manual |
 
@@ -31,10 +32,11 @@ whole pixel at 16, 32, 48 and 64 px: at 16 px each stage is 4 px tall and the
 gaps between them exactly 1 px. The three stages keep one height, so the
 result reads as the end of a funnel rather than as an arrowhead.
 
-One mark, with one difference by size: the landing lockup cuts a line of text
-into the specification, where it is about 6 px tall. Below about 48 px that
-line is sub-pixel and only muddies the bar, so the mark used everywhere else
-goes without it. Proportions, colours and corner radii are identical.
+One mark, with one difference by size: from 64 px up it cuts a line of text
+into the specification, 4 px tall in the sidebar and about 6 px on the landing
+page. Below 64 px that line falls off the pixel grid and only muddies the bar,
+so the favicon and the horizontal lockup go without it. Proportions, colours
+and corner radii are identical.
 
 The wordmark is monoline geometry, not live text. A logo that renders
 differently on a machine without the right font is not a logo, so **no asset
@@ -70,7 +72,8 @@ them — a hand-placed offset goes wrong silently the first time either moves.
 
 ## Where it is wired in
 
-- `doc/source/conf.py`: `html_logo` and `html_favicon`, both `spear-mark.svg`.
+- `doc/source/conf.py`: `html_logo` is `spear-mark.svg`, `html_favicon` is
+  `spear-favicon.svg`.
 - `doc/source/_static/theme_overrides.css`: the light card behind the sidebar
   mark, the same treatment the sibling projects give theirs, because teal on
   the theme's blue has too little contrast.

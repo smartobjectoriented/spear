@@ -110,6 +110,7 @@ RUN chmod +x /opt/spear/entrypoint.sh /opt/spear/spear-run.sh /usr/local/bin/spe
 ENV SPEAR_COMMON_STATE_DIR=/opt/spear/common
 ENV SPEAR_STANDARDS_ROOT=/opt/spear/common/standards
 ENV SPEAR_STATE_DIR=/opt/spear/state
+ENV SPEAR_SHIPPED_DB_PATH=$APP/chromadb
 ENV SPEAR_CORPUS_ROOT=/corpora
 ENV PATH=$APP/bin:$PATH
 WORKDIR /corpora

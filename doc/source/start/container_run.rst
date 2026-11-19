@@ -161,6 +161,28 @@ container reaches it through an SSH tunnel you open on your machine.
    directory the image does not know, bound at its own path; ``/reindex``
    then builds its index into your state volume.
 
+7. **Use Claude Code** in the container instead of SPEAR, on your own tree,
+   with the corpus's rules, skills and index already in place.  The image
+   gains it as one more layer:
+
+   .. code-block:: console
+
+      $ scripts/docker/add-claude.sh <registry>/spear:<version>-<entity>
+
+   Then, from your checkout:
+
+   .. code-block:: console
+
+      $ cd ~/src/my-checkout && spear-run.sh --claude --tree <corpus name>
+
+   No model and no key are named: it asks you to log in with your own
+   account on the first run, and the login stays in your state volume.  The
+   rules and skills that apply to the corpus are laid out in the container's
+   home, never in your tree, and the corpus index is its ``spear-corpus`` MCP
+   server (:ref:`mcp_server`).  ``--here`` works as above: the tree gets the
+   rules that apply everywhere and can search every corpus of the image.
+   ``SPEAR_CLI=claude`` in the configuration file makes it the default.
+
 The ``--ask`` at the end is the permission mode (:ref:`usage`): confirm each
 edit and command.  ``--safe`` is read-only, ``--auto`` runs without asking.
 Everything a session accumulates stays in ``~/.spear/state`` on your machine.

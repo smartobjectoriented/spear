@@ -41,6 +41,11 @@ class ExportRules(unittest.TestCase):
         self.assertTrue(files[".claude/rules/spear-global.md"].startswith(
             '---\npaths:\n  - "doc/**"\n  - "src/**"\n---\n\n# global\n'))
 
+    def test_no_corpus_leaves_what_applies_everywhere(self):
+        files = claude_export.export_rules(RULES, set())
+
+        self.assertEqual(sorted(files), [".claude/rules/spear-global.md"])
+
     def test_a_family_rule_follows_the_registry_entry(self):
         names = claude_export.corpus_names({"alpha": {}}, "alpha", ("build",))
 

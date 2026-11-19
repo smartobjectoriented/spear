@@ -401,7 +401,7 @@ class TheStandaloneLauncherNeedsOnlyDocker(unittest.TestCase):
 
         for option in ("--image", "--pull", "--reds", "--key", "--endpoint",
                        "--provider", "--model", "--tree", "--here",
-                       "--corpus", "--mount", "--state", "--list"):
+                       "--corpus", "--mount", "--state", "--list", "--claude"):
             with self.subTest(option=option):
                 self.assertIn(option, out)
 
@@ -458,6 +458,19 @@ class TheStandaloneLauncherNeedsOnlyDocker(unittest.TestCase):
         self.assertIn(f"{os.getcwd()}:/corpora/some/tree", sent)
         self.assertEqual(sent[sent.index("-w") + 1], "/corpora/some/tree")
         self.assertEqual(sent[-6:-1], ["--provider", "anthropic", "--model", "m1", "--ask"])
+
+    def test_the_assistant_needs_no_model_and_gets_the_corpus(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            env = self.docker_recording(tmp)
+            result = self.run_it("--claude", "--tree", "name", "--state", f"{tmp}/state",
+                                 "--", "--continue", env=env)
+            sent = (Path(tmp) / "run").read_text().split("\n")
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(sent[sent.index("--entrypoint") + 1], "spear-claude")
+        self.assertNotIn("SPEAR_API_BASE", " ".join(sent))
+        self.assertEqual(sent[sent.index("-w") + 1], "/corpora/some/tree")
+        self.assertEqual(sent[-4:-1], ["--corpus", "name", "--continue"])
 
     def test_the_image_carries_it(self):
         dockerfile = (REPO / "docker" / "Dockerfile").read_text()

@@ -13,7 +13,8 @@ same channel as the MCP server does:
     ssh host docker run --rm --entrypoint spear-claude-export IMAGE \\
         --corpus NAME | tar -x -C <project tree>
 
-Only what applies to the named corpus is written. A rule scoped to a path is
+Only what applies to the named corpus is written; without --corpus, only what
+applies to every tree. A rule scoped to a path is
 left out: the tree it names is one of this machine, not of the reader's.
 """
 
@@ -133,8 +134,8 @@ def main(argv=None):
     argv = list(sys.argv[1:] if argv is None else argv)
     corpus, directory = _option(argv, "--corpus"), _option(argv, "--out")
 
-    if not corpus:
-        print("usage: spear-claude-export --corpus NAME [--out DIR]", file=sys.stderr)
+    if "-h" in argv or "--help" in argv:
+        print("usage: spear-claude-export [--corpus NAME] [--out DIR]", file=sys.stderr)
 
         return 2
 
@@ -145,13 +146,20 @@ def main(argv=None):
 
     projects = corpus_registry.load_projects()
 
-    if corpus not in projects:
+    if corpus and corpus not in projects:
         print(f"spear-claude-export: no corpus named '{corpus}' "
               f"(known: {', '.join(sorted(projects)) or 'none'})", file=sys.stderr)
 
         return 2
 
-    names = corpus_names(projects, corpus, project_families(projects[corpus])[0])
+    # No corpus named: a tree this install does not know, which gets what
+    # applies everywhere and nothing else.
+
+    names = set()
+
+    if corpus:
+        names = corpus_names(projects, corpus, project_families(projects[corpus])[0])
+
     rules = {}
 
     if os.path.isdir(RULES_DIR):
@@ -170,7 +178,8 @@ def main(argv=None):
     else:
         write_tar(files, sys.stdout.buffer)
 
-    print(f"spear-claude-export: {len(files)} files for '{corpus}'", file=sys.stderr)
+    print(f"spear-claude-export: {len(files)} files for "
+          + (f"'{corpus}'" if corpus else "any tree"), file=sys.stderr)
 
     return 0
 

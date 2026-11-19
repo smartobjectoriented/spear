@@ -1,0 +1,54 @@
+#!/bin/bash
+# Claude Code on this image's corpora: the rules and skills of the corpus are
+# laid out where it reads them, the corpus index is its MCP server, and it
+# starts in the current directory.
+#
+#     docker run --rm -it --entrypoint spear-claude IMAGE [--corpus NAME] [claude args]
+#
+# Everything is written under HOME, never in the tree: a checkout bound into
+# the container stays as git left it. HOME is expected to outlive the
+# container, since the login is kept there too.
+
+set -e
+
+CORPUS=""
+
+if [ "$1" = --corpus ]; then
+    CORPUS="$2"
+    shift 2
+fi
+
+command -v claude >/dev/null || {
+    echo "spear-claude: this image carries no claude; build it with scripts/docker/add-claude.sh" >&2
+    exit 1
+}
+
+CONF="$HOME/.claude"
+LIST="$CONF/.spear-exported"
+mkdir -p "$CONF"
+
+# What the previous run exported goes first: another corpus has other rules.
+
+if [ -f "$LIST" ]; then
+    while IFS= read -r path; do
+        rm -f "$CONF/$path"
+    done < "$LIST"
+fi
+
+STAGE="$(mktemp -d)"
+trap 'rm -rf "$STAGE"' EXIT
+
+spear-claude-export ${CORPUS:+--corpus "$CORPUS"} --out "$STAGE"
+
+if [ -d "$STAGE/.claude" ]; then
+    (cd "$STAGE/.claude" && find . -type f | sed 's|^\./||') > "$LIST"
+    cp -r "$STAGE/.claude/." "$CONF/"
+fi
+
+# The index is registered for the user, so it is there whatever follows on
+# the command line.
+
+claude mcp remove --scope user spear-corpus >/dev/null 2>&1 || true
+claude mcp add --scope user spear-corpus -- spear-mcp ${CORPUS:+--corpus "$CORPUS"} >/dev/null
+
+exec claude "$@"

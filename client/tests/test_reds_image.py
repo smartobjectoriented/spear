@@ -401,7 +401,7 @@ class TheStandaloneLauncherNeedsOnlyDocker(unittest.TestCase):
 
         for option in ("--image", "--pull", "--reds", "--key", "--endpoint",
                        "--provider", "--model", "--tree",
-                       "--corpus", "--mount", "--state", "--list"):
+                       "--corpus", "--mount", "--state", "--list", "--install"):
             with self.subTest(option=option):
                 self.assertIn(option, out)
 
@@ -485,6 +485,28 @@ class TheStandaloneLauncherNeedsOnlyDocker(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn(f"{tmp}/some/tree:/corpora/some/tree", sent)
         self.assertEqual(sent[sent.index("-w") + 1], "/corpora/some/tree/src")
+
+    def test_install_copies_the_launcher_and_keeps_an_existing_configuration(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            env = {k: v for k, v in os.environ.items()
+                   if not k.startswith(("SPEAR_", "XDG_"))}
+            env["HOME"] = tmp
+            first = self.run_it("--install", "--image", "registry/spear:1", env=env)
+            installed = Path(tmp) / ".local/bin/spear-run.sh"
+            conf = Path(tmp) / ".config/spear/local.conf"
+
+            self.assertEqual(first.returncode, 0, first.stderr)
+            self.assertEqual(installed.read_text(), self.SCRIPT.read_text())
+            self.assertTrue(os.access(installed, os.X_OK))
+            self.assertIn("SPEAR_IMAGE=registry/spear:1\n", conf.read_text())
+
+            conf.write_text("SPEAR_IMAGE=mine\n")
+            again = subprocess.run([str(installed), "--install"], env=env,
+                                   capture_output=True, text=True, timeout=30)
+
+            self.assertEqual(again.returncode, 0, again.stderr)
+            self.assertEqual(conf.read_text(), "SPEAR_IMAGE=mine\n")
+            self.assertEqual(installed.read_text(), self.SCRIPT.read_text())
 
     def test_the_image_carries_it(self):
         dockerfile = (REPO / "docker" / "Dockerfile").read_text()

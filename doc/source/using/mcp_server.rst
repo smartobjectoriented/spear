@@ -60,3 +60,32 @@ in.
 The first search of a server process loads the embedding model and the index,
 which takes some tens of seconds on a CPU and, for a large corpus, several
 gigabytes of memory. Later searches of the same process do not pay it again.
+
+Rules and skills for Claude Code
+********************************
+
+The index is one half of what an image knows about a project; its rules and
+skills are the other. ``spear-claude-export`` writes the ones that apply to a
+corpus as Claude Code project files, on stdout as a tar:
+
+.. code-block:: console
+
+   $ ssh <host> docker run --rm --entrypoint spear-claude-export <image> \
+         --corpus <name> | tar -x -C <project tree>
+
+.. list-table::
+   :header-rows: 1
+   :widths: 44 56
+
+   * - File
+     - From
+   * - ``.claude/rules/spear-<rule>.md``
+     - a ``rules.d`` file whose scope is global, the corpus, one it federates
+       or a family it declares; a ``paths`` header is carried over
+   * - ``.claude/skills/<skill>/SKILL.md``
+     - a skill whose scope covers the corpus; its description is the skill's
+       summary
+
+A rule scoped to a path is left out, since the path is one of the image and
+not of the reader's machine. Running the export again replaces the files it
+wrote before and touches no other.

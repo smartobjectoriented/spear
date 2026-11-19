@@ -45,14 +45,19 @@ RUN python3 -m venv "$APP" \
     && "$APP/bin/pip" install --no-cache-dir -r deploy/requirements.txt
 
 # The embedder (bge-m3) and Chroma's default MiniLM, baked at build time so a
-# fresh container neither downloads 4.3 GB on first run nor fails offline.
+# fresh container neither downloads them on first run nor fails offline.
+#
+# bge-m3 publishes its weights as pytorch_model.bin. Left to itself,
+# transformers also fetches the safetensors conversion of them, which is the
+# same 2.3 GB a second time and is never loaded.
 
 ENV HF_HOME=/opt/spear/hf
 ENV HF_HUB_DISABLE_XET=1
+ENV DISABLE_SAFETENSORS_CONVERSION=1
 RUN "$APP/bin/python" -c "\
 from sentence_transformers import SentenceTransformer; \
 SentenceTransformer('BAAI/bge-m3')" \
-    && find /opt/spear/hf -name '*.onnx' -delete 2>/dev/null || true
+    && find /opt/spear/hf -name '*.onnx' -delete
 
 RUN HOME=/opt/spear/chroma-home "$APP/bin/python" -c "\
 from chromadb.utils.embedding_functions import ONNXMiniLM_L6_V2; \

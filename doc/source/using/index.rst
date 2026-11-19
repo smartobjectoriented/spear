@@ -5,8 +5,8 @@ Using SPEAR
 ===========
 
 The day-to-day surface: the chat and its commands, the corpora it answers
-from, how retrieval and the context window are managed, and every setting
-that changes them.
+from, how retrieval works, what each turn is shown, how the conversation is
+carried, and every setting that changes them.
 
 .. toctree::
    :maxdepth: 2
@@ -14,6 +14,7 @@ that changes them.
    spear-chat <usage>
    projects
    retrieval
+   context_selection
    context
    knowledge
    capabilities

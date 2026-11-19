@@ -56,20 +56,22 @@ explicitly granted network access.
 
 ## Quick start
 
-With Docker and access to a model server:
+With Docker and an OpenAI-compatible model endpoint:
 
 ```sh
 git clone https://github.com/smartobjectoriented/spear ~/spear
 cd ~/spear
-scripts/docker/build.sh                              # ~20 min, mostly the embedder
-scripts/docker/spear-docker.sh --reds --auto         # opens the tunnel, then chats
+scripts/docker/build.sh          # spear:<version>-public, ~20 min, mostly the embedder
 ```
 
-To run it natively — to change the harness, index your projects or bind your
-own standards — start from `client/deploy/install.sh`. Both paths, and the
-three `--security-opt` flags without which the sandbox cannot start in a
-container, are in
-[Getting started](https://smartobjectoriented.github.io/spear/start/getting_started.html).
+Then run the image against your endpoint and your checkouts as
+[Running the public image](https://smartobjectoriented.github.io/spear/start/container_run.html)
+shows: its `docker run` line carries the three `--security-opt` flags without
+which the sandbox cannot start in a container.
+
+To run SPEAR natively — to change the harness, index your projects or bind
+your own standards — follow
+[Installation](https://smartobjectoriented.github.io/spear/start/installation.html).
 
 ## Where to read what
 

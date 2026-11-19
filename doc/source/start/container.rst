@@ -5,11 +5,14 @@ Container
 =========
 
 The container exists to hand the assistant to someone else: the :term:`harness`, its
-dependencies, the embedder and a prebuilt retrieval index, in one image.  They
-mount their own checkouts and point it at a model endpoint.
+dependencies and the embedder in one image, with — in a ``private`` image —
+the building host's retrieval index, normative store and team knowledge as
+well (:ref:`image-profiles`).  The recipient mounts their own checkouts and points it
+at a model endpoint.
 
-This chapter is for whoever **builds** the images.  To run a published one,
-read :ref:`container_run` instead.
+This chapter is for whoever **builds** the images: what goes in, how a
+deployment's content gets there, and how an image is published.  To run a
+published one, read :ref:`container_run`, the user's page, instead.
 
 The image is defined in ``docker/``; the scripts that build, run and
 publish it are in ``scripts/docker/``, and ``scripts/spear-image`` drives them
@@ -29,7 +32,7 @@ publish it are in ``scripts/docker/``, and ``scripts/spear-image`` drives them
      - The corpus registry, in **relative** paths.  *Generated* by
        ``gen-registry.py`` and not in the repository.
    * - ``docker/README.md``
-     - The short version, for whoever receives the image.
+     - A pointer to these pages, kept beside the ``Dockerfile``.
    * - ``scripts/spear-image``
      - The operator's entry point: build, list, inspect, run, save, load,
        push, erase.
@@ -104,7 +107,7 @@ profiles, follow.
 A profile names the tag ``build.sh`` gives by default,
 ``spear:<version>-<profile>``, where the version is the release the tree is
 (``scripts/spearversion.sh``: the latest ``v*`` tag, else the fallback the
-release sets, such as ``0.3.0-rc1``);
+release sets, such as ``0.3.0``);
 anything containing a ``:`` is taken as a tag.  ``spear-image`` decides nothing the scripts under it
 would not: ``build.sh`` still decides what a profile may carry and ``push.sh``
 still refuses a ``private`` image without ``--allow-push``.
@@ -120,9 +123,13 @@ Daily use
 
    spear-docker --reds --auto        # what `spear-chat --reds --auto` does
 
-``~/.local/bin/spear-docker`` is the sibling of ``spear-chat`` and takes the
-same arguments; everything after them is passed to the harness unchanged.
-Three things the runner does that the native launcher does not have to:
+``spear-docker`` is ``scripts/docker/spear-docker.sh`` linked onto ``PATH``
+beside ``spear-chat``.  Its own options are ``--reds``, ``--endpoint URL``,
+``--state DIR`` and ``--mount DIR``; everything else is passed to the harness
+unchanged.  It runs the ``private`` image of this machine,
+``spear:<version>-private`` (``SPEAR_IMAGE`` names another), and needs the
+native installation beside it, from which it reads the registry.  Three
+things the runner does that the native launcher does not have to:
 
 **The SSH tunnel stays on the host.** ``--reds`` opens it exactly as
 ``spear-chat.sh`` does, reading the same ``reds.conf``, then hands the
@@ -144,40 +151,10 @@ instead (:ref:`container_run`).
 :term:`workspace knowledge`, trajectories and the audit trail accumulate; ``docker run --rm``
 would throw them away, and a container running as root would leave them
 owned by root and unreadable to the harness running natively.  The default is
-``~/.spear/state``, overridable with ``--state DIR`` or
-``SPEAR_STATE_DIR``.
-
-That separation is also a property of the harness itself: ``STATE_DIR`` covers
-every path that accumulates and defaults to the application directory, so a
-workstation launch is unaffected.  The paths that matter most are the ones that
-make a session reconstructible rather than merely readable:
-
-.. list-table::
-   :header-rows: 1
-   :widths: 34 66
-
-   * - Path under ``STATE_DIR``
-     - What is lost with it
-   * - ``audit/sessions/``
-     - the resumable session — an interrupted task cannot be picked up again
-   * - ``audit/tool-results/``
-     - the full tool output kept out of model context; only the previews the
-       model saw would survive
-   * - ``audit/checkpoints/``
-     - the exact pre-mutation bytes, so a rollback has nothing to restore from
-   * - ``audit/runtime-trace.jsonl``
-     - the spans: which tool ran, how long, with what outcome
-   * - ``audit/tool-actions.jsonl``
-     - the metadata-only record of every mutating attempt
-   * - ``knowledge.sqlite3``
-     - the workspace knowledge: every recorded fact, its provenance and its
-       state
-   * - ``history*.json``, ``history-archive.jsonl``, ``trajectories.jsonl``,
-       ``.input_history``
-     - conversation, and the trajectories a future fine-tune would train on
-
-Evidence inside the image is evidence lost with the container that produced
-it, which is precisely the case it exists for.
+``~/.spear/state``, mounted on ``/state``, overridable with ``--state DIR`` or
+``SPEAR_STATE_DIR``.  What that directory holds is listed in
+:doc:`/operations/directory_layout`; evidence kept inside the image would be
+lost with the container that produced it.
 
 External capabilities are not baked: ``capabilities.json`` is a machine's own
 file, and the MCP servers it starts must exist where the harness runs. A
@@ -198,20 +175,22 @@ What is baked, and what is not
      - image
      - pinned, reproducible
    * - embedder (bge-m3)
-     - image, 4.5 G
+     - image, 4.3 GB
      - fetching it on first run is a surprise on a machine that may have no
        Hugging Face access at all
    * - ChromaDB index
-     - image *if the building host has one*, 4.5 G
+     - ``private`` image *if the building host has one*; as large as what
+       the host indexed, several GB
      - re-indexing takes hours *and* needs every corpus tree present — the one
        thing a newcomer does not have
    * - rules, skills, benches, notes corpus
      - image *if present*
      - a deployment's own content; see below
    * - ``corpora/``
-     - image, 38 M
-     - cross-cutting references, attached to every session without duplicating
-       them into each project index
+     - image
+     - cross-cutting API references the host generated (such as the musl
+       header snapshot of ``corpora/refresh-musl-headers.sh``), attached to
+       every session without duplicating them into each project index
    * - source trees
      - **mounted**
      - working copies that change daily; an image would be stale the next
@@ -223,18 +202,20 @@ What is baked, and what is not
 Two build contexts
 ==================
 
-``build.sh`` passes two, and the reason is size:
+``build.sh`` passes two main ones, and the reason is size:
 
 ``.`` (default) → ``client/``
-   Harness code and the prebuilt index.  Narrow on purpose: a wider context
-   would be re-transferred on every build and would invalidate the 4.5 GB
-   embedder layer.
+   Harness code.  Narrow on purpose: a wider context would be re-transferred
+   on every build and would invalidate the 4.3 GB embedder layer.
 
 ``repo`` (named) → the repository root
    Only ``corpora/``, ``docker/entrypoint.sh`` and the generated
    ``docker/projects.docker.json`` are taken from it.  A named context is
    fetched lazily — BuildKit transfers only the paths actually ``COPY``-ed — so
-   pointing it at a tree holding 122 GB of weights costs nothing.
+   pointing it at a tree that also holds model weights costs nothing.
+
+The index and the other optional inputs are named contexts of their own
+(`The optional inputs`_).
 
 A bare ``docker build`` therefore fails on the missing ``--from=repo``.
 
@@ -246,13 +227,10 @@ The optional inputs
 Five of the things the image would like to carry are **not in the repository
 and cannot be**: the retrieval index is built on the host and gitignored, and
 the rules, the skills, the benches and the shared notes corpus are a
-deployment's own content.  Requiring them meant the documented build failed on
-a clean clone — on the first missing one, with a message about a directory the
-reader had no way to produce.
-
-Each is now a named context of its own, resolved by ``build.sh`` in three
-steps: the environment variable, else the in-tree directory, else an **empty
-directory**.
+deployment's own content.  Each is a named context of its own, resolved by
+``build.sh`` in three steps: the environment variable, else the in-tree
+directory, else an **empty directory** — so a clean clone builds an image that
+simply carries less.
 
 .. list-table::
    :header-rows: 1
@@ -283,10 +261,9 @@ question.  An empty context still creates the directory, so the harness finds
 an empty directory rather than no directory — which is the difference between
 "no rules" and a stack trace.
 
-The first four variables are the same ones the harness itself reads at runtime
-(:ref:`resource-directories`), so a deployment that keeps its rules outside the
-checkout points one variable at them and both the native run and the image
-follow.
+``SPEAR_RULES_DIR``, ``SPEAR_SKILLS_DIR`` and ``SPEAR_BENCH_DIR`` are the
+variables the harness itself reads at runtime (:ref:`resource-directories`), so
+one setting covers both the native run and the image.
 
 Two further contexts are **staged** rather than pointed at, because neither is
 a directory that happens to be in the right shape already: the normative store
@@ -468,7 +445,7 @@ is a second repository:
    * - What
      - How it gets in
    * - rules, skills, benches
-     - ``machine.env`` sets ``SPEAR_RULES_DIR`` and the other two;
+     - ``machine.env`` sets their variables (:ref:`resource-directories`);
        ``build.sh`` resolves them as named contexts
        (:ref:`optional-build-inputs`)
    * - the normative store
@@ -578,8 +555,8 @@ It registers every corpus **relative** to ``SPEAR_CORPUS_ROOT`` (``/corpora``
 in the image), where a workstation registry uses absolute paths under the
 operator's home.  That is what makes one
 image work for someone whose checkouts live elsewhere;
-``resolve_corpus_path()`` leaves absolute paths untouched, so the workstation
-keeps behaving exactly as before (:doc:`/using/retrieval`).
+``resolve_corpus_path()`` leaves absolute paths untouched, so a workstation
+registry works unchanged (:doc:`/using/retrieval`).
 
 A tree the host does not have is not an error.  The entrypoint prints what
 resolved and what did not, at startup, rather than letting a missing corpus
@@ -588,14 +565,16 @@ surface three questions later as an empty retrieval.
 Mounts are derived, not listed
 ==============================
 
-Without ``--corpora DIR``, ``spear-docker.sh`` computes one bind per registered
-corpus from the registry itself, dropping any path already inside another.
+``spear-docker.sh`` computes its binds from the registry itself: one per
+registered corpus, plus the repository and the current working directory,
+dropping any path already inside another, each at its own absolute path.
+``/usr/local/bin`` and ``/opt/toolchains`` are added read-only, for the
+cross-toolchains, and ``--mount DIR`` adds a tree a build needs that is not a
+corpus.  A corpus added to the registry is therefore mounted without touching
+the script.  The repository is mounted whole and read-write, so anything kept
+inside the checkout — model weights included — is visible to the container.
 
-This is not tidiness.  Binding the whole SPEAR checkout — the obvious
-single mount — would put ``models/`` (75 G) and the served GGUFs (47 G) inside
-the container **read-write**, in the one tree the sandbox grants write access
-to, for no retrieval value.  Weights are not corpus.  Deriving the list also
-means a corpus added to the registry is mounted without touching this script.
+.. _container-security-opts:
 
 The three flags that are not optional
 =====================================
@@ -618,6 +597,11 @@ None of the flags grants the container new privileges on the host: all three are
 letting an *unprivileged* namespace be created inside it.  The sandbox is
 still what confines the model's commands, and it is still doing its job.
 
+``spear-docker.sh`` also passes ``--memory``, ``--pids-limit`` and ``--cpus``
+with ``SPEAR_RESOURCE_CONTROL=delegated``: there is no systemd inside the
+container to scope each command, so the limits are enforced by Docker for the
+container as a whole (:ref:`resource_control`).
+
 Refreshing the index
 ====================
 
@@ -630,8 +614,10 @@ ones after it are rebuilt.
    spear-index /path/to/tree     # updates chromadb/ on the workstation
    scripts/docker/build.sh --profile private
 
-Why retrieval is not served from the GPU host
-=============================================
+Design rationale: retrieval stays in the client
+================================================
+
+This section records a design decision rather than a procedure.
 
 The obvious economy is to move the embedder and the index onto the machine
 that already serves the model, and keep a thin client here.  It was costed and
@@ -650,24 +636,25 @@ What it would save, measured on a development workstation:
      - 4.0 GB
    * - the bge-m3 weights
      - 4.3 GB
-   * - the ChromaDB index
-     - 4.3 GB
+   * - the ChromaDB index (grows with what is indexed)
+     - ~5 GB
    * - **total**, leaving ~0.2 GB of client
-     - **12.6 GB**
+     - **~13 GB**
 
 The image would fall from 17.1 GB to roughly 5 GB, and the ten-second embedder
 load on the first query of a session would disappear, since the model would
 stay resident server-side on a GPU.  Latency is not the objection: a round trip
 through the SSH tunnel that is already open measures **17 ms**, against ~100 ms
-for a local CPU embedding.  (The existing ``deploy/embed_worker.py`` could not
-be used as it stands: it opens one SSH connection per batch, **350 ms**, which
-is right for indexing 45 000 chunks once and wrong for three embeddings a
-turn.  It would need a persistent service behind the tunnel.)
+for a local CPU embedding.  (The offload worker, ``server/embed/worker.py``,
+could not be used as it stands: it serves one request per SSH invocation,
+**350 ms**, which is right for indexing tens of thousands of chunks once and
+wrong for three embeddings a turn (:doc:`/using/retrieval`).  It would need a
+persistent service behind the tunnel.)
 
 It was declined for three reasons, in increasing order of weight:
 
-* **It ends offline operation.**  Retrieval is what turns 18 % into 90 % on the
-  build-system questions.  Making it require a VPN and a reachable GPU host means a
+* **It ends offline operation.**  Retrieval is what makes answers about a
+  project reliable (:ref:`retrieval-measured-effect`).  Making it require a VPN and a reachable GPU host means a
   session on a train is not a degraded session, it is a different assistant.
 * **It empties the container of its purpose.**  The image exists so that
   retrieval works the moment it starts, on a machine that may have no Hugging

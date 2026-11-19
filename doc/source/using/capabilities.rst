@@ -69,7 +69,7 @@ deployment's own file: commands and server names are not public material.
 What a turn is offered
 **********************
 
-A provider is a candidate like a rule: its scope and task classes decide which
+A provider is a candidate like a rule: its scope and request classes decide which
 turns it reaches, and the decision is audited with the others. A provider for
 one project never reaches another, and an unregistered tree inherits none.
 External capabilities reach implementation turns, general questions (read
@@ -91,8 +91,9 @@ its words are split but never expanded, and its arguments are parsed as JSON.
 The name anywhere else, such as an argument to ``grep``, is ordinary text.
 
 A change in a standard-bound session that does not concern the standard runs
-on SPEAR's earlier runtime, which has no capability gateway: such a turn is not
-offered external capabilities, says so, and records it.
+on the normative runtime's change workflow (:doc:`/reasoning/workflow`), which
+has no capability gateway: such a turn is not offered external capabilities,
+says so, and records it.
 
 How much it is shown depends on the size of the family:
 

@@ -117,7 +117,11 @@ class CommandLine(unittest.TestCase):
         source = (ROOT / "cli/startup_banner.py").read_text(encoding="utf-8")
         start, end = source.index("PERMISSIONS  ("), source.index("SESSION SETTINGS  (")
         flags = set(re.findall(r"(?<![\w-])(--[a-z][a-z-]+)", source[start:end]))
-        text = page("using/usage.rst")
+
+        # usage.rst introduces the modes, configuration.rst is the reference:
+        # a flag has to be in one of them.
+
+        text = page("using/usage.rst") + page("using/configuration.rst")
 
         self.assertIn("--auto", flags)
         for flag in flags:

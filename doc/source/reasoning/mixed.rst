@@ -103,9 +103,10 @@ than its limit, or a closure that would add too many provisions, is not
 absorbed — the coverage is marked **INCOMPLETE**, and an incomplete coverage
 can never yield ``COMPLIANT``. A pre-pass that cites nothing identifiable also
 leaves coverage incomplete; the packet is never filled from whatever retrieval
-happened to return. The coverage reason says which of three things happened:
-the pass answered and cited no provision, its answer was withheld because the
-evidence did not support it, or it did not complete.
+happened to return. When the packet has no constraints, a non-empty reason
+from the pre-pass outcome replaces the packet's ``coverage_reason``: the pass's
+answer was withheld because the evidence did not support it, or the pass did
+not complete; otherwise the packet's own reason stands.
 
 Applicability
 -------------
@@ -132,17 +133,19 @@ The model's view (*possibly applicable* because the pre-pass cited it,
 advice. It never discards a requirement and never adds one.
 
 An ``UNRESOLVED`` requirement can be neither met nor failed: it holds the
-verdict at ``COMPLIANCE NOT DEMONSTRATED``, it is never reported as
-``VIOLATED``, and it is never repaired.
+verdict at ``COMPLIANCE NOT DEMONSTRATED`` — or ``EVIDENCE CONFLICT`` when its
+evidence conflicts — it is never reported as ``VIOLATED``, and it is never
+repaired.
 
 The packet the coding core receives
 -----------------------------------
 
 The active set becomes a ``NormativeConstraintSet``: one constraint per
-provision, each with the provision's identity (``ProvisionKey`` and
-``ProvisionInstanceId``), its modality (SHALL, SHOULD, MAY), the requirement in
-the document's words, its condition, any exact count, any stated values and
-identifiers, and a one-line implication — "permitted, not required: the
+provision, each with the provision's identity (``provision`` and
+``instance_id``, from ``ProvisionKey`` and ``ProvisionInstanceId``), its
+``modality`` (SHALL, SHOULD, MAY), the ``requirement`` in the document's words,
+its ``condition``, any exact count (``cardinality``), any stated ``values`` and
+``identifiers``, and a one-line implication — "permitted, not required: the
 implementation must still work when it is absent" for a MAY, "applies only when
 …" for a conditional requirement. The set has a stable identity that the audit
 trail and the verdict refer to.

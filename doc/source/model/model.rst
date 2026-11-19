@@ -12,19 +12,20 @@ attempts measured before this one was chosen.
 .. toctree::
    :maxdepth: 2
 
-   inference_host
-   model_serving
    backends
+   model_serving
+   inference_host
    runtime_bootstrap
    training
    model_history
 
-:doc:`inference_host` is the procedure: an empty GPU machine to a supervised
-server with clients attached. :doc:`model_serving` covers the serving side: the quantised weights, the
-GPU/CPU split and the flags that decide throughput. :doc:`runtime_bootstrap`
-is what has to be true before the first token, and what the harness does when
-it is not. :doc:`backends` covers the endpoints the client can talk to
-and how it is pointed at one.
+:doc:`backends` is the client side: the endpoints and ports the client can
+talk to, how it is pointed at one, and what it sends. :doc:`model_serving`
+covers the serving side: the quantised weights, the GPU/CPU split and the
+flags that decide throughput. :doc:`inference_host` is the procedure: an
+empty GPU machine to a supervised server with clients attached.
+:doc:`runtime_bootstrap` is what has to be true before the first token, and
+what the harness does when it is not.
 
 :doc:`training` is the fine-tuning side, and it stands on its own: how the
 harness turns its own usage into a governed dataset, and what it takes to run

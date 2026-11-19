@@ -85,22 +85,19 @@ through the terminal.
 **Network.** A command reaches the network only if the session's mode grants
 it (below), through the sandbox's own network stack.
 
-**Repeated refusals.** A refusal is deterministic, so a turn that asks for the
-same refused operation five times is stopped and the stop audited
-(``repeated_refusal_stopped``, :doc:`tool_harness`).
+**What the model is told.** Only a ``denied`` result becomes a refusal: it
+reaches the coding core as a one-line ``refused: …`` reason
+(``control_plane.py``).  A command the operator declines in ``ASK`` comes back
+``cancelled`` and is read as an interrupted command; one that cannot be
+confined — the sandbox, ``prlimit`` or the cgroup mechanism unavailable — comes
+back ``failed`` with its reason (:ref:`fail_closed`).  A turn that keeps
+repeating a refused operation is stopped (:ref:`refusal_breaker`).
 
 **External capabilities.** ``spear-capability`` and ``spear-knowledge`` are
-host commands: SpearHost recognises them in a ``terminal`` call and answers
-them itself, and no shell ever runs them. Each must stand alone on one line —
-not in a pipeline, a list, a redirection or a substitution. A capability runs
-through the gateway (``capability_gateway.py``) only if its provider is
-admitted for the workspace and task class and the arguments fit its declared
-schema; a ``WRITE`` capability also needs a deployment that does not refuse
-it, a turn allowed to change things, and the session's confirmation (refused
-in ``SAFE``, asked in ``ASK``, accepted in ``AUTO``). Providers are MCP
-servers started by SPEAR on the host with only the environment their
-registration names; they are outside the Bubblewrap sandbox, which is why
-what a registration may do is the deployment's decision.
+host commands that SpearHost answers itself, never through a shell; a
+capability runs only through the gateway's scope, schema and read/write checks,
+and its MCP provider runs on the host, outside the Bubblewrap sandbox
+(:doc:`/using/capabilities`, :doc:`/using/knowledge`).
 
 **Audit and evidence.** Every call is audited, every mutation checkpointed for
 ``/undo``, and every call recorded as canonical evidence — what it changed,
@@ -159,10 +156,9 @@ Why reading outside the workspace is a grant, not a hole
 --------------------------------------------------------
 
 ``host:read`` lets a read-only command name an absolute path that no declared
-root contains.  Refusing them made whole questions unanswerable — "read the
-notes in ``/srv/notes``" died on ``path argument may escape the
-workspace``, a refusal the model could not act on — while buying no
-containment, because looking at a file is not changing it.
+root contains.  Refusing them would make whole questions unanswerable — "read
+the notes in ``/srv/notes``" — while buying no containment, because looking at
+a file is not changing it.
 
 The grant is read-only *by construction*: the vetted paths are exposed
 read-only (``--ro-bind-try``, so a file gone in between reports ``ENOENT``)
@@ -183,7 +179,7 @@ spelling and the resolved one, so a symlink is not a way round:
   ``$HOME``.
 * **relative ``..`` traversal** — the classifier cannot know which directory a
   shell stage resolved against, so the same string may denote two files.  The
-  refusal now says to name the path absolutely instead.
+  refusal says to name the path absolutely instead.
 
 ``host:read`` is listed as sensitive, so ``ASK`` confirms each command that
 leaves the declared trees, and every such read is recorded in the audit trail
@@ -195,28 +191,25 @@ Why SAFE may run a pipeline
 ``SAFE`` grants ``shell:complex`` because what makes ``SAFE`` safe is the
 **mount**, not the classifier: without ``workspace:write`` every root is
 bind-mounted read-only, so a pipeline physically cannot write.  Refusing
-``find … | head`` bought nothing — ``find … -type f`` was allowed, adding
-``| head`` was not — and an assistant that cannot pipe cannot search a tree.
+``find … | head`` while allowing ``find … -type f`` would buy nothing, and an
+assistant that cannot pipe cannot search a tree.
 
 Writing is still refused, twice over: a redirection or a writing binary
 declares ``workspace:write``, which ``SAFE`` does not grant, and the read-only
 mount would refuse it regardless.  ``tee`` is listed among the mutating
 binaries for exactly that reason — it writes a file with no redirection
 operator, so the ``>`` heuristic never sees it — while a redirection to
-``/dev/null`` no longer demands write access, since it writes nothing.
+``/dev/null`` demands no write access, since it writes nothing.
 
 Why AUTO has the network, and how to take it away
 -------------------------------------------------
 
-``AUTO`` used to withhold it while ``ASK`` granted it, on the argument that
-network access is the one capability whose consequences leave the machine and
-cannot be reviewed afterwards from the workspace diff.  The argument is sound
-and the placement was not: ``AUTO`` is ``ASK`` without the prompt, so it cannot
-grant *less* than ``ASK``.  The result was that ``-y`` — reached for precisely
-to stop being blocked — was the one mode that still refused ``curl``, while the
-banner advertised it as the permissive one.
+``AUTO`` is ``ASK`` without the prompt, so it cannot grant *less* than
+``ASK``: network access, whose consequences leave the machine and cannot be
+reviewed afterwards from the workspace diff, is confirmed in ``ASK`` and
+granted in ``AUTO``.
 
-``--no-network`` is the way to an offline session, and it now means the whole
+``--no-network`` is the way to an offline session, and it means the whole
 session: ``CapabilityPolicy.without_network()`` drops the capability from every
 mode, and ``rag_chat`` also withholds ``search_internet`` and ``fetch_url``.
 Those two reach the internet from the chat process, outside the capability
@@ -272,12 +265,11 @@ checks the class and its required capabilities against the mode:
 Two rules about redirections are worth stating, because getting them wrong is
 expensive in both directions:
 
-* ``<`` and ``>`` introduce a **file**, not a command.  Treating the token
-  after them as a command stage made ``/dev/null`` trip the "argv[0] contains a
-  slash" rule, so every command carrying ``2>/dev/null`` — the most common
-  idiom in shell — was refused as a *dangerous shell stage*, ``ls 2>/dev/null``
-  included.  An assistant that cannot suppress stderr cannot search a tree, and
-  a real session was spent discovering that.
+* ``<`` and ``>`` introduce a **file**, not a command.  Read as a command
+  stage, ``/dev/null`` would trip the "argv[0] contains a slash" rule and
+  refuse ``ls 2>/dev/null`` — the most common idiom in shell — as a
+  *dangerous shell stage*; an assistant that cannot suppress stderr cannot
+  search a tree.
 * The redirection **target is still checked, as a path**.  An absolute target,
   or one escaping the workspace, stays dangerous; ``/dev/null``,
   ``/dev/stdout`` and ``/dev/stderr`` are the documented exceptions, since they
@@ -358,6 +350,8 @@ Two redactions happen before anything is written:
 and leading ``KEY=value`` environment assignments are stripped from the argv
 before the executable summary is derived, so ``FOO=secret make`` is summarised
 as ``make``, not as something containing ``secret``.
+
+.. _fail_closed:
 
 The fail-closed rule in practice
 ================================

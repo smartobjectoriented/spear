@@ -29,9 +29,41 @@ refusal to answer when the evidence is insufficient.
    The SPEAR infrastructure.  The two sources of truth — specification and
    implementation — are kept separate and reconciled only in the runtime.
 
+.. _deployment:
+
+Where each part runs
+====================
+
+SPEAR runs on two machines.  The operator machine — a workstation, or the
+container that stands for one — runs ``spear-chat`` and everything that
+touches a tree or keeps state: the control plane, the coding core and the
+normative runtime, the sandbox in which every tool, build and test runs, the
+project trees, the retrieval index and the state directory.  The inference
+host holds the GPU and runs only the ``server/`` component: ``llama-server``
+behind the ``spear-inference`` unit, serving the model on ``:8010``, the
+embedding worker that indexing calls over SSH, and fine-tuning.
+
+Two things cross between them.  Every model call goes through an SSH tunnel
+that ``spear-chat --reds`` opens from ``127.0.0.1:8082`` to the host's
+``:8010``; the prompt carries what the tools read, so that is what the host
+sees.  Indexing sends document chunks to the embedding worker and gets vectors
+back; a query is embedded on the operator machine and never leaves it.
+
+.. figure:: /img/SPEAR-Deployment.drawio.png
+   :width: 100%
+   :alt: The operator machine runs spear-chat, the sandbox, the project trees,
+         retrieval and state; the inference host runs llama-server, the
+         embedding worker and fine-tuning; a tunnel carries chat completions
+         and an SSH call carries document chunks to embed
+
+   Where each part runs, and what crosses between the two machines.
+
+Setting up the host is :doc:`/model/inference_host`; the ports and the other
+endpoints the client can use instead are in :ref:`backend_ports`.
+
 What a turn is told about its workspace — rules, skills, :term:`workspace knowledge`,
 project metadata — and the external capabilities it may reach are selected by
-the control plane per workspace and task class; they are described below
+the control plane per workspace and request class; they are described below
 (:ref:`context_selection`, :doc:`/using/knowledge`, :doc:`/using/capabilities`).
 
 .. _request_classes:
@@ -68,18 +100,13 @@ and from whether a standard is engaged for the session:
 The class decides the path:
 
 **The coding core, behind SpearHost** — every request with no standard engaged.
-A standalone tool-calling loop with six tools (``read_file``,
-``search_files``, ``patch``, ``write_file``, ``delete_file``, ``terminal``)
-whose every call crosses :term:`SpearHost`, the control plane. The turn ends with
-:term:`implementation evidence` computed from the record of what the calls did:
-``VERIFIED`` only when a build or test ran and passed after the last change to
-the source, in the final :term:`source epoch`. A command sent to the background, or a
-Makefile that only prints its help, is no check. The project's declared
-commands (``build_commands``, ``test_commands`` in ``projects.json``) and the
-ones SPEAR probes from the tree may both verify; a declared kind wins, and a
-probe only fills a kind left undeclared. The :term:`coding core` needs an
-OpenAI-compatible endpoint; the Anthropic backend serves the general and
-normative paths. See :doc:`/reasoning/implementation`.
+A standalone tool-calling loop with six tools whose every call crosses
+:term:`SpearHost`, the control plane. The turn ends with :term:`implementation
+evidence` computed from the record of what the calls did, never from the
+model's account of it (:doc:`/reasoning/evidence`); the checks that may verify
+it are the project's declared and probed commands (:doc:`/using/projects`). The
+:term:`coding core` needs an OpenAI-compatible endpoint; the Anthropic backend
+serves the general and normative paths. See :doc:`/reasoning/implementation`.
 
 **The normative runtime** — requests in a session where a standard is engaged.
 The provider-neutral ``AgentRuntime`` loop with the standard's tools, provision
@@ -106,7 +133,7 @@ workspace knowledge, project metadata and external capabilities. Every
 eligible skill is offered — there is no similarity gate, only a bound of eight
 per turn — and knowledge and capabilities reach the passes that run on the
 coding core, never a normative one. The selector also names the tool family;
-every decision is audited and none is shown to the model
+every decision is traced and none is shown to the model
 (:ref:`context_selection`).
 
 Runtime components
@@ -142,9 +169,9 @@ The coding core (``client/agent/``) imports nothing of SPEAR: it calls a
 ``Host`` interface for every read, write and command, and ``SpearHost``
 implements that interface with SPEAR's policy. Its evidence is turned into the
 implementation verdict by ``completion.py``. In front of every mutation,
-``target_policy.py`` refuses generated output and snapshot copies to every tool
-— ``delete_file`` and shell redirection included — and ``refusal_breaker.py``
-stops a turn that repeats the same refused operation five times. The capability
+``target_policy.py`` applies the :term:`target policy`
+(:doc:`/harness/security_model`), and ``refusal_breaker.py`` stops a turn that
+keeps repeating a refused operation (:doc:`/harness/tool_harness`). The capability
 gateway (``capability_gateway.py``) answers the ``spear-capability`` host
 command itself, never through a shell. The MIXED orchestration
 (``mixed_orchestration.py``) composes the two runtimes and the normative
@@ -154,131 +181,18 @@ evidence modules (``normative_constraints``, ``normative_coverage``,
 The ``AgentRuntime`` can also run Explorer and Reviewer roles with isolated
 contexts and read-only tools; they are experimental and off by default.
 
-Task ownership
-==============
+Where state is kept
+===================
 
-On the normative runtime, ``WorkingState`` is authoritative task truth.  It changes only through typed,
-grounded events.  Conversation, retrieved context, durable memory and compacted
-summaries are context sources, not alternative task-state stores.
+Sessions, tool results, checkpoints, traces and workspace knowledge live in the
+state directory, each with its own owner (:doc:`/operations/directory_layout`;
+retention in :doc:`/harness/internals`).  Turns are also recorded as
+trajectories, which the training subsystem curates into datasets outside the
+turn (:doc:`/model/training`).
 
-``TaskController`` owns the bounded synchronous lifecycle: optional planning,
-Main execution, verification, and checkpoint finalization by default. Explorer,
-Reviewer and their bounded repair cycle are explicit experimental opt-ins. It
-receives an already constructed
-``AgentContext`` and injected callbacks for project bench execution, diff
-evidence, child sessions, and the remaining code-block compatibility path.  It
-does not read terminal input, render output, choose a provider, or construct a
-filesystem persistence implementation.
-
-Context and memory
-==================
-
-On the normative runtime, ``ContextEngine`` composes the context.  It accounts
-for system rules, project rules, WorkingState projection, conversation
-summaries, recent conversation, retrieval and tool evidence.  The coding core
-builds its own request from the selected rules, project metadata, skills,
-workspace knowledge and admitted capabilities, and reads the tree through its
-tools; it does not compact, it stops at half the window and asks for a
-summary.  Each of its model responses is bounded by
-``SPEAR_RESPONSE_MAX_TOKENS`` (16384 by default).
-
-Workspace knowledge (``workspace_knowledge.py``) is what a workspace keeps
-across sessions: typed records with a provenance, a verification and a
-lifecycle (proposed, active, stale, revoked), stored in ``knowledge.sqlite3``
-under the state directory.  ``/remember`` and ``/knowledge`` record
-operator-confirmed knowledge; what a model offers — the ``remember`` tool, or
-``spear-knowledge propose`` on the coding core — is only a proposal, inert
-until the operator accepts it.  A record bound to a
-source file goes stale when the file changes, and two active records that
-disagree are reported as a conflict.  Knowledge describes; it never overrides
-the request, the rules, the configuration or WorkingState.  The legacy
-``memories-*.md`` notes are no longer shown to a turn;
-``/knowledge migrate-remember`` migrates them.
-
-External capabilities (``capabilities.py``, ``capability_gateway.py``,
-``mcp_provider.py``) are tools of MCP servers over stdio, registered in
-``capabilities.json`` (``SPEAR_CAPABILITIES_FILE``) with the workspaces and
-task classes they apply to and a read/write policy.  A small family is shown
-whole; a large one as an index that ``spear-capability list``,
-``describe`` and ``invoke`` read on demand.  A provider that cannot start is
-reported to the operator and to the turn.
-
-Persistence ownership and retention
-===================================
-
-Persistent artifacts have distinct owners:
-
-* ``audit/runtime-trace.jsonl`` is optional observability and may be rotated or
-  deleted without affecting resume.
-* ``audit/sessions/`` contains resumable state and references tool results and
-  checkpoints.  Do not remove an active session's referenced evidence.
-* ``audit/tool-results/`` holds full bounded-out-of-context tool evidence.
-* ``audit/checkpoints/`` holds exact pre-mutation bytes for safe rollback.
-* ``trajectories.jsonl`` and history files are training and user-facing
-  projections, not resumable runtime state.  Recording is deliberately wider
-  than judging: a turn the project's bench judged is recorded ``pass`` or
-  ``fail``, and a turn nothing judged is recorded ``unrated`` rather than
-  dropped.  Gating the recording on a verdict is what once left the dataset
-  holding a single trajectory — one project declares a bench — so the width is
-  the point, not an oversight.  ``/good`` promotes what was right.
-* ``knowledge.sqlite3`` is durable workspace knowledge; legacy
-  ``memories-*.md`` files are kept only until they are migrated.
-
-No automatic garbage collector currently runs.  Closed session bundles may be
-archived or deleted manually as a unit after their checkpoint and result
-references are no longer needed.  Deleting a trace or trajectory never repairs
-or invalidates a session; deleting referenced results/checkpoints makes the
-associated evidence unavailable.
-
-Training data as a by-product
-=============================
-
-Fifteen of the modules belong to a subsystem the rest of the harness feeds
-rather than calls: canonical episode capture, SFT and preference curation,
-governance, readiness, the frozen bundle, and the operator control plane that
-launches a job.  It sits outside the turn — nothing in it is model-visible, no
-tool reaches it, and freezing a bundle executes no training.  It has its own
-chapter, :doc:`/model/training`.
-
-The coupling that does exist runs one way and is deliberate: ``AgentRuntime``
-and ``TaskController`` emit trajectories, ``rag_chat`` owns the ``/finetune``
-operator command, and ``training_handoff`` is allowed to stop the inference
-service because on a single-GPU host the card that trains is the card that
-serves.
-
-Dependency direction
-====================
-
-Lower runtime modules do not import ``rag_chat`` or the ``cli/`` modules it is
-built from.  The client owns backend construction, project selection, terminal
-commands, human confirmation and presentation.  ``TaskController`` depends on provider-neutral policies and
-protocols; ``AgentRuntime`` does not depend on ``TaskController`` or on
-Explorer/Reviewer orchestration.
-
-Model capability boundary
-=========================
-
-``ModelBackend.complete`` remains the intentionally small required protocol.
-Canonical ``ModelTurn`` carries stop reason and optional usage, while context
-and output limits are explicit ``AgentContext`` configuration.  Cancellation
-is checked immediately before and after calls for every backend.  No mandatory
-capability object was added during consolidation: the current adapters cannot
-truthfully promise transport-level cancellation or exact token counting, and
-making those flags mandatory would couple the runtime to provider behavior.
-Future adapters may expose optional native capabilities without changing the
-canonical turn contract.
-
-Default profile
-===============
-
-Requests with no standard engaged run on the coding core. ``--fresh`` starts a
-session without its stored conversation; knowledge, rules and configuration
-still apply. Requests in a
-standard-bound session run on the normative runtime, or through the MIXED
-orchestration when they ask for a change in the standard's terms. On the
-normative runtime, planning remains deterministic and conservative; Explorer,
-Reviewer and reviewer repair are disabled unless the caller explicitly enables
-them.
+Contributor internals — task ownership, context composition, dependency
+direction and the model capability boundary — are described in
+:doc:`/harness/internals`.
 
 .. _provenance:
 

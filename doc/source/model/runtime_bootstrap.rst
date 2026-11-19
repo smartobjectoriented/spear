@@ -87,11 +87,9 @@ The bootstrap orchestrates; it does not reimplement.
 That last one matters for verification.  ``--verify`` does not describe what
 it thinks the command line would be: it runs the real launcher against a
 stub binary that prints its own argv, so precedence, the mixture-of-experts
-guess and the fixed flags are *exercised* rather than assumed.  This is the
-same trick the deployment's own dry-run used, and it exists because three
-implementations of that command line once disagreed — a running server at
-98304 tokens of context against a restart script that would have brought it
-back at 65536.
+guess and the fixed flags are *exercised* rather than assumed.  A second
+description of the command line could drift from the launcher that actually
+serves; the launcher itself cannot.
 
 
 Idempotency

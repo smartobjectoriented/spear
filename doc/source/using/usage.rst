@@ -22,51 +22,17 @@ and a collection derived from its path.
 The active corpus is auto-detected from the current directory; otherwise a
 picker lists them.  Launching in an unregistered multi-component workspace
 offers to split it into one corpus per large sub-tree, so that a huge upstream
-tree never dilutes the index.  :doc:`/using/retrieval` is the full account.
+tree never dilutes the index.  :doc:`/using/projects` is the full account.
 
 Permission modes
 ================
 
-The first decision a session makes is what the assistant is allowed to do to
-your files. One mode is always in force, and ``--safe`` is the default when
-none is given.
-
-.. list-table::
-   :header-rows: 1
-   :widths: 22 40 38
-
-   * - Mode
-     - Writes and commands
-     - Network
-   * - ``--safe``
-     - refused, not proposed
-     - none
-   * - ``--ask``
-     - each edit and each command is confirmed before it runs
-     - available, each use confirmed
-   * - ``--auto``
-     - run without asking
-     - available
-
-``--ask`` has the aliases ``--confirm`` and ``--no-bypass``; ``--auto`` has
-``-y``, ``--yolo`` and ``--bypass-permissions``.
-
-.. important::
-
-   ``--no-network`` removes network access from every mode, the web tools
-   included. Use it for an unattended ``--auto`` run that must stay offline.
-
-Two further flags bound where writes may land:
-
-``--single-root``
-   Restrict writes to the launch directory. By default the registered corpora
-   are writable too, each mounted at ``/workspaces/<name>`` — a path that
-   works in the terminal and in the file tools alike. Relative paths always
-   resolve in the launch directory and never reach them.
-
-``--allow-absolute-paths``
-   Accept host absolute paths into the launch directory. Off by default;
-   ``/workspace/...`` always works.
+One permission mode is always in force: ``--safe`` (the default, read-only),
+``--ask`` (each mutation and command confirmed) or ``--auto`` (no
+confirmation), and ``--no-network`` takes the network away from any of them.
+What each mode allows, and where writes may land, is
+:doc:`/harness/security_model`; the flags and their aliases are listed in
+:ref:`configuration`.
 
 Command line
 ============
@@ -159,21 +125,15 @@ Session commands:
    reason to register one.
 
 ``/remember <fact>``
-   Record a fact about *this* workspace as workspace knowledge -- the same as
-   ``/knowledge add`` with its defaults (:ref:`knowledge`).  An instruction is
-   refused: it belongs in a rule.  With no argument, list the workspace's
-   knowledge.
+   Record a fact about *this* workspace, as ``/knowledge add`` does with its
+   defaults (:ref:`knowledge`).
 
 ``/recall <rule>``
-   Add a rule for *every* corpus, injected into every request that changes or
-   asks about a tree.  With no argument, list them.  Use it for what holds
-   everywhere — "an existing copyright header is never rewritten" — and
-   ``/remember`` for what is true of one tree only.
+   Add a working rule for *every* corpus; with no argument, list them
+   (:ref:`learning_layers`).
 
 ``/knowledge [add|list|show|accept|amend|revoke|check|export|purge|migrate-remember]``
-   This workspace's recorded knowledge: facts about it, each with where it came
-   from, kept across sessions and shown to the turns that change or ask about
-   it.  Descriptive only, never a rule; see :ref:`knowledge`.
+   Manage this workspace's recorded knowledge (:ref:`knowledge`).
 
 ``/forget <regex>``
    Prune the history-search index.  The archive file itself is kept.
@@ -225,37 +185,15 @@ truncated one, and is a mutation — so it obeys the permission mode like any
 write.  That is the route to a document you mean to ingest as a standard.  The
 pair is described from the :term:`harness` side in :ref:`the-web-pair`.
 
-Knowledge layers, on different clocks
-=====================================
+What the assistant learns
+=========================
 
-.. list-table::
-   :header-rows: 1
-   :widths: 30 34 36
+Workspace knowledge, learned rules, skills, rules, the tool guide, the
+retrieval corpus and the history search each take effect on their own clock;
+:ref:`learning_layers` lists them and says which to use for what.
 
-   * - Layer
-     - Latency
-     - Where
-   * - workspace knowledge (``/remember``, ``/knowledge``)
-     - next turn
-     - ``knowledge.sqlite3`` under the state directory
-   * - learned rules (``/recall``)
-     - next turn, every corpus
-     - ``rules-learned.md`` under the state directory
-   * - skills (``save_skill``, learned procedures)
-     - next turn, scope and prerequisite gated
-     - ``skills/*.md``
-   * - rules (project conventions)
-     - next turn, scope gated
-     - ``rules.d/*.md``
-   * - tool behaviour rules
-     - next launch
-     - ``tool-guide.md``
-   * - retrieval corpus
-     - after ``/reindex``
-     - ``chromadb/``
-   * - history search (cross-session recall)
-     - continuous
-     - the history archive collection
+The base model
+==============
 
 Two behaviours of the base model are worth knowing before you judge the
 harness by them:
@@ -273,24 +211,23 @@ What a turn is allowed to do
 
 Which :term:`request class` a turn falls into decides which path runs it
 (:doc:`/reasoning/index`): an implementation request runs on the :term:`coding core`
-behind :term:`SpearHost` (in a standard-bound session, on SPEAR's earlier runtime), a
+behind :term:`SpearHost` (in a standard-bound session, on the normative
+runtime's change workflow, :doc:`/reasoning/workflow`), a
 question about a bound standard on the :term:`normative runtime`,
 and a change that must satisfy the standard through the :term:`MIXED` orchestration.
 On every path:
 
-* the permission mode decides whether anything is written or run at all, and
-  ``--ask`` confirms each mutation and each command, with ``Enter`` meaning
-  yes;
+* the permission mode decides whether anything is written or run at all
+  (:doc:`/harness/security_model`);
 * every path a tool touches must resolve inside the workspace, and a shell
   command is held to the same write scope as the file tools;
 * generated files and snapshot or third-party copies are never written;
 * every mutation is checkpointed (the file's earlier content is kept under the
   state directory) and recorded in the audit trail;
-* a turn that keeps repeating an operation that was refused is stopped
-  (``SPEAR_REFUSAL_REPEATS``, five by default), and one model response is
-  bounded (``SPEAR_RESPONSE_MAX_TOKENS``);
-* the round and tool budgets (``--max-tool-rounds``, ``--max-commands``) bound
-  a turn;
+* a turn that keeps repeating a refused operation is stopped by the refusal
+  breaker (:doc:`/harness/tool_harness`);
+* one model response, and the rounds and tool calls of a turn, are bounded
+  (:ref:`configuration`);
 * the verdict at the end is computed from what the tools did, not from what
   the model says it did (:doc:`/reasoning/evidence`).
 

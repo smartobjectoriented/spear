@@ -4,11 +4,14 @@
 Directory layout
 ================
 
-Everything lives in the checkout — ``~/spear`` in the examples; the tree can
-sit anywhere.  It mixes three quite different
-kinds of content — application code, multi-gigabyte model weights, and
-persistent state — so it is worth knowing which is which before running a
-``find`` over it.
+The code lives in the checkout — ``~/spear`` in the examples; the tree can sit
+anywhere.  Two directories outside it matter as well: the state directory,
+which may sit outside the checkout (`Persistent state`_), and, on an inference
+host, the runtime root that ``scripts/bootstrap-runtime.sh`` populates
+(``~/spear-runtime`` in the examples, :doc:`/model/runtime_bootstrap`).  The
+checkout itself mixes three quite different kinds of content — application
+code, multi-gigabyte model weights, and persistent state — so it is worth
+knowing which is which before running a ``find`` over it.
 
 .. figure:: /img/SPEAR-Layout.drawio.png
    :width: 100%
@@ -29,12 +32,13 @@ Top level
      - The application **and** its Python virtualenv.  ``bin/python`` here is
        the interpreter every command in this documentation uses.
    * - ``server/``
-     - The generic inference server component: the ``llama-server`` launcher,
-       model fetching, embedding and the runtime bootstrap.
+     - The generic inference server component (see `The server component`_).
    * - ``scripts/``
      - Release, configuration and image scripts (``spear-configure``,
-       ``spear-image``, ``spear-consolidate``, ``spearversion.sh``);
-       ``scripts/docker/`` builds and runs the container.
+       ``spear-image``, ``spear-consolidate``, ``spearversion.sh``) and the
+       inference host's ``bootstrap-runtime.sh``.  ``scripts/docker/`` builds
+       the image (``build.sh``, ``push.sh`` and the staging helpers) and runs
+       it (``spear-docker.sh``).
    * - ``docker/``
      - The container image: ``Dockerfile``, the entrypoint and the
        relative-path corpus registry.  It sits at the root rather than under
@@ -57,11 +61,13 @@ Top level
      - ``. ./env.sh`` from the tree's root puts ``scripts/`` on ``PATH``
        (``spear-configure``, ``spear-image``).
    * - ``doc/``
-     - This documentation.
+     - This documentation (:doc:`/contributing/documentation`).
+   * - ``.github/workflows/docs.yml``
+     - The only CI workflow: it builds this documentation and publishes it.
 
 .. note::
 
-   ``spear`` being both the application directory and the virtualenv root
+   ``client/`` being both the application directory and the virtualenv root
    is why ``bin/``, ``lib/`` and ``include/`` sit next to the packages.
    It is unusual but deliberate: the app and its exact dependency set travel
    together.
@@ -154,53 +160,119 @@ launchers and the image do that for you.
        command line.
    * - ``tests/``
      - The test suite; see :doc:`/operations/testing`.
-   * - ``eval/`` · ``benchmarks/``
-     - Evaluation harnesses and the benchmark runner.
+   * - ``eval/``
+     - Evaluation harnesses that call no model, the retrieval one first
+       (``run_eval.py``): they measure what lands in the prompt.
+   * - ``benchmarks/``
+     - The real-model benchmark runner and its ablations
+       (``python -m benchmarks.runner``).
+   * - ``deploy/``
+     - Installing the application on a machine: ``preflight.sh`` (a survey
+       that changes nothing), ``install.sh`` (the virtualenv, idempotent),
+       ``enable-sandbox.sh`` and its AppArmor profile for ``bwrap``.
+   * - ``doc/``
+     - Two standalone notes kept beside the code, outside this manual.
+
+Beside the packages, ``client/`` holds the launchers ``spear-chat.sh`` and
+``spear-corpus.sh`` (`Entry points`_), ``tool-guide.md`` (the tool usage guide
+handed to the model) and ``TRAINING_DATA.md`` (the operator's notes
+on the training-data workflow, :doc:`/model/training`).
+
+The server component
+====================
+
+.. list-table::
+   :header-rows: 1
+   :widths: 22 78
+
+   * - Path
+     - Content
+   * - ``server/inference/``
+     - ``serve.sh`` (runs ``llama-server`` from configuration),
+       ``install-llamacpp.sh``, and the ``spear-inference`` systemd unit with
+       ``render-unit.sh``.
+   * - ``server/config/``
+     - ``server.conf.example`` and ``gpu.conf.example``: what a deployment
+       must say.  The real files live under the runtime root, never here.
+   * - ``server/embed/``
+     - The embedding worker (``worker.py``, ``protocol.py``) and its pinned
+       requirements.
+   * - ``server/runtime/``
+     - ``manifest.json``, what ``bootstrap-runtime.sh`` installs.
+   * - ``server/scripts/``
+     - ``fetch-model.sh``, which fetches a GGUF, shards included.
+   * - ``server/tests/``
+     - The server's own suite; it needs no GPU (:doc:`/operations/testing`).
 
 Configuration
 =============
 
+These files sit in ``client/``.  The ones marked *ignored* are git-ignored:
+each machine writes its own, usually from the ``.example`` file beside it.
+
 .. list-table::
    :header-rows: 1
-   :widths: 30 70
+   :widths: 28 12 60
 
    * - File
+     - In git
      - Meaning
    * - ``active-model.conf``
-     - Absolute path of the GGUF to serve, read by ``spear-chat --local`` when
-       it starts the local server; ``SPEAR_MODEL`` in the environment
-       overrides it.
+     - ignored
+     - Absolute path of the GGUF that ``spear-chat --local`` serves when it
+       starts the local server; ``SPEAR_MODEL`` in the environment overrides
+       it.  An inference host chooses its model in its own ``server.conf``
+       instead (:doc:`/model/model_serving`).
    * - ``active-lora.conf``
+     - tracked
      - LoRA adapter path, or the literal ``none``.  ``SPEAR_LORA`` overrides.
+   * - ``active-embedder.conf``
+     - tracked
+     - The embedding model that indexing and retrieval use.
+       ``SPEAR_EMBED_MODEL`` overrides.
+   * - ``active-embed-remote-cmd.conf``
+     - ignored
+     - The command that runs the embedding worker on a remote host.
+       ``SPEAR_EMBED_REMOTE_CMD`` overrides.
    * - ``pod.conf``
+     - ignored
      - Connection details for the remote vLLM pod used by
        ``spear-chat --remote``.  The SSH port changes on every pod restart.
    * - ``reds.conf``
+     - ignored
      - Host, port and model of a shared GPU server used by
        ``spear-chat --reds``.  Stable host: the launcher only tunnels to it.
    * - ``machine.env``
-     - Settings specific to THIS machine, untracked: the ``SPEAR_*`` path
-       overrides a deployment needs and nothing a clone should inherit.  Every
-       ``spear-*`` launcher sources it if it is there, and runs on the defaults
-       if it is not.
-   * - ``active-backend.conf``
-     - The backend chosen last, preselected by the startup picker.  Runtime
-       state, not versioned.
+     - ignored
+     - Settings specific to THIS machine: the ``SPEAR_*`` path overrides a
+       deployment needs and nothing a clone should inherit.  Every
+       ``spear-*`` launcher sources it if it is there, and runs on the
+       defaults if it is not.  ``spear-configure`` writes it.
    * - ``projects.json``
-     - Named workspaces the chat can open, mapping a short name to an absolute
-       path and a project kind.
+     - ignored
+     - Named workspaces the chat can open, mapping a short name to an
+       absolute path and a project kind.
    * - ``capabilities.json``
+     - ignored
      - External capability providers registered per workspace (MCP servers
        over stdio).  ``SPEAR_CAPABILITIES_FILE`` overrides the path.
    * - ``tool-guide.md``
+     - tracked
      - The tool usage guide handed to the model.
    * - ``rules.d/``
-     - Prompt fragments injected per task kind.  ``rules.d/corpora/<name>.md``
-       holds a corpus's orientation map (:doc:`/using/retrieval`).
+     - tracked
+     - Prompt fragments.  Each one applies where the header it opens with
+       scopes it, and a rule without a header applies nowhere
+       (:doc:`/using/projects`).  ``rules.d/corpora/<name>.md`` holds a
+       corpus's orientation map (:ref:`orientation_maps`).  The directory
+       ships with only its ``README``.
    * - ``skills/``
-     - Task recipes (build debugging, rootfs packages, code quality…), each
-       optionally opening with a ``SKILL.md`` frontmatter block read by
-       ``skill_library.py`` (:doc:`/using/retrieval`).
+     - tracked
+     - Task recipes, each optionally opening with a ``SKILL.md`` frontmatter
+       block read by ``skill_library.py`` (:ref:`skill_library`).  The
+       directory ships with only its ``README``.
+
+``active-backend.conf`` is state, not configuration: see `Persistent state`_.
 
 .. _resource-directories:
 
@@ -220,13 +292,13 @@ answers to an environment variable:
      - Default
      - What it holds
    * - ``SPEAR_RULES_DIR``
-     - ``<app>/rules.d``
-     - the always-injected rules, and ``corpora/<name>.md`` under it
+     - ``client/rules.d``
+     - the rules, and ``corpora/<name>.md`` under it
    * - ``SPEAR_SKILLS_DIR``
-     - ``<app>/skills``
+     - ``client/skills``
      - the skill library, read *and written* — ``save_skill`` lands here
    * - ``SPEAR_BENCH_DIR``
-     - ``<app>/benches``
+     - ``client/benches``
      - the acceptance benches a project declares by bare name
    * - ``SPEAR_CONTENT_TREES``
      - unset
@@ -235,58 +307,111 @@ answers to an environment variable:
        read by ``build.sh`` for a ``reds`` image and merged after the three
        above, same-named files replacing earlier ones
 
-The default is the in-tree directory, so a plain checkout behaves exactly as it
-did; **no default points outside the checkout**, which is what keeps a private
-path out of public source.  An empty value counts as unset rather than naming
-the filesystem root.
+The default is the in-tree directory; **no default points outside the
+checkout**, which is what keeps a private path out of public source.  An empty
+value counts as unset rather than naming the filesystem root.
 
-The failure mode these replace is quiet: ``load_rules()`` returns ``""`` for a
-directory that is not there and the skill library returns ``[]``, so a session
-whose content had moved ran with none of it and said nothing.  The same three
-variables are read by ``scripts/docker/build.sh`` when it bakes an image
-(:ref:`optional-build-inputs`), so one setting covers both.
+A directory that is not there reads as empty, without a warning: a variable
+that points at the wrong place gives a session with no rules and no skills.
+The same three variables are read by ``scripts/docker/build.sh`` when it bakes
+an image (:ref:`optional-build-inputs`), so one setting covers both.
+
+.. _persistent-state:
 
 Persistent state
 ================
 
-These live in the state directory: ``SPEAR_STATE_DIR``, or ``client/`` when it
-is not set.  The knowledge store and the standard store are the exception:
-without ``SPEAR_STATE_DIR`` they default to ``~/.local/state/spear``.
+What a session accumulates goes to the *state directory*:
+``SPEAR_STATE_DIR`` (``--state-dir``), or ``client/`` when it is not set.
+``spear-configure`` writes ``SPEAR_STATE_DIR`` into ``machine.env``, by default
+``~/.local/state/spear``; the container sets it to its mounted state volume
+(:doc:`/start/container`).
+
+Not everything follows that rule.  The vector index and the local server's log
+stay in ``client/`` whatever the state directory is.  The knowledge store,
+and the standard store as the standard review commands open it, fall back to
+``~/.local/state/spear`` rather than ``client/`` when ``SPEAR_STATE_DIR`` is
+unset.  Setting ``SPEAR_STATE_DIR`` therefore puts everything but the first
+two rows below in one place.
 
 .. list-table::
    :header-rows: 1
-   :widths: 30 70
+   :widths: 30 26 44
 
    * - Path
+     - Where, when nothing is set
      - Content
    * - ``chromadb/``
-     - The vector store.  Rebuildable from the sources it indexes.
+     - ``client/``
+     - The vector store.  ``SPEAR_DB_PATH`` (``--db-path``) moves it;
+       ``SPEAR_STATE_DIR`` does not.  Rebuildable from the sources it
+       indexes.
+   * - ``llama-server.log``
+     - ``client/``, always
+     - Log of the local ``llama-server`` that ``spear-chat --local`` starts.
+   * - ``knowledge.sqlite3``
+     - ``~/.local/state/spear``
+     - Workspace knowledge (``/remember``, ``/knowledge``).
+       ``SPEAR_KNOWLEDGE_DB`` names the file; otherwise it is under
+       ``SPEAR_STATE_DIR``.  A read-only team copy may sit under
+       ``SPEAR_COMMON_STATE_DIR`` (:ref:`knowledge`).
+   * - ``standards/``
+     - ``client/`` for the chat; ``~/.local/state/spear`` for the standard
+       review commands
+     - The normative-standard store.  ``SPEAR_STANDARDS_ROOT`` moves it
+       alone; otherwise it is under ``SPEAR_STATE_DIR``.
    * - ``audit/tool-actions.jsonl``
+     - state directory
      - Append-only audit trail of mutating tool attempts.  Metadata only:
        assignments that look like secrets are redacted before the record is
        written.
    * - ``audit/runtime-trace.jsonl``
-     - Optional privacy-bounded runtime observability.
-   * - ``audit/sessions/`` / ``audit/tool-results/`` / ``audit/checkpoints/``
+     - state directory
+     - The runtime trace, written only with ``--trace``; ``--trace-file``
+       (``SPEAR_TRACE_FILE``) moves it.
+   * - ``audit/sessions/`` · ``audit/tool-results/`` · ``audit/checkpoints/``
+     - state directory
      - Resumable task snapshots, referenced large results, and pre-mutation
-       rollback bytes. Active sessions may reference the latter two.
+       rollback bytes.  Active sessions may reference the latter two.
    * - ``audit/training-data/``
-     - Canonical training episodes, the source a bundle freezes from.
+     - state directory
+     - Canonical training episodes, the source a bundle freezes from
+       (:doc:`/model/training`).  ``SPEAR_TRAINING_CAPTURE=0`` turns capture
+       off.
    * - ``rules-learned.md``
-     - Rules taught at runtime with ``/recall``.  Injected into every session,
-       under a token budget.
-   * - ``knowledge.sqlite3``
-     - Workspace knowledge (``/remember``, ``/knowledge``).
-       ``SPEAR_KNOWLEDGE_DB`` overrides the path.
-   * - ``standards/``
-     - The normative-standard store.  ``SPEAR_STANDARDS_ROOT`` moves it alone.
-   * - ``memories-*.md`` / ``memories-*.md.metadata.json``
-     - Legacy remembered notes.  No longer shown to a turn; their content
-       reaches one only once migrated into workspace knowledge.
-   * - ``history*.json`` / ``history-archive.jsonl``
-     - Conversation transcripts, including per-project ones.
-   * - ``llama-server.log``
-     - Log of the local ``llama-server`` that ``spear-chat --local`` starts.
+     - state directory
+     - Rules taught at runtime with ``/recall``.  They apply in every
+       workspace, on every turn but a normative one.
+   * - ``history-adhoc-<tag>.json`` · ``history-archive.jsonl``
+     - state directory
+     - Conversation transcripts, one per corpus, and their archive.
+   * - ``memories-adhoc-<tag>.md`` · ``….md.metadata.json``
+     - state directory
+     - Legacy remembered notes and their metadata.  Not shown to a turn;
+       their content reaches one only once migrated into workspace knowledge.
+       ``SPEAR_MEMORIES_FILE`` names the file.  ``client/memories-so3.md`` is
+       a tracked file of this kind.
+   * - ``trajectories.jsonl`` · ``experience.jsonl``
+     - state directory
+     - Rated agent trajectories and the samples ``/good`` records, kept for
+       fine-tuning.  ``SPEAR_TRAJECTORY_FILE`` and ``SPEAR_EXPERIENCE_FILE``
+       move them.
+   * - ``projects/<name>/``
+     - state directory
+     - The cached result of probing a project's build and test commands.
+   * - ``training-execution.json``
+     - state directory
+     - The training host the operator control plane launches on; an example
+       ships as ``client/training-execution.json.example``.
+   * - ``active-backend.conf``
+     - state directory
+     - The backend chosen last, preselected by the startup picker.
+   * - ``.input_history``
+     - state directory
+     - The prompt's line-editing history.
+
+``<tag>`` is derived from the corpus root, so history follows the tree rather
+than the directory a session was launched from.
 
 .. _entry-points:
 
@@ -339,71 +464,3 @@ relocated tree activates into a directory that no longer exists and
 ``corpus_registry.handle_corpus_command``, which is also what ``/corpus`` calls
 inside the chat: one registry, one implementation, and one environment — it
 reads ``machine.env`` exactly as ``spear-chat`` does.
-
-.. _doc-diagrams:
-
-This documentation
-==================
-
-::
-
-   doc/
-     Makefile                       make html | latexpdf | …
-     requirements.txt               Sphinx toolchain (local and CI)
-     source/
-       conf.py                      Sphinx configuration
-       rstFlatTable.py              the ``flat-table`` directive
-       *.rst                        the chapters
-       _static/theme_overrides.css  small readability overrides
-       img/
-         spear.drawio               every diagram, one page each (source)
-         SPEAR-<Page>.drawio.png    the pages exported for the HTML build
-         261008_SPEAR_Overview.png  the overview figure, a standalone image
-
-Diagrams follow the convention of the sibling projects.  ``spear.drawio`` is
-the source of every diagram but the overview, and is edited directly in
-draw.io or the VS Code extension.  Each page the documentation uses is
-exported to ``SPEAR-<Page>.drawio.png`` (one file per page, named after the
-page), and the exported PNG is committed next to the ``.drawio`` in the same
-change.  The overview figure of the introduction is a standalone raster
-image, not exported from ``spear.drawio``, and is replaced as a whole.  From
-the command line, with the drawio snap:
-
-.. code-block:: console
-
-   $ cd doc/source/img
-   $ mkdir -p ~/snap/drawio/common/x && cp spear.drawio ~/snap/drawio/common/x/
-   $ xvfb-run -a drawio -x -f png --scale 1.5 --border 10 -p 6 \
-         -o ~/snap/drawio/common/x/SPEAR-Layout.drawio.png \
-         ~/snap/drawio/common/x/spear.drawio --no-sandbox --disable-gpu
-
-``-p`` is the 1-based page index (7 is the *Layout* page).  The snap is
-confined: it cannot read ``/opt`` nor any hidden directory in ``$HOME``
-(``~/.cache`` included), which is why the file is staged under
-``~/snap/drawio/common``.
-
-Building
-========
-
-.. code-block:: console
-
-   $ cd ~/spear/doc
-   $ make html
-   $ xdg-open build/html/index.html
-
-Sphinx and the RTD theme come from the system Python (``/usr/bin/sphinx-build``),
-not from the ``spear`` virtualenv, which deliberately carries only the
-application's runtime dependencies.  ``doc/requirements.txt`` lists the toolchain
-for anyone who prefers an isolated environment:
-
-.. code-block:: console
-
-   $ pip install -r doc/requirements.txt
-
-The same file is what ``.github/workflows/docs.yml`` installs.  That workflow
-builds these pages on every push to ``main`` and publishes them to GitHub
-Pages, so the published site is always the documentation of the current
-``main``; a pull request builds the documentation but never publishes it.  The
-build must stay dependency-free with respect to the application — the
-documentation imports no project module, which is why a Sphinx toolchain and a
-checkout are the whole of what CI needs.

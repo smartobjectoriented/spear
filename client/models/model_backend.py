@@ -806,6 +806,145 @@ class AnthropicBackend:
 
         return counts
 
+    def _from_wire(self, messages) -> tuple[str, list[dict[str, object]]]:
+        """(system, messages) for the Messages API, from an OpenAI-format history.
+
+        The leading system messages are the system prompt. One that comes
+        later stays in place, as user text. Tool results that follow one
+        another answer the same assistant turn and travel in one message, and
+        two messages of the same role are merged, since the roles alternate.
+        """
+        system: list[str] = []
+        out: list[dict[str, object]] = []
+
+        def add(role: str, blocks: list[dict[str, object]]) -> None:
+            if not blocks:
+                return
+
+            if out and out[-1]["role"] == role:
+                out[-1]["content"].extend(blocks)
+            else:
+                out.append({"role": role, "content": list(blocks)})
+
+        for message in messages:
+            role, content = message.get("role"), message.get("content") or ""
+
+            if not isinstance(content, str):
+                content = json.dumps(content, ensure_ascii=False)
+
+            if role == "system" and not out:
+                if content:
+                    system.append(content)
+            elif role == "assistant":
+                blocks: list[dict[str, object]] = []
+
+                if content:
+                    blocks.append({"type": "text", "text": content})
+
+                for call in message.get("tool_calls") or ():
+                    function = call.get("function") or {}
+
+                    try:
+                        arguments = json.loads(function.get("arguments") or "{}")
+                    except ValueError:
+                        arguments = {}
+
+                    blocks.append({
+                        "type": "tool_use", "id": call.get("id"),
+                        "name": self._wire_name(function.get("name") or ""),
+                        "input": arguments if isinstance(arguments, dict) else {},
+                    })
+
+                add("assistant", blocks)
+            elif role == "tool":
+                add("user", [{"type": "tool_result",
+                              "tool_use_id": message.get("tool_call_id"),
+                              "content": content or "(no output)"}])
+            elif content:
+                add("user", [{"type": "text", "text": content}])
+
+        return "\n\n".join(system), out
+
+    def complete_messages(self, messages, tools, *, max_tokens: int,
+                          on_token=None) -> RawTurn:
+        """The agent core's call: its OpenAI-format history, sent natively."""
+        system, converted = self._from_wire(messages)
+        payload = []
+
+        for tool in tools or ():
+            function = tool.get("function") or {}
+            name = function.get("name") or ""
+            wire = self._wire_name(name)
+
+            if wire != name:
+                self._canonical_names[wire] = name
+
+            payload.append({
+                "name": wire, "description": function.get("description") or "",
+                "input_schema": dict(function.get("parameters")
+                                     or {"type": "object", "properties": {}}),
+            })
+
+        kwargs: dict[str, object] = {
+            "model": self.model, "max_tokens": max_tokens, "messages": converted,
+            "thinking": {"type": "disabled"},
+        }
+
+        if system:
+            kwargs["system"] = self._cached_system(system)
+
+        if payload:
+            kwargs["tools"] = self._cached_tools(payload)
+
+        try:
+            with self.client.messages.stream(**kwargs) as stream:
+                for _delta in stream.text_stream:
+                    if on_token:
+                        on_token()
+
+                final = stream.get_final_message()
+        except Exception as exc:
+            return RawTurn("", (), None, error=f"Anthropic backend error: "
+                                               f"{type(exc).__name__}: {exc}")
+
+        text: list[str] = []
+        calls: list[dict] = []
+
+        for block in getattr(final, "content", ()):
+            kind = getattr(block, "type", None)
+
+            if kind == "text":
+                text.append(getattr(block, "text", "") or "")
+            elif kind == "tool_use":
+                name = getattr(block, "name", "") or ""
+                calls.append({
+                    "id": getattr(block, "id", None) or f"call_{len(calls)}",
+                    "name": self._canonical_names.get(name, name),
+                    "arguments": json.dumps(getattr(block, "input", None) or {},
+                                            ensure_ascii=False),
+                })
+
+        stop = getattr(final, "stop_reason", None)
+        counts = self._usage(final)
+        usage = None
+
+        # The core compares prompt_tokens with the context it may fill, so the
+        # part read from the cache counts as prompt too.
+
+        if counts:
+            usage = {"prompt_tokens": counts["input_tokens"]
+                     + counts.get("cache_read_input_tokens", 0)
+                     + counts.get("cache_creation_input_tokens", 0),
+                     "completion_tokens": counts["output_tokens"]}
+
+        if stop in ("refusal", "model_context_window_exceeded", "pause_turn"):
+            return RawTurn("".join(text), (), None, usage=usage,
+                           error=f"Anthropic stopped with {stop}")
+
+        finish = {"tool_use": "tool_calls", "max_tokens": "length"}.get(stop, "stop")
+
+        return RawTurn("".join(text), tuple(calls), finish, usage=usage)
+
     def complete(
         self,
         *,

@@ -7,7 +7,7 @@ Container
 The container exists to hand the assistant to someone else: the :term:`harness`, its
 dependencies and the embedder in one image, with — in a ``private`` image —
 the building host's retrieval index, normative store and team knowledge as
-well (`Two profiles`_).  The recipient mounts their own checkouts and points it
+well (:ref:`image-profiles`).  The recipient mounts their own checkouts and points it
 at a model endpoint.
 
 This chapter is for whoever **builds** the images: what goes in, how a

@@ -472,6 +472,13 @@ class CorpusCommandTest(unittest.TestCase):
     def test_a_read_only_registry_does_not_kill_the_session(self):
         """save_projects raises SystemExit there — right for a CLI, fatal in a
         chat loop, which would lose the conversation to a typo."""
+
+        # An install that is its own state directory: nowhere else to write.
+
+        self.addCleanup(setattr, self.corpus_registry, "user_projects_file",
+                        self.corpus_registry.user_projects_file)
+        self.corpus_registry.user_projects_file = lambda: None
+
         os.chmod(self.corpus_registry.PROJECTS_FILE, 0o444)
         os.chmod(self.root, 0o555)
         self.addCleanup(os.chmod, self.root, 0o755)

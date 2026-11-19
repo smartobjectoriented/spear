@@ -15,7 +15,7 @@
 #                  [--reds USER@HOST [--key FILE] [--port N] | --endpoint URL
 #                   | --provider anthropic [--model NAME]]
 #                  [--tree NAME | --corpus PATH]
-#                  [--mount HOST_DIR:PATH]... [--state DIR]
+#                  [--mount HOST_DIR:PATH]... [--state DIR] [--build TAG]
 #                  [-- harness args, e.g. --ask, --auto, --fresh]
 #
 #   --image     the image to run; default ghcr.io/smartobjectoriented/spear-reds
@@ -38,6 +38,11 @@
 #   --state     where conversations, knowledge, audit and the logins land on
 #               this machine (default ~/.spear/state)
 #   --list      print the image's corpora and exit
+#   --build     make a new image, TAG, out of the image and your state: the
+#               corpora you registered, their index and the knowledge you
+#               recorded become part of it, without the source trees. Someone
+#               who runs TAG from a checkout of the same tree picks the work
+#               up where it is.
 #   --install   copy this script to ~/.local/bin and, when there is none yet,
 #               write the configuration file with the image named by --image;
 #               nothing is run
@@ -90,10 +95,11 @@ TREE=""
 PULL=0
 LIST=0
 INSTALL=0
+BUILD=""
 MOUNTS=()
 ARGS=()
 
-usage() { sed -n '2,62p' "$0" | sed 's/^# \{0,1\}//'; exit "${1:-0}"; }
+usage() { sed -n '2,67p' "$0" | sed 's/^# \{0,1\}//'; exit "${1:-0}"; }
 die() { echo "spear-run: $*" >&2; exit 1; }
 
 while [ $# -gt 0 ]; do
@@ -112,6 +118,7 @@ while [ $# -gt 0 ]; do
         --state)    STATE="$2"; shift 2 ;;
         --list)     LIST=1; shift ;;
         --install)  INSTALL=1; shift ;;
+        --build)    BUILD="$2"; shift 2 ;;
         -h|--help)  usage ;;
         --)         shift; ARGS=("$@"); break ;;
         *)          ARGS+=("$1"); shift ;;
@@ -163,6 +170,26 @@ fi
 command -v docker >/dev/null || die "docker is not installed"
 [ "$PULL" = 1 ] && docker pull "$IMAGE"
 docker image inspect "$IMAGE" >/dev/null 2>&1 || die "no image $IMAGE here; add --pull, or docker login first"
+
+if [ -n "$BUILD" ]; then
+    [ -d "$STATE" ] || die "no state at $STATE: nothing to add to $IMAGE"
+    NAME="spear-build-$$"
+
+    # As root, since the registry and the index of an image are not the
+    # user's; the state is only read.
+
+    docker run --name "$NAME" --user 0 -v "$STATE:/state:ro" \
+        --entrypoint spear-bake-state "$IMAGE" /state "$HOME" \
+        || { docker rm -f "$NAME" >/dev/null 2>&1; die "the image could not take the state"; }
+
+    # The container was started on another program than the image's own.
+
+    docker commit --change 'ENTRYPOINT ["/opt/spear/entrypoint.sh"]' --change 'CMD []' \
+        --change 'USER root' "$NAME" "$BUILD" >/dev/null
+    docker rm "$NAME" >/dev/null
+    echo "built $BUILD"
+    exit 0
+fi
 
 # The image's corpora: a name and a path under /corpora on each line.
 REGISTRY="$(docker run --rm --entrypoint /opt/spear/client/bin/python "$IMAGE" -c '
@@ -257,7 +284,12 @@ done
 if [ -n "$CORPUS" ]; then
     WORKDIR="/corpora/${CORPUS#/corpora/}"
 elif [ -n "$TREE" ]; then
-    rel="$(while read -r name path; do [ "$name" = "$TREE" ] && echo "$path"; done <<< "$REGISTRY")"
+    rel=""
+
+    while read -r name path; do
+        if [ "$name" = "$TREE" ]; then rel="$path"; fi
+    done <<< "$REGISTRY"
+
     [ -n "$rel" ] || die "the image has no corpus named '$TREE' (--list names them)"
     BINDS+=(-v "$PWD:/corpora/$rel")
     WORKDIR="/corpora/$rel"

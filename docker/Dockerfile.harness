@@ -101,11 +101,12 @@ COPY --from=repo docker/spear-claude-export /usr/local/bin/spear-claude-export
 # the corpus. The latter is only the preparation; docker/Dockerfile.claude
 # adds the program itself to the images that are to carry it.
 
-COPY --from=repo docker/spear-shell docker/spear-chat docker/spear-where /usr/local/bin/
+COPY --from=repo docker/spear-shell docker/spear-chat docker/spear-where \
+    docker/spear-bake-state /usr/local/bin/
 COPY --from=repo docker/claude-launcher /usr/local/bin/claude
 RUN chmod +x /opt/spear/entrypoint.sh /opt/spear/spear-run.sh /usr/local/bin/spear-mcp \
     /usr/local/bin/spear-claude-export /usr/local/bin/spear-shell /usr/local/bin/spear-chat \
-    /usr/local/bin/spear-where /usr/local/bin/claude
+    /usr/local/bin/spear-where /usr/local/bin/spear-bake-state /usr/local/bin/claude
 
 ENV SPEAR_COMMON_STATE_DIR=/opt/spear/common
 ENV SPEAR_STANDARDS_ROOT=/opt/spear/common/standards

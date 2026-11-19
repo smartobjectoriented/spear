@@ -4,15 +4,50 @@
 
 CORPUS="$(spear-where 2>/dev/null)"
 
-echo "SPEAR image, in $PWD"
-echo "  corpus      ${CORPUS:-none of this image: no index of its own, the rules that apply everywhere}"
-echo "  spear-chat  SPEAR on this tree (--ask, --safe, --auto)"
+BOLD="" DIM="" OFF=""
+[ -t 1 ] && BOLD=$'\e[1m' DIM=$'\e[2m' OFF=$'\e[0m'
 
-if [ -x /opt/claude/.local/bin/claude ]; then
-    echo "  claude      Claude Code on this tree, with the rules, skills and index of the corpus"
+# What the tree is comes first and apart: it is a fact about this directory,
+# not something to type.
+
+echo "${BOLD}SPEAR${OFF} ${DIM}in${OFF} $PWD"
+
+if [ -n "$CORPUS" ]; then
+    echo "This tree is the corpus ${BOLD}$CORPUS${OFF} of the image: its index, rules and skills are in place."
+else
+    echo "This tree is not a corpus of the image: it has no index of its own, and gets"
+    echo "the rules that apply everywhere."
 fi
 
-# The user the container runs as has no entry in its passwd: bash would call
-# it "I have no name!".
+echo
+echo "Commands:"
+echo "  ${BOLD}spear-chat${OFF}   SPEAR on this tree (--ask, --safe, --auto)"
 
-exec env PS1='spear:\w\$ ' bash --norc --noprofile -i
+if [ -x /opt/claude/.local/bin/claude ]; then
+    echo "  ${BOLD}claude${OFF}       Claude Code on this tree"
+fi
+
+echo
+
+# The prompt is the shell's own: the user the container runs as has no entry
+# in its passwd, so bash would call it "I have no name!", and no startup file
+# of the host is here. It shows what a host prompt usually does -- where, and
+# on which branch -- under a name that says this is the container.
+
+RC="$(mktemp)"
+
+cat > "$RC" <<'RC'
+__spear_branch() {
+    local branch
+
+    branch="$(git symbolic-ref --short -q HEAD 2>/dev/null)" || return
+    printf ' \001\e[33m\002(%s)\001\e[0m\002' "$branch"
+}
+
+PS1='\[\e[1;32m\]spear\[\e[0m\]:\[\e[1;34m\]\w\[\e[0m\]$(__spear_branch)\$ '
+
+alias ls='ls --color=auto'
+alias grep='grep --color=auto'
+RC
+
+exec bash --rcfile "$RC" -i

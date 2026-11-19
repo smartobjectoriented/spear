@@ -503,6 +503,7 @@ def runtime_tool_log(task_result):
 def print_assistant(text):
     """Assistant response: ⏺ bullet on the first line, indented continuation."""
     text = render_md(text.strip())
+    close_tool_block()
 
     if not text:
         print(f"{C_DIM}⏺ (no response){C_RST}")
@@ -513,6 +514,37 @@ def print_assistant(text):
 
     for l in lines[1:]:
         print(f"  {l}")
+
+
+# A run of tool calls reads as one block: a line per call, nothing between
+# them, and a result only when it is not the expected one. The block is closed
+# by a blank line before whatever is printed next.
+
+_TOOL_BLOCK = {"open": False}
+
+
+def tool_step(name, arg, color=C_OK):
+    """One call of a run: its header, set against the previous one."""
+
+    if not _TOOL_BLOCK["open"]:
+        print()
+
+    _TOOL_BLOCK["open"] = True
+    tool_use(name, arg, color=color)
+
+
+def tool_step_result(text):
+    """What a call of a run came to, when that is worth a line: a success is
+    not, the next header says it."""
+
+    if text:
+        tool_result(text)
+
+
+def close_tool_block():
+    if _TOOL_BLOCK["open"]:
+        _TOOL_BLOCK["open"] = False
+        print()
 
 
 def tool_use(name, arg, color=C_OK):

@@ -101,6 +101,7 @@ from cli.standard_session import (
 from cli.startup_banner import (
     _corpus_summary, backend_label, banner, banner_art, print_help,
 )
+from cli import terminal_ui
 from cli.terminal_ui import (
     C_BOLD, C_DIM, C_ERR, C_OK, C_RST, C_WARN, CliRuntimeObserver, STATUS,
     Spinner, SpinnerProgress, interruptible, print_assistant,
@@ -1546,6 +1547,8 @@ def main():
             print()
         elif not transcript:
             print_assistant("")
+
+        terminal_ui.close_tool_block()
 
         # History keeps follow-up context ("ok redo it", "what next?") but
         # tool transcripts go on the USER side — the same place they appear

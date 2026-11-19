@@ -67,25 +67,46 @@ print(f"corpora: {found} present, {miss} missing "
 # packaging fault, not a user choice. Unchecked, the harness says "no index
 # for this corpus yet (optional)" and starts with no retrieval at all -- which
 # is the entire reason the tool exists.
+import json
 import textwrap
 
 have = {c.name for c in corpus_search._db().list_collections()}
 absent = sorted(n for n, spec in corpus_registry.load_projects().items()
                 if os.path.isdir(spec["path"])
                 and corpus_search.collection_name_for(spec) not in have)
-if absent:
+
+# The image's own corpora and the ones the user registered are two cases: the
+# first without an index is a fault of the image, the second is a tree nobody
+# has indexed yet.
+
+try:
+    with open(corpus_registry.PROJECTS_FILE) as handle:
+        shipped = set(json.load(handle))
+except (OSError, ValueError):
+    shipped = set()
+
+faulty = [n for n in absent if n in shipped]
+unindexed = [n for n in absent if n not in shipped]
+
+if faulty:
     # Every name, not the first six. Announcing 11 and listing 6 reads as a
     # bug in the count -- the reader cannot tell which five are missing from
     # the list, and the whole point of the line is to say which corpora will
     # answer without retrieval.
-    print(f"  WARNING: {len(absent)} mounted corpora have no collection in the "
-          f"baked index:")
-    for line in textwrap.wrap(", ".join(absent), 72):
+    print(f"  WARNING: {len(faulty)} corpora of this image have no collection "
+          f"in its index:")
+    for line in textwrap.wrap(", ".join(faulty), 72):
         print(f"    {line}")
     print("  They will answer without retrieval. Re-index on the host and "
-          "rebuild (scripts/docker/build.sh).")
+          "rebuild the image.")
 else:
-    print(f"index: every mounted corpus has its collection ({len(have)} total)")
+    print(f"index: every corpus of the image has its collection ({len(have)} total)")
+
+if unindexed:
+    print(f"  {len(unindexed)} of your own corpora are not indexed yet:")
+    for line in textwrap.wrap(", ".join(unindexed), 72):
+        print(f"    {line}")
+    print("  To index one: cd into its tree, spear-chat, then /reindex.")
 PY
 
 # The normative store. An image that carries a standard nothing is bound to

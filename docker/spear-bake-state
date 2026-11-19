@@ -1,0 +1,5 @@
+#!/bin/bash
+# Write a user's state into this image's registry, index and common
+# knowledge; spear-run.sh --build runs it and commits the result.
+
+exec /opt/spear/client/bin/python /opt/spear/client/cli/bake_state.py "$@"

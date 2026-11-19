@@ -427,7 +427,7 @@ class TheStandaloneLauncherNeedsOnlyDocker(unittest.TestCase):
         (bin_dir / "docker").write_text(
             "#!/bin/bash\n"
             "case \"$*\" in\n"
-            "  *projects.json*) echo name some/tree ;;\n"
+            "  *projects.json*) echo name some/tree; echo other some/other ;;\n"
             f"  run*) printf '%s\\n' \"$@\" > {tmp}/run ;;\n"
             "esac\n")
         (bin_dir / "docker").chmod(0o755)

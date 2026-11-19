@@ -86,6 +86,10 @@ corpus as Claude Code project files, on stdout as a tar:
      - a skill whose scope covers the corpus; its description is the skill's
        summary
 
+Inside the container none of this is needed: the image's ``claude`` command
+does the export and registers the server before it starts
+(:ref:`container_run_reds`, step 6).
+
 A rule scoped to a path is left out, since the path is one of the image and
 not of the reader's machine. Running the export again replaces the files it
 wrote before and touches no other.

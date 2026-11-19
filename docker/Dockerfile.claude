@@ -4,9 +4,10 @@
 #
 #     scripts/docker/add-claude.sh IMAGE [TAG]
 #
-# SPEAR itself stays the image's entrypoint; spear-claude is the other one.
+# The harness image already has the `claude` command, which prepares the
+# rules, skills and index; this layer brings what it starts.
 
-ARG BASE
+ARG BASE=scratch
 FROM ${BASE}
 
 USER root
@@ -17,12 +18,5 @@ USER root
 ENV DISABLE_AUTOUPDATER=1
 
 RUN HOME=/opt/claude bash -c 'curl -fsSL https://claude.ai/install.sh | bash' \
-    && ln -sf /opt/claude/.local/bin/claude /usr/local/bin/claude \
     && chmod -R a+rX /opt/claude \
-    && claude --version
-
-# The exporter comes along, so an image built before it existed serves too.
-
-COPY --from=repo client/cli/claude_export.py /opt/spear/client/cli/claude_export.py
-COPY spear-claude spear-claude-export /usr/local/bin/
-RUN chmod 755 /usr/local/bin/spear-claude /usr/local/bin/spear-claude-export
+    && /opt/claude/.local/bin/claude --version

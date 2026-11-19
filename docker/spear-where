@@ -1,0 +1,12 @@
+#!/bin/bash
+# The name of the corpus the current directory is in, or nothing.
+
+exec /opt/spear/client/bin/python - <<'PY'
+import sys
+
+sys.path.insert(0, "/opt/spear/client")
+
+from cli import corpus_registry
+
+print(corpus_registry.detect_project(corpus_registry.load_projects()) or "")
+PY

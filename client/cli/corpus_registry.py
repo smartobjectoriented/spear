@@ -314,6 +314,12 @@ def workspace_components(path, projects, min_files=300):
         if not os.path.isdir(p) or sub in _SCAN_SKIP:
             continue
 
+        # A snapshot a build system left beside the live tree is not a
+        # component: offering it only doubles what gets indexed.
+
+        if sub.endswith(_SNAPSHOT_SUFFIXES):
+            continue
+
         rp = os.path.realpath(p)
         owner = known.get(rp)
 

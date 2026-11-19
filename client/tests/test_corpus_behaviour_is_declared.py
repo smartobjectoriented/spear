@@ -68,6 +68,42 @@ class Registry(unittest.TestCase):
         return spec
 
 
+class AShippedRegistryTakesTheUsersAdditionsElsewhere(Registry):
+    def setUp(self):
+        super().setUp()
+        from cli import chat_settings
+
+        self.addCleanup(setattr, chat_settings, "STATE_DIR", chat_settings.STATE_DIR)
+        chat_settings.STATE_DIR = f"{self.root}/state"
+
+        with open(corpus_registry.PROJECTS_FILE, "w") as f:
+            json.dump({"shipped": {"path": f"{self.root}/tree"}}, f)
+
+        os.chmod(corpus_registry.PROJECTS_FILE, 0o444)
+
+    def test_a_new_corpus_goes_to_the_state_directory(self):
+        projects = corpus_registry.load_projects()
+        projects["mine"] = {"path": f"{self.root}/tree", "kind": "generic"}
+        corpus_registry.save_projects(projects)
+
+        with open(f"{self.root}/state/projects.json") as f:
+            self.assertEqual(list(json.load(f)), ["mine"])
+
+        with open(corpus_registry.PROJECTS_FILE) as f:
+            self.assertEqual(list(json.load(f)), ["shipped"])
+
+        self.assertEqual(sorted(corpus_registry.load_projects()), ["mine", "shipped"])
+
+    def test_the_shipped_entry_wins_on_its_name(self):
+        os.makedirs(f"{self.root}/state")
+
+        with open(f"{self.root}/state/projects.json", "w") as f:
+            json.dump({"shipped": {"path": "/elsewhere"}}, f)
+
+        self.assertEqual(corpus_registry.load_projects()["shipped"]["path"],
+                         f"{self.root}/tree")
+
+
 class TheIndexerIsDeclared(Registry):
     def test_generic_by_default(self):
         self.register(kind="generic")

@@ -10,4 +10,29 @@ case " $* " in
            && MODEL=(--provider "$SPEAR_CHAT_PROVIDER" ${SPEAR_CHAT_MODEL:+--model "$SPEAR_CHAT_MODEL"}) ;;
 esac
 
+# With no model named anywhere the session would open on a local server that
+# is not there, and only say so at the first question.
+
+case " $* " in
+    *" --provider"*|*" --api-base"*|*" --reds "*|*" --remote "*|*" --local "*|*" --help "*|*" -h "*) ;;
+    *) if [ -z "$SPEAR_CHAT_PROVIDER" ] && [ -z "$SPEAR_API_BASE" ]; then
+           cat >&2 <<'MSG'
+spear-chat: no model is configured, so SPEAR could not answer.
+
+Leave this shell, name the model in ~/.config/spear/local.conf on your
+machine, and run spear-run.sh again:
+
+    SPEAR_PROVIDER=anthropic          a hosted model, with its key
+    SPEAR_MODEL=<model name>
+    ANTHROPIC_API_KEY=<key>
+
+or  REDS_HOST=<account>@<host>        an inference host reached through ssh
+    SPEAR_REDS_KEY=<ssh identity file>
+
+`claude` needs none of this: it logs in with your own account.
+MSG
+           exit 1
+       fi ;;
+esac
+
 exec /opt/spear/entrypoint.sh "${MODEL[@]}" "$@"

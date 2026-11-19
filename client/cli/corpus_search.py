@@ -148,9 +148,12 @@ def federated_corpora():
         try:
             col = client.get_collection(name=collection_name_for(sub))
         except Exception:
+            # An image has no spear-index: a tree is indexed from a session.
+
+            how = (f"open a session in {sub['path']} and run /reindex"
+                   if SHIPPED_DB_PATH else f"spear-index {sub['path']}")
             print(f"{C_WARN}corpus '{n}' has no index yet "
-                  f"({collection_name_for(sub)}) — index it with: "
-                  f"spear-index {sub['path']}{C_RST}")
+                  f"({collection_name_for(sub)}) — index it with: {how}{C_RST}")
             continue
 
         out.append((col, corpus_prefix(sub["path"])))

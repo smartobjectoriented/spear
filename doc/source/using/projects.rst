@@ -13,7 +13,8 @@ The distinction that matters is a different one:
 
 A corpus is *what the assistant reads about*. The workspace is *where tools
 run* — always the current directory, whatever corpus is attached. To work on
-another tree, ``cd`` into it. No flag relocates the workspace.
+another tree, ``cd`` into it. No flag relocates the workspace
+(:ref:`two_roots`).
 
 The registry
 ************
@@ -46,8 +47,24 @@ Entry format
        "exclude": ["./third_party", "./build/downloads"],
        "corpora": ["acme-shared-libs"],
        "test_commands": ["ctest --test-dir build"]
-     }
+     },
+     "bsp-a": {
+       "path": "/srv/src/bsp-a",
+       "kind": "buildsystem",
+       "indexer": "buildsystem",
+       "collection": "bsp_a",
+       "autoindex": true,
+       "prompt_file": "bsp-prompt.md"
+     },
+     "spear": { "path": "client", "kind": "generic" }
    }
+
+A ``path`` is either **absolute** — a tree of yours, genuinely
+machine-specific — or **relative**, in which case it resolves against
+``SPEAR_CORPUS_ROOT``. That root defaults to the repository root, so the
+``spear`` entry above, and every corpus that lives inside the repository, is
+found wherever the repository is cloned; a container overrides the root with
+its mount point (:doc:`/start/container`).
 
 .. list-table::
    :header-rows: 1
@@ -57,8 +74,6 @@ Entry format
      - Meaning
    * - ``path``
      - absolute, or relative and resolved against ``SPEAR_CORPUS_ROOT``
-       (which defaults to the repository root, so a corpus living inside the
-       repository is found wherever the repository is cloned)
    * - ``kind``
      - a free label, printed in the listing. It selects no behaviour, and
        rules and skills are scoped by project name, not by kind
@@ -123,8 +138,8 @@ with ``/standard use`` (:ref:`standards`).
 .. important::
 
    What a corpus *does* is declared, not inferred from its ``kind``. A label
-   that silently selected an indexer, a prompt and three other behaviours was
-   the source of corpora that behaved differently for no visible reason.
+   that silently selected an indexer, a prompt and other behaviours would make
+   corpora behave differently for no visible reason.
 
 .. _normative_checks:
 
@@ -226,63 +241,6 @@ applies to the project.
 A provision declared ``NOT_APPLICABLE`` leaves the :term:`constraint packet`. A
 provision declared both ways is left unresolved.
 
-.. _context_selection:
-
-What a turn is shown
-********************
-
-A registered project is not context everywhere. Each turn starts from its
-**workspace** — the registered project, or, for a tree nobody registered, that
-tree alone, which inherits nothing from the project next to it or the one used
-before — and is given only:
-
-* what its :term:`request class` calls for: the coding rules, :term:`workspace knowledge`
-  (:ref:`knowledge`), procedures and
-  build commands for a change; the standard and its tools, and no
-  implementation material, for a question about the standard; for a general
-  question, the rules that name the ``general`` class, workspace knowledge and
-  read-only external capabilities. A :term:`MIXED` change is selected once per pass;
-* material of this workspace, or material explicitly declared generic;
-* a rule scoped to paths only when the request names such a path.
-
-The decision is deterministic — no model, no embedder — and recorded in the
-audit trail with the reason for every item kept or left out
-(``context_selected``, ``context_rejected``, ``toolset_selected``). It is never
-shown to the model. When the context window is tight, optional material is left
-out by priority; the request, the runtime's own constraints and the constraint
-packet never are.
-
-The tool family follows the same decision, at the family level only: a change
-gets the :term:`coding core`'s six tools, a normative question the standard's tools,
-and the MIXED post-check none. A turn on the coding core may also be offered
-the external capabilities its workspace admits (:ref:`capabilities`).
-
-Rules declare where they apply
-==============================
-
-A rule file in ``rules.d/`` opens with a header saying where it applies. **A
-rule without one applies nowhere**: a rule is generic because it says so, not
-because nobody scoped it.
-
-.. code-block:: text
-
-   ---
-   scope: global                     every workspace: the only generic scope
-   scope: corpus acme-firmware       this registered project, or one of its parts
-   scope: family acme-bsp            every registered project declaring that family
-   scope: path /srv/src/acme         workspaces whose tree lies under this directory
-   tasks: implementation, mixed      the request classes it serves (the default);
-                                     also normative, general
-   paths: doc/**                     only when the request names such a path
-   priority: 80                      kept longer when the window is tight
-   ---
-   Build the documentation with `make -C doc html` and treat warnings as errors.
-
-A skill is held to the same rule: its ``scope:`` must name the project or a
-family (``[family:acme-bsp]``), or say ``[any]`` to be generic. ``/recall`` rules are generic by what that command
-means. A project's own map (an in-tree ``.edgem-rules.md``, or
-``rules.d/corpora/<name>.md``) belongs to that project only.
-
 What a build command proves
 ***************************
 
@@ -333,17 +291,58 @@ An **ad-hoc** corpus is one that was never registered: the current directory,
 indexed under a name derived from its path. It behaves like any other corpus
 and is the normal way to ask about a tree you are passing through.
 
+.. _two_roots:
+
+Corpus and workspace are two roots
+**********************************
+
+``set_project`` binds two distinct roots, and the distinction is the whole
+safety story:
+
+``CORPUS_ROOT``
+   The registered tree the retrieval index and the conversation history belong
+   to — an *identity*.  Selected by the cwd, or forced with ``--corpus``.
+
+``PROJECT_ROOT``
+   Where the **tools** run: the real current directory, always.  It is the
+   workspace root the execution :term:`harness` validates every filesystem path
+   against (:doc:`/harness/security_model`).
+
+Only the cwd moves ``PROJECT_ROOT``.  Nothing in a question does — not a
+``--corpus`` flag, and certainly not a corpus name appearing in a sentence.
+Letting natural language relocate the sandbox root would hand the workspace
+boundary to the model's reading of a phrase, which is precisely what the
+containment layers exist to prevent.
+
+That has an ergonomic cost, so the harness pays it in information instead.
+When a question names a *registered corpus other than the current one*, it says
+so once and does nothing:
+
+.. code-block:: text
+
+   > generate a simple ping.c to run in so3
+     ⎿  'so3' is a registered corpus (/srv/src/so3/so3), but your
+        tools run in /home/me/spear/client. To work there:
+        cd /srv/src/so3/so3 && spear-chat
+
+Matching is on whole words, longest registered name first (so ``micropython-so3``
+wins over ``so3``), once per name per session.  Names that are ordinary
+directory words — ``src``, ``lib``, ``build``… — are never treated as mentions,
+nor is a name used as a path fragment (``so3/usr/main.c``), nor a registry entry
+whose tree has disappeared.
+
+Selecting a corpus without moving the cwd is legitimate but asymmetric: the
+model then reads about one tree and acts on another.  The harness warns it
+explicitly with a *Working directory* note in the system prompt, telling it to
+adapt the retrieved paths.  Prefer ``cd`` to ``--corpus`` when you intend to
+edit.
+
 Writable roots
 **************
 
-By default the launch directory is writable, and so is each registered corpus,
-mounted at ``/workspaces/<name>`` — a path that works identically in ``bash``
-and in the file tools. Relative paths always resolve in the launch directory
-and never reach the others.
-
-``--single-root`` restricts writes to the launch directory alone.
-``--allow-absolute-paths`` accepts host absolute paths into the launch
-directory; it is off by default, and ``/workspace/...`` always works.
+The launch directory is writable, and so is each registered corpus, mounted
+at ``/workspaces/<name>``; which flags narrow or widen that is
+:doc:`/harness/security_model`.
 
 Indexing
 ********

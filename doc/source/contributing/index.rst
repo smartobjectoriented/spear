@@ -4,7 +4,8 @@
 Contributing
 ============
 
-How the code is written, how changes flow, and how a release is cut.
+How the code is written, how changes flow, how a release is cut, and how
+this documentation is built.
 
 .. toctree::
    :maxdepth: 2
@@ -12,3 +13,4 @@ How the code is written, how changes flow, and how a release is cut.
    Coding conventions <coding_conventions>
    Development flow <dev_flow>
    Release process <release_process>
+   Documentation <documentation>

@@ -4,9 +4,10 @@
 Model history and what it cost
 ==============================
 
-This page is the project's own record of which model has been served, why it
-was changed, and what the fine-tuning experiments actually measured.  It is
-kept because the reasoning that led to the expensive decisions looks
+This page is a record of past choices, not current instructions: which model
+has been served, why it was changed, and what the fine-tuning experiments
+actually measured.  What is served today, and how, is :ref:`model_serving` and
+:ref:`inference_host`.  The record is kept because the reasoning that led to the expensive decisions looks
 convincing and was wrong, and a summary that omitted that would be the least
 useful part of this documentation.
 

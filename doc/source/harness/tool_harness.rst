@@ -4,29 +4,31 @@
 Tool execution harness
 ======================
 
-Six modules of ``harness/`` are the security and command-execution substrate:
-``tool_primitives.py`` (modes, capabilities, ``ToolResult``),
-``command_policy.py``, ``workspace.py``, ``sandbox.py``,
-``resource_control.py`` and ``tool_runtime.py`` (``CommandRunner``,
-``AuditLogger``).  The provider-neutral lifecycle above it is split between
-``ToolRegistry``, ``ToolRouter``, ``AgentRuntime`` and ``TaskController``;
-none imports ``rag_chat``.  The substrate remains independently testable.
+``client/harness/`` holds the tool execution harness.  Six of its modules are
+the security and command-execution substrate: ``tool_primitives.py`` (modes,
+capabilities, ``ToolResult``), ``command_policy.py``, ``workspace.py``,
+``sandbox.py``, ``resource_control.py`` and ``tool_runtime.py``
+(``CommandRunner``, ``AuditLogger``).  The others sit above it: the control
+plane in front of the coding core (``control_plane.py``, ``target_policy.py``,
+``refusal_breaker.py``, ``host_commands.py``); the tool lifecycle
+(``tool_registry.py``, ``tool_router.py``, ``tool_exposure.py``,
+``tool_selection.py``); ``checkpoint.py`` and ``approval_binding.py``; the
+external-capability gateway (``capabilities.py``, ``capability_gateway.py``,
+``mcp_provider.py``); and ``web_fetch.py``.  None imports ``rag_chat``, and the
+substrate is testable on its own.
 
 Two tool surfaces
 =================
 
 The registry serves two vocabularies, and a turn sees exactly one of them:
 
-**The coding core's six tools** — ``read_file``, ``search_files``, ``patch``,
-``write_file``, ``delete_file``, ``terminal`` — on every request with no
-standard engaged, and in the implementation pass of a :term:`MIXED` request (it needs
-an OpenAI-compatible endpoint). The core reaches the :term:`harness` through :term:`SpearHost`
-(``control_plane.py``, :doc:`/reasoning/implementation`), which calls the same
-router authorization, workspace resolution, :term:`target policy`, command policy and
-sandbox described below. External capabilities and :term:`workspace knowledge` add no
-tool: they are reached with the ``spear-capability`` and ``spear-knowledge``
-host commands, which SpearHost answers itself and never hands to a shell
-(:ref:`control_plane`).
+**The coding core's six tools** (:doc:`/reasoning/implementation`) — on every
+request with no standard engaged, and in the implementation pass of a
+:term:`MIXED` request (it needs an OpenAI-compatible endpoint). The core reaches
+the :term:`harness` through :term:`SpearHost` (``control_plane.py``), which
+calls the same router authorization, workspace resolution, :term:`target
+policy`, command policy and sandbox described below. External capabilities and
+:term:`workspace knowledge` add no tool (:ref:`control_plane`).
 
 **The normative runtime's tools** — the ``standard.*`` tools, the file and
 command tools of that runtime, ``search_corpus``, and the web pair — in a
@@ -49,27 +51,26 @@ authorization.  A long PDF comes back in slices and each names the ``pages``
 range that continues it — told only that the answer was truncated, a model
 re-fetches the same url.
 
-Their exposure follows ``web_enabled`` alone.  It used to depend on matching
-the objective against ``\b(web|internet|online|latest|current release)\b``,
-which withheld both tools whenever the phrasing missed — "please get the
-complete Code-G pdf" matched nothing, and so did a bare ``fetch https://…``.
-The two schemas that gate saved measure 155 tokens of a 65536-token window; a
-tool the model cannot see is one it narrates instead of using.
+Their exposure follows ``web_enabled`` alone, never the wording of the
+request: a tool the model cannot see is one it narrates instead of using.
 
 
 .. figure:: /img/SPEAR-Harness.drawio.png
    :width: 100%
    :alt: Tool execution harness architecture
 
-   The three layers of the substrate: what may run, where it runs, how it is
-   confined.
+   The control plane in front of the coding core, and the three layers of the
+   substrate: what may run, where it runs, how it is confined.
 
-Three layers
-============
+The control plane and three layers
+==================================
 
-The substrate is organised as three layers with a one-way dependency: the
-decision layer never knows how confinement works, and the execution layer
-never knows why a command was allowed.
+A coding-core call first crosses the control plane, SpearHost
+(:ref:`control_plane`): workspace resolution, the router's hard gates and the
+target policy, and the two host commands it answers itself.  Below it, the
+substrate is organised as three layers with a one-way dependency: the decision
+layer never knows how confinement works, and the execution layer never knows
+why a command was allowed.
 
 Decision layer — *what may run at all*
 --------------------------------------
@@ -136,9 +137,10 @@ Execution layer — *how it is confined*
    produces a wrapped argv; it has no idea what a capability is.
 
 ``ToolResult``
-   The single result type: ``status``, ``stdout``, ``stderr``, ``exit_code``,
-   ``changed_paths``.  ``status`` is one of ``ok``, ``denied``, ``cancelled``,
-   ``invalid_path``, ``not_found``, ``timeout``, ``failed``.
+   The single result type: ``status``, a required one-line ``summary``,
+   ``stdout``, ``stderr``, ``exit_code`` and ``changed_paths``.  ``status`` is
+   one of ``ok``, ``denied``, ``cancelled``, ``invalid_path``, ``not_found``,
+   ``timeout``, ``failed``.
 
 Life of a tool call
 ===================
@@ -169,28 +171,26 @@ Life of a tool call
    recorded by ``AuditLogger``.
 
 Every one of the step-9 checks returns a ``failed`` ``ToolResult`` rather than
-proceeding in a degraded mode.  There is no code path from "mechanism
-unavailable" to "run it anyway".
+proceeding in a degraded mode (:ref:`fail_closed`).
 
-A refusal attaches to the file, not to the tool.  Generated output (a
-``generated/`` or ``build/tmp/`` path, or a header saying the file is
-generated) and snapshot or third-party copies are refused to ``write_file``
-and ``patch``, to ``delete_file`` -- a deleted file could be written afresh --
-and to every write a terminal command makes: a redirection, ``tee``, ``cp``,
-``install``, ``truncate``, ``ln``, and any path an inline program mentions.
-The decision is taken on the path as written and on the file it reaches, so a
-link or a ``..`` does not change it.
+A refusal of the :term:`target policy` attaches to the file, not to the tool
+(:ref:`control_plane`).
+
+.. _refusal_breaker:
+
+Repeated refusals
+=================
 
 A refusal is deterministic, so asking again cannot change it.  When a turn
 asks for the same refused operation five times -- the same tool, target and
 refusal once spacing, quoting, a leading ``./`` and trailing slashes are set
-aside -- it is stopped with an answer that names the refusal, and the stop is audited
-(``repeated_refusal_stopped``).  ``SPEAR_REFUSAL_REPEATS`` sets the limit.  One
-model response is bounded too: ``SPEAR_RESPONSE_MAX_TOKENS`` (16384) caps what
-a single response may generate, and a response cut there is reported as
-truncated.
+aside -- it is stopped with an answer that names the refusal, and the stop is
+emitted as a ``repeated_refusal_stopped`` trace event, kept when tracing is on
+(``SPEAR_TRACE``).  ``SPEAR_REFUSAL_REPEATS`` sets the limit, and
+``SPEAR_RESPONSE_MAX_TOKENS`` bounds a single model response
+(:doc:`/using/configuration`).
 
-The core's ``terminal`` is bounded the same way: a call runs for 180 s unless
+The core's ``terminal`` has bounds of its own: a call runs for 180 s unless
 it asks for another ``timeout``, and one above 600 s is refused; its output is
 cut to 50 000 characters, keeping the head and the tail (``agent/tools.py``).
 The timeout replaces the sandbox's own default (45 s) for that call only.
@@ -211,20 +211,14 @@ from retrieved context alone is a change nobody can check — and the answer the
 user needs is that the sandbox is down, not a plausible patch.  ``DENIED`` and
 not ``FAILED``: the tool did not break, it declined.
 
-The guard predates the router and was carried across it deliberately.  Keeping
-"our side" of that merge would have dropped it silently, since the monolithic
-``execute_tool`` it lived in no longer exists.
+The guard lives in the router's file handlers (``tool_handlers.py``).
+``execute_tool`` in ``tool_routing.py`` is a legacy compatibility facade over
+the same router, not a separate path that could bypass it.
 
 Preflight caching
 =================
 
-Preflight runs a real, minimal sandbox rather than probing version strings —
-it executes a small ``/bin/sh`` that asserts ``$PWD``, workspace writability,
-``$HOME`` and ``$TMPDIR``.  Probing what the kernel actually permits is the
-only honest test; a version number does not tell you whether unprivileged user
-namespaces are enabled.
-
-Results are cached on the sandbox instance, and terminal failures
+What preflight runs is described in :doc:`sandbox`.  Results are cached on the sandbox instance, and terminal failures
 (``ABSENT``, ``INEXECUTABLE``, ``REFUSED``) are remembered so a broken
 environment is not re-probed on every call.  The network preflight is cached
 per (sandbox, workspace) pair and invalidated when either changes.

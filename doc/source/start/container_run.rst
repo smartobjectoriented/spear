@@ -33,7 +33,7 @@ release:
 
    $ docker pull ghcr.io/smartobjectoriented/spear:<version>-public
 
-``<version>`` is the release you want, e.g. ``0.3.0-rc1``.  The image is labelled
+``<version>`` is the release you want, e.g. ``0.3.0``.  The image is labelled
 ``redistributable=true``: you may pass it on.
 
 **At the institute**, the image to use is the ``reds`` one: it carries the
@@ -251,6 +251,8 @@ Running it
          --security-opt seccomp=unconfined \
          --security-opt apparmor=unconfined \
          --security-opt systempaths=unconfined \
+         --memory 2g --memory-swap 2g --pids-limit 256 --cpus 8 \
+         -e SPEAR_RESOURCE_CONTROL=delegated \
          --network host \
          --user "$(id -u):$(id -g)" \
          -e SPEAR_API_BASE=http://127.0.0.1:8080/v1 \
@@ -264,11 +266,15 @@ Running it
 Each line has a reason:
 
 ``--security-opt`` ×3
-   SPEAR runs every command the model asks for inside ``bubblewrap``, and
-   refuses to run any without it.  Docker's defaults forbid the unprivileged
-   namespaces ``bubblewrap`` needs; these three flags allow them *inside* the
-   container and give it nothing on the host.  Without them the container
-   stops at once and prints exactly this.
+   Let ``bubblewrap``, which confines every command, start inside the
+   container; they give it nothing on the host (:ref:`container-security-opts`).
+   Without them the container stops at once and says so.
+
+``--memory`` … ``--cpus`` and ``SPEAR_RESOURCE_CONTROL=delegated``
+   Each command's resource limits are enforced by Docker for the container as
+   a whole, since there is no systemd inside to do it per command.  The
+   variable tells the :term:`harness` so; without it every command fails with
+   ``resource control unavailable`` (:ref:`resource_control`).
 
 ``--network host`` and ``SPEAR_API_BASE``
    The model endpoint.  With host networking ``127.0.0.1`` means your machine,
@@ -317,6 +323,10 @@ When something is wrong
 
 ``bubblewrap cannot start in this container``
    One of the three ``--security-opt`` flags is missing.
+
+``resource control unavailable: systemd-run is absent``
+   ``-e SPEAR_RESOURCE_CONTROL=delegated`` is missing, with the limits beside
+   it.
 
 ``Nothing mounted at /corpora``
    The ``-v`` line is missing or points at an empty directory.

@@ -1,20 +1,26 @@
 SPEAR documentation
 ======================
 
-Sphinx documentation for SPEAR. The configuration is the one shared by its
-sibling projects' documentation, taken verbatim so the manuals build and
-look the same: doc/Makefile, sources in doc/source/*.rst,
-configuration in doc/source/conf.py, theme overrides in
+Sphinx documentation for SPEAR. How to build it, check it for warnings and
+export its figures is in source/contributing/documentation.rst
+("Documentation", in the Contributing part of the built manual).
+
+Shared configuration
+--------------------
+
+The configuration is the one shared by its sibling projects' documentation,
+taken verbatim so the manuals build and look the same: doc/Makefile, sources
+in doc/source/, configuration in doc/source/conf.py, theme overrides in
 doc/source/_static/theme_overrides.css, output in doc/build/ (generated —
 never edit it, never index it).
 
 Only these differ from the shared configuration:
 
-  * conf.py: project, copyright, LaTeX/man titles, and the version string
-    (see below);
+  * conf.py: project, copyright, LaTeX/man titles, and the version string,
+    taken from scripts/spearversion.sh;
   * requirements.txt: sphinxcontrib-plantuml added (conf.py loads it;
-    the sibling projects get it from their CI image), sphinxcontrib-pdfembed dropped
-    (not on PyPI, so the GitHub runner cannot install it);
+    the sibling projects get it from their CI image), sphinxcontrib-pdfembed
+    dropped (not on PyPI, so the GitHub runner cannot install it);
   * doc/utils/plantuml.jar (22 MB) is not versioned: conf.py loads the
     plantuml extension as the siblings do, but no page uses the `uml`
     directive. The day one does, copy the jar from a sibling's doc/utils/
@@ -24,61 +30,3 @@ Only these differ from the shared configuration:
 
 When the shared configuration changes, copy the file over and re-apply
 the differences above. Do not add project-specific styling or options.
-
-Structure
----------
-
-index.rst follows the shared landing page: the REDS/HEIG-VD logotype
-centred, one hidden numbered toctree, a centred title, and left-aligned
-sections that list :ref: links. Prose belongs in the chapters, not on the
-landing page.
-
-A topic with several pages gets a directory and an eponymous index
-(harness/harness.rst, model/model.rst). Every page carries a label
-(`.. _name:` above its title) so references to it are :ref: and break the
-build if their target disappears.
-
-Cross-references are absolute (:doc:`/harness/sandbox`), and so are image
-paths from a subdirectory (/img/...). A relative reference changes meaning
-with the directory of the page that writes it.
-
-Warnings are errors
--------------------
-
-CI builds with `sphinx-build -W --keep-going`. Without -W, an extension that
-cannot reach its native tool only logs a warning and drops the node: the job
-stays green while the diagrams are missing from the published pages.
-
-To check warnings reliably, clean first — an incremental build skips the
-consistency check:
-
-    make clean && make html
-
-Build
------
-
-    make html                 # -> build/html/index.html
-    make latexpdf             # -> build/latex/SPEAR.pdf
-    make clean
-
-Sphinx and the RTD theme come from the system Python (/usr/bin/sphinx-build),
-not from the spear virtualenv, which carries only the application's
-runtime dependencies.
-
-Diagrams
---------
-
-As in the sibling projects: source/img/spear.drawio holds every diagram, one page
-each, and is edited directly in draw.io. Each page the documentation uses is
-exported to source/img/SPEAR-<Page>.drawio.png and committed with the
-.drawio in the same change; the .rst files reference the PNG
-(/img/SPEAR-<Page>.drawio.png). The command-line export, and why the snap
-needs the file staged under ~/snap/drawio/common, are in
-source/directory_layout.rst ("This documentation").
-
-The version string
-------------------
-
-The sibling projects derive `release` from their release tag. SPEAR has no
-release tags, so conf.py derives it from client/active-model.conf instead: the served
-model appears in the page header and never has to be bumped by hand.

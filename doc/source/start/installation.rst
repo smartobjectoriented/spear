@@ -25,7 +25,8 @@ Prerequisites
    * - ``bubblewrap``
      - the sandbox layer for untrusted commands
    * - Docker *(container path only)*
-     - with the three ``--security-opt`` flags the harness requires
+     - run with the security options the harness requires
+       (:ref:`container`)
 
 A GPU is a property of the *backend*, not of the client. The client itself is
 undemanding; a machine that cannot serve a model can still run SPEAR against
@@ -73,14 +74,15 @@ If you have an inference endpoint and only want to use SPEAR, Docker is enough:
 
    $ git clone https://github.com/smartobjectoriented/spear ~/spear
    $ cd ~/spear
-   $ scripts/docker/build.sh
+   $ scripts/docker/build.sh        # spear:<version>-public
 
-The build takes a while, mostly for the embedding model. See :ref:`Container
-<container>` for what the image carries, what it expects mounted, and the
-three security options without which the harness refuses to run any command.
-Without ``--profile`` it builds the ``public`` image; ``--profile private``
-builds the one ``spear-docker.sh`` runs on this machine, and ``--profile reds``
-the one handed to the institute, cut to the corpora it bakes.
+The build takes a while, mostly for the embedding model.
+:ref:`container_run` shows how to run the image, including the security
+options without which the harness refuses to run any command.  Without
+``--profile`` the build produces the ``public`` image; ``--profile private``
+builds the one ``scripts/docker/spear-docker.sh`` runs on a workstation that
+also has the native installation, and ``--profile reds`` the one handed to
+the institute, cut to the corpora it bakes (:ref:`image-profiles`).
 
 The inference runtime
 *********************
@@ -130,10 +132,8 @@ What ends up where
      - the external capabilities (MCP providers) of **this** machine
        (untracked, optional; ``SPEAR_CAPABILITIES_FILE`` moves it)
    * - ``$SPEAR_STATE_DIR``
-     - everything a session accumulates — history, audit trail, workspace
-       knowledge (``knowledge.sqlite3``), ingested standards;
-       ``spear-configure`` sets it to ``~/.local/state/spear``, and without
-       it the harness falls back to ``client/``
+     - everything a session accumulates; its contents and defaults are in
+       :doc:`/operations/directory_layout`
 
 The untracked files are the boundary between the platform and the machine.
 Nothing machine-specific belongs in a tracked file — see
@@ -159,9 +159,8 @@ Checking the installation
 .. code-block:: console
 
    $ client/spear-chat.sh --help          # the CLI, its flags and its settings
-   $ cd spear && PYTHONPATH=. ./bin/python -m unittest discover -s tests
 
-The suite runs offline and takes a few minutes (:ref:`testing`).
+The test suite runs offline; :ref:`testing` gives the commands.
 
 .. seealso::
 

@@ -64,26 +64,23 @@ Nothing else is offered on an implementation turn: no standard tools, no
 retrieval tool, no web tool, no memory tool. A tool the model cannot see is a
 tool it cannot misuse, and every schema left out is context the model keeps.
 
-What a turn may reach beyond the six — the external capabilities its workspace
-admits, and the workspace's recorded knowledge — it reaches through the
-terminal, with ``spear-capability`` and ``spear-knowledge``. SpearHost answers
-these commands itself and never hands them to a shell, so the surface stays six
-tools.
+External capabilities and workspace knowledge are reached through the
+terminal with the ``spear-capability`` and ``spear-knowledge`` host commands,
+which SpearHost answers itself, so the surface stays six tools
+(:doc:`/using/capabilities`, :doc:`/using/knowledge`).
 
 The loop ends when the model answers without calling a tool, when the round or
 tool budget runs out (``--max-tool-rounds``, ``--max-commands``), or when the
 conversation reaches half of the context window — the loop does not compact; it
 stops and asks for a summary instead. It also stops a turn that is going
 nowhere: a call repeated without progress trips the core's tool-call guardrail,
-and an operation refused five times in the same way (same tool, same target,
-same refusal; ``SPEAR_REFUSAL_REPEATS``) is stopped by the host. Both end the
-turn as ``STALLED``, and the refusal case is audited as
-``repeated_refusal_stopped``.
+and an operation refused again and again is stopped by the host's refusal
+breaker (:ref:`refusal_breaker`). Both end the turn as ``STALLED``.
 
 The core sends no sampling parameters, so the server's own sampling applies
 and ``--temp`` and ``--max-tokens`` serve the other paths, not this one. Its
-output reservation is its own, and the host bounds every model response it
-requests to ``SPEAR_RESPONSE_MAX_TOKENS`` (16384 by default), so one runaway
+output reservation is its own, and every model response it requests is bounded
+by ``SPEAR_RESPONSE_MAX_TOKENS`` (:doc:`/using/configuration`), so one runaway
 reply cannot consume the turn.
 
 .. note::
@@ -93,10 +90,10 @@ reply cannot consume the turn.
    the message interface the coding core uses.
 
 The coding core's request is built from the workspace's own context
-(:ref:`projects`) — its rules, project metadata, memories, skills and active
+(:ref:`projects`) — its rules, project metadata, skills and active
 knowledge, and the external capabilities it admits — not from the retrieval
 corpus: an implementation turn reads the tree it is changing, through its
-tools. That context is selected deterministically, by workspace and task class,
+tools. That context is selected deterministically, by workspace and request class,
 never by resemblance to the request; nothing scoped to another project reaches
 the turn, and every eligible skill is offered (:ref:`context_selection`).
 
@@ -128,16 +125,16 @@ Every call the coding core makes crosses SpearHost, whichever tool made it:
    the audit record, the canonical evidence of the call, and the count of
    repeated refusals.
 
-A refusal comes back to the model as a one-line reason in the coding core's own
-vocabulary (``refused: …``), so the model is pointed at a tool it actually has.
+A refusal (a ``denied`` result, :ref:`control_plane`) comes back to the model
+as a one-line reason in the coding core's own vocabulary (``refused: …``), so
+the model is pointed at a tool it actually has.
 
 Scope: what a turn may change
 =============================
 
-**Workspace containment.** The workspace is the launch directory, plus — unless
-``--single-root`` is given — the registered corpora, each at
-``/workspaces/<name>``. A path that resolves outside it is refused, for reading
-as for writing.
+**Workspace containment.** A path that resolves outside the workspace's roots
+is refused, for reading as for writing; which roots the workspace has is
+described in :ref:`security_model`.
 
 **Write scope.** A request that names a target confines writes to that target
 and what genuinely belongs to it; a sibling file of the same family is not
@@ -148,14 +145,9 @@ written because it resembles the one asked for.
 ``sed`` — are judged exactly as a ``write_file`` to the same path would be. A
 change the file tools would refuse cannot be made through the terminal instead.
 
-**Protected and generated paths.** Files a build produces (``/generated/``,
-``/build/tmp/``, or a file whose head says *DO NOT MODIFY*, *DO NOT EDIT* or
-*auto-generated*) are refused with a pointer to their source. Snapshot and
-third-party copies (``.back``, ``.pristine``, ``.0``, vendored ``u-boot``,
-``atf``, ``qemu`` trees) are never written. The refusal belongs to the file,
-not to the tool: ``patch``, ``write_file``, ``delete_file`` and the
-terminal's redirections, ``cp``, ``tee``, ``truncate`` or ``ln -sf`` are all
-refused the same file, judged both as written and as the path it resolves to.
+**Protected and generated paths.** Generated output and snapshot or
+third-party copies are refused to every tool, the terminal included, with a
+pointer to the source to change (:term:`target policy`, :ref:`control_plane`).
 
 **Advisory and read-only turns.** A turn that asks only to be told something,
 or is told not to change anything, keeps its reading tools and loses every
@@ -174,8 +166,7 @@ Where a ``terminal`` call runs is decided in this order:
 
 A ``workdir`` outside the workspace is refused before anything runs. Commands
 run in the Bubblewrap sandbox (:ref:`sandbox`); network access follows the
-session's mode — granted in ``--ask`` and ``--auto``, never in ``--safe``, and
-removed everywhere by ``--no-network`` (:ref:`network`).
+session's permission mode (:ref:`security_model`).
 
 Canonical execution evidence
 ============================

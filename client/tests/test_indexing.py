@@ -463,6 +463,19 @@ class CorpusCommandTest(unittest.TestCase):
         self.assertIn("-> corpus 'agency'", out)
         self.assertIn("agency", self._registry())
 
+    def test_scan_leaves_a_snapshot_tree_out(self):
+        for name in ("agency", "agency.back"):
+            os.makedirs(f"{self.root}/tree/{name}", exist_ok=True)
+
+            for i in range(5):
+                Path(f"{self.root}/tree/{name}/f{i}.c").write_text("int x;\n")
+
+        out = self._corpus("scan", f"{self.root}/tree", "--min", "3")
+
+        self.assertIn("-> corpus 'agency'", out)
+        self.assertNotIn("agency.back", out)
+        self.assertNotIn("agency.back", self._registry())
+
     def test_scan_takes_min_as_a_value_not_as_a_directory(self):
         """`--min 500` used to leave 500 in the positionals, where it was read
         as the directory to scan."""

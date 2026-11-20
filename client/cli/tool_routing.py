@@ -23,7 +23,7 @@ from cli.session_workspace import (
     authorize_mutation, resolve_path, run_cmd_result, safe_mode_refusal,
 )
 from cli.terminal_ui import (
-    C_ACCENT, C_BOLD, C_RST, C_TOOL, tool_result, tool_use,
+    C_ACCENT, C_BOLD, C_RST, C_TOOL, tool_result, tool_step, tool_step_result, tool_use,
 )
 from cli.tool_handlers import (
     NETWORK_ENABLED, SANDBOX_DOWN, WORK_PHASE, _classified_handler_result,
@@ -66,9 +66,8 @@ def coding_host(agent_context, cache, record):
                                   phase_ledger=getattr(agent_context, "work_phase", None))
 
     def authorize(name, arguments, cwd=None):
-        print()
-        tool_use(_CORE_LABELS.get(name, name), _core_summary(name, arguments),
-                 color=C_ACCENT if name in ("patch", "write_file", "delete_file") else C_TOOL)
+        tool_step(_CORE_LABELS.get(name, name), _core_summary(name, arguments),
+                  color=C_ACCENT if name in ("patch", "write_file", "delete_file") else C_TOOL)
         ctx = context()
 
         if cwd:
@@ -153,10 +152,15 @@ def coding_host(agent_context, cache, record):
                               result.exit_code, result.summary or "")
 
     def recorded(item):
-        tool_result(("refused" if item.refused else
-                     "ok" if item.ok else "failed") + (
-            f" (exit {item.exit_code})" if item.exit_code not in (None, 0) else ""))
-        print()
+        code = f" (exit {item.exit_code})" if item.exit_code not in (None, 0) else ""
+
+        if item.refused:
+            tool_step_result("refused" + code)
+        elif not item.ok:
+            tool_step_result("failed" + code)
+        elif code:
+            tool_step_result("ok" + code)
+
         record(item)
 
     from harness.workspace import SandboxSpec

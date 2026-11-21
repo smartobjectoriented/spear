@@ -174,9 +174,9 @@ def save_projects(projects):
             f"reached with --corpora instead.") from exc
 
 
-def detect_project(projects):
+def detect_project(projects, cwd=None):
     """Project whose path contains the cwd, or None."""
-    cwd = os.path.realpath(os.getcwd())
+    cwd = os.path.realpath(cwd or os.getcwd())
     best = None
 
     for name, spec in projects.items():

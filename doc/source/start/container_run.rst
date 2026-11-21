@@ -211,7 +211,18 @@ container reaches it through an SSH tunnel you open on your machine.
 
       Retrieval is not left to the model's choice in either: the hook runs
       SPEAR's own search on each prompt.  ``/memory``, ``/skills`` and
-      ``/mcp`` show, inside Claude Code, what a session was given.
+      ``/mcp`` show, inside Claude Code, what a session was given.  A prompt
+      is given at most what Claude Code reads in full, some 10 000
+      characters: the knowledge, then as many passages as fit.
+
+      **From an editor.**  The container is named ``spear-<tree>-<n>``.
+      Attach VS Code to it (*Dev Containers: Attach to Running Container*),
+      open the tree, and install the Claude Code extension in the container.
+      The extension starts its own copy of the program, which reads the same
+      home and the same image-wide hook, so its panel works from the same
+      base as the ``claude`` command; what the shell prepared at its start is
+      the corpus of the directory it was opened in.  ``claude`` in the
+      editor's terminal is the command above.
 
    An image gains Claude Code as one more layer, once it is built:
 
@@ -222,7 +233,9 @@ container reaches it through an SSH tunnel you open on your machine.
 7. **Hand your work on** as an image.  What a session registers, indexes and
    records stays in your state directory (``~/.spear/state``): the corpora
    added with ``/corpus add``, the index ``/reindex`` builds, the knowledge
-   you accepted.  ``--build`` writes all of it into a new image:
+   you accepted, the skills that were saved and the rules taught with
+   ``/recall``.  ``--build`` writes all of it into a new image, on top of
+   everything the image you run already holds:
 
    .. code-block:: console
 
@@ -230,7 +243,14 @@ container reaches it through an SSH tunnel you open on your machine.
          registry  1 added: <corpus>
          index     <collection>  (<n> chunks)
          knowledge <n> active records
+         skills    1 added: <skill>
+         rules     <n> learned
       built <registry>/spear:<version>-<name>
+
+   Both assistants then start from it: a colleague who runs the new image
+   gets these additions in ``spear-chat`` and in ``claude`` alike.  Knowledge
+   an assistant only proposed stays behind until you accept it
+   (``/knowledge accept <id>`` in ``spear-chat``).
 
    The source trees are not copied.  A corpus whose tree is under your home
    is named by its path relative to it, so whoever runs the new image from a

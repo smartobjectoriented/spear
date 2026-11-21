@@ -11,9 +11,9 @@ both, ssh included:
 
     ssh host docker run --rm -i --entrypoint spear-mcp IMAGE --corpus NAME
 
-The one exception is local: with --context-socket PATH the server also
-answers Claude Code's prompt hook on a socket of this machine, private to the
-user (cli/claude_context.py).
+The one exception is local: with --context the server also answers Claude
+Code's prompt hook on a socket of this machine, private to the user
+(cli/claude_context.py).
 
 Two tools: `list_corpora` and `search_corpus`. Paths in a result are relative
 to the root of the corpus that was asked for, which is how the client's own
@@ -340,11 +340,19 @@ def main(argv=None):
 
         return 2
 
-    if "--context-socket" in argv[:-1]:
+    # Nobody named a corpus: the one the server was started in, if it is
+    # indexed, so that one registration serves whatever tree a session opens.
+
+    if not default:
+        from cli import corpus_registry
+
+        here = corpus_registry.detect_project(index._projects)
+        index.default = here if here in index.names() else None
+
+    if "--context" in argv:
         from cli import claude_context
 
-        claude_context.serve(index, argv[argv.index("--context-socket") + 1],
-                             index._projects)
+        claude_context.serve(index, index._projects)
 
     serve(index, sys.stdin, out)
 

@@ -1,0 +1,15 @@
+{
+  "hooks": {
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "spear-claude-context",
+            "timeout": 180
+          }
+        ]
+      }
+    ]
+  }
+}

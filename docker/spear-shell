@@ -25,6 +25,11 @@ echo "  ${BOLD}spear-chat${OFF}   SPEAR on this tree (--ask, --safe, --auto)"
 
 if [ -x /opt/claude/.local/bin/claude ]; then
     echo "  ${BOLD}claude${OFF}       Claude Code on this tree"
+
+    # For an editor attached to this container: its extension starts Claude
+    # Code without the command above.
+
+    (spear-claude-setup >/dev/null 2>&1 &)
 fi
 
 echo

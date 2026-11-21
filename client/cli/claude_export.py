@@ -252,7 +252,8 @@ def main(argv=None):
                 with open(path, "r", encoding="utf-8") as handle:
                     rules[fname] = handle.read()
 
-    skills = skill_library.load_library(resource_dir("SPEAR_SKILLS_DIR", "skills"))
+    shipped = resource_dir("SPEAR_SKILLS_DIR", "skills")
+    skills = skill_library.load_layered(shipped, skill_library.own_directory(shipped, STATE_DIR))
     files = {**export_rules(rules, names), **export_skills(skills, names)}
 
     # The rest of what a turn starts from, read as a turn reads it.

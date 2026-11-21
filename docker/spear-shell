@@ -29,7 +29,7 @@ fi
 
 echo
 echo "${DIM}What you register and index here stays in your state directory. To hand it"
-echo "on as an image: leave this shell, then  spear-run.sh --build <tag>${OFF}"
+echo "on as an image: leave this shell, then  spear --build <tag>${OFF}"
 echo
 
 # The prompt is the shell's own: the user the container runs as has no entry

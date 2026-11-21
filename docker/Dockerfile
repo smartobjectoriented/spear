@@ -140,9 +140,9 @@ COPY --from=baked --chmod=0777 . /corpora/
 COPY --from=common . /opt/spear/common/
 
 # The launcher for a machine that has this image and nothing else: a recipient
-# copies it out (`docker run --rm --entrypoint cat <image> /opt/spear/spear-run.sh`)
+# copies it out (`docker run --rm --entrypoint cat <image> /opt/spear/spear`)
 # and runs the image with it, tunnel included.
-COPY --from=repo scripts/docker/spear-run.sh /opt/spear/spear-run.sh
+COPY --from=repo scripts/docker/spear /opt/spear/spear
 ENV SPEAR_COMMON_STATE_DIR=/opt/spear/common
 # The standards store stays writable, so that a standard ingested in the
 # container can be bound there; it is kept apart from the state directory

@@ -52,7 +52,7 @@ On a workstation that also has a native installation,
 opens the tunnel and chats (:ref:`image-profiles`, :ref:`container`).
 
 At the institute there is a shorter path still: the ``reds`` image carries the
-shared trees and their index, and ``spear-run.sh`` runs it with nothing but
+shared trees and their index, and ``spear`` runs it with nothing but
 Docker (:ref:`container_run_reds`).
 
 The native path

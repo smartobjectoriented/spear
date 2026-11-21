@@ -386,11 +386,11 @@ if __name__ == "__main__":
 
 
 class TheStandaloneLauncherNeedsOnlyDocker(unittest.TestCase):
-    """scripts/docker/spear-run.sh: for a machine that has the image and
+    """scripts/docker/spear: for a machine that has the image and
     nothing else. It is also copied into the image, so a recipient can get it
     from there."""
 
-    SCRIPT = DOCKER / "spear-run.sh"
+    SCRIPT = DOCKER / "spear"
 
     def run_it(self, *args, env=None):
         return subprocess.run([str(self.SCRIPT), *args], env=env,
@@ -497,7 +497,7 @@ class TheStandaloneLauncherNeedsOnlyDocker(unittest.TestCase):
                    if not k.startswith(("SPEAR_", "XDG_"))}
             env["HOME"] = tmp
             first = self.run_it("--install", "--image", "registry/spear:1", env=env)
-            installed = Path(tmp) / ".local/bin/spear-run.sh"
+            installed = Path(tmp) / ".local/bin/spear"
             conf = Path(tmp) / ".config/spear/local.conf"
 
             self.assertEqual(first.returncode, 0, first.stderr)
@@ -513,7 +513,22 @@ class TheStandaloneLauncherNeedsOnlyDocker(unittest.TestCase):
             self.assertEqual(conf.read_text(), "SPEAR_IMAGE=mine\n")
             self.assertEqual(installed.read_text(), self.SCRIPT.read_text())
 
+    def test_install_removes_the_launcher_under_its_former_name(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            env = {k: v for k, v in os.environ.items()
+                   if not k.startswith(("SPEAR_", "XDG_"))}
+            env["HOME"] = tmp
+            former = Path(tmp) / ".local/bin/spear-run.sh"
+            former.parent.mkdir(parents=True)
+            former.write_text("#!/bin/bash\n")
+
+            done = self.run_it("--install", "--image", "registry/spear:1", env=env)
+
+            self.assertEqual(done.returncode, 0, done.stderr)
+            self.assertFalse(former.exists())
+            self.assertTrue((Path(tmp) / ".local/bin/spear").exists())
+
     def test_the_image_carries_it(self):
         dockerfile = (REPO / "docker" / "Dockerfile").read_text()
 
-        self.assertIn("scripts/docker/spear-run.sh /opt/spear/spear-run.sh", dockerfile)
+        self.assertIn("scripts/docker/spear /opt/spear/spear", dockerfile)

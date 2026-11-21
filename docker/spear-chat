@@ -20,7 +20,7 @@ case " $* " in
 spear-chat: no model is configured, so SPEAR could not answer.
 
 Leave this shell, name the model in ~/.config/spear/local.conf on your
-machine, and run spear-run.sh again:
+machine, and run spear again:
 
     SPEAR_PROVIDER=anthropic          a hosted model, with its key
     SPEAR_MODEL=<model name>

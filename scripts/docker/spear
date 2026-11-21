@@ -320,12 +320,23 @@ TTY=(-i); [ -t 0 ] && TTY=(-i -t)
 
 NAME="spear-$(printf '%s' "${WORKDIR##*/}" | tr -c 'A-Za-z0-9_.-' '-')-$$"
 
+# The harness bounds what each command may take, and refuses to run one when
+# nothing does. A container has no systemd to do it per command, so Docker
+# bounds the container and the harness is told so: the limits and the variable
+# go together. They hold your own builds too, hence most of the machine;
+# SPEAR_CONTAINER_MEMORY in the configuration file names another bound.
+
+MEMORY="${SPEAR_CONTAINER_MEMORY:-$(awk '/^MemTotal:/ { printf "%dm", $2 * 3 / 4 / 1024 }' /proc/meminfo)}"
+
 # The three --security-opt are what bubblewrap, the harness's sandbox, needs
 # to start inside a container; without them it refuses every command.
+
 exec docker run --rm --name "$NAME" "${TTY[@]}" \
     --security-opt seccomp=unconfined \
     --security-opt apparmor=unconfined \
     --security-opt systempaths=unconfined \
+    --memory "$MEMORY" --memory-swap "$MEMORY" --pids-limit 4096 \
+    -e SPEAR_RESOURCE_CONTROL=delegated \
     --network host \
     --user "$(id -u):$(id -g)" \
     "${BACKEND[@]}" \

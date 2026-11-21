@@ -13,9 +13,10 @@ Unreleased
 		its build output or its *.back snapshots, honours the registry's
 		exclusions, and bakes a corpus nested in another by its own rule.
 
-	•	spear-run.sh runs a published image on a machine that has docker and
-		nothing else: tunnel to the inference host, state volume, own
-		checkouts over the baked trees. It is copied into the image.
+	•	scripts/docker/spear runs a published image on a machine that has
+		docker and nothing else: tunnel to the inference host, state
+		volume, own checkouts over the baked trees. It is copied into the
+		image.
 
 v0.3.0 (8 oct 2026)
 

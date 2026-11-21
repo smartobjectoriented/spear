@@ -10,7 +10,7 @@ checkout of the tree:
     the knowledge that was accepted   -> the image's common knowledge
 
 Run as root in a container of the image, with the state mounted; the launcher
-then commits that container (spear-run.sh --build).
+then commits that container (spear --build).
 
 A corpus path under the user's home is rewritten relative to it, which is how
 an image names its trees: whoever has the same checkout at the same place

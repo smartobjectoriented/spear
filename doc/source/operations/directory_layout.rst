@@ -448,8 +448,8 @@ arrangement, and the rest of this documentation uses the names:
      - ``scripts/docker/spear-docker.sh``
      - the assistant in a container, this machine's trees mounted
        (:doc:`/start/container`)
-   * - ``spear-run.sh``
-     - ``scripts/docker/spear-run.sh``, also ``/opt/spear/spear-run.sh`` in the image
+   * - ``spear``
+     - ``scripts/docker/spear``, also ``/opt/spear/spear`` in the image
      - a published image on a machine that has docker and nothing else
        (:ref:`container_run_reds`)
 

@@ -10,10 +10,15 @@ that same text, built by the same functions:
 
 The embedder takes seconds to load, which a hook started afresh on each
 prompt would pay each time. The MCP server of the session is already there
-with it loaded, so it also answers on a socket (corpus_mcp --context-socket)
-and the hook asks it; without a server, the hook does the work itself.
+with it loaded, so it also answers on a socket (corpus_mcp --context) and the
+hook asks it; without a server, the hook does the work itself.
 
-    spear-claude-context [--socket PATH] [--corpus NAME]    the hook
+The hook is declared for the whole image (docker/claude-managed-settings.json),
+so it runs for every client of Claude Code there, a terminal or an editor.
+What it prints is kept under the size Claude Code reads in full: passages are
+left out from the end, never cut, and `search_corpus` finds the rest.
+
+    spear-claude-context                                    the hook
     spear-knowledge list | show <id> | propose '<json>'     the records
 """
 
@@ -24,12 +29,25 @@ import os
 import shlex
 import socket
 import sys
+import tempfile
 import threading
+import time
 
 RETRIEVED_HEADER = "## Retrieved Context"
 RETRIEVED_NOTE = ("Passages of the indexed corpus that match this request, each headed by "
                   "its path relative to the corpus root.")
 ANSWER_TIMEOUT = 120
+
+#: Claude Code shows a hook's output in full up to 10 000 characters, and only
+#: its beginning past that.
+OUTPUT_CHARS = 9500
+SEPARATOR = "\n\n---\n\n"
+TAKEOVER_SECONDS = 20
+
+
+def socket_path():
+    """Where a user's session server answers the hook."""
+    return os.path.join(tempfile.gettempdir(), f"spear-context-{os.getuid()}.sock")
 
 
 def workspace(corpus, cwd, projects):
@@ -43,8 +61,9 @@ def workspace(corpus, cwd, projects):
     return f"adhoc:{root}", root
 
 
-def retrieved(index, prompt, corpus):
-    """The retrieved passages of a prompt, or "" when the corpus has no index."""
+def retrieved(index, prompt, corpus, room):
+    """The retrieved passages of a prompt that fit in `room` characters, or ""
+    when the corpus has no index."""
     if index is None or not corpus or corpus not in index.names():
         return ""
 
@@ -53,7 +72,17 @@ def retrieved(index, prompt, corpus):
     if not context or not context.strip():
         return ""
 
-    return f"{RETRIEVED_HEADER}\n\n{RETRIEVED_NOTE}\n\n{context}"
+    text = f"{RETRIEVED_HEADER}\n\n{RETRIEVED_NOTE}\n"
+    kept = 0
+
+    for passage in context.split(SEPARATOR):
+        if len(text) + len(SEPARATOR) + len(passage) > room:
+            break
+
+        text += (SEPARATOR if kept else "\n") + passage
+        kept += 1
+
+    return text if kept else ""
 
 
 def knowledge(prompt, workspace_id, root):
@@ -73,12 +102,17 @@ def knowledge(prompt, workspace_id, root):
         store.close()
 
 
-def compose(index, prompt, corpus, cwd, projects):
-    """Everything a prompt is shown, as one text; "" when there is nothing."""
+def compose(index, prompt, cwd, projects):
+    """Everything a prompt is shown, as one text; "" when there is nothing.
+    The knowledge comes first: it is short, and what is cut is retrieval."""
+    from cli import corpus_registry
+
+    corpus = corpus_registry.detect_project(projects, cwd)
     parts = []
 
-    for part in (lambda: retrieved(index, prompt, corpus),
-                 lambda: knowledge(prompt, *workspace(corpus, cwd, projects))):
+    for part in (lambda: knowledge(prompt, *workspace(corpus, cwd, projects)),
+                 lambda: retrieved(index, prompt, corpus,
+                                   OUTPUT_CHARS - sum(len(text) + 2 for text in parts))):
         try:
             text = part()
         except Exception as exc:
@@ -93,32 +127,51 @@ def compose(index, prompt, corpus, cwd, projects):
 
 # ── the session's server answers the hook ────────────────────────────
 
-def serve(index, path, projects):
-    """Answer the hook on a socket at `path`, from a thread, until the process
-    ends. One request per connection: a JSON object, then the text."""
-    try:
-        os.unlink(path)
-    except OSError:
-        pass
+def serve(index, projects, path=None):
+    """Answer the hook on the user's socket, from a thread, until the process
+    ends. One request per connection: a JSON object, then the text.
 
-    listener = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-    listener.bind(path)
-    os.chmod(path, 0o600)
-    listener.listen(4)
+    One server answers for all the sessions of a user: a second one waits, and
+    takes over when the first is gone.
+    """
+    path = path or socket_path()
 
-    def loop():
+    def answer(listener):
         while True:
             connection, _ = listener.accept()
 
             with connection:
                 try:
                     request = json.loads(_read(connection))
-                    text = compose(index, str(request.get("prompt") or ""),
-                                   request.get("corpus"), request.get("cwd"), projects)
+                    prompt = str(request.get("prompt") or "")
+
+                    # No prompt: another server asking whether this one lives.
+
+                    text = compose(index, prompt, request.get("cwd"), projects) if prompt else ""
                     connection.sendall(text.encode("utf-8"))
                 except Exception as exc:
                     print(f"spear-claude-context: {type(exc).__name__}: {exc}",
                           file=sys.stderr)
+
+    def loop():
+        while ask(path, {}) is not None:
+            time.sleep(TAKEOVER_SECONDS)
+
+        try:
+            os.unlink(path)
+        except OSError:
+            pass
+
+        listener = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+
+        try:
+            listener.bind(path)
+        except OSError:
+            return
+
+        os.chmod(path, 0o600)
+        listener.listen(4)
+        answer(listener)
 
     threading.Thread(target=loop, daemon=True).start()
 
@@ -127,8 +180,6 @@ def serve(index, path, projects):
     if index.default:
         threading.Thread(target=lambda: index.context("warm up", index.default),
                          daemon=True).start()
-
-    return listener
 
 
 def _read(connection):
@@ -163,19 +214,17 @@ def _option(argv, flag):
     return argv[argv.index(flag) + 1] if flag in argv[:-1] else None
 
 
-def _alone(prompt, corpus, cwd):
+def _alone(prompt, cwd):
     from cli import corpus_mcp, corpus_registry
 
     projects = corpus_registry.load_projects()
-    index = None
 
-    if corpus:
-        try:
-            index = corpus_mcp.CorpusIndex(corpus)
-        except Exception:
-            index = None
+    try:
+        index = corpus_mcp.CorpusIndex()
+    except Exception:
+        index = None
 
-    return compose(index, prompt, corpus, cwd, projects)
+    return compose(index, prompt, cwd, projects)
 
 
 def hook(argv, stdin, out):
@@ -191,9 +240,8 @@ def hook(argv, stdin, out):
     if not prompt:
         return 0
 
-    path, corpus = _option(argv, "--socket"), _option(argv, "--corpus")
-    request = {"prompt": prompt, "corpus": corpus, "cwd": event.get("cwd") or os.getcwd()}
-    text = ask(path, request) if path else None
+    request = {"prompt": prompt, "cwd": event.get("cwd") or os.getcwd()}
+    text = ask(_option(argv, "--socket") or socket_path(), request)
 
     if text is None:
         # The libraries under the search print; the hook's stdout is read as
@@ -203,7 +251,7 @@ def hook(argv, stdin, out):
         os.dup2(2, 1)
 
         try:
-            text = _alone(prompt, corpus, request["cwd"])
+            text = _alone(prompt, request["cwd"])
         except Exception as exc:
             print(f"spear-claude-context: {type(exc).__name__}: {exc}", file=sys.stderr)
             text = ""

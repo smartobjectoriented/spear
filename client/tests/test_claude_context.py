@@ -7,6 +7,7 @@ import json
 import os
 import sys
 import tempfile
+import time
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -54,7 +55,7 @@ class WhatAPromptIsShown(Base):
         self.record("alpha", "The modem is on UART2.")
         index = FakeIndex()
 
-        text = claude_context.compose(index, "where is a?", "alpha", self.dir, self.projects)
+        text = claude_context.compose(index, "where is a?", self.dir, self.projects)
 
         self.assertEqual(index.asked, [("where is a?", "alpha")])
         self.assertIn(claude_context.RETRIEVED_HEADER, text)
@@ -66,7 +67,7 @@ class WhatAPromptIsShown(Base):
         index = FakeIndex()
 
         self.assertEqual(
-            claude_context.compose(index, "q", "beta", self.dir, {"beta": {"path": self.dir}}),
+            claude_context.compose(index, "q", self.dir, {"beta": {"path": self.dir}}),
             "")
         self.assertEqual(index.asked, [])
 
@@ -74,10 +75,23 @@ class WhatAPromptIsShown(Base):
         root = os.path.realpath(self.dir)
         self.record(f"adhoc:{root}", "Built with ninja.")
 
-        text = claude_context.compose(None, "how is it built?", None, self.dir, {})
+        text = claude_context.compose(None, "how is it built?", self.dir, {})
 
         self.assertIn("Built with ninja.", text)
         self.assertNotIn(claude_context.RETRIEVED_HEADER, text)
+
+    def test_what_is_printed_stays_under_what_is_read_in_full(self):
+        self.record("alpha", "The modem is on UART2.")
+        passages = [f"# File: src/{n}.c\n" + "x" * 3000 for n in range(6)]
+        index = FakeIndex(claude_context.SEPARATOR.join(passages))
+
+        text = claude_context.compose(index, "q", self.dir, self.projects)
+
+        self.assertLessEqual(len(text), claude_context.OUTPUT_CHARS)
+        self.assertIn("The modem is on UART2.", text)
+        self.assertIn(passages[0], text)
+        self.assertIn(passages[1], text)
+        self.assertNotIn("src/5.c", text)
 
     def test_a_search_that_fails_leaves_the_knowledge(self):
         self.record("alpha", "The modem is on UART2.")
@@ -85,7 +99,7 @@ class WhatAPromptIsShown(Base):
         index.context = mock.Mock(side_effect=RuntimeError("index gone"))
 
         with mock.patch("sys.stderr", io.StringIO()):
-            text = claude_context.compose(index, "q", "alpha", self.dir, self.projects)
+            text = claude_context.compose(index, "q", self.dir, self.projects)
 
         self.assertIn("The modem is on UART2.", text)
 
@@ -97,33 +111,54 @@ class TheHook(Base):
 
         return code, out.getvalue()
 
+    def wait_for(self, path):
+        for _ in range(200):
+            if claude_context.ask(path, {}) is not None:
+                return
+
+            time.sleep(0.01)
+
+        self.fail("no server answered")
+
     def test_it_asks_the_sessions_server_and_prints_its_answer(self):
         path = os.path.join(self.dir, "socket")
         index = FakeIndex()
-        listener = claude_context.serve(index, path, self.projects)
-        self.addCleanup(listener.close)
+        claude_context.serve(index, self.projects, path)
+        self.wait_for(path)
 
-        code, text = self.run_hook(["--socket", path, "--corpus", "alpha"],
-                                   {"prompt": "where is a?", "cwd": self.dir})
+        code, text = self.run_hook(["--socket", path], {"prompt": "where is a?", "cwd": self.dir})
 
         self.assertEqual(code, 0)
         self.assertIn("# File: src/a.c", text)
         self.assertIn(("where is a?", "alpha"), index.asked)
         self.assertEqual(os.stat(path).st_mode & 0o777, 0o600)
 
+    def test_a_second_server_leaves_the_socket_to_the_first(self):
+        path = os.path.join(self.dir, "socket")
+        first, second = FakeIndex("# File: first"), FakeIndex("# File: second")
+        first.default = second.default = None
+        claude_context.serve(first, self.projects, path)
+        self.wait_for(path)
+        claude_context.serve(second, self.projects, path)
+        time.sleep(0.05)
+
+        _, text = self.run_hook(["--socket", path], {"prompt": "q", "cwd": self.dir})
+
+        self.assertIn("# File: first", text)
+
     def test_without_a_server_it_does_the_work_itself(self):
         with mock.patch.object(claude_context, "_alone", return_value="the context") as alone:
-            code, text = self.run_hook(["--socket", os.path.join(self.dir, "nobody"),
-                                        "--corpus", "alpha"],
+            code, text = self.run_hook(["--socket", os.path.join(self.dir, "nobody")],
                                        {"prompt": "q", "cwd": self.dir})
 
         self.assertEqual((code, text), (0, "the context\n"))
-        alone.assert_called_once_with("q", "alpha", self.dir)
+        alone.assert_called_once_with("q", self.dir)
 
     def test_it_never_fails_a_prompt(self):
         with mock.patch.object(claude_context, "_alone", side_effect=RuntimeError("broken")), \
                 mock.patch("sys.stderr", io.StringIO()):
-            self.assertEqual(self.run_hook([], {"prompt": "q", "cwd": self.dir}), (0, ""))
+            self.assertEqual(self.run_hook(["--socket", os.path.join(self.dir, "nobody")],
+                                           {"prompt": "q", "cwd": self.dir}), (0, ""))
 
         self.assertEqual(self.run_hook([], {"prompt": "  "}), (0, ""))
         self.assertEqual(claude_context.hook([], io.StringIO("not json"), io.StringIO()), 0)

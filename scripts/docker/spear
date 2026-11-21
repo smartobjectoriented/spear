@@ -3,7 +3,7 @@
 # repository, no registry of your own. It serves any image whose corpora are
 # baked.
 #
-#     cd <your tree> && spear-run.sh
+#     cd <your tree> && spear
 #
 # opens a shell in the container, in that tree, bound at the place the image
 # knows it by when it is a checkout of one of its corpora (same path under
@@ -11,12 +11,12 @@
 # are there: `spear-chat` for SPEAR, `claude` for Claude Code, each with the
 # rules, skills and index of the corpus.
 #
-#     spear-run.sh [--image IMAGE] [--pull]
-#                  [--reds USER@HOST [--key FILE] [--port N] | --endpoint URL
-#                   | --provider anthropic [--model NAME]]
-#                  [--tree NAME | --corpus PATH]
-#                  [--mount HOST_DIR:PATH]... [--state DIR] [--build TAG]
-#                  [-- harness args, e.g. --ask, --auto, --fresh]
+#     spear [--image IMAGE] [--pull]
+#           [--reds USER@HOST [--key FILE] [--port N] | --endpoint URL
+#            | --provider anthropic [--model NAME]]
+#           [--tree NAME | --corpus PATH]
+#           [--mount HOST_DIR:PATH]... [--state DIR] [--build TAG]
+#           [-- harness args, e.g. --ask, --auto, --fresh]
 #
 #   --image     the image to run; default ghcr.io/smartobjectoriented/spear-reds
 #               at this release
@@ -100,7 +100,7 @@ MOUNTS=()
 ARGS=()
 
 usage() { sed -n '2,67p' "$0" | sed 's/^# \{0,1\}//'; exit "${1:-0}"; }
-die() { echo "spear-run: $*" >&2; exit 1; }
+die() { echo "spear: $*" >&2; exit 1; }
 
 while [ $# -gt 0 ]; do
     case "$1" in
@@ -133,19 +133,23 @@ if [ "$INSTALL" = 1 ]; then
     # A link to this very file is already the install; anything else is
     # replaced, a link first so that the copy does not go through it.
 
-    if [ "$(readlink -f "$BIN/spear-run.sh")" != "$(readlink -f "$0")" ]; then
-        rm -f "$BIN/spear-run.sh"
-        cp "$0" "$BIN/spear-run.sh"
-        chmod 755 "$BIN/spear-run.sh"
+    if [ "$(readlink -f "$BIN/spear")" != "$(readlink -f "$0")" ]; then
+        rm -f "$BIN/spear"
+        cp "$0" "$BIN/spear"
+        chmod 755 "$BIN/spear"
     fi
 
-    echo "installed $BIN/spear-run.sh"
+    # The launcher's former name would otherwise stay beside the new one.
+
+    rm -f "$BIN/spear-run.sh"
+
+    echo "installed $BIN/spear"
 
     if [ -e "$CONF" ]; then
         echo "kept      $CONF"
     else
         cat > "$CONF" <<EOF
-# Read by spear-run.sh before its options; shell, one assignment per line.
+# Read by spear before its options; shell, one assignment per line.
 SPEAR_IMAGE=$IMAGE
 
 # The model spear-chat talks to: a hosted one,
@@ -265,7 +269,7 @@ ENTRY=()
 
 if [ ${#ARGS[@]} -eq 0 ]; then
     ENTRY=(--entrypoint spear-shell)
-    backend || echo "spear-run: no model for spear-chat ($WHY)" >&2
+    backend || echo "spear: no model for spear-chat ($WHY)" >&2
 else
     backend || die "$WHY"
     [ -n "$PROVIDER" ] && ARGS=(--provider "$PROVIDER" ${MODEL:+--model "$MODEL"} "${ARGS[@]}")

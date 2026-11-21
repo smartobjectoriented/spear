@@ -78,17 +78,17 @@ container reaches it through an SSH tunnel you open on your machine.
 
 2. **Pull** the image, as above.
 
-3. **Get the launcher.** ``spear-run.sh`` needs only docker, ssh and curl; it
+3. **Get the launcher.** ``spear`` needs only docker, ssh and curl; it
    opens the tunnel, mounts your state and runs the image.  It is in the
    repository under ``scripts/docker/``, and inside the image; ``--install``
    copies it to ``~/.local/bin`` and writes ``~/.config/spear/local.conf``
-   with the image's name, so that ``spear-run.sh`` alone is enough afterwards:
+   with the image's name, so that ``spear`` alone is enough afterwards:
 
    .. code-block:: console
 
       $ IMAGE=ghcr.io/smartobjectoriented/spear-reds:<version>-reds
-      $ docker run --rm --entrypoint cat $IMAGE /opt/spear/spear-run.sh > /tmp/spear-run.sh
-      $ bash /tmp/spear-run.sh --install --image $IMAGE
+      $ docker run --rm --entrypoint cat $IMAGE /opt/spear/spear > /tmp/spear
+      $ bash /tmp/spear --install --image $IMAGE
 
 4. **Run** it on the corpus you want to work in, by its path under
    ``/corpora``.  The tunnel to the inference server (port 8010 there, 8082
@@ -97,9 +97,9 @@ container reaches it through an SSH tunnel you open on your machine.
 
    .. code-block:: console
 
-      $ spear-run.sh --reds <account>@<inference host> --key ~/.ssh/id_reds \
+      $ spear --reds <account>@<inference host> --key ~/.ssh/id_reds \
             --corpus opencn/opencn-ng --ask
-      $ spear-run.sh --list                       # every corpus and its path
+      $ spear --list                       # every corpus and its path
 
    What does not change from one run to the next goes in a configuration
    file rather than on every command line: ``~/.config/spear/local.conf``
@@ -130,14 +130,14 @@ container reaches it through an SSH tunnel you open on your machine.
    The paths under ``/corpora`` are those of the building machine, relative to
    its home: ``opencn/opencn-ng`` (and ``opencn/opencn-ng/linux/usr``),
    ``soo/so3/so3``, ``soo/so3/doc``, ``sye/sye_sol``,
-   ``pos/pos_sol/so3`` and so on; ``spear-run.sh --list`` prints them all.
+   ``pos/pos_sol/so3`` and so on; ``spear --list`` prints them all.
 
 5. **Work on your own checkout** rather than the baked copy: mount it at the
    same path, and it shadows the copy while the index keeps serving.
 
    .. code-block:: console
 
-      $ spear-run.sh --reds <account>@<inference host> --key ~/.ssh/id_reds \
+      $ spear --reds <account>@<inference host> --key ~/.ssh/id_reds \
             --mount ~/opencn/opencn-ng:opencn/opencn-ng --corpus opencn/opencn-ng --ask
 
    The index describes the baked revision; after large changes to your tree,
@@ -149,7 +149,7 @@ container reaches it through an SSH tunnel you open on your machine.
 
    .. code-block:: console
 
-      $ cd ~/src/my-checkout && spear-run.sh
+      $ cd ~/src/my-checkout && spear
       SPEAR image, in /corpora/<path of the corpus>
         corpus      <corpus name>
         spear-chat  SPEAR on this tree (--ask, --safe, --auto)
@@ -200,7 +200,7 @@ container reaches it through an SSH tunnel you open on your machine.
 
    .. code-block:: console
 
-      $ spear-run.sh --build <registry>/spear:<version>-<name>
+      $ spear --build <registry>/spear:<version>-<name>
          registry  1 added: <corpus>
          index     <collection>  (<n> chunks)
          knowledge <n> active records

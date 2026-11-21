@@ -549,6 +549,15 @@ class TheStandaloneLauncherNeedsOnlyDocker(unittest.TestCase):
         self.assertIn("spear-claude-setup", (REPO / "docker" / "claude-launcher").read_text())
         self.assertIn("spear-claude-setup", (REPO / "docker" / "spear-shell").read_text())
 
+    def test_the_container_is_bounded_and_the_harness_told(self):
+        """The harness refuses a command nothing bounds; the limits and the
+        word that they exist are on the same docker run."""
+        run = self.SCRIPT.read_text().split("exec docker run", 1)[1]
+
+        for flag in ('--memory "$MEMORY"', "--pids-limit",
+                     "-e SPEAR_RESOURCE_CONTROL=delegated"):
+            self.assertIn(flag, run)
+
     def test_the_image_carries_it(self):
         dockerfile = (REPO / "docker" / "Dockerfile").read_text()
 

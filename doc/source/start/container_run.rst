@@ -118,6 +118,8 @@ container reaches it through an SSH tunnel you open on your machine.
             --security-opt seccomp=unconfined \
             --security-opt apparmor=unconfined \
             --security-opt systempaths=unconfined \
+            --memory 16g --memory-swap 16g --pids-limit 4096 \
+            -e SPEAR_RESOURCE_CONTROL=delegated \
             --network host \
             --user "$(id -u):$(id -g)" \
             -e SPEAR_API_BASE=http://127.0.0.1:8082/v1 \
@@ -126,6 +128,12 @@ container reaches it through an SSH tunnel you open on your machine.
             -v ~/.spear/state:/state \
             -w /corpora/opencn/opencn-ng \
             ghcr.io/smartobjectoriented/spear-reds:<version>-reds --ask
+
+   The limits and ``SPEAR_RESOURCE_CONTROL=delegated`` go together: the
+   harness refuses to run a command that nothing bounds, and in a container
+   Docker is what bounds it (:ref:`resource_control`).  The launcher gives
+   the container three quarters of the machine's memory;
+   ``SPEAR_CONTAINER_MEMORY`` in the configuration file names another bound.
 
    The paths under ``/corpora`` are those of the building machine, relative to
    its home: ``opencn/opencn-ng`` (and ``opencn/opencn-ng/linux/usr``),

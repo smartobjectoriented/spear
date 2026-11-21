@@ -18,6 +18,10 @@ Unreleased
 		volume, own checkouts over the baked trees. It is copied into the
 		image.
 
+	•	scripts/docker/spear bounds the container's memory and processes
+		and tells the harness so. Without it the terminal of a session
+		started from that launcher refused every command.
+
 	•	In an image, Claude Code starts from what a SPEAR request starts
 		from: beside the rules and skills, the learned rules, the corpus's
 		map and the project's build and test commands are laid out as rule

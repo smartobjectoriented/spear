@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import io
+import os
 import sys
 import tarfile
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -12,7 +14,7 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
 from cli import claude_export  # noqa: E402
-from context import skill_library  # noqa: E402
+from context import context_sources, skill_library  # noqa: E402
 
 RULES = {
     "10-global.md": "---\nscope: global\npaths: doc/**, src/**\n---\nAlways build before you claim.",
@@ -97,6 +99,61 @@ class ExportSkills(unittest.TestCase):
         line = files[".claude/skills/long/SKILL.md"].splitlines()[2]
 
         self.assertLessEqual(len(line), len('description: ""') + claude_export.DESCRIPTION_MAX)
+
+
+class WhatATurnStartsFromBesideTheRules(unittest.TestCase):
+    def setUp(self):
+        self.dir = tempfile.mkdtemp()
+        self.tree = os.path.join(self.dir, "tree")
+        self.shipped = os.path.join(self.dir, "corpora")
+        os.makedirs(self.tree)
+        os.makedirs(self.shipped)
+
+    def write(self, path, text):
+        with open(path, "w", encoding="utf-8") as handle:
+            handle.write(text)
+
+    def test_the_map_is_the_trees_own_before_the_shipped_one(self):
+        self.write(os.path.join(self.shipped, "alpha.md"), "Shipped map.")
+
+        self.assertEqual(
+            claude_export.corpus_map(self.tree, self.tree, "alpha", self.shipped),
+            ("alpha, shipped", "Shipped map."))
+
+        self.write(os.path.join(self.tree, claude_export.CORPUS_RULES_FILE), "Its own map.")
+
+        self.assertEqual(
+            claude_export.corpus_map(self.tree, self.tree, "alpha", self.shipped),
+            ("tree", "Its own map."))
+
+    def test_a_tree_without_a_map_gets_none(self):
+        self.assertEqual(claude_export.corpus_map(self.tree, "", None, self.shipped), ("", ""))
+
+    def test_the_map_file_is_the_one_a_turn_reads(self):
+        from cli import turn_context
+
+        self.assertEqual(claude_export.CORPUS_RULES_FILE, turn_context.CORPUS_RULES_FILE)
+
+    def test_each_source_is_a_rule_file_holding_the_text_a_turn_is_shown(self):
+        learned = os.path.join(self.dir, "rules-learned.md")
+        self.write(learned, "Never push to main.")
+        found = context_sources.learned_candidate(learned)
+
+        files = claude_export.export_session((
+            ("spear.learned.md", found),
+            ("spear.corpus-map.md", context_sources.corpus_rule_candidates([]))))
+
+        self.assertEqual(list(files), [".claude/rules/spear.learned.md"])
+        self.assertEqual(files[".claude/rules/spear.learned.md"], found[0].text.strip() + "\n")
+
+    def test_the_guide_names_what_arrives_and_the_tools(self):
+        text = claude_export.knowledge_base("alpha")
+
+        for word in ("`alpha`", "Retrieved Context", "search_corpus", "Workspace knowledge",
+                     "spear-knowledge"):
+            self.assertIn(word, text)
+
+        self.assertIn("this tree", claude_export.knowledge_base(None))
 
 
 class Archive(unittest.TestCase):

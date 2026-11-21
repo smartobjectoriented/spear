@@ -1,0 +1,50 @@
+#!/bin/bash
+# Prepare Claude Code, in this container, for the tree the current directory
+# is in: the rules and skills of its corpus are laid out where Claude Code
+# reads them, and the corpus index is registered as its MCP server.
+#
+# Everything is written under HOME, never in the tree: a checkout bound into
+# the container stays as git left it. HOME is expected to outlive the
+# container, since the login is kept there too.
+#
+# It serves every client: the `claude` command runs it before starting, and
+# the shell runs it once, for an editor attached to the container, whose
+# extension starts its own copy of the program.
+
+set -e
+
+REAL=/opt/claude/.local/bin/claude
+
+[ -x "$REAL" ] || {
+    echo "claude: this image does not carry it; scripts/docker/add-claude.sh adds it" >&2
+    exit 1
+}
+
+CORPUS="$(spear-where)"
+CONF="$HOME/.claude"
+LIST="$CONF/.spear-exported"
+mkdir -p "$CONF"
+
+# What the previous run exported goes first: another corpus has other rules.
+
+if [ -f "$LIST" ]; then
+    while IFS= read -r path; do
+        rm -f "$CONF/$path"
+    done < "$LIST"
+fi
+
+STAGE="$(mktemp -d)"
+trap 'rm -rf "$STAGE"' EXIT
+
+spear-claude-export ${CORPUS:+--corpus "$CORPUS"} --out "$STAGE" 2>/dev/null
+
+if [ -d "$STAGE/.claude" ]; then
+    (cd "$STAGE/.claude" && find . -type f | sed 's|^\./||') > "$LIST"
+    cp -r "$STAGE/.claude/." "$CONF/"
+fi
+
+# The index is registered for the user, with no corpus named: the server
+# takes the one of the directory it is started in, whatever the client.
+
+"$REAL" mcp remove --scope user spear-corpus >/dev/null 2>&1 || true
+"$REAL" mcp add --scope user spear-corpus -- spear-mcp --context >/dev/null

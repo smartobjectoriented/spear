@@ -18,6 +18,20 @@ Unreleased
 		volume, own checkouts over the baked trees. It is copied into the
 		image.
 
+	•	In an image, Claude Code starts from what a SPEAR request starts
+		from: beside the rules and skills, the learned rules, the corpus's
+		map and the project's build and test commands are laid out as rule
+		files, and a hook gives every prompt the passages retrieved from
+		the index and the workspace's recorded knowledge. The hook is the
+		image's, so an editor attached to the container gets it too.
+		spear-knowledge is a command of the container.
+
+	•	In a container a saved skill goes to the state directory, over the
+		image's library, instead of being lost with the container. spear
+		--build also writes the saved skills and the learned rules into the
+		new image, and no longer copies the files of the image it starts
+		from into the new layer.
+
 v0.3.0 (8 oct 2026)
 
 First stable release of the 0.3 line: v0.3.0-rc1, below, with the fixes and

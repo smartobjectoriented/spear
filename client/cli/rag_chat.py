@@ -68,7 +68,7 @@ from cli.corpus_search import (
     retrieve_context,
 )
 from cli.knowledge_commands import (
-    SKILLS_DIR, current_workspace, knowledge_command, knowledge_store,
+    SKILLS_DIR, current_workspace, knowledge_command, knowledge_store, load_skills,
     legacy_notes_notice, library_skills, remember_fact,
 )
 from cli.model_io import (
@@ -552,7 +552,7 @@ def main():
             continue
 
         if user_input == "/skills":
-            skills = skill_library.load_library(SKILLS_DIR)
+            skills = load_skills()
 
             if not skills:
                 print("(no skills yet — the model saves them after "

@@ -528,6 +528,27 @@ class TheStandaloneLauncherNeedsOnlyDocker(unittest.TestCase):
             self.assertFalse(former.exists())
             self.assertTrue((Path(tmp) / ".local/bin/spear").exists())
 
+    def test_the_image_gives_a_prompt_of_the_other_assistant_what_a_turn_gets(self):
+        harness = (REPO / "docker" / "Dockerfile.harness").read_text()
+        setup = (REPO / "docker" / "spear-claude-setup").read_text()
+        managed = json.loads((REPO / "docker" / "claude-managed-settings.json").read_text())
+
+        for command in ("spear-claude-context", "spear-knowledge", "spear-claude-setup"):
+            self.assertIn(f"docker/{command}", harness)
+            self.assertIn(f"/usr/local/bin/{command}", harness)
+            self.assertTrue(os.access(REPO / "docker" / command, os.X_OK))
+
+        # The hook is the image's, so an editor's own copy of the program
+        # runs it too; the server it asks is registered with no corpus named.
+
+        self.assertIn("docker/claude-managed-settings.json "
+                      "/etc/claude-code/managed-settings.json", harness)
+        self.assertEqual(managed["hooks"]["UserPromptSubmit"][0]["hooks"][0]["command"],
+                         "spear-claude-context")
+        self.assertIn("-- spear-mcp --context", setup)
+        self.assertIn("spear-claude-setup", (REPO / "docker" / "claude-launcher").read_text())
+        self.assertIn("spear-claude-setup", (REPO / "docker" / "spear-shell").read_text())
+
     def test_the_image_carries_it(self):
         dockerfile = (REPO / "docker" / "Dockerfile").read_text()
 

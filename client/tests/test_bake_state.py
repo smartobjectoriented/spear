@@ -1,4 +1,5 @@
-"""A user's state, written into an image: registry, index, knowledge."""
+"""A user's state, written into an image: registry, index, knowledge, skills
+and learned rules."""
 
 import json
 import os
@@ -6,6 +7,7 @@ import sqlite3
 import sys
 import tempfile
 import unittest
+import unittest.mock
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -94,6 +96,84 @@ class Knowledge(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             self.assertEqual(bake_state.bake_knowledge(f"{tmp}/absent", f"{tmp}/c/k.sqlite3",
                                                        wk._SCHEMA, wk.Lifecycle.ACTIVE), 0)
+
+
+class SkillsAndLearnedRules(unittest.TestCase):
+    def setUp(self):
+        self.dir = tempfile.mkdtemp()
+        self.state = os.path.join(self.dir, "state")
+        self.rules = os.path.join(self.dir, "rules.d")
+        os.makedirs(os.path.join(self.state, "skills"))
+
+    def write(self, path, text):
+        with open(path, "w", encoding="utf-8") as handle:
+            handle.write(text)
+
+    def test_the_users_skills_are_copied_over_the_images(self):
+        target = os.path.join(self.dir, "skills")
+        os.makedirs(target)
+        self.write(os.path.join(target, "flash.md"), "shipped")
+        self.write(os.path.join(self.state, "skills", "flash.md"), "revised")
+        self.write(os.path.join(self.state, "skills", "probe.md"), "new")
+        self.write(os.path.join(self.state, "skills", "notes.txt"), "not a skill")
+
+        self.assertEqual(bake_state.bake_skills(os.path.join(self.state, "skills"), target),
+                         ["flash", "probe"])
+        self.assertEqual(sorted(os.listdir(target)), ["flash.md", "probe.md"])
+
+        with open(os.path.join(target, "flash.md")) as handle:
+            self.assertEqual(handle.read(), "revised")
+
+    def test_no_skills_of_the_users_adds_nothing(self):
+        self.assertEqual(bake_state.bake_skills(os.path.join(self.dir, "absent"), self.dir), [])
+
+    def test_learned_rules_become_a_rule_that_reaches_what_a_learned_rule_reaches(self):
+        from context import context_sources
+
+        learned = os.path.join(self.state, "rules-learned.md")
+        self.write(learned, "- Never push to main.  (2026-01-02)\n")
+
+        self.assertEqual(bake_state.bake_learned_rules(learned, self.rules), 1)
+
+        baked, = context_sources.rule_candidates(self.rules)
+        own, = context_sources.learned_candidate(learned)
+
+        self.assertIn("Never push to main.", baked.text)
+        self.assertEqual((baked.scope, baked.tasks), (own.scope, own.tasks))
+
+    def test_a_second_build_adds_only_what_is_new(self):
+        learned = os.path.join(self.state, "rules-learned.md")
+        self.write(learned, "- One.\n")
+        bake_state.bake_learned_rules(learned, self.rules)
+        self.write(learned, "- One.\n- Two.\n")
+
+        self.assertEqual(bake_state.bake_learned_rules(learned, self.rules), 1)
+        self.assertEqual(bake_state.bake_learned_rules(learned, self.rules), 0)
+
+        with open(os.path.join(self.rules, bake_state.LEARNED_RULE)) as handle:
+            self.assertEqual(handle.read(), bake_state.LEARNED_HEADER + "- One.\n- Two.\n")
+
+    def test_nothing_learned_writes_no_rule(self):
+        self.assertEqual(bake_state.bake_learned_rules(os.path.join(self.dir, "absent"),
+                                                       self.rules), 0)
+        self.assertFalse(os.path.exists(self.rules))
+
+
+class WhatIsAlreadyOpenIsLeftAlone(unittest.TestCase):
+    def test_only_a_path_lacking_the_mode_is_changed(self):
+        directory = tempfile.mkdtemp()
+        closed, opened = os.path.join(directory, "closed"), os.path.join(directory, "open")
+
+        for path, mode in ((closed, 0o600), (opened, 0o777)):
+            open(path, "w").close()
+            os.chmod(path, mode)
+
+        with unittest.mock.patch("os.chmod", wraps=os.chmod) as chmod:
+            bake_state._open(closed, 0o666)
+            bake_state._open(opened, 0o666)
+
+        chmod.assert_called_once_with(closed, 0o666)
+        self.assertEqual(os.stat(opened).st_mode & 0o777, 0o777)
 
 
 if __name__ == "__main__":

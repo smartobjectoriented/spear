@@ -1,51 +1,13 @@
 #!/bin/bash
-# Claude Code on this image's corpora, installed as `claude`: the rules and
-# skills of the corpus the current directory is in are laid out where it reads
-# them, the corpus index is its MCP server, and it starts.
+# Claude Code on this image's corpora, installed as `claude`: prepared for the
+# corpus the current directory is in (spear-claude-setup), then started.
 #
-# Everything is written under HOME, never in the tree: a checkout bound into
-# the container stays as git left it. HOME is expected to outlive the
-# container, since the login is kept there too.
+# What a SPEAR request gets by itself -- the passages retrieved from the index
+# and the workspace's recorded knowledge -- reaches each prompt through a hook
+# the image declares for every client (/etc/claude-code/managed-settings.json).
 
 set -e
 
-REAL=/opt/claude/.local/bin/claude
+spear-claude-setup
 
-[ -x "$REAL" ] || {
-    echo "claude: this image does not carry it; scripts/docker/add-claude.sh adds it" >&2
-    exit 1
-}
-
-CORPUS="$(spear-where)"
-CONF="$HOME/.claude"
-LIST="$CONF/.spear-exported"
-mkdir -p "$CONF"
-
-# What the previous run exported goes first: another corpus has other rules.
-
-if [ -f "$LIST" ]; then
-    while IFS= read -r path; do
-        rm -f "$CONF/$path"
-    done < "$LIST"
-fi
-
-STAGE="$(mktemp -d)"
-trap 'rm -rf "$STAGE"' EXIT
-
-spear-claude-export ${CORPUS:+--corpus "$CORPUS"} --out "$STAGE" 2>/dev/null
-
-if [ -d "$STAGE/.claude" ]; then
-    (cd "$STAGE/.claude" && find . -type f | sed 's|^\./||') > "$LIST"
-    cp -r "$STAGE/.claude/." "$CONF/"
-fi
-
-rm -rf "$STAGE"
-trap - EXIT
-
-# The index is registered for the user, so it is there whatever follows on
-# the command line.
-
-"$REAL" mcp remove --scope user spear-corpus >/dev/null 2>&1 || true
-"$REAL" mcp add --scope user spear-corpus -- spear-mcp ${CORPUS:+--corpus "$CORPUS"} >/dev/null
-
-exec "$REAL" "$@"
+exec /opt/claude/.local/bin/claude "$@"

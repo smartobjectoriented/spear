@@ -7,7 +7,7 @@ from context import skill_library, workspace_context
 from context.memory_store import MemoryStoreError
 from runtime.tracing import EventStatus, EventType
 from cli import session_workspace
-from cli.chat_settings import TRACE, resource_dir
+from cli.chat_settings import STATE_DIR, TRACE, resource_dir
 from cli.corpus_registry import load_projects
 from cli.session_workspace import confirm
 
@@ -18,22 +18,28 @@ from cli.session_workspace import confirm
 # the most similar skills are injected into the prompt on each turn.
 
 SKILLS_DIR = resource_dir("SPEAR_SKILLS_DIR", "skills")
+OWN_SKILLS_DIR = skill_library.own_directory(SKILLS_DIR, STATE_DIR)
+
+
+def load_skills():
+    """The library a session works from: the shipped skills and the user's."""
+    return skill_library.load_layered(SKILLS_DIR, OWN_SKILLS_DIR)
 
 
 def skill_save(name, content, description="", scope=(), requires=()):
     """Write a skill file. Returns a result message."""
 
     try:
-        skill = skill_library.save(SKILLS_DIR, name, content,
-                                   description=description, scope=scope,
-                                   requires=requires)
+        skill = skill_library.save_layered(SKILLS_DIR, OWN_SKILLS_DIR, name, content,
+                                           description=description, scope=scope,
+                                           requires=requires)
     except skill_library.SkillError as exc:
         return f"ERROR: {exc}"
 
     revised = f", revision {skill.version}" if skill.version > 1 else ""
 
     return (f"OK: skill '{skill.name}' saved{revised} "
-            f"({len(skill_library.load_library(SKILLS_DIR))} skills in library)")
+            f"({len(load_skills())} skills in library)")
 
 
 def library_skills():
@@ -47,7 +53,7 @@ def library_skills():
     out, as it always was.
     """
     return [(skill.name, skill.document, skill.scope if skill.scope_declared else ())
-            for skill in skill_library.load_library(SKILLS_DIR)
+            for skill in load_skills()
             if not skill_library.missing_requirements(skill)]
 
 

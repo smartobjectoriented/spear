@@ -11,6 +11,10 @@ both, ssh included:
 
     ssh host docker run --rm -i --entrypoint spear-mcp IMAGE --corpus NAME
 
+The one exception is local: with --context the server also answers Claude
+Code's prompt hook on a socket of this machine, private to the user
+(cli/claude_context.py).
+
 Two tools: `list_corpora` and `search_corpus`. Paths in a result are relative
 to the root of the corpus that was asked for, which is how the client's own
 checkout names the same files.
@@ -21,6 +25,7 @@ from __future__ import annotations
 import json
 import os
 import sys
+import threading
 
 SERVER_NAME = "spear-corpus"
 
@@ -91,6 +96,7 @@ class CorpusIndex:
         self._projects = corpus_registry.load_projects()
         self._client = corpus_search._db()
         self._collections = {}
+        self._lock = threading.Lock()
         self.default = default
 
     def _collection(self, name):
@@ -151,6 +157,27 @@ class CorpusIndex:
             raise ToolError(f"no indexed corpus named '{name}'; "
                             f"list_corpora names the ones there are")
 
+        with self._lock:
+            context, _ = self._search.retrieve_context(self._corpora(name), query, top_k)
+
+        if not context or not context.strip():
+            return "(no match)"
+
+        if len(context) > MAX_CHARS:
+            context = context[:MAX_CHARS] + "\n… (truncated; ask a narrower query)"
+
+        return context
+
+    def context(self, query, name):
+        """What a SPEAR turn retrieves for a request, unasked: the corpus and
+        the ones attached to it, at the breadth a turn uses."""
+        with self._lock:
+            context, _ = self._search.retrieve_context(self._corpora(name), query)
+
+        return context
+
+    def _corpora(self, name):
+        """(collection, path prefix) for a corpus and the ones searched with it."""
         root = os.path.realpath(self._projects[name]["path"])
         corpora = [(self._collection(name), "")]
 
@@ -160,15 +187,7 @@ class CorpusIndex:
             corpora.append((self._collection(other),
                             os.path.relpath(path, root) if inside else path))
 
-        context, _ = self._search.retrieve_context(corpora, query, top_k)
-
-        if not context or not context.strip():
-            return "(no match)"
-
-        if len(context) > MAX_CHARS:
-            context = context[:MAX_CHARS] + "\n… (truncated; ask a narrower query)"
-
-        return context
+        return corpora
 
 
 def call_tool(index, name, arguments):
@@ -320,6 +339,20 @@ def main(argv=None):
               f"(indexed: {', '.join(index.names()) or 'none'})", file=sys.stderr)
 
         return 2
+
+    # Nobody named a corpus: the one the server was started in, if it is
+    # indexed, so that one registration serves whatever tree a session opens.
+
+    if not default:
+        from cli import corpus_registry
+
+        here = corpus_registry.detect_project(index._projects)
+        index.default = here if here in index.names() else None
+
+    if "--context" in argv:
+        from cli import claude_context
+
+        claude_context.serve(index, index._projects)
 
     serve(index, sys.stdin, out)
 

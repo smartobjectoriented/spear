@@ -8,6 +8,8 @@ checkout of the tree:
     the corpora the user registered   -> the image's registry
     their index                       -> the image's index
     the knowledge that was accepted   -> the image's common knowledge
+    the skills that were saved        -> the image's skills
+    the rules that were learned       -> a rule of the image, for every tree
 
 Run as root in a container of the image, with the state mounted; the launcher
 then commits that container (spear --build).
@@ -120,6 +122,59 @@ def bake_knowledge(source, target, schema, active):
     return len(rows)
 
 
+def bake_skills(source, target):
+    """Copy the user's skills over the image's; their names."""
+    if not os.path.isdir(source):
+        return []
+
+    os.makedirs(target, exist_ok=True)
+    names = sorted(name for name in os.listdir(source) if name.endswith(".md"))
+
+    for name in names:
+        shutil.copyfile(os.path.join(source, name), os.path.join(target, name))
+
+    return [name[:-3] for name in names]
+
+
+LEARNED_RULE = "90-learned-shared.md"
+LEARNED_HEADER = "---\nscope: global\ntasks: implementation, mixed, general\n---\n"
+
+
+def bake_learned_rules(source, rules_dir):
+    """Add the rules the user taught to the image's rule of learned ones, which
+    reaches the turns a learned rule reaches; how many were new."""
+    try:
+        with open(source, encoding="utf-8") as handle:
+            taught = [line.rstrip() for line in handle if line.strip()]
+    except OSError:
+        return 0
+
+    path, kept = os.path.join(rules_dir, LEARNED_RULE), []
+
+    if os.path.isfile(path):
+        with open(path, encoding="utf-8") as handle:
+            kept = [line.rstrip() for line in handle.read().split("---\n")[-1].splitlines()
+                    if line.strip()]
+
+    new = [line for line in taught if line not in kept]
+
+    if new:
+        os.makedirs(rules_dir, exist_ok=True)
+
+        with open(path, "w", encoding="utf-8") as handle:
+            handle.write(LEARNED_HEADER + "\n".join(kept + new) + "\n")
+
+    return len(new)
+
+
+def _open(path, mode):
+    """Give everyone `mode` on a path that lacks some of it."""
+    held = os.stat(path).st_mode & 0o777
+
+    if held & mode != mode:
+        os.chmod(path, held | mode)
+
+
 def _read(path):
     try:
         with open(path) as handle:
@@ -188,14 +243,22 @@ def main(argv=None):
 
     print(f"   knowledge {records} active records")
 
-    # The image is run as whoever launches it.
+    from cli.chat_settings import RULES_DIR, resource_dir
+
+    skills = bake_skills(f"{state}/skills", resource_dir("SPEAR_SKILLS_DIR", "skills"))
+    print(f"   skills    {len(skills)} added" + (f": {', '.join(skills)}" if skills else ""))
+    print(f"   rules     {bake_learned_rules(f'{state}/rules-learned.md', RULES_DIR)} learned")
+
+    # The image is run as whoever launches it. Only what is not open yet is
+    # touched: changing a file's mode copies it into the new layer, and the
+    # index of an image is most of its size.
 
     for root in filter(None, (chat_settings.SHIPPED_DB_PATH, str(common or ""))):
         for directory, _, files in os.walk(root):
-            os.chmod(directory, 0o777)
+            _open(directory, 0o777)
 
             for name in files:
-                os.chmod(os.path.join(directory, name), 0o666)
+                _open(os.path.join(directory, name), 0o666)
 
     return 0
 

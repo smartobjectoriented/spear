@@ -1,0 +1,9 @@
+#!/bin/bash
+# The knowledge recorded for the tree the current directory is in:
+#
+#     spear-knowledge list | show <id> | propose '<json>'
+#
+# SPEAR answers this command itself inside its own turns; here it is a
+# program, so that any other assistant in the container reads the same store.
+
+exec /opt/spear/client/bin/python /opt/spear/client/cli/claude_context.py knowledge "$@"

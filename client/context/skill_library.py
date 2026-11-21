@@ -219,6 +219,46 @@ def load_library(directory: str) -> list[Skill]:
     return skills
 
 
+def own_directory(shipped: str, state_dir: str) -> str | None:
+    """Where skills are saved when the library is not the user's to write: an
+    image ships it, and what a session learns there goes to the state
+    directory instead. None when the library itself can be written."""
+
+    if not os.path.isdir(shipped) or os.access(shipped, os.W_OK):
+        return None
+
+    return os.path.join(state_dir, "skills")
+
+
+def load_layered(shipped: str, own: str | None = None) -> list[Skill]:
+    """The shipped library with the user's own over it, by name: a skill the
+    user saved again answers for the shipped one."""
+
+    skills = {skill.name: skill for skill in load_library(shipped)}
+
+    if own:
+        skills.update({skill.name: skill for skill in load_library(own)})
+
+    return [skills[name] for name in sorted(skills)]
+
+
+def save_layered(shipped: str, own: str | None, name: str, content: str, **details) -> Skill:
+    """`save` into the user's layer when there is one. A shipped skill saved
+    again starts from the shipped file, so its history carries over."""
+
+    if not own:
+        return save(shipped, name, content, **details)
+
+    filename = f"{normalize_name(name)}.md"
+    source, target = os.path.join(shipped, filename), os.path.join(own, filename)
+
+    if os.path.isfile(source) and not os.path.exists(target):
+        os.makedirs(own, exist_ok=True)
+        shutil.copyfile(source, target)
+
+    return save(own, name, content, **details)
+
+
 def missing_requirements(skill: Skill, *, which=shutil.which) -> tuple[str, ...]:
     """Declared commands this machine does not have.
 

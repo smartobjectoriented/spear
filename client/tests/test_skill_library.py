@@ -1,6 +1,7 @@
 import os
 import tempfile
 import unittest
+from unittest import mock
 from datetime import datetime
 
 from context import skill_library
@@ -234,6 +235,48 @@ class SaveTests(unittest.TestCase):
     def test_the_saved_file_reloads_as_the_same_skill(self):
         saved = save(self.directory, "s", "1. Read.", description="Purpose.")
         self.assertEqual(load_library(self.directory), [saved])
+
+
+class LayeredLibraryTests(unittest.TestCase):
+    """An image ships its library; what a user saves there goes beside it."""
+
+    def setUp(self):
+        self.dir = tempfile.mkdtemp()
+        self.shipped = os.path.join(self.dir, "shipped")
+        self.own = os.path.join(self.dir, "state", "skills")
+        skill_library.save(self.shipped, "flash", "Flash over USB.", scope=("alpha",))
+
+    def test_a_library_the_user_can_write_has_no_other_layer(self):
+        self.assertIsNone(skill_library.own_directory(self.shipped, self.dir))
+        self.assertIsNone(skill_library.own_directory(os.path.join(self.dir, "absent"), self.dir))
+
+    def test_a_library_the_user_cannot_write_sends_skills_to_the_state(self):
+        with mock.patch("os.access", return_value=False):
+            self.assertEqual(skill_library.own_directory(self.shipped, "/state"),
+                             "/state/skills")
+
+    def test_the_users_skill_is_listed_with_the_shipped_ones(self):
+        skill_library.save_layered(self.shipped, self.own, "probe", "Probe the bus.")
+
+        self.assertEqual([skill.name for skill in
+                          skill_library.load_layered(self.shipped, self.own)],
+                         ["flash", "probe"])
+        self.assertEqual(os.listdir(self.shipped), ["flash.md"])
+
+    def test_a_shipped_skill_saved_again_keeps_its_history_and_answers_for_it(self):
+        revised = skill_library.save_layered(self.shipped, self.own, "flash", "Flash over JTAG.")
+
+        self.assertEqual((revised.version, revised.scope), (2, ("alpha",)))
+
+        found, = skill_library.load_layered(self.shipped, self.own)
+
+        self.assertEqual(found.body, "Flash over JTAG.")
+        self.assertEqual(skill_library.load_library(self.shipped)[0].body, "Flash over USB.")
+
+    def test_without_a_layer_the_library_itself_is_written(self):
+        skill_library.save_layered(self.shipped, None, "probe", "Probe the bus.")
+
+        self.assertEqual(sorted(os.listdir(self.shipped)), ["flash.md", "probe.md"])
 
 
 if __name__ == "__main__":

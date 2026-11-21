@@ -528,6 +528,20 @@ class TheStandaloneLauncherNeedsOnlyDocker(unittest.TestCase):
             self.assertFalse(former.exists())
             self.assertTrue((Path(tmp) / ".local/bin/spear").exists())
 
+    def test_the_image_gives_a_prompt_of_the_other_assistant_what_a_turn_gets(self):
+        harness = (REPO / "docker" / "Dockerfile.harness").read_text()
+        launcher = (REPO / "docker" / "claude-launcher").read_text()
+
+        for command in ("spear-claude-context", "spear-knowledge"):
+            self.assertIn(f"docker/{command}", harness)
+            self.assertIn(f"/usr/local/bin/{command}", harness)
+            self.assertTrue(os.access(REPO / "docker" / command, os.X_OK))
+
+        self.assertIn('"UserPromptSubmit"', launcher)
+        self.assertIn('spear-claude-context --socket $SOCKET', launcher)
+        self.assertIn('--context-socket "$SOCKET"', launcher)
+        self.assertIn('--settings "$SETTINGS"', launcher)
+
     def test_the_image_carries_it(self):
         dockerfile = (REPO / "docker" / "Dockerfile").read_text()
 

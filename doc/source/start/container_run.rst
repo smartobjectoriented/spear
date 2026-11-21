@@ -187,6 +187,32 @@ container reaches it through an SSH tunnel you open on your machine.
       and the corpus index is its ``spear-corpus`` MCP server
       (:ref:`mcp_server`).
 
+      It works from the knowledge base ``spear-chat`` works from, and gets it
+      the same way:
+
+      .. list-table::
+         :header-rows: 1
+         :widths: 34 66
+
+         * - What a SPEAR request starts from
+           - How Claude Code gets it
+         * - the rules of ``rules.d`` that apply to the corpus, the rules
+             learned with ``/recall``, the corpus's map, the project's
+             identity and its build and test commands
+           - rule files in ``~/.claude/rules``, loaded with every session
+         * - the skills whose scope covers the corpus
+           - ``~/.claude/skills``, offered by their description
+         * - the passages retrieved from the index for the request
+           - printed by a hook on every prompt; ``search_corpus`` searches
+             further
+         * - the knowledge recorded for the workspace
+           - printed by the same hook; ``spear-knowledge`` lists the
+             records and proposes new ones
+
+      Retrieval is not left to the model's choice in either: the hook runs
+      SPEAR's own search on each prompt.  ``/memory``, ``/skills`` and
+      ``/mcp`` show, inside Claude Code, what a session was given.
+
    An image gains Claude Code as one more layer, once it is built:
 
    .. code-block:: console

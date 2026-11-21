@@ -16,6 +16,14 @@ same channel as the MCP server does:
 Only what applies to the named corpus is written; without --corpus, only what
 applies to every tree. A rule scoped to a path is
 left out: the tree it names is one of this machine, not of the reader's.
+
+What a SPEAR turn is shown beside rules.d goes along, each as a rule of its
+own, so that both assistants start from the same text:
+
+    spear.learned.md          the rules learned on this machine
+    spear.corpus-map.md       the corpus's map, the tree's own or the shipped one
+    spear.project.md          what the project declares: identity, build, test
+    spear.knowledge-base.md   what reaches a request by itself, and the tools
 """
 
 from __future__ import annotations
@@ -28,6 +36,7 @@ import tarfile
 import time
 
 RULE_PREFIX = "spear-"
+CORPUS_RULES_FILE = ".edgem-rules.md"
 DESCRIPTION_MAX = 300
 
 
@@ -98,6 +107,76 @@ def export_skills(skills, names):
     return files
 
 
+def export_session(candidates):
+    """{path: text} for the candidates a turn gets beside rules.d, as
+    context_sources builds them: (file name, candidates) pairs."""
+    files = {}
+
+    for name, found in candidates:
+        text = "".join(item.text for item in found).strip()
+
+        if text:
+            files[f".claude/rules/{name}"] = text + "\n"
+
+    return files
+
+
+def corpus_map(tree, root, corpus, shipped):
+    """(label, text) of the corpus's map as a turn finds it: the file the tree
+    carries, at the working directory then at the corpus root, else the one
+    shipped under the corpus's name."""
+    seen = set()
+
+    for where in (tree, root):
+        path = os.path.realpath(os.path.join(where, CORPUS_RULES_FILE)) if where else ""
+
+        if not path or path in seen or not os.path.isfile(path):
+            continue
+
+        seen.add(path)
+
+        with open(path, "r", encoding="utf-8") as handle:
+            text = handle.read().strip()
+
+        if text:
+            return os.path.basename(os.path.realpath(where)), text
+
+    path = os.path.join(shipped, f"{corpus}.md") if corpus else ""
+
+    if path and os.path.isfile(path):
+        with open(path, "r", encoding="utf-8") as handle:
+            text = handle.read().strip()
+
+        if text:
+            return f"{corpus}, shipped", text
+
+    return "", ""
+
+
+def knowledge_base(corpus):
+    """The rule that says what this session shares with SPEAR and how it
+    arrives."""
+    tree = f"the corpus `{corpus}`" if corpus else "this tree"
+
+    return (
+        "# Shared knowledge base\n\n"
+        f"This session works on {tree} with the knowledge base SPEAR uses for it: "
+        "the rules beside this one, the skills, the corpus index and the knowledge "
+        "recorded for the workspace.\n\n"
+        "- A request arrives with a `Retrieved Context` section when the corpus is "
+        "indexed: the passages that match it, each headed by its path relative to "
+        "the corpus root. Start from them; open the files they name rather than "
+        "searching the tree again.\n"
+        "- `search_corpus` (MCP server `spear-corpus`) searches the same index. Use "
+        "it for what the retrieved context does not cover, before grep or a walk "
+        "through the tree; `list_corpora` names what is indexed.\n"
+        "- A `Workspace knowledge` section carries what has been recorded about "
+        "this workspace. `spear-knowledge list` and `spear-knowledge show <id>` "
+        "print the records; `spear-knowledge propose '<json>'` suggests one, with "
+        "`kind`, `subject` and `statement`, which is used only once the operator "
+        "accepts it.\n")
+
+
 def write_tar(files, out):
     now = time.time()
 
@@ -133,16 +212,19 @@ def _option(argv, flag):
 def main(argv=None):
     argv = list(sys.argv[1:] if argv is None else argv)
     corpus, directory = _option(argv, "--corpus"), _option(argv, "--out")
+    tree = _option(argv, "--tree") or os.getcwd()
 
     if "-h" in argv or "--help" in argv:
-        print("usage: spear-claude-export [--corpus NAME] [--out DIR]", file=sys.stderr)
+        print("usage: spear-claude-export [--corpus NAME] [--tree DIR] [--out DIR]",
+              file=sys.stderr)
 
         return 2
 
     from cli import corpus_registry
-    from cli.chat_settings import RULES_DIR, resource_dir
-    from context import skill_library
+    from cli.chat_settings import LEARNED_RULES_FILE, RULES_DIR, STATE_DIR, resource_dir
+    from context import context_sources, skill_library, workspace_context
     from context.workspace_context import project_families
+    from evidence import project_build
 
     projects = corpus_registry.load_projects()
 
@@ -172,6 +254,24 @@ def main(argv=None):
 
     skills = skill_library.load_library(resource_dir("SPEAR_SKILLS_DIR", "skills"))
     files = {**export_rules(rules, names), **export_skills(skills, names)}
+
+    # The rest of what a turn starts from, read as a turn reads it.
+
+    spec = projects.get(corpus) or {}
+    root = os.path.realpath(spec["path"]) if corpus else ""
+    commands = project_build.commands(
+        tree, spec=spec, cache_dir=f"{STATE_DIR}/projects/{corpus.replace('/', '_')}"
+    ) if corpus else None
+    here = workspace_context.from_session(
+        project=corpus or "", spec=spec, registered=bool(corpus), project_root=tree,
+        corpus_root=root or tree, project_commands=commands)
+    label, text = corpus_map(tree, root, corpus, os.path.join(RULES_DIR, "corpora"))
+    files.update(export_session((
+        ("spear.learned.md", context_sources.learned_candidate(LEARNED_RULES_FILE)),
+        ("spear.corpus-map.md", context_sources.corpus_rule_candidates(
+            [(label, text, ())] if text else [])),
+        ("spear.project.md", context_sources.metadata_candidates(here)))))
+    files[".claude/rules/spear.knowledge-base.md"] = knowledge_base(corpus)
 
     if directory:
         write_tree(files, directory)

@@ -1,7 +1,9 @@
 #!/bin/bash
 # Claude Code on this image's corpora, installed as `claude`: the rules and
 # skills of the corpus the current directory is in are laid out where it reads
-# them, the corpus index is its MCP server, and it starts.
+# them, the corpus index is its MCP server, and it starts. Each prompt then
+# gets what a SPEAR request gets by itself, through a hook: the passages
+# retrieved from the index and the workspace's recorded knowledge.
 #
 # Everything is written under HOME, never in the tree: a checkout bound into
 # the container stays as git left it. HOME is expected to outlive the
@@ -45,7 +47,19 @@ trap - EXIT
 # The index is registered for the user, so it is there whatever follows on
 # the command line.
 
-"$REAL" mcp remove --scope user spear-corpus >/dev/null 2>&1 || true
-"$REAL" mcp add --scope user spear-corpus -- spear-mcp ${CORPUS:+--corpus "$CORPUS"} >/dev/null
+# The hook asks the session's MCP server, which has the embedder loaded, on
+# a socket of this session's own.
 
-exec "$REAL" "$@"
+SOCKET="$(mktemp -u "${TMPDIR:-/tmp}/spear-context-XXXXXX")"
+SETTINGS="$SOCKET.json"
+
+cat > "$SETTINGS" <<EOF
+{"hooks": {"UserPromptSubmit": [{"hooks": [{"type": "command", "timeout": 180,
+  "command": "spear-claude-context --socket $SOCKET${CORPUS:+ --corpus $CORPUS}"}]}]}}
+EOF
+
+"$REAL" mcp remove --scope user spear-corpus >/dev/null 2>&1 || true
+"$REAL" mcp add --scope user spear-corpus -- spear-mcp ${CORPUS:+--corpus "$CORPUS"} \
+    --context-socket "$SOCKET" >/dev/null
+
+exec "$REAL" --settings "$SETTINGS" "$@"

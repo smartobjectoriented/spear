@@ -107,6 +107,17 @@ Filesystem
    * - the workspace
      - **the only host-writable mount**, at its own host path by default (see
        below); the registered corpora beside it unless ``--single-root``
+   * - git metadata
+     - when the workspace is writable: every ``.git`` directory and file in
+       it, and the git directories ``.git`` files name, bound back read-only
+       (``--ro-bind-try``) after the workspace, at their path inside it —
+       except the git directories of the repository a git command keeps its
+       records in, when the command is git's alone (:doc:`security_model`)
+   * - protected targets
+     - the same way: the protected files the command names or reaches
+       through the files it runs or feeds, the files refused earlier in the
+       session, and — unless the command builds or tests — the generated and
+       snapshot trees (:doc:`security_model`)
 
 Environment:
 
@@ -126,6 +137,24 @@ Workspace binding follows the profile
 
 A read-only profile therefore cannot write even by accident: the restriction
 is a mount option, not a check in Python.
+
+A writable profile is narrowed the same way. The repositories in the tree are
+found by a walk that reads directories only (never file contents, and not
+``build/tmp``, ``build/downloads`` or ``build/sstate-cache``), cached per root
+for the session and walked again when a root changes or a ``git clone`` ran.
+Each is bound read-only over the writable tree, so ``rm .git/index`` or a
+script appending to ``.git/config`` fail with *Read-only file system*
+whatever spells them; ``git status`` and ``git log`` read and run. A git
+command that keeps its repository's records (``add``, ``checkout``,
+``restore``, ``switch``, ``stash``, ``clean``, ``fetch``, ``pull``) finds
+that repository's git directories writable, and only those: one nested
+inside another stays read-only, and one under a read-only one is bound
+writable again after it (``--bind-try``).
+The same walk finds the generated and snapshot trees (``generated/``,
+``build/tmp``, ``.back``, ``.pristine``, a ``.0`` beside its live tree),
+bound read-only for a command that is not a build or a test run; the
+protected files a command reaches are found from its words and from the
+files it names, never by reading the whole tree.
 
 ``<mount>`` is the workspace's own host path, so a build tree configured
 outside the sandbox keeps working inside it — CMake caches, generated

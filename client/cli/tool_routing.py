@@ -23,7 +23,8 @@ from cli.session_workspace import (
     authorize_mutation, resolve_path, run_cmd_result, safe_mode_refusal,
 )
 from cli.terminal_ui import (
-    C_ACCENT, C_BOLD, C_RST, C_TOOL, tool_result, tool_step, tool_step_result, tool_use,
+    C_ACCENT, C_BOLD, C_RST, C_TOOL, LIVENESS, tool_result, tool_step,
+    tool_step_result, tool_use,
 )
 from cli.tool_handlers import (
     NETWORK_ENABLED, SANDBOX_DOWN, WORK_PHASE, _classified_handler_result,
@@ -59,6 +60,10 @@ def coding_host(agent_context, cache, record):
     from harness.control_plane import SpearHost
     from agent.host import CommandOutcome
 
+    # Where the terminal call last authorized runs, for the command it runs.
+
+    command_cwd = [None]
+
     def context():
         return _execution_context(agent_context, cache,
                                   task_id=getattr(agent_context, "task_id", None),
@@ -72,6 +77,9 @@ def coding_host(agent_context, cache, record):
 
         if cwd:
             ctx.metadata = {**ctx.metadata, "command_cwd": cwd}
+
+        if name == "terminal":
+            command_cwd[0] = cwd
 
         return TOOL_ROUTER.authorize(ctx, name, arguments)
 
@@ -101,6 +109,22 @@ def coding_host(agent_context, cache, record):
         if protected:
             return protected
 
+        # And what the write would say: a line that throws a guard's
+        # override switch is the operator's to write (control_overrides.py).
+
+        from harness import control_overrides
+
+        try:
+            with open(resolved, encoding="utf-8", errors="replace") as handle:
+                before = handle.read()
+        except OSError:
+            before = ""
+
+        override = control_overrides.content_refusal(before, content)
+
+        if override:
+            return override
+
         blocked = authorize_mutation(f"Modify {C_BOLD}{label}{C_RST} ?",
                                      action=action, paths=(Path(resolved),))
 
@@ -128,7 +152,8 @@ def coding_host(agent_context, cache, record):
 
         # A file no write may change may not be deleted either: deleted, it
         # could be written afresh, with nothing left to say it was protected.
-        protected = target_policy.refusal(resolved, _workspace_label(Path(resolved)))
+        protected = target_policy.refusal(resolved, _workspace_label(Path(resolved)),
+                                          deleting=True)
 
         if protected:
             return protected
@@ -138,13 +163,16 @@ def coding_host(agent_context, cache, record):
 
     def run(command, script, timeout, output_chars):
         ctx = context()
-        result = run_cmd_result(
-            command, need_confirm=False, cancellation=ctx.cancellation,
-            exec_cmd=script, timeout=timeout, output_chars=output_chars,
-            execution_mode=(ExecutionMode.SAFE
-                            if ctx.read_only or _write_gate_closed(ctx)
-                            or ctx.role in {"explorer", "reviewer", "planning"}
-                            else None))
+
+        with LIVENESS.bounded(timeout + 30):
+            result = run_cmd_result(
+                command, need_confirm=False, cancellation=ctx.cancellation,
+                exec_cmd=script, timeout=timeout, output_chars=output_chars,
+                cwd=command_cwd[0],
+                execution_mode=(ExecutionMode.SAFE
+                                if ctx.read_only or _write_gate_closed(ctx)
+                                or ctx.role in {"explorer", "reviewer", "planning"}
+                                else None))
         status = {"ok": "ok", "failed": "ok", "denied": "denied",
                   "cancelled": "cancelled", "timeout": "timeout"}.get(result.status, "error")
 

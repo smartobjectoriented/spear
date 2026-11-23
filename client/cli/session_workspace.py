@@ -6,9 +6,10 @@ import sys
 import hashlib
 import readline
 import subprocess
+from dataclasses import replace
 from pathlib import Path
 from runtime import work_phase
-from harness.command_policy import CommandPolicy, ToolPolicy
+from harness.command_policy import AuthorizationResult, CommandPolicy, ToolPolicy
 from harness.resource_control import ExecutionProfile
 from harness.sandbox import BubblewrapSandbox
 from harness.tool_primitives import (
@@ -16,6 +17,7 @@ from harness.tool_primitives import (
 )
 from harness.tool_runtime import CommandRunner
 from harness.workspace import SandboxSpec, Workspace, effective_mount_root
+from harness import attach_control, provenance, target_policy, write_protection
 from runtime.tracing import EventStatus, EventType, new_action_id
 from cli.chat_settings import AUDIT_LOGGER, STATE_DIR
 from cli.corpus_registry import load_projects
@@ -154,6 +156,12 @@ def set_project(spec):
 
     if "COMMAND_POLICY" in globals():
         COMMAND_POLICY.bind_workspace(WORKSPACE)
+
+    # What the trees hold now is what the session did not create: only the
+    # rest is its to clean up (provenance.py).
+
+    provenance.capture(WORKSPACE.roots)
+    attach_control.pin_pristine()
 
     PROJECT_KIND = spec["kind"]
 
@@ -508,15 +516,314 @@ def read_file(path):
 SIGPIPE_EXIT = 141
 
 
+# What the carried-over session may export that would steer git, or a
+# program git runs, while it writes its records.
+
+_STEERING_EXPORT = re.compile(r"^(?:GIT_(?!PAGER$)\w+|XDG_\w+|LD_\w+|BASH_ENV|ENV|EDITOR|VISUAL)$")
+
+
+def _session_exports(script):
+    """{name: value} that a terminal session script restores before its command."""
+    found = {}
+
+    for line in (script or "").splitlines():
+        match = re.match(r'declare -x ([A-Za-z_]\w*)(?:="((?:[^"\\]|\\.)*)")?$', line)
+
+        if match:
+            found[match.group(1)] = re.sub(r"\\(.)", r"\1", match.group(2) or "")
+
+    return found
+
+
+def _git_is_steered(cmd, script, aliases):
+    """Whether the session around `cmd` makes its git something else.
+
+    An export that redirects git or loads code into it, a HOME other than
+    the sandbox's, or a writable directory ahead of the system's git on PATH
+    that holds a `git`, or could by the time a second git command runs.
+    """
+    spec = SandboxSpec()
+    exports = _session_exports(script)
+
+    if any(_STEERING_EXPORT.match(name) for name in exports):
+        return True
+
+    if exports.get("HOME", spec.home) != spec.home:
+        return True
+
+    writable = [str(root) for root in WORKSPACE.roots] + [spec.home] + list(aliases.values())
+    several = sum(argv[0] == "git" for argv in COMMAND_POLICY.stage_argvs(cmd)) > 1
+
+    for entry in exports.get("PATH", spec.path).split(":"):
+        if entry in ("/usr/bin", "/bin"):
+            return False
+
+        if not entry.startswith("/"):
+            return True
+
+        host = next((path + entry[len(inside):] for inside, path in aliases.items()
+                     if entry == inside or entry.startswith(inside.rstrip("/") + "/")), entry)
+
+        if write_protection.within(os.path.realpath(host), writable) and (
+                several or os.path.lexists(os.path.join(host, "git"))):
+            return True
+
+    return False
+
+
+def _host_paths():
+    """A function from a path as the sandbox names it to the host's."""
+    mount = effective_mount_root(WORKSPACE.root)
+    aliases = {inside: host for host, inside in WORKSPACE.mount_map(
+        mount, identity=mount != SandboxSpec().workspace_mount).items() if inside != host}
+
+    def host(path):
+        for inside, outside in aliases.items():
+            if path == inside or path.startswith(inside.rstrip("/") + "/"):
+                return outside + path[len(inside):]
+
+        return path
+
+    return host
+
+
+_UNREAD_WORD = re.compile(r"[$`*?\[\]{}~]")
+
+
+def _stages_where(cmd, cwd, host):
+    """(directory, argv) for each stage of `cmd`, its `cd`s followed.
+
+    The directory is None once a `cd` names a place that cannot be read.
+    """
+    directory = host(cwd)
+
+    for argv in COMMAND_POLICY.stage_argvs(cmd):
+        if argv[0] == "cd":
+            operands = [word for word in argv[1:] if word not in ("-P", "-L", "--")]
+
+            if directory is None or len(operands) != 1 or _UNREAD_WORD.search(operands[0]):
+                directory = None
+            else:
+                directory = os.path.normpath(os.path.join(directory, host(operands[0])))
+
+            continue
+
+        yield directory, argv
+
+
+def _sourced_refusal(cmd, cwd):
+    """Why `cmd` may not source a script, or "".
+
+    `. ./x.sh` runs the script's commands in the shell itself, none of them
+    judged. A script from the start state (env.sh) is the project's own; one
+    written or changed in this session is the model's, and would run what
+    the model may not.
+    """
+    host = _host_paths()
+
+    for directory, argv in _stages_where(cmd, cwd, host):
+        if argv[0] not in (".", "source") or len(argv) < 2:
+            continue
+
+        word = argv[1]
+
+        if _UNREAD_WORD.search(word) or (directory is None and not word.startswith("/")):
+            return (f"'{argv[0]} {word}': which script it runs cannot be read here, so "
+                    f"the command cannot run")
+
+        path = os.path.normpath(os.path.join(directory or "/", host(word)))
+
+        try:
+            changed = os.path.getmtime(path) >= write_protection.started()
+        except OSError:
+            continue
+
+        if changed or provenance.created(path):
+            return (f"'{argv[0]} {word}' runs a script written in this session, whose "
+                    f"commands would run unjudged: run them as commands instead")
+
+    return ""
+
+
+def _authored_programs(cmd, cwd):
+    """The programs `cmd` runs by path that this session made.
+
+    A binary the session compiled, a script of the project it rewrote, or
+    anything it put in its scratch, runs code the model wrote: `gcc -o t t.c
+    && ./t` did what `python3 t.py` was refused. Such a program gets what a
+    test module the session wrote gets: the trees read-only. A program of the
+    start state, unchanged, runs as it always did.
+    """
+    host = _host_paths()
+    found = []
+
+    for directory, argv in _stages_where(cmd, cwd, host):
+        program = argv[0]
+
+        if "/" not in program:
+            continue
+
+        if directory is None or _UNREAD_WORD.search(program):
+            found.append(program)
+            continue
+
+        path = os.path.normpath(os.path.join(directory, host(program)))
+
+        if path.startswith(("/tmp/", SandboxSpec().tmpdir.rstrip("/") + "/")) or (
+                provenance.known(path) and (not os.path.lexists(path) or provenance.created(path)
+                                            or _changed_since_start(path))):
+            found.append(path)
+
+    return tuple(found)
+
+
+def _changed_since_start(path):
+    try:
+        return os.path.getmtime(path) >= write_protection.started()
+    except OSError:
+        return False
+
+
+def _git_clean_targets(cmd, cwd):
+    """(objects, refusal) for the `git clean` stages of `cmd`.
+
+    What git clean removes is listed first by the same command with -n, and
+    each object is judged as delete_file would judge it (provenance.py): the
+    session's own objects may go; one from the start state, a protected one
+    or one in a tree whose start state is unknown stops the command. A clean
+    whose deletion set cannot be listed does not run.
+    """
+    host = _host_paths()
+    targets = []
+
+    for directory, argv in _stages_where(cmd, cwd, host):
+        if argv[0] != "git":
+            continue
+
+        parsed = COMMAND_POLICY.git_command(argv)
+
+        if parsed is None or parsed[0] != "clean":
+            if parsed is None and "clean" in argv:
+                return (), "git clean with these options cannot be read here, so it cannot run"
+
+            continue
+
+        if (directory is None or COMMAND_POLICY.steers_git(cmd)
+                or any(_UNREAD_WORD.search(word) for word in argv)):
+            return (), "what this git clean would remove cannot be read here, so it cannot run"
+
+        for word in parsed[1]:
+            directory = os.path.normpath(os.path.join(directory, host(word)))
+
+        options = []
+        arguments = argv[argv.index("clean") + 1:]
+
+        # A dry run removes nothing.
+
+        if any(word in ("-n", "--dry-run") or (re.fullmatch(r"-[a-zA-Z]+", word) and "n" in word)
+               for word in arguments if word != "--"):
+            continue
+
+        for word in arguments:
+            if word in ("-i", "--interactive") or (
+                    re.fullmatch(r"-[a-zA-Z]+", word) and "i" in word):
+                return (), "an interactive git clean cannot run here"
+
+            if word in ("-q", "--quiet"):
+                continue
+
+            options.append(word.replace("q", "") if re.fullmatch(r"-[a-zA-Z]+", word) else word)
+
+        try:
+            listing = subprocess.run(
+                ["git", "-c", "core.fsmonitor=false", "clean", "-n",
+                 *options],
+                cwd=directory, capture_output=True, text=True, timeout=60,
+                env={key: value for key, value in os.environ.items()
+                     if not key.startswith("GIT_")})
+        except (OSError, subprocess.TimeoutExpired):
+            return (), "what this git clean would remove could not be listed, so it cannot run"
+
+        if listing.returncode != 0:
+            return (), "what this git clean would remove could not be listed, so it cannot run"
+
+        for line in listing.stdout.splitlines():
+            if not line.startswith("Would remove "):
+                continue
+
+            name = line[len("Would remove "):]
+            path = os.path.normpath(os.path.join(directory, name))
+
+            if not provenance.known(path):
+                return (), (f"git clean would remove {name}, in a tree whose start state is "
+                            f"not known, so it cannot run")
+
+            refusal = provenance.removal_refusal(path, name.rstrip("/"))
+
+            if refusal:
+                return (), (f"git clean: {target_policy.deletion_set_refusal(refusal)}. "
+                            f"git clean removes only what this session created")
+
+            targets.append(os.path.join(os.path.realpath(os.path.dirname(path)),
+                                        os.path.basename(path)))
+
+    return tuple(targets), ""
+
+
+def _session_cleanup(cmd, cwd):
+    """(objects, refusal) for a command that only removes named objects.
+
+    ((), "") when the command is not such a command; the objects, as host
+    paths, when every one was created in this session; a refusal naming the
+    first that was not.
+    """
+    plan = COMMAND_POLICY.cleanup_plan(cmd)
+
+    if plan is None:
+        return (), ""
+
+    host = _host_paths()
+    directory, targets = host(cwd), []
+
+    for kind, words, _ in plan:
+        if kind == "cd":
+            directory = os.path.normpath(os.path.join(directory, host(words[0])))
+            continue
+
+        for word in words:
+            path = os.path.normpath(os.path.join(directory, host(word)))
+
+            if not os.path.lexists(path):
+                continue
+
+            # With no start state for the tree, nothing is the session's: the
+            # command keeps the refusal it had.
+
+            if not provenance.known(path):
+                return (), ""
+
+            refusal = provenance.removal_refusal(path, word)
+
+            if refusal:
+                return (), (f"{refusal}. A command removes only what this session created; "
+                            f"a file from the start state is deleted with delete_file.")
+
+            targets.append(os.path.join(os.path.realpath(os.path.dirname(path)),
+                                        os.path.basename(path)))
+
+    return tuple(targets), ""
+
+
 def run_cmd_result(cmd, need_confirm=True, cancellation=None, execution_mode=None,
-                   exec_cmd=None, timeout=None, output_chars=None):
+                   exec_cmd=None, timeout=None, output_chars=None, cwd=None):
     """Return the security substrate's structured command result.
 
     `cmd` is what is classified and authorised. `exec_cmd`, when given, is
     what runs in its place: the same command inside a harness-built script
     (the terminal's carried-over session), never anything the policy did not
     judge -- and judged as the script it runs in. `timeout` replaces the
-    sandbox's default for this call.
+    sandbox's default for this call. `cwd` is where the command starts, for
+    reading the relative paths it names.
     """
     # The coding core's control plane answers gateway commands before they
     # get here. One that arrives anyway came from a runtime that has no
@@ -533,6 +840,52 @@ def run_cmd_result(cmd, need_confirm=True, cancellation=None, execution_mode=Non
     authorization = COMMAND_POLICY.authorize(assessment, mode,
                                                approve=confirm)
 
+    # A command that only removes what this session created gets the
+    # authority delete_file has, no more (provenance.py): every object it
+    # names must have been created in this session.
+
+    cleanup = ()
+
+    if assessment.classification == CommandClassification.DANGEROUS and WORKSPACE is not None:
+        cleanup, refusal = _session_cleanup(cmd, cwd or str(WORKSPACE.root))
+
+        if refusal:
+            authorization = AuthorizationResult(ToolResult("denied", f"command denied: {refusal}"))
+        elif cleanup:
+            assessment = replace(
+                assessment, classification=CommandClassification.WORKSPACE_MUTATING,
+                reason="session cleanup", required_capabilities=frozenset({
+                    Capability.FILESYSTEM_READ, Capability.WORKSPACE_WRITE,
+                    Capability.SHELL_COMPLEX}))
+            authorization = COMMAND_POLICY.authorize(assessment, mode, approve=confirm)
+
+    # The other routes to a deletion or to unjudged commands: git clean
+    # removes only what this session created, and a script this session
+    # wrote is not sourced.
+
+    if authorization.allowed and WORKSPACE is not None:
+        refusal = _sourced_refusal(cmd, cwd or str(WORKSPACE.root))
+        cleaned = ()
+
+        if not refusal:
+            cleaned, refusal = _git_clean_targets(cmd, cwd or str(WORKSPACE.root))
+
+        if refusal:
+            authorization = AuthorizationResult(ToolResult("denied", f"command denied: {refusal}"))
+        else:
+            cleanup = tuple(cleanup) + cleaned
+
+    # A test runner is no authority: a test module this session wrote runs
+    # with the trees read-only, so it reaches nothing the model could not
+    # reach directly (write_protection.authored_test_modules).
+
+    authored = ()
+
+    if authorization.allowed and WORKSPACE is not None:
+        authored = write_protection.authored_test_modules(
+            cmd, WORKSPACE.roots, cwd=cwd or str(WORKSPACE.root))
+        authored += _authored_programs(cmd, cwd or str(WORKSPACE.root))
+
     if authorization.result is not None:
         if (assessment.classification != CommandClassification.READ_ONLY
                 or assessment.required_capabilities):
@@ -545,9 +898,47 @@ def run_cmd_result(cmd, need_confirm=True, cancellation=None, execution_mode=Non
         return authorization.result
 
     granted_capabilities = authorization.granted_capabilities
+
+    if authored:
+        granted_capabilities = granted_capabilities - {Capability.WORKSPACE_WRITE}
+
+    builds = COMMAND_POLICY.builds(cmd)
+    protected = ()
+    git_dirs = ()
+
+    # What the command names that no tool may change is bound read-only
+    # under it, whatever program would write it (write_protection.py).
+
+    if Capability.WORKSPACE_WRITE in granted_capabilities and WORKSPACE is not None:
+        mount = effective_mount_root(WORKSPACE.root)
+        aliases = {inside: host for host, inside in WORKSPACE.mount_map(
+            mount, identity=mount != SandboxSpec().workspace_mount).items() if inside != host}
+        tmpdir = getattr(COMMAND_RUNNER.sandbox, "session_tmpdir", None)
+
+        if tmpdir:
+            aliases[SandboxSpec().tmpdir] = tmpdir
+
+        protected = write_protection.command_files(
+            cmd, WORKSPACE.roots, cwd=cwd or str(WORKSPACE.root), build=builds,
+            aliases=aliases)
+        protected = tuple(path for path in protected
+                          if not any(path == target or path.startswith(target + "/")
+                                     for target in cleanup))
+
+        # A git command keeps its own repository's records, and only when the
+        # command is git's alone, run as itself (CommandPolicy.git_writes).
+
+        steps = COMMAND_POLICY.git_writes(cmd)
+
+        if steps and not _git_is_steered(cmd, exec_cmd, aliases):
+            git_dirs = write_protection.git_dirs(steps, WORKSPACE.roots,
+                                                 cwd=cwd or str(WORKSPACE.root), aliases=aliases)
+
     profile = ExecutionProfile.from_capabilities(
         granted_capabilities,
         assessment.host_read_paths if Capability.HOST_READ in granted_capabilities else (),
+        git_dirs=git_dirs, guard_outputs=not builds, protected_paths=protected,
+        cleanup_paths=cleanup,
     )
     sandboxed = False
 
@@ -566,6 +957,15 @@ def run_cmd_result(cmd, need_confirm=True, cancellation=None, execution_mode=Non
         default_timeout = getattr(sandbox, "timeout_seconds", None)
         default_chars = getattr(sandbox, "max_output_chars", None)
 
+        # The attach state is the attach's own, and what a build removes from
+        # the start state must be its own output (attach_control.py).
+
+        watched = Capability.WORKSPACE_WRITE in granted_capabilities and WORKSPACE is not None
+        attach_before = attach_control.snapshot() if watched else {}
+        objects_before = attach_control.present_start_objects() if watched and builds else []
+        pristine_before = attach_control.pristine_state() if watched and builds else {}
+        started = attach_control.now()
+
         try:
             if timeout and default_timeout is not None:
                 sandbox.timeout_seconds = timeout
@@ -583,6 +983,16 @@ def run_cmd_result(cmd, need_confirm=True, cancellation=None, execution_mode=Non
 
             if default_chars is not None:
                 sandbox.max_output_chars = default_chars
+
+        if watched:
+            result = _attach_and_build_effects(cmd, result, mode, attach_before, objects_before,
+                                               pristine_before, started, builds)
+
+        # A clone adds a repository, and a build a generated tree, that the
+        # next command must find protected.
+
+        if builds or COMMAND_POLICY.writes_git(cmd):
+            write_protection.forget()
 
         sandboxed = True
     else:
@@ -619,6 +1029,79 @@ def run_cmd_result(cmd, need_confirm=True, cancellation=None, execution_mode=Non
         return ToolResult("timeout", f"timed out ({timeout or 45}s){hint}")
 
     return result
+
+
+def _attach_and_build_effects(cmd, result, mode, attach_before, objects_before, pristine_before,
+                              started, builds):
+    """Undo what a command did to the attach state, report what a build
+    removed that it did not own, and, after a successful updiff, record the
+    attached tree as the state its series reproduces."""
+    notes = []
+    restored = attach_control.enforce(attach_before, build=builds)
+
+    if restored:
+        notes.append(f"policy: the attach state is control-plane metadata; restored "
+                     f"{', '.join(_label(path) for path in restored[:5])}")
+        AUDIT_LOGGER.record_mutation(
+            action="attach_metadata_restored", mode=mode, workspace=WORKSPACE,
+            paths=restored, command=cmd, approved=False,
+            result=ToolResult("denied", "attach metadata changed by a command, restored"))
+
+    if builds:
+        attach_control.pin_pristine(pristine_before)
+        bad = attach_control.violations(attach_control.removed_by(objects_before))
+
+        if bad:
+            notes.append(f"policy violation: the build removed {len(bad)} object(s) of the start "
+                         f"state it does not own (sources, not build output): "
+                         f"{', '.join(_label(path) for path in bad[:5])}")
+            AUDIT_LOGGER.record_mutation(
+                action="build_effect_violation", mode=mode, workspace=WORKSPACE,
+                paths=bad[:200], command=cmd, approved=False,
+                result=ToolResult("denied", f"build removed {len(bad)} start-state source objects"))
+
+        if result.status == "ok" and result.exit_code in (None, 0):
+            for recipe in attach_control.updiff_recipes(COMMAND_POLICY.stage_argvs(cmd)):
+                written, why, check = attach_control.refresh(recipe, started)
+
+                if check is not None:
+                    AUDIT_LOGGER.record_mutation(
+                        action="persistence_verification", mode=mode, workspace=WORKSPACE,
+                        paths=(), command=cmd, approved=check.verified,
+                        result=ToolResult("ok" if check.verified else "denied", check.summary()))
+
+                    if not check.verified:
+                        shown = "; ".join(check.differences[:5])
+                        notes.append(f"SPEAR did not record the attached tree of {recipe}: {why}"
+                                     f"{f' ({shown})' if shown else ''}. The updiff captured what "
+                                     f"it could, the attach guard stays in force, and a re-attach "
+                                     f"will refuse until the series reproduces the tree")
+
+                if written:
+                    notes.append(f"SPEAR recorded the attached tree of {recipe} as the state its "
+                                 f"patch series now reproduces ({_label(written)}): the next "
+                                 f"attach re-attaches from the series")
+                    AUDIT_LOGGER.record_mutation(
+                        action="attach_state_refresh", mode=mode, workspace=WORKSPACE,
+                        paths=(written,), command=cmd, approved=True,
+                        result=ToolResult("ok", f"trusted attach-state refresh after updiff of {recipe}"))
+                else:
+                    AUDIT_LOGGER.record_mutation(
+                        action="attach_state_refresh", mode=mode, workspace=WORKSPACE,
+                        paths=(), command=cmd, approved=False,
+                        result=ToolResult("denied", f"no refresh after updiff of {recipe}: {why}"))
+
+    if not notes:
+        return result
+
+    return replace(result, stderr=(result.stderr + "\n" if result.stderr else "") + "\n".join(notes))
+
+
+def _label(path):
+    try:
+        return WORKSPACE.relative(path)
+    except Exception:
+        return path
 
 
 def command_result_text(result):
@@ -734,33 +1217,18 @@ def edit_file(path, old_text, new_text, *, execution_context=None):
     if not fpath:
         return f"ERROR: file not found: {path}"
 
-    # guard: a bad/incomplete path can fuzzy-resolve to a SNAPSHOT or
-    # third-party tree (e.g. avz.back/…, u-boot/…). Never write there — it
-    # corrupts the pristine copy and is never the file the user meant.
+    # A bad or incomplete path can fuzzy-resolve to a snapshot copy, generated
+    # output or git metadata. The same policy every other mutation asks.
 
-    if is_excluded_path(fpath):
-        return (f"ERROR: {os.path.relpath(fpath, PROJECT_ROOT)} is a snapshot / "
-                f"third-party copy (.back/.0/.pristine/u-boot/atf/qemu) — never "
-                f"edit it. Use the LIVE source path (re-check it with ls/find).")
+    from harness import target_policy
+
+    protected = target_policy.refusal(str(fpath), path)
+
+    if protected:
+        return f"ERROR: {protected}."
 
     with fpath.open("r", encoding="utf-8") as f:
         content = f.read()
-
-    # guard: never edit a GENERATED / DO-NOT-MODIFY file — it is overwritten on
-    # the next build/regen and editing it hides the real fix (must change the
-    # source that generates it, or the Kconfig/config instead).
-    # str(): resolve_path returns a Path, and re.search refuses one. This
-    # raised TypeError on EVERY edit of an existing file, so edit_file has been
-    # dead since the workspace started resolving to Path objects — which is why
-    # the model always fell back to rewriting whole files with write_file.
-
-    if re.search(r"/generated/|/build/tmp/", str(fpath)) or re.search(
-            r"DO NOT (?:MODIFY|EDIT)|auto(?:matically)?[ -]?generated|@generated",
-            content[:600], re.IGNORECASE):
-        return (f"ERROR: {path} is a GENERATED / DO-NOT-MODIFY file (it gets "
-                f"overwritten on the next build). Do NOT edit it — fix the "
-                f"source that generates it (a script, Kconfig, .config, or a "
-                f"template), not the generated output.")
 
     # guard: a no-op edit changes nothing but reports success — the model then
     # believes it acted. The comparison is EXACT. It used to normalise
@@ -1016,7 +1484,7 @@ def apply_unified_diff(fpath, diff_text):
 
 
 def is_excluded_path(p):
-    """Third-party / snapshot trees we must NEVER auto-write into."""
+    """Snapshot copies we must NEVER auto-write into."""
     from harness import target_policy
 
     return target_policy.is_snapshot(str(p))

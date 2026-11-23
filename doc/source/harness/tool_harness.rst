@@ -174,7 +174,12 @@ Every one of the step-9 checks returns a ``failed`` ``ToolResult`` rather than
 proceeding in a degraded mode (:ref:`fail_closed`).
 
 A refusal of the :term:`target policy` attaches to the file, not to the tool
-(:ref:`control_plane`).
+(:ref:`control_plane`).  The decision is taken on the path as written and on
+the file it reaches, so a link or a ``..`` does not change it.  Git metadata
+(``.git`` and the git directory a ``.git`` file names) is refused the same
+way, and the sandbox binds it read-only under every command that may write,
+together with the protected files the command reaches and, unless it builds or
+tests, the generated and snapshot trees.
 
 .. _refusal_breaker:
 

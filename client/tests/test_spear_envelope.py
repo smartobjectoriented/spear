@@ -35,6 +35,7 @@ from cli import rag_chat, session_workspace, tool_routing
 from agent import dispatch, tools
 from agent.host import CommandOutcome
 from runtime.cancellation import NEVER_CANCELLED
+from harness import provenance
 from harness.tool_primitives import ExecutionMode, decode_command_output
 from harness.workspace import Workspace
 
@@ -91,6 +92,12 @@ class Envelope(unittest.TestCase):
         self.root = os.path.realpath(tempfile.mkdtemp(prefix="envelope-", dir=str(ROOT)))
         self.records = []
         self.fill()
+
+        # The session starts on the filled tree: its start inventory is this,
+        # as a session's is taken when it binds its workspace.
+
+        provenance.forget()
+        provenance.capture([self.root])
 
     def tearDown(self):
         shutil.rmtree(self.root, ignore_errors=True)
@@ -215,12 +222,19 @@ class AllowedCallsAreTransparent(Envelope):
 class TheShellHasNoMoreReachThanPatch(Envelope):
     """Items 7-8 and the shell replay: the named target, and not its siblings."""
 
+    # The scope opens the named target; a start file changes through the
+    # checkpointed tools (HARDENED-V3), and a shell write to it is refused for
+    # that reason, not for its scope.
+
     def test_a_shell_write_to_the_named_target_runs(self):
         call = self.spear_session()
         text, record = call("terminal", command="echo cp >> board/virt64/post_image.sh")
 
-        self.assertFalse(record.refused, text)
-        self.assertIn("cp", Path(self.root, "board/virt64/post_image.sh").read_text())
+        self.assertIn("[policy: start_state_edit]", text)
+        text, record = call("write_file", path="board/virt64/post_image.sh",
+                            content="#!/bin/sh\ncp\n")
+
+        self.assertIn("cp", Path(self.root, "board/virt64/post_image.sh").read_text(), text)
 
     def test_a_sibling_is_refused_however_the_path_is_reached(self):
         call = self.spear_session()
@@ -262,7 +276,10 @@ class TheShellHasNoMoreReachThanPatch(Envelope):
         call = self.spear_session("Fix post_image.sh on all platforms")
         text, record = call("terminal", command="echo x >> board/rpi4/post_image.sh")
 
-        self.assertFalse(record.refused, text)
+        self.assertIn("[policy: start_state_edit]", text)
+        text, record = call("write_file", path="board/rpi4/post_image.sh", content="x\n")
+
+        self.assertEqual(Path(self.root, "board/rpi4/post_image.sh").read_text(), "x\n", text)
 
 
 @unittest.skipUnless(SANDBOX, "needs the bubblewrap sandbox")
@@ -608,7 +625,7 @@ class AProtectedFileIsProtectedFromEveryTool(Envelope):
         call = self.spear_session("Add a new.c and tidy the tree")
 
         for name, arguments in (("terminal", {"command": "echo ok > out.txt"}),
-                                ("terminal", {"command": "echo more >> a.txt"}),
+                                ("terminal", {"command": "echo more >> log.txt"}),
                                 ("terminal", {"command": "make > /dev/null 2>&1"}),
                                 ("write_file", {"path": "new.c", "content": "int y;\n"}),
                                 ("delete_file", {"path": "sub/b.c", "reason": "unused"})):

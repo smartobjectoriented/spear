@@ -21,6 +21,7 @@ from enum import StrEnum
 from pathlib import Path
 from typing import Sequence
 
+from harness import write_protection
 from harness.resource_control import (
     CgroupLimits,
     ExecutionProfile,
@@ -186,6 +187,11 @@ class BubblewrapSandbox:
 
         return ["--bind", self._session_tmpdir, self.spec.tmpdir]
 
+    @property
+    def session_tmpdir(self) -> str | None:
+        """The host directory bound at /tmp, once the first command made it."""
+        return self._session_tmpdir
+
     def mount_root(
         self, workspace: Workspace, profile: ExecutionProfile | None = None
     ) -> str:
@@ -232,6 +238,74 @@ class BubblewrapSandbox:
 
         for extra in workspace.extra_roots:
             argv.extend([flag, str(extra), mounts[str(extra)]])
+
+        if profile is not None and profile.workspace_write:
+            argv.extend(self._protection_argv(workspace, profile, mounts))
+
+        return argv
+
+    @staticmethod
+    def _protected_paths(workspace: Workspace,
+                         profile: ExecutionProfile) -> "list[tuple[str, bool]]":
+        """Host paths under the writable trees bound again: (path, writable).
+
+        Read-only, what the command may not write. Writable again, the git
+        directories its own git commands keep their records in, when one lies
+        under a path bound read-only (a submodule's, under its superproject's
+        .git). Outermost first; a path bound the way the nearest bound one
+        around it already is adds nothing.
+        """
+        roots = [str(root) for root in workspace.roots]
+        unlocked = {os.path.realpath(path) for path in profile.git_dirs}
+
+        # A cleanup removes what the session created; the directory it sits
+        # in may lie in a tree bound read-only, and removing needs it writable.
+
+        unlocked |= {os.path.dirname(path.rstrip("/")) for path in profile.cleanup_paths}
+        found: dict[str, bool] = {}
+
+        for root in roots:
+            trees = write_protection.trees(root)
+            found.update(dict.fromkeys(
+                (path for path in trees.git if os.path.realpath(path) not in unlocked), False))
+
+            if profile.guard_outputs:
+                found.update(dict.fromkeys(trees.outputs, False))
+                found.update(dict.fromkeys(trees.control, False))
+
+        found.update(dict.fromkeys(profile.protected_paths, False))
+        found.update(dict.fromkeys(unlocked, True))
+        kept: list[tuple[str, bool]] = []
+
+        for path in sorted(found):
+            if not write_protection.within(path, roots) or path in roots:
+                continue
+
+            around = [(parent, writable) for parent, writable in kept
+                      if path.startswith(parent.rstrip("/") + "/")]
+
+            if found[path] == (around[-1][1] if around else True):
+                continue
+
+            kept.append((path, found[path]))
+
+        return kept
+
+    def _protection_argv(self, workspace: Workspace, profile: ExecutionProfile,
+                         mounts: dict[str, str]) -> list[str]:
+        """Bind what may not be written back read-only, over the writable trees.
+
+        After the workspace binds, since in bwrap the later bind is the one in
+        force, and at the path the tree has inside. ``-try``: a path that is
+        gone by then has nothing left to protect.
+        """
+        argv: list[str] = []
+        roots = [str(root) for root in workspace.roots]
+
+        for path, writable in self._protected_paths(workspace, profile):
+            root = write_protection.within(path, roots)
+            inside = mounts[root] + path[len(root):]
+            argv.extend(["--bind-try" if writable else "--ro-bind-try", path, inside])
 
         return argv
 
@@ -494,12 +568,60 @@ class BubblewrapSandbox:
 
         return None
 
-    def _result_from_completed(self, completed: subprocess.CompletedProcess[str]) -> ToolResult:
+    def _output_left_since(self, started: float) -> str:
+        """What a killed command had written so far, from the session /tmp.
+
+        The session wrapper writes the command's output to a file under /tmp,
+        which is a host directory bound for the whole session: a sandbox the
+        cgroup killed takes its processes, not that file."""
+        if not self._session_tmpdir:
+            return ""
+
+        found = []
+
+        for path in Path(self._session_tmpdir).glob("*/out"):
+            try:
+                if path.stat().st_mtime >= started - 1:
+                    found.append((path.stat().st_mtime, path))
+            except OSError:
+                continue
+
+        if not found:
+            return ""
+
+        data = max(found)[1].read_bytes()
+        return decode_command_output(data[-self.max_output_chars:])
+
+    def _result_from_completed(self, completed: subprocess.CompletedProcess[str],
+                               cgroup_limits: CgroupLimits | None = None,
+                               started: float | None = None) -> ToolResult:
         stdout = decode_command_output(completed.stdout)[: self.max_output_chars]
         stderr = decode_command_output(completed.stderr)[: self.max_output_chars]
 
         if completed.returncode == 0:
             return ToolResult("ok", "bubblewrap sandbox command completed", stdout, stderr)
+
+        # A sandbox ended by a signal, with a resource contract active, is the
+        # cgroup's doing: the kernel OOM-kills the process over the cap (SIGKILL)
+        # and systemd's OOM policy then stops the whole scope (SIGTERM). Timeouts
+        # never reach this point. The session wrapper died with it, so the
+        # output it had written and the limits are the evidence left.
+
+        killed = {signal.SIGKILL, signal.SIGTERM}
+
+        if (-completed.returncode in killed or completed.returncode - 128 in killed) \
+                and cgroup_limits is not None and cgroup_limits.active:
+            left = self._output_left_since(started) if started is not None else ""
+            return ToolResult(
+                "failed",
+                "bubblewrap sandbox command killed: it most likely exceeded the "
+                f"sandbox's resource limits ({', '.join(cgroup_limits.systemd_properties())}); "
+                + ("its output up to the kill follows. " if left else "no output was kept. ")
+                + "Run less in parallel or a smaller step.",
+                stdout=left or stdout,
+                stderr=stderr,
+                exit_code=completed.returncode,
+            )
 
         return ToolResult(
             "failed",
@@ -598,6 +720,7 @@ class BubblewrapSandbox:
         env = {} if unit is None else self.scope_runner.supervisor_env()
 
         try:
+            started = time.time()
             process = subprocess.Popen(
                 argv,
                 stdout=subprocess.PIPE,
@@ -663,7 +786,7 @@ class BubblewrapSandbox:
             self.availability = SandboxAvailability.INEXECUTABLE
             return ToolResult("failed", f"bubblewrap sandbox unavailable: {exc}")
 
-        return self._result_from_completed(completed)
+        return self._result_from_completed(completed, cgroup_limits, started)
 
     @staticmethod
     def _safe_close(fd: int | None) -> None:
@@ -854,6 +977,7 @@ class BubblewrapSandbox:
                     scoped_argv = bwrap_argv
                     scope_env = {}
 
+                started = time.time()
                 bwrap_process = subprocess.Popen(
                     scoped_argv,
                     stdout=subprocess.PIPE,
@@ -994,7 +1118,7 @@ class BubblewrapSandbox:
 
                 completed = subprocess.CompletedProcess(bwrap_argv, bwrap_process.returncode, stdout, stderr)
 
-                return self._result_from_completed(completed)
+                return self._result_from_completed(completed, cgroup_limits, started)
 
         # The coordinator must not leak an in-flight namespace/helper if a
         # Python-level failure occurs while reading control data.

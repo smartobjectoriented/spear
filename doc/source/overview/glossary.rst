@@ -155,9 +155,9 @@ Glossary
 
    Target policy
       The rule that a refusal attaches to the file, not to the tool: generated
-      output and snapshot copies refused to ``write_file`` and ``patch`` are
-      refused to every other mutation as well, ``delete_file`` and shell
-      redirection included.
+      output, snapshot copies and git metadata refused to ``write_file`` and
+      ``patch`` are refused to every other mutation as well, ``delete_file``
+      and shell redirection included.
 
    Refusal breaker
       The guard that stops a turn which keeps asking for an operation already

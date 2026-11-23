@@ -485,6 +485,51 @@ def _at(directory: str, token: str) -> str:
     return os.path.join(directory, token)
 
 
+_VARIABLE = re.compile(r"\$(?:\{(\w+)\}|(\w+))")
+_LITERAL_ASSIGNMENT = re.compile(r"^([A-Za-z_]\w*)=([^$`]*)$")
+
+
+def _with_assignments(stages):
+    """Each stage with the variables assigned literally before it substituted.
+
+    `F=board/x; echo P >> $F` writes board/x. A value the command computes is
+    left as `$F`, which counts as a destination known only at run time.
+    """
+    values = {}
+    found = []
+
+    for argv in stages:
+        argv = [_VARIABLE.sub(lambda match: values.get(match.group(1) or match.group(2),
+                                                       match.group(0)), token)
+                for token in argv]
+
+        for token in (argv[1:] if argv[0] in ("export", "local", "readonly") else argv):
+            assignment = _LITERAL_ASSIGNMENT.match(token)
+
+            if not assignment:
+                break
+
+            values[assignment.group(1)] = assignment.group(2)
+
+        found.append(argv)
+
+    return found
+
+
+def _copied_into(argv) -> list[str]:
+    """What `cp src dir/` writes: dir/src's name, not the directory."""
+    if Path(argv[0]).name not in ("cp", "mv", "install"):
+        return []
+
+    operands = [arg for arg in argv[1:] if not arg.startswith("-")]
+
+    if len(operands) < 2 or not (operands[-1].endswith("/") or os.path.isdir(operands[-1])):
+        return []
+
+    return [os.path.join(operands[-1], os.path.basename(source.rstrip("/")))
+            for source in operands[:-1]]
+
+
 def shell_write_targets(command: str, scope: RequestScope, cwd: str | None = None) -> list[str]:
     """Every path a shell command may write: a redirection, the destination
     of cp/mv/install/ln, the operands of rm/touch/mkdir/tee/truncate/sed -i.
@@ -501,7 +546,7 @@ def shell_write_targets(command: str, scope: RequestScope, cwd: str | None = Non
     if not command:
         return []
 
-    words = list(_split_stages(command))
+    words = _with_assignments(list(_split_stages(command)))
     patterns = [argv[index + 1] for argv in words
                 for index, arg in enumerate(argv[:-1])
                 if arg in ("-name", "-iname")]
@@ -511,24 +556,188 @@ def shell_write_targets(command: str, scope: RequestScope, cwd: str | None = Non
                            for index, token in enumerate(argv) if index]
               for argv, directory in zip(words, directories)]
     # What the whole command names, globs expanded in the project: the
-    # candidates when a write's destination is only known at run time.
-    mentioned = [path for argv in stages for token in argv[1:]
-                 for path in _expand_in(scope, token)]
-    mentioned += [path for item in list(mentioned)
-                  for path in _children_matching(scope, item, patterns)]
+    # candidates when a write's destination is only known at run time. A
+    # directory a stage only enters (`cd`) is where it runs, not a file it
+    # names. What lies inside a named directory is reached only by a writer
+    # fed from a walk of it (find -exec, xargs): counted for every unknown
+    # destination, `cd root && build.sh > $LOG` was refused for the first
+    # generated file the walk of the whole project met.
+    mentioned = [path for argv in stages if Path(argv[0]).name not in ("cd", "pushd")
+                 for token in argv[1:] for path in _expand_in(scope, token)]
+    walked = mentioned + [path for item in list(mentioned)
+                          for path in _children_matching(scope, item, patterns)]
     targets = []
 
     for argv in stages:
         destinations = _shell_destinations(argv)
         targets += [path for item in destinations for path in _expand_in(scope, item)]
+        targets += _copied_into(argv)
+        fed = _writes_fed(argv) or any("{}" in item for item in destinations)
 
         if _opaque(argv) or any("$" in item or "{}" in item
                                 for item in destinations) or (
                 _writes_fed(argv) and not destinations):
-            targets += mentioned
+            targets += walked if fed else mentioned
             targets += _WORD_PATH.findall(" ".join(argv[1:]))
 
     return list(dict.fromkeys(targets))
+
+
+def shell_overwrite_targets(command: str, scope: RequestScope,
+                            cwd: str | None = None) -> list[str]:
+    """The files a shell command writes by name: a redirection, tee,
+    truncate, dd of=, and the destination of cp, install, ln and rsync (a
+    directory's entry named after each source). A destination only decided
+    at run time is "$" in the result: what it reaches cannot be read."""
+    if not command:
+        return []
+
+    words = _with_assignments(list(_split_stages(command)))
+    directories = _stage_directories(words, cwd or scope.root or ".")
+    found = []
+
+    # Scratch is no start file: /tmp, and a directory mktemp made.
+
+    scratch = re.findall(r"\b([A-Za-z_]\w*)=[\"']?(?:\$\(mktemp\b|/tmp/)", command)
+
+    def at_scratch(target):
+        return target.startswith("/tmp/") or any(
+            re.search(rf"(?:^|/)[\"']?\$\{{?{name}\b", target) for name in scratch)
+
+    # Where a `cd` to a name read at run time leads is not known here: a
+    # patch run after it changes files that cannot be named.
+
+    entered = "known"
+
+    for argv, directory in zip(words, directories):
+        binary = Path(argv[0]).name
+        operands = [arg for arg in argv[1:] if not arg.startswith("-")]
+
+        if binary in ("cd", "pushd") and operands and re.search(r"[$`]", operands[0]):
+            entered = "scratch" if at_scratch(operands[0]) else "unknown"
+
+        named = [target for target in _shell_destinations(argv)
+                 if binary not in ("rm", "rmdir", "unlink", "touch", "mkdir", "chmod",
+                                   "chown", "shred", "mv")]
+
+        if binary in ("cp", "install", "ln", "rsync") and len(operands) >= 2:
+            destination = _at(directory, operands[-1])
+
+            if os.path.isdir(destination):
+                named = [target for target in named if target != operands[-1]]
+                found += [os.path.join(destination, os.path.basename(source.rstrip("/")))
+                          for source in operands[:-1]]
+
+        for target in named:
+            if at_scratch(target):
+                continue
+
+            found.append("$" if "$" in target or "`" in target else _at(directory, target))
+
+        if binary == "patch" and entered == "unknown":
+            found.append("$")
+        elif binary == "patch" and entered == "known" and not directory.startswith("/tmp"):
+            found += _patched_files(argv, directory)
+
+    return list(dict.fromkeys(found))
+
+
+def _patched_files(argv, directory):
+    """The files a `patch` run changes, read from its diff: "$" when the
+    diff or the files cannot be read, none for a dry run."""
+    if "--dry-run" in argv:
+        return []
+
+    strip, source, named = 0, "", []
+    index = 1
+
+    while index < len(argv):
+        arg = argv[index]
+        value = argv[index + 1] if index + 1 < len(argv) else ""
+
+        if arg in ("-d", "--directory"):
+            directory, index = _at(directory, value), index + 2
+            continue
+
+        if arg in ("-i", "--input", "<"):
+            source, index = value, index + 2
+            continue
+
+        if arg.startswith("--input="):
+            source = arg.split("=", 1)[1]
+        elif arg.startswith("--directory="):
+            directory = _at(directory, arg.split("=", 1)[1])
+        elif re.fullmatch(r"-p\d+", arg):
+            strip = int(arg[2:])
+        elif arg in ("-p", "--strip") and value.isdigit():
+            strip, index = int(value), index + 2
+            continue
+        elif not arg.startswith("-"):
+            named.append(arg)
+
+        index += 1
+
+    if named:
+        return [_at(directory, named[0])]
+
+    if not source or "$" in source:
+        return ["$"]
+
+    try:
+        with open(_at(directory, source), encoding="utf-8", errors="replace") as handle:
+            lines = handle.read(4_000_000).splitlines()
+    except OSError:
+        return ["$"]
+
+    found = []
+
+    for previous, line in zip([""] + lines, lines):
+        if not line.startswith("+++ ") or not previous.startswith("--- "):
+            continue
+
+        name = line[4:].split("\t")[0].strip()
+
+        if name == "/dev/null":
+            name = previous[4:].split("\t")[0].strip()
+
+        parts = name.split("/")[strip:]
+
+        if parts:
+            found.append(_at(directory, "/".join(parts)))
+
+    return found
+
+
+def shell_removal_targets(command: str, scope: RequestScope, cwd: str | None = None) -> list[str]:
+    """The paths a command removes by name: rm, rmdir and unlink operands,
+    and the start points of a find that deletes. A subset of
+    shell_write_targets, judged as deletions (target_policy, provenance)."""
+    if not command:
+        return []
+
+    words = _with_assignments(list(_split_stages(command)))
+    directories = _stage_directories(words, cwd or scope.root or ".")
+    found = []
+
+    for argv, directory in zip(words, directories):
+        name = Path(argv[0]).name
+
+        if name in ("rm", "rmdir", "unlink"):
+            found += [_at(directory, arg) for arg in argv[1:] if not arg.startswith("-")]
+        elif name == "find" and ("-delete" in argv or any(
+                argv[index] == "-exec" and index + 1 < len(argv) and argv[index + 1] in ("rm", "rmdir")
+                for index in range(len(argv)))):
+            starts = []
+
+            for arg in argv[1:]:
+                if arg.startswith(("-", "(", "!")):
+                    break
+
+                starts.append(_at(directory, arg))
+
+            found += starts
+
+    return list(dict.fromkeys(found))
 
 
 def shell_write_refusal(command: str, scope: RequestScope | None,
@@ -572,12 +781,43 @@ _SHELL_KEYWORDS = frozenset({"do", "then", "else", "elif", "time", "!", "{",
                              "(", "exec", "nohup", "env", "sudo", "command"})
 
 
+def _detach_redirections(stage: str) -> str:
+    """`echo P>>t` as `echo P >>t`: an unquoted `>` ends the word before it.
+
+    Left joined, shlex hands over `P>>t` as one word and the file it writes
+    is never seen. A word of digits before it is the descriptor (`2>x`).
+    """
+    out: list[str] = []
+    word: list[str] = []
+    quote = ""
+
+    for char in stage:
+        if quote:
+            quote = "" if char == quote else quote
+        elif char in "'\"":
+            quote = char
+        elif (char == ">" and word and word[-1] not in ">&|<"
+              and not "".join(word).isdigit()):
+            out.append("".join(word) + " ")
+            word = []
+
+        if char.isspace() and not quote:
+            out.append("".join(word) + char)
+            word = []
+        else:
+            word.append(char)
+
+    return "".join(out) + "".join(word)
+
+
 def _split_stages(command: str):
     # find's `-exec ... \;` terminator is not a command separator; `+` ends
     # the same -exec without looking like one.
     command = command.replace("\\;", "+").replace("';'", "+")
 
     for stage in re.split(r"&&|\|\||[;|\n]", command):
+        stage = _detach_redirections(stage)
+
         try:
             argv = shlex.split(stage, posix=True)
         except ValueError:

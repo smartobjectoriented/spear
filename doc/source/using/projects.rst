@@ -349,9 +349,20 @@ Indexing
 
 .. code-block:: text
 
+   /cd <dir>                 move the session's corpus to <dir>, inside the
+                             launch directory
    /reindex                  rebuild the index for the current corpus
-   /corpus                   list and manage the registry (switching is
-                             spear-chat --corpus <name>)
+   /corpus                   list and manage the registry
+
+``/cd`` moves the corpus, not the tools. Launched in ``opencn-ng``,
+``/cd linux/linux`` makes the session's index, history, memories and rules
+those of ``opencn-ng-linux``, and ``/reindex`` then rebuilds that tree; the
+tools keep running in ``opencn-ng``, and retrieved paths come prefixed with
+``linux/linux/`` so they open from there. The directory resolves as a launch
+there would, except that a directory its corpus excludes is not part of it:
+``/cd linux`` federates the corpora below ``linux/`` rather than falling back
+on ``opencn-ng``. A target outside the launch directory is refused; ``/cd``
+alone returns to it.
 
 Indexing is not optional in practice. See :ref:`Retrieval <retrieval>` for what
 it measurably buys, and :ref:`Troubleshooting <troubleshooting>` for the

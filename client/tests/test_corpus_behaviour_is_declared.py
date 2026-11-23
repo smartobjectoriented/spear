@@ -167,10 +167,10 @@ class ThePromptIsDeclared(Registry):
                          "system-prompt.md")
 
     def test_the_selection_is_not_a_kind_branch(self):
-        """Read from main(), which is where the choice is made."""
+        """Read from corpus_prompt(), which is where the choice is made."""
         import inspect
 
-        source = inspect.getsource(rag_chat.main)
+        source = inspect.getsource(rag_chat.corpus_prompt)
 
         self.assertIn('corpus_property("prompt_file")', source)
         self.assertNotIn('PROJECT_KIND !=', source)

@@ -1,5 +1,9 @@
 Unreleased
 
+	•	/cd <dir> moves the session's corpus -- index, history, memories,
+		rules -- to a directory inside the launch tree, so /reindex right
+		after rebuilds that tree. The tools stay in the launch directory.
+
 	•	Image profile reds, between public and private: the image for the
 		people of one institute. It bakes the corpora named by --bake and is
 		cut to them -- of the index only their collections, of rules, skills

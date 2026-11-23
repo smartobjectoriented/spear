@@ -46,6 +46,25 @@ class Inventory(unittest.TestCase):
         self.assertFalse(provenance.created(f"{self.root}/a.txt"))
         self.assertFalse(provenance.created(f"{self.root}/build"))
 
+    def test_a_background_walk_is_waited_for_and_runs_what_follows(self):
+        ran = []
+        provenance.forget()
+        provenance.capture([self.root], background=True, then=lambda: ran.append(1))
+        provenance.ready()
+        Path(self.root, "new.tmp").write_text("n\n")
+
+        self.assertEqual(ran, [1])
+        self.assertTrue(provenance.created(f"{self.root}/new.tmp"))
+        self.assertFalse(provenance.created(f"{self.root}/a.txt"))
+
+    def test_a_tree_inside_another_is_inventoried_once(self):
+        provenance.forget()
+        provenance.capture([self.root, f"{self.root}/build"])
+
+        self.assertTrue(provenance.known(f"{self.root}/build/x/old.c"))
+        self.assertEqual(len(provenance.start_paths()),
+                         len(set(provenance.start_paths())))
+
     def test_recreating_a_start_path_does_not_make_it_the_sessions(self):
         os.remove(f"{self.root}/a.txt")
         Path(self.root, "a.txt").write_text("again\n")

@@ -1,5 +1,10 @@
 Unreleased
 
+	•	The start inventory of the declared trees runs beside the session's
+		startup instead of before it: every registered corpus is walked, and
+		spear-chat took over a minute to show its prompt, --help included. A
+		tree inside another one is walked once.
+
 	•	/cd <dir> moves the session's corpus -- index, history, memories,
 		rules -- to a directory inside the launch tree, so /reindex right
 		after rebuilds that tree. The tools stay in the launch directory.

@@ -158,10 +158,11 @@ def set_project(spec):
         COMMAND_POLICY.bind_workspace(WORKSPACE)
 
     # What the trees hold now is what the session did not create: only the
-    # rest is its to clean up (provenance.py).
+    # rest is its to clean up (provenance.py). Taken beside the startup: the
+    # declared trees are every registered corpus.
 
-    provenance.capture(WORKSPACE.roots)
-    attach_control.pin_pristine()
+    provenance.capture(WORKSPACE.roots, background=True,
+                       then=attach_control.pin_pristine)
 
     PROJECT_KIND = spec["kind"]
 

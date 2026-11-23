@@ -398,6 +398,8 @@ def refresh(recipe: str, started: float) -> tuple[str, str, persistence_check.Ve
 
 
 def _verify(root: str, tree: str, pf: str) -> persistence_check.Verification:
+    provenance.ready()
+
     def failed(reason: str) -> persistence_check.Verification:
         return persistence_check.Verification(False, reason)
 

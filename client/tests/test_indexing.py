@@ -334,6 +334,79 @@ class ReindexTargetsTheCorpusNotTheCwdTest(unittest.TestCase):
         self.assertEqual(["--exclude", "vendor"], self.corpus_search.reindex_options())
 
 
+class CdMovesTheCorpusTest(unittest.TestCase):
+    """/cd moves the session's corpus inside the launch tree, so /reindex after
+    it rebuilds the tree just entered. The shape is opencn-ng's: the umbrella
+    excludes linux/, whose kernel and userspace are corpora of their own."""
+
+    def setUp(self):
+        from cli import corpus_registry, corpus_search, session_workspace
+        self.corpus_registry = corpus_registry
+        self.corpus_search = corpus_search
+        self.session_workspace = session_workspace
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.root = os.path.realpath(self.tmp.name) + "/opencn-ng"
+
+        for d in ("doc", "qemu", "linux/linux", "linux/usr"):
+            os.makedirs(f"{self.root}/{d}")
+
+        self.addCleanup(setattr, corpus_registry, "PROJECTS_FILE",
+                        corpus_registry.PROJECTS_FILE)
+
+        for name in ("PROJECT", "PROJECT_SPEC", "PROJECT_KIND", "PROJECT_ROOT",
+                     "CORPUS_ROOT", "COLLECTION_NAME", "WORKSPACE",
+                     "HISTORY_FILE", "MEMORIES_FILE"):
+            self.addCleanup(setattr, session_workspace, name,
+                            getattr(session_workspace, name))
+
+        corpus_registry.PROJECTS_FILE = os.path.join(self.tmp.name, "projects.json")
+        self.projects = {
+            "opencn-ng": {"path": self.root, "kind": "generic",
+                          "exclude": ["./linux", "./qemu"]},
+            "opencn-usr": {"path": f"{self.root}/linux/usr", "kind": "generic"},
+            "opencn-ng-linux": {"path": f"{self.root}/linux/linux", "kind": "generic"},
+        }
+
+        with open(corpus_registry.PROJECTS_FILE, "w") as f:
+            json.dump(self.projects, f)
+
+        self.addCleanup(os.chdir, os.getcwd())
+        os.chdir(self.root)
+
+    def test_a_registered_tree_is_its_corpus(self):
+        spec = self.corpus_registry.corpus_at(f"{self.root}/linux/linux")
+        self.assertEqual("opencn-ng-linux", spec["name"])
+
+    def test_an_excluded_directory_holding_corpora_federates_them(self):
+        """Not back to opencn-ng, which leaves linux/ out of its index."""
+        spec = self.corpus_registry.corpus_at(f"{self.root}/linux")
+        self.assertEqual("workspace:linux", spec["name"])
+        self.assertEqual(["opencn-ng-linux", "opencn-usr"], spec["corpora"])
+
+    def test_an_excluded_directory_alone_is_ad_hoc(self):
+        spec = self.corpus_registry.corpus_at(f"{self.root}/qemu")
+        self.assertEqual(("adhoc:qemu", f"{self.root}/qemu"),
+                         (spec["name"], spec["path"]))
+
+    def test_a_plain_subdirectory_stays_in_its_corpus(self):
+        self.assertEqual("opencn-ng",
+                         self.corpus_registry.corpus_at(f"{self.root}/doc")["name"])
+
+    def test_reindex_follows_the_corpus_and_the_tools_stay(self):
+        self.session_workspace.set_project(
+            self.corpus_registry.corpus_at(f"{self.root}/linux/linux"))
+        cmd = self.corpus_search.reindex_command()
+        self.assertEqual(f"{self.root}/linux/linux", cmd[2])
+        self.assertEqual(self.session_workspace.COLLECTION_NAME,
+                         cmd[cmd.index("--collection") + 1])
+        self.assertEqual(self.root, self.session_workspace.PROJECT_ROOT)
+
+    def test_cd_is_a_session_command(self):
+        from cli.operator_input import completion_candidates
+        self.assertEqual(["/cd"], completion_candidates("/c", "/c")[:1])
+
+
 class CorpusCommandTest(unittest.TestCase):
     """/corpus and the `spear-corpus` CLI are one implementation.
 

@@ -176,7 +176,12 @@ def init_chromadb():
     client = _db()
 
     try:
-        own = [(client.get_collection(name=session_workspace.COLLECTION_NAME), "")]
+        # After /cd the corpus sits below the directory the tools run in, and
+        # its chunks are addressed from there like a federated one's.
+
+        prefix = corpus_prefix(session_workspace.CORPUS_ROOT)
+        own = [(client.get_collection(name=session_workspace.COLLECTION_NAME),
+                "" if os.path.isabs(prefix) else prefix)]
     except Exception:
         own = []
 

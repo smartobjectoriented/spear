@@ -17,6 +17,7 @@ delete.
 from __future__ import annotations
 
 import os
+import threading
 
 from harness import target_policy
 
@@ -34,6 +35,19 @@ _names: list[str] = []
 # inventory, and the ones whose walk completed: only those hold created objects.
 _asked: tuple[str, ...] = ()
 _complete: tuple[str, ...] = ()
+# The walk in progress. Every registered corpus is a declared tree, and their
+# walk takes long enough to hold the prompt back, so a session runs it beside
+# its startup.
+_pending: "threading.Thread | None" = None
+
+
+def ready() -> None:
+    """Wait for the start inventory, and what was run after it."""
+    global _pending
+
+    if _pending is not None and _pending is not threading.current_thread():
+        _pending.join()
+        _pending = None
 
 
 def _key(path: str) -> int:
@@ -83,14 +97,40 @@ def _walk(root: str):
     return paths, inodes, names
 
 
-def capture(roots) -> None:
-    """Take the start inventory of `roots`, once per set of roots."""
-    global _asked, _complete
+def capture(roots, background: bool = False, then=None) -> None:
+    """Take the start inventory of `roots`, once per set of roots.
+
+    In the background, readers of the inventory wait for it, and for
+    `then`, run after it on the same thread. An object made while the walk
+    runs may be taken for one of the start: refused to the session's
+    cleanup, never handed to it.
+    """
+    global _asked, _pending
 
     roots = tuple(sorted(os.path.realpath(str(root)) for root in roots))
 
     if roots == _asked:
         return
+
+    ready()
+    _asked = roots
+    def run():
+        _inventory(roots)
+
+        if then is not None:
+            then()
+
+    if not background:
+        run()
+
+        return
+
+    _pending = threading.Thread(target=run, daemon=True, name="provenance-inventory")
+    _pending.start()
+
+
+def _inventory(roots) -> None:
+    global _complete
 
     _paths.clear()
     _inodes.clear()
@@ -98,6 +138,12 @@ def capture(roots) -> None:
     complete = []
 
     for root in roots:
+        # Under a root already walked in full: its objects are in already.
+
+        if any(root.startswith(done + "/") for done in complete):
+            complete.append(root)
+            continue
+
         found = _walk(root)
 
         if found is not None:
@@ -106,12 +152,14 @@ def capture(roots) -> None:
             _names.extend(found[2])
             complete.append(root)
 
-    _asked, _complete = roots, tuple(complete)
+    _complete = tuple(complete)
 
 
 def forget() -> None:
     """Start over: no inventory, nothing counts as created."""
     global _asked, _complete
+
+    ready()
 
     _paths.clear()
     _inodes.clear()
@@ -121,6 +169,8 @@ def forget() -> None:
 
 def start_paths() -> list[str]:
     """Every object of the inventoried trees at the start, by name."""
+    ready()
+
     return _names
 
 
@@ -130,6 +180,8 @@ def known(path: str) -> bool:
 
 
 def _inside(path: str) -> str:
+    ready()
+
     return next((root for root in _complete
                  if path == root or path.startswith(root + "/")), "")
 

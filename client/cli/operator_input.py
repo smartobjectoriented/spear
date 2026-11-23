@@ -310,9 +310,9 @@ def handle_bang_command(cmd_line):
 
 #: The slash commands, as the banner lists them and as Tab completes them:
 #: one list, so a command cannot be completed and go unlisted, or the reverse.
-SESSION_COMMANDS = ("/search", "/reindex", "/corpus", "/history", "/skills",
-                    "/remember", "/recall", "/knowledge", "/forget", "/good", "/bad",
-                    "/undo", "/clear", "/model", "/tools")
+SESSION_COMMANDS = ("/search", "/cd", "/reindex", "/corpus", "/history",
+                    "/skills", "/remember", "/recall", "/knowledge", "/forget",
+                    "/good", "/bad", "/undo", "/clear", "/model", "/tools")
 OPERATOR_COMMANDS = ("/standard", "/finetune")
 
 

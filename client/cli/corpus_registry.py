@@ -403,6 +403,64 @@ def offer_workspace_split(path, projects, min_files=300):
     return None
 
 
+def umbrella_spec(path, below):
+    """The session spec of a directory that holds registered corpora."""
+    path = os.path.realpath(path)
+
+    return {"name": "workspace:" + (os.path.basename(path) or "root"),
+            "path": path, "kind": "generic", "corpora": sorted(below),
+            # Discovered, not declared. Declared federations and shared
+            # corpora are a deliberate choice and stay attached every turn;
+            # these are whatever happened to be registered under the
+            # directory, so they are selected per question instead.
+            "auto_corpora": sorted(below)}
+
+
+def excludes_path(spec, path):
+    """Whether `spec` leaves `path`, a directory inside its tree, out of its
+    index: under one of its path exclusions, or through a bare name."""
+    rel = os.path.relpath(os.path.realpath(path), os.path.realpath(spec["path"]))
+    parts = rel.split(os.sep)
+
+    for e in spec.get("exclude", ()):
+        if "/" in e:
+            e = os.path.normpath(e)
+
+            if rel == e or rel.startswith(e + os.sep):
+                return True
+        elif e in parts:
+            return True
+
+    return False
+
+
+def corpus_at(path, projects=None):
+    """The corpus /cd lands on: the one a session launched in `path` works on.
+
+    Startup's rules without its questions, and one more: a directory its
+    corpus excludes is not part of that corpus. opencn-ng excludes ./linux,
+    which is indexed on its own, so /cd linux must not land back on
+    opencn-ng.
+    """
+    projects = load_projects() if projects is None else projects
+    path = os.path.realpath(path)
+    found = detect_project(projects, path)
+
+    if found and os.path.realpath(projects[found]["path"]) == path:
+        return {"name": found, **projects[found]}
+
+    below = corpora_below(projects, path)
+
+    if below:
+        return umbrella_spec(path, below)
+
+    if found and not excludes_path(projects[found], path):
+        return {"name": found, **projects[found]}
+
+    return {"name": "adhoc:" + (os.path.basename(path) or "root"),
+            "path": path, "kind": "generic"}
+
+
 def resolve_project_at_startup():
     """The CURRENT directory decides everything — no prompt:
       1. explicit --corpus <name> (or --here) wins;
@@ -451,18 +509,11 @@ def resolve_project_at_startup():
     below = corpora_below(projects)
 
     if below:
-        cwd = os.path.realpath(os.getcwd())
         print(f"{C_DIM}  ⎿  {len(below)} registered corpora sit under this "
               f"directory ({', '.join(sorted(below))}) — tools run here, "
               f"retrieval spans them. --corpus <name> narrows to one.{C_RST}")
 
-        return {"name": "workspace:" + (os.path.basename(cwd) or "root"),
-                "path": cwd, "kind": "generic", "corpora": sorted(below),
-                # Discovered, not declared. Declared federations and shared
-                # corpora are a deliberate choice and stay attached every turn;
-                # these eight are whatever happened to be registered under the
-                # cwd, so they are selected per question instead.
-                "auto_corpora": sorted(below)}
+        return umbrella_spec(os.getcwd(), below)
 
     # cwd outside any corpus → ad-hoc on the cwd (no picker). Offer a split
     # if it is a big multi-component workspace.

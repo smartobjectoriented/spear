@@ -61,7 +61,7 @@ from cli.chat_settings import (
     STANDARD_OPERATOR, STANDARD_STORE, STATE_DIR, TRACE, TRAINING_STORE,
 )
 from cli.corpus_registry import (
-    handle_corpus_command, load_projects, resolve_project_at_startup,
+    corpus_at, handle_corpus_command, load_projects, resolve_project_at_startup,
 )
 from cli.corpus_search import (
     archive_forget, corpus_property, init_chromadb, reindex_command,
@@ -177,19 +177,9 @@ def compaction_policy_from_environment():
         return CompactionPolicy()
 
 
-def main():
-    global TRACE_PROVIDER, TRACE_MODEL
-
-    # Before anything with a side effect: --help must not resolve a corpus,
-    # offer a workspace split, or touch the model server.
-
-    if {"--help", "-h"} & set(sys.argv[1:]):
-        print_help()
-        return
-
-    banner_art()
-    set_project(resolve_project_at_startup())
-    init_readline()
+def corpus_prompt():
+    """The session corpus's prompt and rules, as
+    (instructions, source, global_rules, corpus_rules)."""
 
     # A corpus may declare a domain prompt of its own; otherwise the generic
     # one. This used to be chosen by corpus KIND, which meant a prompt naming
@@ -224,6 +214,29 @@ def main():
 
     global_rules = load_rules()
     project_rules = load_corpus_rules()
+
+    return system_instructions, system_source, global_rules, project_rules
+
+
+def main():
+    global TRACE_PROVIDER, TRACE_MODEL
+
+    # Before anything with a side effect: --help must not resolve a corpus,
+    # offer a workspace split, or touch the model server.
+
+    if {"--help", "-h"} & set(sys.argv[1:]):
+        print_help()
+        return
+
+    banner_art()
+    set_project(resolve_project_at_startup())
+
+    # Where /cd resolves a relative path from: the directory it last entered.
+
+    focus = session_workspace.PROJECT_ROOT
+    init_readline()
+
+    system_instructions, system_source, global_rules, project_rules = corpus_prompt()
     base_prompt = system_instructions + global_rules + project_rules + TOOL_GUIDE
 
     collection = init_chromadb()
@@ -481,6 +494,40 @@ def main():
 
             print("\n" + (err or handle_corpus_command(argv, current=session_workspace.PROJECT))
                   + "\n")
+
+            continue
+
+        if user_input == "/cd" or user_input.startswith("/cd "):
+            # The corpus moves, the tools do not: they keep running in the
+            # launch directory, whose sandbox already holds every tree /cd can
+            # reach. What follows the corpus is what belongs to it -- index,
+            # history, memories, prompt and rules -- so /reindex right after
+            # rebuilds the tree just entered.
+
+            arg = user_input[3:].strip() or session_workspace.PROJECT_ROOT
+            target = os.path.realpath(os.path.join(focus, os.path.expanduser(arg)))
+            launch = os.path.realpath(session_workspace.PROJECT_ROOT)
+
+            if not os.path.isdir(target):
+                print(f"{C_ERR}/cd: {arg}: no such directory{C_RST}\n")
+            elif target != launch and not target.startswith(launch + os.sep):
+                print(f"{C_ERR}/cd: {target} is outside {launch}, where this "
+                      f"session was launched — relaunch spear there{C_RST}\n")
+            else:
+                save_history(history)
+                focus = target
+                set_project(corpus_at(target))
+                (system_instructions, system_source,
+                 global_rules, project_rules) = corpus_prompt()
+                base_prompt = system_instructions + global_rules + project_rules + TOOL_GUIDE
+                collection = init_chromadb()
+                corpus_search.COLLECTION = collection
+                history = load_history()
+                print(f"{C_DIM}  ⎿  {target}{C_RST}\n"
+                      f"Corpus: {session_workspace.PROJECT} "
+                      f"({session_workspace.CORPUS_ROOT})"
+                      + (f" — {_corpus_summary(collection)}" if collection else "")
+                      + "\n")
 
             continue
 

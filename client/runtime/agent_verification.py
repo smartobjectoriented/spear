@@ -489,11 +489,17 @@ def project_build_runs(context, tool_log):
     root = getattr(context, "project_root", "") or "."
     verifier = getattr(context, "project_verifier", None)
 
-    if commands is None or not turn_changed_files(context, tool_log):
+    # A coding turn's source epoch also counts what its commands wrote (`git
+    # apply`, `sed -i`), which the working state's generation does not see.
+
+    source_changed = getattr(context, "core_source_changed", ())
+
+    if commands is None or not (turn_changed_files(context, tool_log) or source_changed):
         return ()
 
     state = getattr(context, "working_state", None)
-    generation = getattr(state, "mutation_generation", 0)
+    generation = (getattr(state, "mutation_generation", 0),
+                  getattr(context, "core_source_epoch", None))
     cached = getattr(context, "_project_verification", None)
 
     if cached is not None and cached[0] == generation:

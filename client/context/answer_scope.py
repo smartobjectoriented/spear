@@ -87,7 +87,7 @@ LOCAL_CATEGORIES = frozenset({ToolCategory.COMMAND, ToolCategory.FILE_READ,
                               ToolCategory.FILE_WRITE})
 
 
-def of(message, *, prior=None, standard_bound=False):
+def of(message, *, prior=None, standard_bound=False, project_bound=False):
     """The scope of this turn, from its own words.
 
     `prior` is the previous turn's scope, consulted only where this message
@@ -96,6 +96,12 @@ def of(message, *, prior=None, standard_bound=False):
     names no subject at all a question about that document -- the same
     principle the normative policy already works on, where activation is the
     binding and never the phrasing.
+
+    `project_bound` says the session runs in a registered project that
+    declares a project family: the same principle again, from the workspace.
+    "Enable CONFIG_SCHEDSTATS in the kernel configuration" names no subject
+    this module's vocabulary knows, and in such a project it is about that
+    project's tree all the same, so its rules and skills become eligible.
     """
     text = (message or "").strip()
     local = (bool(_LOCAL_SUBJECT.search(text)) or bool(_CHANGE.search(text))
@@ -122,8 +128,12 @@ def of(message, *, prior=None, standard_bound=False):
         return prior
 
     # Names no subject of its own. With a document bound, that is a question
-    # about the document; without one there is nothing for this to mean.
-    return NORMATIVE if standard_bound else GENERAL
+    # about the document; in a project of a declared family, about its tree;
+    # otherwise there is nothing for this to mean.
+    if standard_bound:
+        return NORMATIVE
+
+    return IMPLEMENTATION if project_bound else GENERAL
 
 
 #: The machine payload a finished turn appends to what the operator typed:
@@ -268,7 +278,7 @@ def operator_messages(conversation):
     return said
 
 
-def prior_scope(conversation, *, standard_bound=False):
+def prior_scope(conversation, *, standard_bound=False, project_bound=False):
     """The scope of the turn before this one, for a message that refers back.
 
     Read from the conversation rather than remembered between turns: the
@@ -280,4 +290,4 @@ def prior_scope(conversation, *, standard_bound=False):
     if len(said) < 2:
         return None
 
-    return of(said[-2], standard_bound=standard_bound)
+    return of(said[-2], standard_bound=standard_bound, project_bound=project_bound)

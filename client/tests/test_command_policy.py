@@ -264,7 +264,7 @@ class CommandPolicyTests(unittest.TestCase):
         for command in ("for f in a b; do cp $f $f.bak; done",
                         "for f in a b; do ./tool $f; done",
                         "if true; then touch a; fi",
-                        "for f in a b; do echo $f > $f.txt; done",
+                        "for f in a b; do echo $f >> out.txt; done",
                         "command touch a; ls",
                         "while true; do make; done"):
             self.assertIn(Capability.WORKSPACE_WRITE,
@@ -864,6 +864,128 @@ class OutsideReadPolicyTests(unittest.TestCase):
         self.assertIn(str(self.root), reason)
         self.assertIn("READ-ONLY", reason)
 
+
+class StageAndRedirectionParsingTests(unittest.TestCase):
+    """What a command writes and runs, read the way the shell reads it."""
+
+    def setUp(self):
+        self.policy = CommandPolicy()
+
+    def writes(self, command):
+        assessment = self.policy.classify(command)
+        return Capability.WORKSPACE_WRITE in assessment.required_capabilities
+
+    def test_a_newline_ends_a_command(self):
+        assessment = self.policy.classify(
+            "cat > /tmp/p.py <<'EOF'\nopen('x','a').write('P')\nEOF\npython3 /tmp/p.py")
+
+        self.assertEqual(assessment.classification, CommandClassification.DANGEROUS)
+        self.assertEqual([argv[0] for argv in self.policy.stage_argvs("make\nls -l\ngit status")],
+                         ["make", "ls", "git"])
+
+    def test_a_read_only_heredoc_pipeline_stays_read_only(self):
+        self.assertFalse(self.writes("cat <<'EOF' | grep b\na\nb\nEOF"))
+
+    def test_descriptor_duplication_is_not_a_file_write(self):
+        for command in ("git diff x.diff 2>&1", "git status 2>&1 | head", "echo x >&2",
+                        "ls 2>/dev/null; ls"):
+            with self.subTest(command=command):
+                self.assertFalse(self.writes(command))
+
+        for command in ("echo P>>t", "echo x > out.txt 2>&1", "make 2>&1 > log"):
+            with self.subTest(command=command):
+                self.assertTrue(self.writes(command))
+
+    def test_a_variable_destination_is_its_literal_value_or_nothing(self):
+        self.assertTrue(self.writes("F=out.txt; echo P >> $F"))
+        self.assertTrue(self.writes("F='out.txt'; echo P >> ${F}"))
+        self.assertFalse(self.writes("echo P >> $UNSET"))
+        self.assertFalse(self.writes("F=/dev/null; echo P > $F"))
+
+    def test_builds_and_tests_are_told_from_other_writers(self):
+        for command in ("make -j8", "cd linux && make 2>&1 | tail", ". ./env.sh && bitbake rootfs",
+                        "./scripts/build.sh -c rootfs", "ib-build.sh", "cmake --build build",
+                        "python3 -m unittest discover -s tests", "pytest -q", "./configure"):
+            with self.subTest(command=command):
+                self.assertTrue(self.policy.builds(command))
+
+        for command in ("patch -p1 < x.diff", "./scripts/run.sh", "echo x > make", "cp a b",
+                        "git apply x", "grep make Makefile", "python3 x.py"):
+            with self.subTest(command=command):
+                self.assertFalse(self.policy.builds(command))
+
+    def test_a_launcher_is_judged_by_what_it_runs(self):
+        for command in ("./scripts/updiff.sh linux", "cd t && . ./env.sh && updiff.sh linux 2>&1 | tail",
+                        "timeout 600 ./scripts/updiff.sh linux", "timeout -k5 -sKILL 1m bitbake linux",
+                        "nice -n 5 make", "nice -10 make", "env -i -u X A=1 make", "nohup make",
+                        "time -p make", "exec make", "bash -c './scripts/build.sh linux'",
+                        "sh -ec '. ./env.sh && updiff.sh linux' 2>&1 | tail",
+                        "timeout 60 bash -o pipefail -c 'nice make -j$(nproc) | tail'",
+                        "make -j$(nproc) 2>&1 | tee build.log"):
+            with self.subTest(command=command):
+                self.assertTrue(self.policy.builds(command))
+                self.assertIn(Capability.WORKSPACE_WRITE,
+                              self.policy.classify_script(command).required_capabilities)
+
+    def test_a_launcher_lends_no_authority(self):
+        for command in ("timeout 60 sh -c 'echo x > build/tmp/f'", "env A=1 cp a out/generated/",
+                        "bash -c './scripts/run.sh'", "bash -c 'make; cp x generated/y'",
+                        "make && echo x > build/tmp/new", "make | tee build/tmp/log",
+                        "F=build/tmp/x; make > $F", "make > $UNKNOWN", "timeout --bogus 5 make",
+                        "env -S make", "env -C dir make", "bash -c 'make' extra", "nice"):
+            with self.subTest(command=command):
+                self.assertFalse(self.policy.builds(command))
+
+        for command in ("timeout 5 rm -rf x", "bash -c 'rm x'", "nice python3 x.py",
+                        "cd t && timeout 5 bash -c 'python3 -c 1'", "env -S 'make' x",
+                        "timeout --bogus 5 make", "bash -c 'ls' arg", 'bash -c "$(cat x)"',
+                        'bash -c "make -j$(nproc)"', "bash -c '$(cat x)'", "bash -c '$CMD'",
+                        "timeout 9 sh -c 'echo x > /etc/passwd'", "bash x.sh", "env"):
+            with self.subTest(command=command):
+                self.assertEqual(self.policy.classify_script(command).classification,
+                                 CommandClassification.DANGEROUS)
+
+    def test_the_git_commands_that_keep_their_records(self):
+        for command in ("cd vendor && git clone https://x/y.git", "git pull", "git add a",
+                        "git -C linux checkout -- f", "git stash", "git clean -fd", "git restore a"):
+            with self.subTest(command=command):
+                self.assertTrue(self.policy.writes_git(command))
+
+        for command in ("git status", "git reset --hard", "git commit -am m", "echo clone > x",
+                        "git log | grep pull", "git -c x=y add a"):
+            with self.subTest(command=command):
+                self.assertFalse(self.policy.writes_git(command))
+
+        for command in ("git add a", "git -C linux checkout -- f", "git stash", "git clean -fd"):
+            with self.subTest(command=command):
+                self.assertEqual(self.policy.classify(command).classification,
+                                 CommandClassification.WORKSPACE_MUTATING)
+
+        self.assertEqual(self.policy.classify("git -C linux log").classification,
+                         CommandClassification.READ_ONLY)
+
+    def test_where_git_keeps_its_records(self):
+        self.assertEqual(self.policy.git_writes("cd linux && git status && git add -A 2>&1 | tail"),
+                         [("cd", ("linux",)), ("git", ())])
+        self.assertEqual(self.policy.git_writes("timeout 9 git -C a -C b checkout -- f"),
+                         [("git", ("a", "b"))])
+        self.assertEqual(self.policy.git_writes("bash -c 'git stash'"), [("git", ())])
+        self.assertEqual(self.policy.git_writes("git clone u x && git -C x log"), [])
+
+    def test_git_is_trusted_only_alone_and_as_itself(self):
+        for command in ("git add a > .git/x", "git add a && cp a .git/config",
+                        "git add a; echo P >> .git/HEAD", "git --git-dir=.git add a",
+                        "git --work-tree=.git checkout -- hooks/x", "git -c core.hooksPath=h add a",
+                        "GIT_DIR=x git add a", "env GIT_WORK_TREE=.git git checkout -- f",
+                        "export GIT_INDEX_FILE=i; git add a", "HOME=. git add a",
+                        "PATH=.:$PATH git add a", "EDITOR=./e git add -e a", "git add -p a",
+                        "git checkout --patch f", "git stash -p", "git clean -i",
+                        "./git add a", "git commit -am m", "git config x y",
+                        "git add $(cat list)", "git add `cat list`", "git() { :; }; git add a",
+                        ". ./env.sh && git add a", "make && git add a", "git apply x.diff",
+                        "find . -exec git add {} +", "cat <<EOF | git apply\nx\nEOF"):
+            with self.subTest(command=command):
+                self.assertIsNone(self.policy.git_writes(command))
 
 if __name__ == "__main__":
     unittest.main()

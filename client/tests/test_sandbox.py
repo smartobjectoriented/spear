@@ -12,6 +12,7 @@ from unittest.mock import MagicMock, patch
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 import harness.sandbox
+import harness.write_protection
 
 from harness.command_policy import CommandPolicy
 from harness.resource_control import DEFAULT_RESOURCE_LIMITS, ExecutionProfile
@@ -799,6 +800,245 @@ class ToolchainReachableInsideTheSandboxTests(unittest.TestCase):
         pairs = [(argv[i + 1], argv[i + 2]) for i, a in enumerate(argv)
                  if a == "--ro-bind" and i + 2 < len(argv)]
         self.assertIn(("/opt/toolchains", "/opt/toolchains"), pairs)
+
+
+def _git_tree(root):
+    """A committed repository with a submodule-shaped checkout beside it."""
+    git = ["git", "-C", str(root), "-c", "user.name=t", "-c", "user.email=t@t"]
+    (root / "a.txt").write_text("a\n")
+    (root / "run.sh").write_text("#!/bin/sh\necho P >> .git/HEAD\n")
+    subprocess.run(git + ["init", "-q"], check=True)
+    subprocess.run(git + ["add", "-A"], check=True)
+    subprocess.run(git + ["commit", "-qm", "base"], check=True)
+    (root / "store").mkdir()
+    subprocess.run(["git", "init", "-q", "--separate-git-dir", str(root / "store/sub"),
+                    str(root / "sub")], check=True)
+
+
+def _fingerprint(*trees):
+    found = []
+
+    for tree in trees:
+        paths = [tree] if tree.is_file() else sorted(tree.rglob("*"))
+        found += [(str(path), path.read_bytes()) for path in paths if path.is_file()]
+
+    return found
+
+
+class GitMetadataIsReadOnlyTests(unittest.TestCase):
+    """A command granted workspace write still cannot change git's state."""
+
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.root = Path(self.temp.name).resolve() / "ws"
+        self.root.mkdir()
+        _git_tree(self.root)
+        self.workspace = Workspace.from_path(self.root)
+        self.write = ExecutionProfile.from_capabilities(
+            {Capability.FILESYSTEM_READ, Capability.WORKSPACE_WRITE, Capability.SHELL_COMPLEX})
+        self.addCleanup(self.temp.cleanup)
+        harness.write_protection.forget()
+
+    def protected(self, argv):
+        return [(argv[i + 1], argv[i + 2]) for i, token in enumerate(argv)
+                if token == "--ro-bind-try" and argv[i + 1].startswith(str(self.root))]
+
+    def test_every_git_directory_and_file_is_bound_read_only_after_the_tree(self):
+        argv = BubblewrapSandbox().build_argv(self.workspace, ["true"], self.write)
+        mount = BubblewrapSandbox().mount_root(self.workspace, self.write)
+        found = self.protected(argv)
+
+        self.assertEqual(sorted(host for host, _ in found),
+                         [str(self.root / ".git"), str(self.root / "store/sub"),
+                          str(self.root / "sub/.git")])
+
+        for host, inside in found:
+            self.assertEqual(inside, mount + host[len(str(self.root)):])
+
+        tree = argv.index("--bind")
+        self.assertTrue(all(argv.index(host) > tree for host, _ in found))
+
+    @patch.dict(os.environ, {"SPEAR_SANDBOX_IDENTITY_MOUNT": "0"})
+    def test_the_binds_follow_the_tree_to_its_neutral_mount(self):
+        other = Path(self.temp.name).resolve() / "other"
+        other.mkdir()
+        (other / ".git").mkdir()
+        workspace = Workspace.from_path(self.root, extra_roots=[other])
+        found = dict(self.protected(BubblewrapSandbox().build_argv(workspace, ["true"],
+                                                                   self.write)))
+        argv = BubblewrapSandbox().build_argv(workspace, ["true"], self.write)
+        rendered = "\0".join(argv)
+
+        self.assertEqual(found[str(self.root / ".git")], "/workspace/.git")
+        self.assertIn(f"--ro-bind-try\0{other / '.git'}\0/workspaces/other/.git", rendered)
+
+    def test_nothing_is_added_without_write_and_a_clone_unlocks_nothing(self):
+        sandbox = BubblewrapSandbox()
+        read = ExecutionProfile.from_capabilities({Capability.FILESYSTEM_READ})
+        clone = ExecutionProfile.from_capabilities(
+            {Capability.FILESYSTEM_READ, Capability.WORKSPACE_WRITE, Capability.NETWORK})
+
+        self.assertEqual(self.protected(sandbox.build_argv(self.workspace, ["true"], read)), [])
+        self.assertEqual(len(self.protected(sandbox.build_argv(
+            self.workspace, ["true"], clone, backend=NetworkBackend.SLIRP4NETNS))), 3)
+
+    def test_only_the_git_directories_named_are_left_writable(self):
+        (self.root / ".git/modules").mkdir()
+        subprocess.run(["git", "init", "-q", "--separate-git-dir",
+                        str(self.root / ".git/modules/inner"), str(self.root / "inner")],
+                       check=True)
+        harness.write_protection.forget()
+
+        def binds(*unlocked):
+            profile = ExecutionProfile.from_capabilities(
+                {Capability.FILESYSTEM_READ, Capability.WORKSPACE_WRITE},
+                git_dirs=[str(self.root / path) for path in unlocked])
+            argv = BubblewrapSandbox().build_argv(self.workspace, ["true"], profile)
+            return [(argv[i], argv[i + 1][len(str(self.root)) + 1:]) for i, token in enumerate(argv)
+                    if token in ("--ro-bind-try", "--bind-try")
+                    and argv[i + 1].startswith(str(self.root))]
+
+        self.assertEqual(binds(".git"), [("--ro-bind-try", ".git/modules/inner"),
+                                         ("--ro-bind-try", "inner/.git"),
+                                         ("--ro-bind-try", "store/sub"),
+                                         ("--ro-bind-try", "sub/.git")])
+        self.assertEqual(binds(".git/modules/inner"), [("--ro-bind-try", ".git"),
+                                                       ("--bind-try", ".git/modules/inner"),
+                                                       ("--ro-bind-try", "inner/.git"),
+                                                       ("--ro-bind-try", "store/sub"),
+                                                       ("--ro-bind-try", "sub/.git")])
+
+    def test_a_new_repository_is_found_once_the_cache_is_dropped(self):
+        sandbox = BubblewrapSandbox()
+        sandbox.build_argv(self.workspace, ["true"], self.write)
+        (self.root / "deep/vendor").mkdir(parents=True)
+        subprocess.run(["git", "init", "-q", str(self.root / "deep/vendor")], check=True)
+        harness.write_protection.forget()
+        hosts = [host for host, _ in self.protected(
+            sandbox.build_argv(self.workspace, ["true"], self.write))]
+
+        self.assertIn(str(self.root / "deep/vendor/.git"), hosts)
+
+    def test_no_program_can_change_git_state_in_the_sandbox(self):
+        before = _fingerprint(self.root / ".git", self.root / "store", self.root / "sub/.git")
+        sandbox = BubblewrapSandbox()
+
+        for command in ("rm -f .git/index", "echo P > .git/HEAD", "echo P>>.git/config",
+                        "cp a.txt .git/config", "mv a.txt .git/HEAD", "sed -i s/a/b/ .git/config",
+                        "python3 -c \"open('.git/index','ab').write(b'P')\"",
+                        "sh run.sh", "echo gitdir: /tmp > sub/.git", "rm -f store/sub/HEAD",
+                        "touch .git/objects/new", "echo P >> a.txt && git add a.txt",
+                        "git -c user.name=t -c user.email=t@t commit -qam m"):
+            with self.subTest(command=command):
+                result = sandbox.run(self.workspace, ["/bin/sh", "-c", command],
+                                     profile=self.write)
+
+                self.assertFalse(result.ok, result.to_legacy_text())
+
+        self.assertEqual(_fingerprint(self.root / ".git", self.root / "store",
+                                      self.root / "sub/.git"), before)
+        self.assertTrue((self.root / "a.txt").is_file())
+
+    def test_ordinary_files_and_read_only_git_still_work(self):
+        sandbox = BubblewrapSandbox()
+
+        for command in ("echo more >> a.txt", "git status --short", "git log --oneline",
+                        "git diff --stat", "git show --stat HEAD", "cd sub && git status"):
+            with self.subTest(command=command):
+                result = sandbox.run(self.workspace, ["/bin/sh", "-c", command],
+                                     profile=self.write)
+
+                self.assertTrue(result.ok, result.to_legacy_text())
+
+        self.assertEqual((self.root / "a.txt").read_text(), "a\nmore\n")
+
+
+class OutputTreesAndNamedFilesTests(unittest.TestCase):
+    """What else a writable command gets read-only: output trees unless it
+    builds, and the protected files it names."""
+
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.root = Path(self.temp.name).resolve() / "ws"
+        for directory in ("out/generated", "build/tmp/work", "build/conf", "u-boot.back",
+                          "rootfs", "rootfs.0", "zynq-rev1.0", "br/build/pkg-1.0/.git", "tests"):
+            (self.root / directory).mkdir(parents=True)
+        (self.root / "br/.config").write_text("BR2_x=y\n")
+        (self.root / "gen.h").write_text("/* DO NOT EDIT */\nint g;\n")
+        (self.root / "a.txt").write_text("a\n")
+        (self.root / "x.diff").write_text("--- a/gen.h\n+++ b/gen.h\n@@ -1 +1 @@\n-x\n+y\n")
+        (self.root / "tests/test_h.py").write_text(f"open('{self.root}/gen.h', 'a')\n")
+        self.workspace = Workspace.from_path(self.root)
+        self.addCleanup(self.temp.cleanup)
+        harness.write_protection.forget()
+        harness.write_protection.target_policy.forget_refused()
+
+    def bound(self, **options):
+        profile = ExecutionProfile.from_capabilities(
+            {Capability.FILESYSTEM_READ, Capability.WORKSPACE_WRITE, Capability.SHELL_COMPLEX},
+            **options)
+        argv = BubblewrapSandbox().build_argv(self.workspace, ["true"], profile)
+        return sorted(argv[i + 1][len(str(self.root)) + 1:] for i, token in enumerate(argv)
+                      if token == "--ro-bind-try" and argv[i + 1].startswith(str(self.root)))
+
+    def test_output_trees_are_found_by_name_and_place(self):
+        trees = harness.write_protection.trees(str(self.root))
+
+        self.assertEqual(sorted(path[len(str(self.root)) + 1:] for path in trees.outputs),
+                         ["build/tmp", "out/generated", "rootfs.0", "u-boot.back"])
+
+        # Buildroot's package tree beside its .config is the build's own.
+
+        self.assertEqual(trees.git, ())
+
+    def test_they_are_bound_unless_the_command_builds(self):
+        self.assertEqual(self.bound(guard_outputs=True),
+                         ["build/tmp", "out/generated", "rootfs.0", "u-boot.back"])
+        self.assertEqual(self.bound(), [])
+        self.assertEqual(self.bound(protected_paths=(str(self.root / "gen.h"),)), ["gen.h"])
+
+    def test_a_named_file_inside_a_bound_tree_is_not_bound_twice(self):
+        self.assertEqual(self.bound(guard_outputs=True, protected_paths=(
+            str(self.root / "out/generated/t.h"),)),
+            ["build/tmp", "out/generated", "rootfs.0", "u-boot.back"])
+
+    def files(self, command, **options):
+        harness.write_protection.target_policy.forget_refused()
+        found = harness.write_protection.command_files(command, [self.root], cwd=str(self.root),
+                                                       **options)
+        return sorted(path[len(str(self.root)) + 1:] for path in found)
+
+    def test_the_protected_files_a_command_reaches(self):
+        cases = {"echo P >> gen.h": ["gen.h"], "make poke T=gen.h": ["gen.h"],
+                 "cp /tmp/s/gen.h ./": ["gen.h"], "patch -p1 < x.diff": ["gen.h"],
+                 "python3 -m unittest tests.test_h": ["gen.h"], "cd tests && echo > ../a.txt": [],
+                 "echo P >> a.txt": []}
+
+        for command, expected in cases.items():
+            with self.subTest(command=command):
+                self.assertEqual(self.files(command), expected)
+
+    def test_a_file_refused_earlier_stays_bound_except_for_a_build(self):
+        harness.write_protection.target_policy.refusal(str(self.root / "gen.h"))
+        found = harness.write_protection.command_files("echo P >> a.txt", [self.root])
+
+        self.assertEqual(found, (str(self.root / "gen.h"),))
+        self.assertEqual(harness.write_protection.command_files("make", [self.root], build=True), ())
+
+    def test_a_build_is_judged_on_its_own_words(self):
+        self.assertEqual(self.files("patch -p1 < x.diff", build=True), [])
+        self.assertEqual(self.files("make T=gen.h", build=True), ["gen.h"])
+        self.assertEqual(self.files("python3 -m unittest", build=True), ["gen.h"])
+
+    def test_a_sandbox_path_is_read_as_the_host_path_it_binds(self):
+        tmp = Path(self.temp.name) / "session-tmp"
+        tmp.mkdir()
+        (tmp / "p.py").write_text("open('/workspace/gen.h','a')\n")
+        aliases = {"/tmp": str(tmp), "/workspace": str(self.root)}
+
+        self.assertEqual(self.files("python3 /tmp/p.py", aliases=aliases), ["gen.h"])
+        self.assertEqual(self.files("echo P > /workspace/gen.h",
+                                    aliases={"/workspace": str(self.root)}), ["gen.h"])
 
 
 if __name__ == "__main__":

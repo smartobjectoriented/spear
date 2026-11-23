@@ -58,8 +58,9 @@ same judgement is applied to what a shell command writes — a redirection, the
 destination of ``cp``, ``mv``, ``install``, ``ln`` or ``rsync``, the ``of=``
 of ``dd``, the operands of ``rm``, ``touch``, ``mkdir``, ``tee``,
 ``truncate`` or ``sed -i``, and any path an inline interpreter program names —
-with relative operands read from the directory the command runs in
-(``request_scope.py``). **A terminal command cannot make a change the file
+with relative operands read from the directory the command runs in, a ``$VAR``
+read as the value the command assigned it, ``x>>file`` read without its
+spaces, and ``cp src dir/`` judged on ``dir/src`` (``request_scope.py``). **A terminal command cannot make a change the file
 tools would refuse.**
 
 **Project scope.** A command that searches outside the project (``find`` or
@@ -68,14 +69,71 @@ home directory outside it, is refused unless the operator named that path:
 another checkout is another project, not a source of this one's build.
 
 **Generated and protected trees.** Build outputs (``/generated/``,
-``/build/tmp/``, files whose head says *DO NOT MODIFY*, *DO NOT EDIT*,
-*auto-generated* or ``@generated``) and snapshot or third-party copies
-(``.back``, ``.pristine``, ``.0`` trees, vendored ``u-boot``, ``atf``,
-``qemu``) are never written; the refusal points at the source to change
-instead. The rule belongs to the target, not to the tool
-(``target_policy.py``): ``write_file``, ``patch``, ``delete_file`` and every
-shell write listed above ask the same question, about the path as written and
-about its ``realpath``, so a link or a ``..`` does not change the answer.
+``/build/tmp/``, files that say *DO NOT MODIFY*, *DO NOT EDIT*,
+*auto-generated* or ``@generated`` in a comment within their first ten lines)
+and snapshot copies (``.back`` and ``.pristine`` trees, a ``.0`` tree beside
+its live one, never a directory because of its name) are never written; the
+refusal points at the source to change instead. The same words in prose do not
+count (Linux's ``init/Kconfig`` uses *auto-generated* in a help text), nor do
+they in the ``+`` lines of a patch, and a saved Kconfig configuration
+(``defconfig``, ``*_defconfig``) is a source even under its *Automatically
+generated file; DO NOT EDIT.* header. The rule belongs to the target, not to
+the tool (``target_policy.py``): ``write_file``, ``patch``, ``delete_file``
+and every shell write listed above ask the same question, about the path as
+written and about its ``realpath``, so a link or a ``..`` does not change the
+answer.
+
+The parser is not the boundary: a program may write what no word of its
+command names. So for a command granted workspace write, the sandbox binds
+back read-only the protected files the command can reach — those its words
+name, those named in the files it runs or feeds (a diff given to ``patch``, a
+script, the tests a runner discovers, a here-document) and every file refused
+earlier in the session — and, unless the command builds or tests, the
+generated and snapshot trees themselves (``write_protection.py``). A build
+(``make``, ``cmake``, ``ninja``, ``bitbake``, a project's ``build.sh``,
+``configure`` or a layer's ``updiff.sh``, a compiler, a test runner) keeps
+writing its output, which is how generated files are meant to change; only
+the files its own words name stay protected. The authority is the build's
+alone: every other stage of the command must write nothing, and no
+redirection or ``tee`` may write into a generated tree.
+
+A launcher — ``timeout``, ``nice``, ``env``, ``nohup``, ``exec``,
+``command``, ``time``, ``bash -c`` or ``sh -c`` — is judged by what it runs,
+read through its options and, for a shell, through its script: a wrapped
+build stays a build, and a wrapped write stays a write, refused the same.
+A launcher this cannot read (an option it does not know, ``env -S``, words
+after a ``-c`` script, a script the outer shell expands, a program that is
+an expansion) is refused.
+
+**Git metadata.** A repository's own state — a ``.git`` directory, a ``.git``
+file (a worktree's or a submodule's) and the git directory it names, or any
+directory holding git's ``HEAD`` beside its ``objects`` — is never edited by a
+tool: the coding core's file tools, the legacy ones (``edit_file``,
+``append_file`` and ``fetch_url``'s ``save_as`` included) and every shell
+write are refused it (``target_policy.py``). Since a terminal command
+may run a program whose writes no parser sees — a script, ``patch`` fed on
+stdin, a Makefile rule — the sandbox also binds every ``.git`` and the git
+directories they name read-only, on top of the writable tree, for every
+command granted workspace write (``write_protection.py``, :doc:`sandbox`).
+``git status``, ``log``, ``diff`` and ``show`` keep working.
+
+Git itself keeps its records. ``add``, ``checkout``, ``restore``,
+``switch``, ``stash``, ``clean``, ``fetch`` and ``pull`` find writable the
+git directories of the repository they run in — followed through the
+command's ``cd`` and ``-C`` steps, and through a ``.git`` file to the git
+directory it names and that one's common directory, all canonically — and
+no other (``write_protection.git_dirs``). Only when the command is git's
+alone and run as itself (``CommandPolicy.git_writes``): every other stage
+reads; nothing writes a file, substitutes, defines a function or sources a
+script; no ``-c``, ``--git-dir``, ``--work-tree`` or interactive form
+(``-p``, ``-i``, ``-e``); no ``GIT_*``, ``HOME``, ``PATH``, ``LD_*`` or
+editor in the command or exported by the session; no directory outside the
+roots or inside git's own state; no writable directory ahead of the system's
+``git`` on ``PATH`` that holds a ``git`` or could before a second git
+command runs. Otherwise the repository stays read-only and the git command
+fails there. What git changes in the worktree is judged like any other
+write: a protected file it names and the generated trees stay read-only
+under it. ``reset``, ``commit``, ``config`` and the rest keep no records.
 
 **Read-only and advisory turns.** A turn that only asks to be told something,
 or is told not to change anything, keeps its reading tools and runs its

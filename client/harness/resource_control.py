@@ -49,10 +49,24 @@ class ExecutionProfile:
     #: Host paths to expose read-only, at their own path, in addition to the
     #: workspace. Empty unless host:read was granted.
     host_read_paths: tuple[str, ...] = ()
+    #: Git directories the command's own git commands keep their records in
+    #: (write_protection.git_dirs): the only ones it may write.
+    git_dirs: tuple[str, ...] = ()
+    #: The command is not a build or a test: generated trees and snapshot
+    #: copies are bound read-only for it.
+    guard_outputs: bool = False
+    #: Further protected host paths the command names or reaches.
+    protected_paths: tuple[str, ...] = ()
+    #: What a session-cleanup command removes (provenance.py), each verified
+    #: created in this session: its directory is bound writable again.
+    cleanup_paths: tuple[str, ...] = ()
 
     @classmethod
     def from_capabilities(cls, capabilities: Sequence[Capability],
-                          host_read_paths: Sequence[str] = ()) -> "ExecutionProfile":
+                          host_read_paths: Sequence[str] = (), *,
+                          git_dirs: Sequence[str] = (), guard_outputs: bool = False,
+                          protected_paths: Sequence[str] = (),
+                          cleanup_paths: Sequence[str] = ()) -> "ExecutionProfile":
         granted = frozenset(capabilities)
         workspace_read = Capability.FILESYSTEM_READ in granted
         workspace_write = Capability.WORKSPACE_WRITE in granted
@@ -82,6 +96,10 @@ class ExecutionProfile:
             container_runtime=Capability.CONTAINER_RUNTIME in granted,
             secrets_allowed=Capability.SECRETS in granted,
             host_read_paths=tuple(host_read_paths),
+            git_dirs=tuple(git_dirs),
+            guard_outputs=guard_outputs,
+            protected_paths=tuple(protected_paths),
+            cleanup_paths=tuple(cleanup_paths),
         )
 
     def audit_metadata(self) -> Mapping[str, bool]:
@@ -245,8 +263,11 @@ class CgroupLimits:
 # Production contract, calibrated in STEP 1d-3d against real workloads on this
 # host (62 GiB RAM, 22 CPUs).  The measured peaks over read-only work, Python
 # test runs, shell pipelines, git and parallel builds were 518 MiB of memory
-# and 47 tasks, both reached by ``make -j22``; the values below keep a 4.1x and
-# 5.4x margin on those.  ``CPUQuota=800%`` was the only point of the grid that
+# and 47 tasks, both reached by ``make -j22``.  A bitbake kernel build
+# (``build.sh linux``: bitbake plus a parallel kernel make) peaks at 2.9 GiB
+# and 111 tasks: under the first 2 GiB cap the OOM killer ended it with no
+# output.  The memory cap keeps a 2x margin on that build, the task cap a
+# 2.3x margin.  ``CPUQuota=800%`` was the only point of the grid that
 # left every workload except a massively parallel build entirely un-throttled
 # (1.77x on ``make -j22``, versus 3.14x at 400% and 6.36x at 200%).
 #
@@ -259,7 +280,7 @@ class CgroupLimits:
 # would both need revisiting on a many-core machine.
 
 DEFAULT_CGROUP_LIMITS = CgroupLimits(
-    memory_max_bytes=2 * 1024 * 1024 * 1024,
+    memory_max_bytes=6 * 1024 * 1024 * 1024,
     memory_swap_max_bytes=0,
     tasks_max=256,
     cpu_quota_percent=800,

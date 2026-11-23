@@ -388,15 +388,42 @@ class ToolRouter:
             if not refusal:
                 from harness import target_policy
 
+                cwd = (context.metadata or {}).get("command_cwd")
+                removed = set(request_scope.shell_removal_targets(
+                    arguments["command"], context.scope, cwd=cwd))
+
                 for target in request_scope.shell_write_targets(
-                        arguments["command"], context.scope,
-                        cwd=(context.metadata or {}).get("command_cwd")):
-                    refusal = target_policy.refusal(target)
+                        arguments["command"], context.scope, cwd=cwd):
+                    refusal = target_policy.refusal(target, deleting=target in removed)
 
                     if refusal:
                         refusal += (". A shell command is not a way around this: "
                                     "the same file is refused to every tool.")
                         category = "protected_target"
+                        break
+
+            # And a file of the start state changes through write_file or
+            # patch, which checkpoint it: a redirection, cp or tee over it
+            # wrote what sed -i was refused, beyond any rollback.
+            if not refusal:
+                from harness import provenance
+
+                for target in request_scope.shell_overwrite_targets(
+                        arguments["command"], context.scope, cwd=cwd):
+                    if target == "$":
+                        if provenance.known(cwd or context.scope.root or "."):
+                            refusal = ("the command writes a file named only at run time, "
+                                       "so whether it existed when the session started "
+                                       "cannot be read: name the file literally")
+                    elif provenance.start_state_file(target):
+                        refusal = (f"{target} existed when the session started: a shell "
+                                   f"command does not overwrite it. Change it with "
+                                   f"write_file or patch, which keep the change "
+                                   f"checkpointed; a command writes only files this "
+                                   f"session created")
+
+                    if refusal:
+                        category = "start_state_edit"
                         break
 
             if refusal:

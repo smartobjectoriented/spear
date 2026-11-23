@@ -37,6 +37,7 @@ from harness.tool_primitives import ExecutionMode
 from runtime.tracing import EventStatus, EventType, new_task_id
 from runtime.working_state import StateEventType, WorkingState
 from context.context_engine import ContextLayer
+from context import workspace_context
 from context.workspace_context import project_families
 from runtime.compaction import CompactionMode, CompactionPolicy
 from runtime.agent_context import AgentContext
@@ -966,12 +967,16 @@ def main():
         # its own words is answered from those words and the document.
         bound_turn = bool(turn_binding)
 
+        projects = load_projects()
+        project_bound = workspace_context.project_bound(
+            registered=session_workspace.PROJECT in projects,
+            spec=projects.get(session_workspace.PROJECT))
         said_before = next((message["content"] for message in reversed(hist)
                             if message["role"] == "user"), "")
         prior_scope = answer_scope.of(answer_scope.spoken_part(said_before),
-                                      standard_bound=bound_turn)
+                                      standard_bound=bound_turn, project_bound=project_bound)
         turn_scope = answer_scope.of(user_input, prior=prior_scope,
-                                     standard_bound=bound_turn)
+                                     standard_bound=bound_turn, project_bound=project_bound)
         hist = answer_scope.carried(
             hist, turn_scope, standard_bound=bound_turn,
             self_contained=answer_scope.self_contained(user_input))

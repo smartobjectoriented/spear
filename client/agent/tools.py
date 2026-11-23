@@ -39,10 +39,11 @@ import shutil
 import stat
 import subprocess
 
+from . import patch_guard
 from .hermes.ansi_strip import strip_ansi
 from .hermes.binary_extensions import has_binary_extension
 from .hermes.exit_codes import _interpret_exit_code
-from .hermes.fuzzy_match import format_no_match_hint, fuzzy_find_and_replace, is_already_applied
+from .hermes.fuzzy_match import format_no_match_hint, is_already_applied
 from .hermes.file_helpers import (
     LINTERS_INPROC, _FAIL_CLOSED_INPROC_EXTS, _READ_DEDUP_STATUS_MESSAGE,
     _detect_line_ending, _is_internal_file_tool_content, _is_likely_binary_bytes,
@@ -882,7 +883,7 @@ def patch(state: dict, display: str, resolved: str, old_string, new_string,
             raw = handle.read()
 
         content, _ = _strip_bom(raw)
-        new_content, match_count, _strategy, error = fuzzy_find_and_replace(
+        new_content, match_count, _strategy, error = patch_guard.find_and_replace(
             content, old_string, new_string, replace_all)
 
         if error or match_count == 0:

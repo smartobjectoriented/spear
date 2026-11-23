@@ -113,8 +113,8 @@ Every call the coding core makes crosses SpearHost, whichever tool made it:
 
 ``write`` / ``delete``
    the protected-target policy (generated output, snapshot and third-party
-   copies), the confirmation the mode requires, and the checkpoint that makes
-   ``/undo`` possible.
+   copies, git metadata), the confirmation the mode requires, and the
+   checkpoint that makes ``/undo`` possible.
 
 ``run_command``
    the command policy (what may run, what it may write, whether it may reach
@@ -148,6 +148,13 @@ change the file tools would refuse cannot be made through the terminal instead.
 **Protected and generated paths.** Generated output and snapshot or
 third-party copies are refused to every tool, the terminal included, with a
 pointer to the source to change (:term:`target policy`, :ref:`control_plane`).
+
+**Git metadata.** No tool edits a repository's state: ``.git`` (directory or
+file), the git directory a ``.git`` file names, and anything under them are
+refused to every tool, and bound read-only by the sandbox under every command
+that may write, so a script writing there fails too. A git command run alone
+keeps its own repository's records — ``git add``, ``checkout``, ``stash``,
+``clean`` work — and nothing else is let in with it.
 
 **Advisory and read-only turns.** A turn that asks only to be told something,
 or is told not to change anything, keeps its reading tools and loses every
@@ -188,7 +195,10 @@ command, its exit status, the bounded output and the source epoch it judged.
 Whatever the repair pass leaves is validated again at its own epoch; a failure
 then, a validation that could not run, or a repair pass that stopped before
 finishing is ``UNVERIFIED``. There is no second repair, and a pass that changes
-nothing ends the turn with the same failure.
+nothing ends the turn with the same failure. A change is a change whatever made
+it: source that a terminal command rewrote (``sed -i``, ``git apply``) starts a
+new epoch, which the project validation judges like one written by the file
+tools.
 
 The repair is not offered when the validation did not run, nor to a turn
 stopped by its budget, a repeated refusal, a truncation or the operator. A

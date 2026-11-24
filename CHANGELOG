@@ -1,5 +1,9 @@
 Unreleased
 
+	•	A corpus declares max_files in the registry when it is larger than
+		the indexer's file cap: a kernel tree made /reindex refuse, with no
+		way to raise the cap from the session.
+
 	•	The start inventory of the declared trees runs beside the session's
 		startup instead of before it: every registered corpus is walked, and
 		spear-chat took over a minute to show its prompt, --help included. A

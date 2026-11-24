@@ -90,6 +90,9 @@ its mount point (:doc:`/start/container`).
      - directories skipped at indexing
    * - ``include_build``
      - index build directories, minus the generated subtrees
+   * - ``max_files``
+     - raise the indexer's file cap (60000) for a tree that is larger by
+       nature, such as a kernel
    * - ``corpora``
      - federate these registered corpora into a session on this project
    * - ``shared``

@@ -209,7 +209,7 @@ def init_chromadb():
 
             if not attached:
                 print(f"{C_WARN}This session has no retrieval. To use an "
-                      f"indexed corpus, launch from its tree, or attach one "
+                      f"indexed corpus, /cd into its tree, or attach one "
                       f"with --with <name> (/corpus lists them).{C_RST}")
 
             if not attached:
@@ -808,6 +808,12 @@ def reindex_options():
 
     if spec.get("include_build"):
         opts.append("--include-build")
+
+    # A tree larger than the indexer's runaway guard, a kernel for one, says
+    # so in the registry: /reindex has no command line to raise it on.
+
+    if spec.get("max_files"):
+        opts += ["--max-files", str(int(spec["max_files"]))]
 
     return opts
 

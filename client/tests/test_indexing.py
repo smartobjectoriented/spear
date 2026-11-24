@@ -226,6 +226,13 @@ class ReindexOptionsTest(unittest.TestCase):
         self.session_workspace.PROJECT = "p"
         self.assertIn("--include-build", self.corpus_search.reindex_options())
 
+    def test_a_declared_file_cap_reaches_the_indexer(self):
+        self._write({"linux": {"path": "/x", "kind": "generic",
+                               "max_files": 150000}})
+        self.session_workspace.PROJECT = "linux"
+        opts = self.corpus_search.reindex_options()
+        self.assertEqual("150000", opts[opts.index("--max-files") + 1])
+
 
 class ReindexTargetsTheCorpusNotTheCwdTest(unittest.TestCase):
     """/reindex rebuilds the CORPUS's index, wherever the session stands.

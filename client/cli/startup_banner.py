@@ -222,7 +222,14 @@ def standard_row():
     # How it is searched follows the document, so switching documents
     # switches it; the banner is where that has to be visible.
 
+    try:
+        beside = "".join(f" + {item.standard_id} {item.revision}"
+                         for item in STANDARD_OPERATOR.companion_bindings())
+    except StandardCommandError as exc:
+        beside = f"  {C_WARN}(companion unavailable — {exc}){C_RST}"
+
     return (f"{C_DIM}standard:{C_RST} {binding.standard_id} {binding.revision}"
+            f"{beside}"
             f"  {C_DIM}·{C_RST}  {binding.data_origin.lower()}"
             f"  {C_DIM}·{C_RST}  "
             + retrieval_summary(STANDARD_STORE, binding.standard_id,

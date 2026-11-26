@@ -346,15 +346,20 @@ def _source_id(arguments: Mapping[str, object]) -> str:
 def standard_tool_specs() -> tuple[ToolSpec, ...]:
     string = {"type": "string"}
     binding_properties = {
-        "standard_id": {"type": "string", "description": "optional; must equal active binding"},
-        "revision": {"type": "string", "description": "optional; must equal active binding"},
+        "standard_id": {"type": "string", "description":
+                        "optional; one of the bound standards. Omitted, search "
+                        "covers every bound standard and the other tools use "
+                        "the one that holds the source"},
+        "revision": {"type": "string", "description":
+                     "optional; must equal that standard's bound revision"},
     }
 
     return (
         ToolSpec(
             "standard.search",
-            "Search the currently bound standard/revision using local hybrid retrieval. "
-            "Returns bounded canonical snippets and stable source IDs.",
+            "Search the bound standards (the active one and any companions) "
+            "using local hybrid retrieval. Returns bounded canonical snippets, "
+            "each with its standard and a stable source ID.",
             {"type": "object", "properties": {
                 "query": string, "section": string,
                 "limit": {"type": "integer"}, **binding_properties,
@@ -429,24 +434,66 @@ def standard_tool_specs() -> tuple[ToolSpec, ...]:
     )
 
 
-def _binding(context: ToolExecutionContext, arguments: Mapping[str, object]) -> StandardBinding:
+def _bindings(context: ToolExecutionContext) -> list[StandardBinding]:
+    """The active binding first, then the companions bound beside it."""
+
     raw = context.metadata.get("standard_binding")
 
     if not isinstance(raw, Mapping):
         raise PermissionError("no standard is bound to this task")
 
-    binding = StandardBinding.from_dict(raw)
+    bindings = [StandardBinding.from_dict(raw)]
 
-    for key in ("standard_id", "revision"):
-        supplied = arguments.get(key)
+    for companion in raw.get("companions") or ():
+        if isinstance(companion, Mapping):
+            bindings.append(StandardBinding.from_dict(companion))
 
-        if supplied is not None and supplied != getattr(binding, key):
+    return bindings
+
+
+def _binding(context: ToolExecutionContext, arguments: Mapping[str, object]) -> StandardBinding:
+    """The bound standard the arguments name, or the active one."""
+
+    bindings = _bindings(context)
+    wanted = arguments.get("standard_id")
+    binding = bindings[0]
+
+    if wanted is not None:
+        named = [item for item in bindings if item.standard_id == wanted]
+
+        if not named:
             raise PermissionError(
-                f"requested {key} does not equal the active StandardBinding; "
-                "the bound standard and revision are supplied by the task -- "
-                "omit standard_id and revision instead of restating them")
+                f"requested standard {wanted} is not an active StandardBinding; "
+                "the bound standards are "
+                + ", ".join(item.standard_id for item in bindings)
+                + " -- omit standard_id and revision to use them all")
+
+        binding = named[0]
+
+    revision = arguments.get("revision")
+
+    if revision is not None and revision != binding.revision:
+        raise PermissionError(
+            f"requested revision does not equal the active StandardBinding of "
+            f"{binding.standard_id}; the bound revisions are supplied by the "
+            "task -- omit standard_id and revision instead of restating them")
 
     return binding
+
+
+def _interleave(rankings, limit):
+    """Results of several standards, alternating by rank, at most `limit`.
+
+    Scores from different corpora are not on one scale, so no standard's
+    first hit may be buried under another's tenth.
+    """
+
+    merged = []
+
+    for position in range(max((len(items) for items in rankings), default=0)):
+        merged.extend(items[position] for items in rankings if position < len(items))
+
+    return merged[:limit]
 
 
 class StandardToolService:
@@ -461,6 +508,27 @@ class StandardToolService:
 
         self.retrieval = StandardRetrieval(store, embedder)
         self.structures = StandardStructureAccess(store)
+
+    def _owner(self, context: ToolExecutionContext,
+               arguments: Mapping[str, object], source_id: str) -> StandardBinding:
+        """The bound standard holding a source, unless the arguments name one.
+
+        Source ids are content hashes, so at most one bound standard holds a
+        given id; the active standard is asked first.
+        """
+
+        if arguments.get("standard_id") is not None or len(_bindings(context)) == 1:
+            return self._active_binding(context, arguments)
+
+        for binding in _bindings(context):
+            try:
+                self.retrieval.cite(binding.standard_id, binding.revision, source_id)
+            except KeyError:
+                continue
+
+            return self._active_binding(context, {"standard_id": binding.standard_id})
+
+        return self._active_binding(context, {})
 
     def _active_binding(
         self, context: ToolExecutionContext, arguments: Mapping[str, object],
@@ -481,7 +549,14 @@ class StandardToolService:
         return binding
 
     def search(self, context: ToolExecutionContext, arguments: Mapping[str, object]):
-        binding = self._active_binding(context, arguments)
+        if (arguments.get("standard_id") is not None
+                or arguments.get("revision") is not None):
+            searched = [self._active_binding(context, arguments)]
+        else:
+            searched = [self._active_binding(context, {"standard_id": item.standard_id})
+                        for item in _bindings(context)]
+
+        binding = searched[0]
         query = str(arguments.get("query") or "")
         section = arguments.get("section")
 
@@ -501,32 +576,33 @@ class StandardToolService:
             ) from None
 
         retrieval_fingerprint = binding.retrieval_fingerprint or binding.index_fingerprint
-
-        try:
-            declared = self.retrieval.store.load_retrieval_settings(
-                binding.standard_id, binding.revision).get("mode")
-        except StandardStoreError as exc:
-            raise StandardConfigurationError(str(exc)) from None
-
-        mode = _configured_mode(declared)
-        key = ("standard.search", retrieval_fingerprint, mode, query, section, limit)
+        modes = [self._search_mode(item) for item in searched]
+        key = ("standard.search",
+               tuple((item.retrieval_fingerprint or item.index_fingerprint, mode)
+                     for item, mode in zip(searched, modes)),
+               query, section, limit)
 
         if key in context.cache:
             return context.cache[key]
 
-        try:
-            response = self.retrieval.search_response(
-                binding.standard_id, binding.revision, query,
-                section=(str(section) if section is not None else None),
-                limit=limit, mode=mode,
-            )
-        except ValueError as exc:
-            raise StandardToolRefusal(
-                INVALID_QUERY, str(exc),
-                {"how": "reword the query, or omit limit to take the default"}
-            ) from None
+        responses = []
 
-        results = response.results
+        for item, mode in zip(searched, modes):
+            try:
+                responses.append(self.retrieval.search_response(
+                    item.standard_id, item.revision, query,
+                    section=(str(section) if section is not None else None),
+                    limit=limit, mode=mode,
+                ))
+            except ValueError as exc:
+                raise StandardToolRefusal(
+                    INVALID_QUERY, str(exc),
+                    {"how": "reword the query, or omit limit to take the default"}
+                ) from None
+
+        response = responses[0]
+
+        results = _interleave([item.results for item in responses], limit)
         payload = {
             "binding": {"standard_id": binding.standard_id,
                         "revision": binding.revision,
@@ -540,6 +616,11 @@ class StandardToolService:
             "completion_budget": response.completion_budget,
             "results": [item.to_dict() for item in results],
         }
+
+        if len(searched) > 1:
+            payload["standards_searched"] = [
+                f"{item.standard_id} {item.revision}" for item in searched]
+
         result = ToolHandlerResult(
             json.dumps(payload, ensure_ascii=False, sort_keys=True),
             metadata={
@@ -553,19 +634,31 @@ class StandardToolService:
             "evidence_completion": response.evidence_completion,
             "completion_budget": response.completion_budget,
                 "retrieval_fingerprint": retrieval_fingerprint,
-                "lexical_candidate_count": response.lexical_candidate_count,
-                "vector_candidate_count": response.vector_candidate_count,
-                "expanded_cross_reference_ids": list(
-                    response.expanded_cross_reference_ids),
+                "lexical_candidate_count": sum(
+                    item.lexical_candidate_count or 0 for item in responses),
+                "vector_candidate_count": sum(
+                    item.vector_candidate_count or 0 for item in responses),
+                "expanded_cross_reference_ids": [
+                    ref for item in responses
+                    for ref in item.expanded_cross_reference_ids],
             },
         )
         context.cache[key] = result
 
         return result
 
+    def _search_mode(self, binding: StandardBinding):
+        try:
+            declared = self.retrieval.store.load_retrieval_settings(
+                binding.standard_id, binding.revision).get("mode")
+        except StandardStoreError as exc:
+            raise StandardConfigurationError(str(exc)) from None
+
+        return _configured_mode(declared)
+
     def fetch(self, context: ToolExecutionContext, arguments: Mapping[str, object]):
-        binding = self._active_binding(context, arguments)
         source_id = _source_id(arguments)
+        binding = self._owner(context, arguments, source_id)
 
         _require_owned(context, source_id)
         offset = arguments.get("text_offset", 0)
@@ -629,8 +722,8 @@ class StandardToolService:
         )
 
     def cite(self, context: ToolExecutionContext, arguments: Mapping[str, object]):
-        binding = self._active_binding(context, arguments)
         source_id = _source_id(arguments)
+        binding = self._owner(context, arguments, source_id)
 
         # A citation dereferences a handle too. It returns no words, but it
         # returns the section and the page -- which is exactly what it takes

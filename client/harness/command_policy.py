@@ -236,8 +236,14 @@ class CommandPolicy:
                     return None, (f"{literal} contains the sandbox's own mounts "
                                   f"and cannot be exposed — name a subdirectory.")
 
-        if not Path(literal).exists():
-            return None, ""
+        # A path the user may not even stat is refused with the reason, rather
+        # than raising out of the classifier and taking the session down.
+
+        try:
+            if not Path(literal).exists():
+                return None, ""
+        except OSError as exc:
+            return None, f"{literal} cannot be read here ({exc.strerror or exc})."
 
         return literal, ""
 

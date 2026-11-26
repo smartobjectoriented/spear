@@ -338,7 +338,8 @@ class FindingsAreSortedByWhatTheyBearOn(unittest.TestCase):
     def test_wording_findings_leave_the_conclusion_alone(self):
         self.assertEqual(
             ar.PRESENTATION_ONLY,
-            {nc.UNGROUNDED_IDENTIFIER, nc.AMBIGUOUS_CITATION})
+            {nc.UNGROUNDED_IDENTIFIER, nc.AMBIGUOUS_CITATION,
+             nc.MISPOSITIONED_FIELD})
 
     def test_conclusion_findings_may_change_it(self):
         self.assertEqual(

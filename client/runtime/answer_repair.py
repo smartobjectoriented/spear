@@ -51,6 +51,8 @@ REPAIRABLE = frozenset({
     # A provision credited with the wrong force is a wording problem: the
     # evidence in hand already says which provision imposes what.
     normative_claims.MISATTRIBUTED_FORCE,
+    # A position copied wrong: the description in hand states the right one.
+    normative_claims.MISPOSITIONED_FIELD,
 })
 
 #: And ones it cannot. A bound nothing states is not a wording problem.
@@ -72,6 +74,7 @@ CONCLUSION_BEARING = frozenset({
 PRESENTATION_ONLY = frozenset({
     normative_claims.UNGROUNDED_IDENTIFIER,
     normative_claims.AMBIGUOUS_CITATION,
+    normative_claims.MISPOSITIONED_FIELD,
 })
 
 #: How a turn says it is not answering. Matched against the opening of a
@@ -242,6 +245,12 @@ def _finding_lines(problems):
                          f"{problem['role'].lower()} and it supports "
                          f"{problem['supported']}. If another provision above "
                          "imposes the obligation, attribute it to that one.")
+
+        elif kind == normative_claims.MISPOSITIONED_FIELD:
+            lines.append(f"  - You placed {problem['identifier']} at bit "
+                         f"{problem['claimed']}; the description above places "
+                         f"it at {problem['stated']}. Copy the position from "
+                         "the description.")
 
     return lines
 

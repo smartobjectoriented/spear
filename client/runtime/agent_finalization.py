@@ -12,7 +12,7 @@ from models.model_backend import (
 )
 from runtime.tracing import EventStatus, EventType
 from evidence import project_build
-from runtime import work_order
+from runtime import line_references, work_order
 from standard.standard_answer_policy import STOPPED_BY_BUDGET
 from runtime.agent_context import AgentContext, AgentResult, RuntimeTerminalReason
 from runtime.agent_notes import unsupported_change_claim
@@ -319,6 +319,13 @@ class FinalizationMixin:
 
         if claim_note:
             response = (response or "") + claim_note
+
+        # File:line references are checked against the files this turn
+        # touched; a counted number that drifted by a line or two is corrected
+        # in the answer, which says so.
+
+        response, _ = line_references.check(
+            response or "", getattr(context, "project_root", ""), tool_log)
 
         # The last word on a turn that wrote. Deterministic, from the tool log,
         # and on every exit path -- the budget's included, which is the one

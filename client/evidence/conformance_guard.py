@@ -187,10 +187,23 @@ def _identity_terms(binding):
 
     from standard import standard_scope
 
-    subject = _Named(binding) if isinstance(binding, dict) else binding
+    # Companions bound beside the active standard travel inside its dict, and
+    # a sentence naming any of them speaks for a bound standard.
 
-    return tuple(term for term in standard_scope.identity_terms(subject)
-                 if len(term) > 3)
+    subjects = [binding]
+
+    if isinstance(binding, dict):
+        subjects += [item for item in binding.get("companions") or ()
+                     if isinstance(item, dict)]
+
+    terms = []
+
+    for item in subjects:
+        subject = _Named(item) if isinstance(item, dict) else item
+        terms += [term for term in standard_scope.identity_terms(subject)
+                  if len(term) > 3 and term not in terms]
+
+    return tuple(terms)
 
 
 # A clause identifier sitting immediately before the standard's name, which

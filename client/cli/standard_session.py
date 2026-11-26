@@ -144,9 +144,23 @@ def standard_binding_for(question):
 
     context, STANDARD_READ_CONTEXT = STANDARD_READ_CONTEXT, ""
 
-    if not standard_scope.engages(binding, question,
-                                  engaged_before=STANDARD_ENGAGED_BEFORE,
-                                  context=context):
+    if binding is None:
+        return None
+
+    try:
+        companions = STANDARD_OPERATOR.companion_bindings()
+    except StandardCommandError as exc:
+        print(f"  {C_DIM}⎿  {exc}; answering with the active standard "
+              f"alone{C_RST}")
+        companions = []
+
+    # A question about a companion engages the binding as much as one about
+    # the active standard: that is what binding it beside was for.
+
+    if not any(standard_scope.engages(item, question,
+                                      engaged_before=STANDARD_ENGAGED_BEFORE,
+                                      context=context)
+               for item in (binding, *companions)):
         return None
 
     # Follow-ups to a bound turn are part of it. "can you validate the
@@ -155,8 +169,15 @@ def standard_binding_for(question):
 
     STANDARD_ENGAGED_BEFORE = True
 
+    beside = "".join(f" + {item.standard_id} {item.revision}"
+                     for item in companions)
     print(f"  {C_DIM}⎿  bound standard: {binding.standard_id} "
-          f"{binding.revision} — normative claims are grounded in it and "
-          f"cited{C_RST}")
+          f"{binding.revision}{beside} — normative claims are grounded in "
+          f"{'them' if companions else 'it'} and cited{C_RST}")
 
-    return binding.to_dict()
+    payload = binding.to_dict()
+
+    if companions:
+        payload["companions"] = [item.to_dict() for item in companions]
+
+    return payload

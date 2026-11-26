@@ -107,15 +107,38 @@ def main() -> int:
 
     if binding.is_file():
         try:
-            active = json.loads(binding.read_text()).get("active", {})
+            document = json.loads(binding.read_text())
         except (OSError, json.JSONDecodeError):
-            active = {}
+            document = {}
 
+        active = document.get("active") or {}
         bound = f"{active.get('standard_id')} {active.get('revision')}"
 
         if any(bound == name for name, _ in taken):
-            shutil.copy2(binding, out / ".active-binding.json")
-            print(f"   standards bound on open: {bound}")
+            # Companions follow the same rule as the binding: one whose
+            # document stayed behind is dropped, not carried as a dangling
+            # reference.
+
+            names = {name for name, _ in taken}
+            companions = [item for item in document.get("companions") or ()
+                          if f"{item.get('standard_id')} {item.get('revision')}" in names]
+
+            for item in document.get("companions") or ():
+                if item not in companions:
+                    print(f"   standards companion dropped ({item.get('standard_id')} "
+                          f"{item.get('revision')} is not in this image)")
+
+            document = {key: value for key, value in document.items()
+                        if key != "companions"}
+
+            if companions:
+                document["companions"] = companions
+
+            (out / ".active-binding.json").write_text(
+                json.dumps(document, sort_keys=True, separators=(",", ":")))
+            print(f"   standards bound on open: {bound}"
+                  + "".join(f" + {item['standard_id']} {item['revision']}"
+                            for item in companions))
         elif active:
             print(f"   standards binding dropped ({bound} is not in this image) —"
                   f" the container opens unbound")

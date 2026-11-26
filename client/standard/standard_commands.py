@@ -90,6 +90,90 @@ class StandardOperator:
 
         return binding
 
+    def companion_bindings(self) -> list[StandardBinding]:
+        """The standards bound beside the active one, each still honoured.
+
+        A companion is read, searched and cited like the active standard, and
+        it is held to the same rule: a corpus that moved underneath it is
+        refused, never silently rebound.
+        """
+
+        companions = []
+
+        for raw in self._read_raw().get("companions") or ():
+            try:
+                persisted = StandardBinding.from_dict(raw)
+                current = self.store.binding(persisted.standard_id,
+                                             persisted.revision,
+                                             bound_at=persisted.bound_at)
+            except Exception as exc:
+                raise StandardCommandError(
+                    f"companion standard binding is invalid: {exc}") from exc
+
+            if (persisted.pdf_sha256 != current.pdf_sha256
+                    or persisted.corpus_manifest_sha256
+                    != current.corpus_manifest_sha256):
+                raise StandardCommandError(
+                    f"companion standard {persisted.standard_id} canonical "
+                    "source changed; rebind refused")
+
+            self._register_profile(current)
+            companions.append(current)
+
+        return companions
+
+    def add_companion(self, standard_id: str, revision: str) -> StandardBinding:
+        """Bind one more standard beside the active one."""
+
+        active = self.active_binding()
+
+        if active is None:
+            raise StandardCommandError(
+                "no active standard: bind one with /standard use first")
+
+        if standard_id == active.standard_id:
+            raise StandardCommandError(
+                f"{standard_id} is already the active standard")
+
+        binding = self.store.binding(
+            standard_id, revision,
+            bound_at=datetime.now(timezone.utc).isoformat(timespec="seconds"),
+        )
+        companions = [item for item in self.companion_bindings()
+                      if item.standard_id != standard_id]
+        self._write_active(active, [*companions, binding])
+        self._register_profile(binding)
+
+        return binding
+
+    def drop_companion(self, standard_id: str) -> bool:
+        active = self.active_binding()
+        companions = self.companion_bindings()
+        kept = [item for item in companions if item.standard_id != standard_id]
+
+        if active is None or len(kept) == len(companions):
+            return False
+
+        self._write_active(active, kept)
+
+        return True
+
+    def session_binding(self) -> dict | None:
+        """The active binding as a session carries it, companions included."""
+
+        active = self.active_binding()
+
+        if active is None:
+            return None
+
+        payload = active.to_dict()
+        companions = self.companion_bindings()
+
+        if companions:
+            payload["companions"] = [item.to_dict() for item in companions]
+
+        return payload
+
     def stale_binding_status(self, exc: StandardCommandError) -> str:
         """Explain a binding the store can no longer honour, without guessing."""
 
@@ -181,11 +265,32 @@ class StandardOperator:
             "active": None,
         }))
 
-    def _write_active(self, binding: StandardBinding) -> None:
-        self._atomic_write(self._active_path, canonical_json({
-            "schema_version": 1,
-            "active": binding.to_dict(),
-        }))
+    def _read_raw(self) -> dict:
+        try:
+            raw = json.loads(self._active_path.read_text("utf-8"))
+        except (FileNotFoundError, ValueError):
+            return {}
+
+        return raw if isinstance(raw, dict) else {}
+
+    def _write_active(self, binding: StandardBinding,
+                      companions: list[StandardBinding] | None = None) -> None:
+        # Rebinding the active standard keeps its companions, except the one
+        # that has just become active.
+
+        if companions is None:
+            kept = [raw for raw in self._read_raw().get("companions") or ()
+                    if isinstance(raw, dict)
+                    and raw.get("standard_id") != binding.standard_id]
+        else:
+            kept = [item.to_dict() for item in companions]
+
+        document = {"schema_version": 1, "active": binding.to_dict()}
+
+        if kept:
+            document["companions"] = kept
+
+        self._atomic_write(self._active_path, canonical_json(document))
 
     @staticmethod
     def _atomic_write(path: Path, content: bytes) -> None:
@@ -221,6 +326,8 @@ STANDARD_ACTIONS: tuple[tuple[str, str], ...] = (
     ("ingest", "<pdf> --id <id> --revision <revision> [--retain-pdf] "
                 "[--origin LICENSED_STANDARD|PUBLIC] [--allow-offload]"),
     ("use", "<id> <revision>"),
+    ("add", "<id> <revision>"),
+    ("drop", "<id>"),
     ("status", ""),
     ("rebuild", "[<id> <revision>] [--allow-offload]"),
     ("retrieval", "[<id> <revision>] [lexical|vector|hybrid] [--completion <n>]"),
@@ -434,10 +541,18 @@ def handle_standard_command(command: str, operator: StandardOperator) -> str:
 
         active = ((bound.standard_id, bound.revision) if bound is not None
                   else (None, None))
+
+        try:
+            companions = {(item.standard_id, item.revision)
+                          for item in operator.companion_bindings()}
+        except Exception:
+            companions = set()
         lines = ["Available standards:"]
 
         for standard_id, revision in values:
-            mark = "  <- bound" if (standard_id, revision) == active else ""
+            mark = ("  <- bound" if (standard_id, revision) == active
+                    else "  <- companion" if (standard_id, revision) in companions
+                    else "")
             lines.append(f"\n  {standard_id} {revision}{mark}")
 
             # A manifest that cannot be read is reported as such rather than
@@ -554,6 +669,8 @@ def handle_standard_command(command: str, operator: StandardOperator) -> str:
                                               binding.revision),
             f"Validation: {manifest.human_validation_status.value}",
             operator.candidate_summary(binding.standard_id, binding.revision),
+            *[f"Companion: {item.standard_id} {item.revision}"
+              for item in operator.companion_bindings()],
         ))
 
     if action == "use":
@@ -571,6 +688,24 @@ def handle_standard_command(command: str, operator: StandardOperator) -> str:
         operator.unbind()
 
         return "Standard binding cleared."
+
+    if action == "add":
+        if len(args) != 2:
+            raise StandardCommandError("usage: /standard add <id> <revision>")
+
+        binding = operator.add_companion(*args)
+
+        return (f"Bound {binding.standard_id} revision {binding.revision} beside "
+                "the active standard.")
+
+    if action == "drop":
+        if len(args) != 1:
+            raise StandardCommandError("usage: /standard drop <id>")
+
+        if not operator.drop_companion(args[0]):
+            raise StandardCommandError(f"{args[0]} is not a companion standard")
+
+        return f"Dropped {args[0]}."
 
     if action == "rebuild":
         if len([item for item in args if item != "--allow-offload"]) not in {0, 2}:

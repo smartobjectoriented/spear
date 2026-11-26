@@ -316,6 +316,30 @@ looks authoritative and is not.
    Use the normative store when you want claims about the document to be
    **citable and checked**. Use a corpus when you want to find things in it.
 
+Companion standards
+===================
+
+One document rarely says everything a question needs. The Arm Architecture
+Reference Manual lists the GIC system registers but defers their fields to
+the GIC architecture specification; an answer about raising an SGI needs
+both. ``/standard add`` binds a second document beside the active one:
+
+.. code-block:: text
+
+   /standard use ARM-DDI0487 M.c
+   /standard add ARM-IHI0069 H.b
+
+``standard.search`` then covers both and says which standard each result
+comes from; ``standard.fetch`` and ``standard.cite`` find the document that
+holds a source on their own, and the model is told which companions are
+bound. The guards accept a clause from either, and a sentence naming either
+document speaks for a bound standard.
+
+The active standard keeps one role a companion does not take: a conformance
+verdict is still judged against it alone. A companion's corpus is held to
+the same rule as the active one -- if it changed underneath its binding, the
+binding is refused rather than silently renewed.
+
 The rest of the operator commands
 =================================
 
@@ -331,8 +355,12 @@ The rest of the operator commands
      - what is bound right now
    * - ``/standard use <id> <revision>``
      - bind one
+   * - ``/standard add <id> <revision>``
+     - bind another one beside it, as a companion
+   * - ``/standard drop <id>``
+     - remove a companion
    * - ``/standard unbind``
-     - bind nothing
+     - bind nothing, companions included
    * - ``/standard verify [<id> <revision>]``
      - check the corpus and every index in full, then the contents table
    * - ``/standard rebuild [<id> <revision>] [--allow-offload]``

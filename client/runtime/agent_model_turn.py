@@ -283,6 +283,7 @@ class ModelTurnMixin:
         on_token: Callable[[], None] | None = None,
         only_tools: Sequence[str] | None = None,
         grace: bool = False,
+        purpose: str | None = None,
     ) -> ModelTurn:
         conversation = tuple(conversation or context.conversation)
 
@@ -321,7 +322,8 @@ class ModelTurnMixin:
                 recorder.begin_model_turn(
                     system=system, conversation=selected_conversation,
                     tools=context.tools, role=context.role,
-                    purpose="primary_agent" if context.role == "main" else context.role,
+                    purpose=purpose or ("primary_agent" if context.role == "main"
+                                        else context.role),
                     mutation_generation=context.working_state.mutation_generation,
                     memory_provenance_ids=tuple(
                         item.item_id for item in snapshot.selected_items

@@ -137,6 +137,28 @@ def repeats_flagged_identifier(repaired, problems):
     return None
 
 
+#: How a sentence reads when it was cut off: a plain word, a comma or an opening
+#: bracket as the last thing on its last line of prose. A repair that stops
+#: there is a fragment, whatever made it stop.
+
+_CUT_OFF = re.compile(r"(?<![\w.-])[^\W\d_]+$|[,(\[{]$")
+
+#: Lines that end without punctuation by nature.
+
+_UNPUNCTUATED = re.compile(r"^\s*(?:[-*+•]|\d+[.)]|#|\||```|>)")
+
+
+def interrupted(text):
+    """Does the draft stop in the middle of a sentence?"""
+
+    lines = [line for line in (text or "").splitlines() if line.strip()]
+
+    if not lines or _UNPUNCTUATED.match(lines[-1]):
+        return False
+
+    return bool(_CUT_OFF.search(lines[-1].rstrip()))
+
+
 def outcome(original, repaired, problems):
     """What the repair did, as a fact about the two drafts.
 
@@ -145,7 +167,7 @@ def outcome(original, repaired, problems):
     finding was repairable, that is a worse outcome than the original, and
     accepting it hid a correct conclusion behind a refusal.
     """
-    if not repaired:
+    if not repaired or interrupted(repaired):
         return REPAIR_FAILED
 
     if repeats_flagged_identifier(repaired, problems):
@@ -232,7 +254,7 @@ def prompt(question, rejected, evidence, problems):
         f"QUESTION: {question}",
         "",
         "YOUR REJECTED ANSWER:",
-        f"  {(rejected or '').strip()[:1200]}",
+        f"  {(rejected or '').strip()}",
         "",
         "WHY IT WAS REJECTED:",
         *_finding_lines(problems),

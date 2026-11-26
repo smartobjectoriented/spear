@@ -250,6 +250,39 @@ class TrainingCaptureTests(unittest.TestCase):
             self.assertFalse(episode.turns[0].primary_candidate)
             self.assertEqual(episode.training_metadata["default_sft_turns"], [])
 
+    def _labels(self, final_response, *, purpose=None):
+        with tempfile.TemporaryDirectory() as directory:
+            store = TrainingStore(Path(directory) / "training")
+            context = make_context(ScriptedBackend([text_turn("the answer")]))
+            recorder = TrainingRecorder(
+                store, task_id=context.task_id, session_id=None,
+                objective="answer", workspace=directory,
+            )
+            context.training_recorder = recorder
+            result = AgentRuntime().run(context)
+            if purpose is not None:
+                recorder.turns[-1].purpose = purpose
+                recorder.turns[-1].primary_candidate = False
+            episode = recorder.finalize(
+                state=context.working_state, task_status="completed",
+                terminal_reason=result.terminal_reason.value,
+                verification_status="not_required", checkpoint_status=None,
+                final_response=final_response,
+            )
+            return episode.turns[-1].labels
+
+    def test_final_success_marks_the_answer_the_user_saw(self):
+        self.assertIn("final_success", self._labels("the answer"))
+        self.assertIn("final_success", self._labels("VERDICT: NOT DEMONSTRATED\n\nthe answer"))
+
+    def test_a_withheld_or_replaced_answer_is_not_a_success_of_the_turn(self):
+        self.assertNotIn("final_success",
+                         self._labels("The evidence does not support this answer."))
+
+    def test_a_repair_turn_is_never_the_positive_example(self):
+        self.assertNotIn("final_success",
+                         self._labels("the answer", purpose="normative_repair"))
+
     def test_two_tasks_do_not_leak_state_and_disabled_creates_nothing(self):
         with tempfile.TemporaryDirectory() as directory:
             store = TrainingStore(Path(directory) / "training")

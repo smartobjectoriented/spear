@@ -8,6 +8,7 @@ import os
 import re
 import tempfile
 import fcntl
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Iterator, Mapping
 
@@ -214,6 +215,72 @@ class TrainingStore:
                 raise
 
             raise TrainingStoreError(f"could not load training episode: {exc}") from exc
+
+    def record_verdict(self, episode_id: str, verdict: str) -> None:
+        """Append an operator's /good or /bad on an episode.
+
+        Episodes are sealed by checksum, so a verdict given after the fact is
+        kept beside them, in its own append-only journal, and the dataset
+        builders read both.
+        """
+
+        if verdict not in {"good", "bad"}:
+            raise TrainingStoreError(f"unknown verdict: {verdict}")
+
+        self._path(self.episodes, episode_id, ".json")
+        entry = json.dumps({"episode_id": episode_id, "verdict": verdict,
+                            "at": datetime.now(timezone.utc).isoformat(timespec="seconds")},
+                           sort_keys=True)
+        lock = os.open(self.manifests / ".store.lock", os.O_RDWR | os.O_CREAT, 0o600)
+
+        try:
+            fcntl.flock(lock, fcntl.LOCK_EX)
+
+            with (self.manifests / "operator-verdicts.jsonl").open("a", encoding="utf-8") as stream:
+                stream.write(entry + "\n")
+                stream.flush()
+                os.fsync(stream.fileno())
+        finally:
+            fcntl.flock(lock, fcntl.LOCK_UN)
+            os.close(lock)
+
+    def operator_verdicts(self) -> dict[str, str]:
+        """The latest operator verdict on each episode that has one."""
+
+        journal = self.manifests / "operator-verdicts.jsonl"
+        verdicts: dict[str, str] = {}
+
+        if not journal.exists():
+            return verdicts
+
+        with journal.open(encoding="utf-8") as stream:
+            for line in stream:
+                try:
+                    item = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+
+                if item.get("verdict") in {"good", "bad"}:
+                    verdicts[str(item.get("episode_id"))] = item["verdict"]
+
+        return verdicts
+
+    def latest_episode_id(self, session_id: str | None = None) -> str | None:
+        """The most recently stored episode, of this session when one is named."""
+
+        for item in reversed(list(self.iterate_metadata())):
+            episode_id = str(item.get("episode_id", ""))
+
+            if session_id is None:
+                return episode_id
+
+            try:
+                if self.load_episode(episode_id).session_id == session_id:
+                    return episode_id
+            except TrainingStoreError:
+                continue
+
+        return None
 
     def iterate_metadata(self, *, eligibility: str | None = None) -> Iterator[Mapping[str, object]]:
         manifest = self.manifests / "episodes.jsonl"

@@ -655,6 +655,7 @@ class SFTDatasetBuilder:
         represented_projects: Counter[str] = Counter()
 
         metadata = sorted(self.store.iterate_metadata(), key=lambda item: str(item.get("episode_id")))
+        verdicts = self.store.operator_verdicts()
 
         for item in metadata:
             episode_id = str(item.get("episode_id", ""))
@@ -685,6 +686,13 @@ class SFTDatasetBuilder:
 
             if self.configuration.project_filters and project not in self.configuration.project_filters:
                 rejection_counts["project_filtered"] += len(episode.turns)
+                continue
+
+            # An answer the operator called bad is never a target, whatever
+            # the automatic labels say.
+
+            if verdicts.get(episode_id) == "bad":
+                rejection_counts["operator_rejected"] += len(episode.turns)
                 continue
 
             represented_projects[project] += 1

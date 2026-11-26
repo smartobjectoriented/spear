@@ -344,6 +344,23 @@ def _tool_view(tools: Sequence[ToolDefinition]) -> tuple[str, Mapping[str, objec
     return hashlib.sha256(encoded).hexdigest(), snapshot
 
 
+def _answered_by(turn: TrainingTurn, final_response: str) -> bool:
+    """Is the user-visible answer this primary turn's own output?
+
+    A guard may withhold or replace the model's answer, and a tool-less repair
+    may rewrite it from a prompt the conversation never held. Neither is the
+    turn's output, so neither may make it a positive example. The response
+    may carry a verdict header, hence containment rather than equality.
+    """
+
+    if not turn.primary_candidate:
+        return False
+
+    output = " ".join(turn.assistant_output.split())
+
+    return bool(output) and output in " ".join((final_response or "").split())
+
+
 def _opaque_id(prefix: str, task_id: str, session_id: str | None) -> str:
     value = f"{task_id}\0{session_id or ''}".encode()
     return f"{prefix}_{hashlib.sha256(value).hexdigest()[:32]}"
@@ -631,7 +648,8 @@ class TrainingRecorder:
             checkpoint_status=checkpoint_status,
         )
 
-        if eligibility == TrainingEligibility.POSITIVE_CANDIDATE and self.turns:
+        if (eligibility == TrainingEligibility.POSITIVE_CANDIDATE and self.turns
+                and _answered_by(self.turns[-1], final_response)):
             labels = list(self.turns[-1].labels)
             labels.append("final_success")
             self.turns[-1].labels = tuple(dict.fromkeys(labels))

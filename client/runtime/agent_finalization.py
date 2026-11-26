@@ -7,12 +7,12 @@ from typing import Any, Mapping
 
 from runtime.failure_policy import FailureKind
 from models.model_backend import (
-    ConversationMessage, ModelTurn, TextBlock, ToolResultBlock, ToolUseBlock,
-    textual_tool_call,
+    ConversationMessage, ModelTurn, StopReason, TextBlock, ToolResultBlock,
+    ToolUseBlock, textual_tool_call,
 )
 from runtime.tracing import EventStatus, EventType
 from evidence import project_build
-from runtime import work_order
+from runtime import line_references, work_order
 from standard.standard_answer_policy import STOPPED_BY_BUDGET
 from runtime.agent_context import AgentContext, AgentResult, RuntimeTerminalReason
 from runtime.agent_notes import unsupported_change_claim
@@ -214,11 +214,22 @@ class FinalizationMixin:
             turn = self.complete_model_turn(
                 context, use_tools=False,
                 conversation=(ConversationMessage("user", (TextBlock(text),)),),
-                grace=True)
+                grace=True, purpose="normative_repair")
         except Exception:
             return ""        # a failed repair withholds, exactly as before
 
-        return (turn.text or "") if turn is not None else ""
+        if turn is None:
+            return ""
+
+        # A draft that reached for a tool, or ran out of tokens, stops where
+        # the call or the limit began: what is left is a fragment, not a
+        # repair.
+
+        if (turn.tool_calls or textual_tool_call(turn.text)
+                or turn.stop_reason == StopReason.MAX_TOKENS):
+            return ""
+
+        return turn.text or ""
 
     @staticmethod
     def _result(
@@ -308,6 +319,13 @@ class FinalizationMixin:
 
         if claim_note:
             response = (response or "") + claim_note
+
+        # File:line references are checked against the files this turn
+        # touched; a counted number that drifted by a line or two is corrected
+        # in the answer, which says so.
+
+        response, _ = line_references.check(
+            response or "", getattr(context, "project_root", ""), tool_log)
 
         # The last word on a turn that wrote. Deterministic, from the tool log,
         # and on every exit path -- the budget's included, which is the one

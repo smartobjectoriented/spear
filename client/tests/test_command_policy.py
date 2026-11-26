@@ -797,6 +797,21 @@ class OutsideReadPolicyTests(unittest.TestCase):
         writable = self.policy.classify(f"echo x > {self.outside}/memory.md")
         self.assertEqual(writable.classification, CommandClassification.DANGEROUS)
 
+    def test_a_path_that_cannot_be_examined_is_refused_not_raised(self):
+        # A directory the user may not traverse made Path.exists raise, and
+        # the exception took the whole chat session down.
+        locked = self.outside / "locked"
+        locked.mkdir()
+        locked.chmod(0)
+
+        try:
+            assessment = self.policy.classify(f"ls -la {locked}/inside")
+        finally:
+            locked.chmod(0o700)
+
+        self.assertEqual(assessment.host_read_paths, ())
+        self.assertIn("cannot be read here", assessment.reason)
+
     def test_a_missing_outside_path_binds_nothing_and_is_not_refused(self):
         # ENOENT from the command is the truthful answer and the one the model
         # can act on; a policy error about a file that was never there is not.

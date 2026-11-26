@@ -249,6 +249,15 @@ backend() {
             [ -n "$REDS_KEY" ] && SSH_OPTS+=(-o IdentitiesOnly=yes -i "$REDS_KEY")
             echo "opening the tunnel :$LPORT -> $REDS_HOST:$REDS_PORT" >&2
 
+            # A tunnel that died with the VPN keeps its port, and a new one
+            # then fails to bind: say that, not "is the host reachable?".
+
+            if (exec 3<>"/dev/tcp/127.0.0.1/$LPORT") 2>/dev/null; then
+                held=$(ss -ltnpH "sport = :$LPORT" 2>/dev/null | grep -o 'pid=[0-9]*' | head -1)
+                WHY="port $LPORT is held by a tunnel that no longer answers${held:+ ($held)}: end it and run spear again"
+                return 1
+            fi
+
             if ! ssh "${SSH_OPTS[@]}" -L "$LPORT:localhost:$REDS_PORT" -N -f "$REDS_HOST"; then
                 WHY="tunnel failed: is $REDS_HOST reachable (VPN?) and your key authorised?"
                 return 1

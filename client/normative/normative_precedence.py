@@ -266,10 +266,22 @@ def _sentences(text):
             if part.strip()]
 
 
-def _replacement(ledger, standard_id="", revision=""):
+def _names(standard_id="", revision="", binding=None):
+    """The bound standards, the active one first, for a reader."""
+    names = [" ".join(part for part in (standard_id, revision) if part)]
+
+    if isinstance(binding, dict):
+        names += [" ".join(str(item.get(key) or "") for key in ("standard_id", "revision")).strip()
+                  for item in binding.get("companions") or () if isinstance(item, dict)]
+
+    names = [name for name in names if name]
+
+    return " or ".join(names) or "the bound standard"
+
+
+def _replacement(ledger, standard_id="", revision="", binding=None):
     """What is put in place of a requirement nothing retrieved supports."""
-    name = " ".join(part for part in (standard_id, revision) if part) or (
-        "the bound standard")
+    name = _names(standard_id, revision, binding)
     read = sorted(ledger.sections,
                   key=lambda section: [int(part) for part in section.split(".")])
 
@@ -296,7 +308,7 @@ def sanitize(answer, ledger, *, standard_id="", revision="", binding=None):
     if not problems:
         return text, []
 
-    note = _replacement(ledger, standard_id, revision)
+    note = _replacement(ledger, standard_id, revision, binding)
     replaced = []
     placed = False
 

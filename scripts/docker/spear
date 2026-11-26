@@ -337,6 +337,28 @@ NAME="spear-$(printf '%s' "${WORKDIR##*/}" | tr -c 'A-Za-z0-9_.-' '-')-$$"
 
 MEMORY="${SPEAR_CONTAINER_MEMORY:-$(awk '/^MemTotal:/ { printf "%dm", $2 * 3 / 4 / 1024 }' /proc/meminfo)}"
 
+# chromadb opens the image's index read-write, and overlayfs then copies the
+# whole database into each new container: some 25 GB and tens of seconds at
+# every start, long enough for chromadb to give up waiting. A named volume
+# holds it instead, filled from the image once and reused while the image
+# stays the same; volumes of earlier images are removed when not in use.
+
+INDEX=()
+SHIPPED="$(docker image inspect -f '{{range .Config.Env}}{{println .}}{{end}}' "$IMAGE" 2>/dev/null \
+    | sed -n 's/^SPEAR_SHIPPED_DB_PATH=//p')"
+
+if [ -n "$SHIPPED" ]; then
+    VOLUME="spear-index-$(docker image inspect -f '{{.Id}}' "$IMAGE" | cut -d: -f2 | cut -c1-12)"
+
+    for old in $(docker volume ls -q --filter name=spear-index-); do
+        [ "$old" = "$VOLUME" ] || docker volume rm "$old" >/dev/null 2>&1 || true
+    done
+
+    docker volume inspect "$VOLUME" >/dev/null 2>&1 \
+        || echo "spear: copying the image's index into the volume $VOLUME, once" >&2
+    INDEX=(-v "$VOLUME:$SHIPPED")
+fi
+
 # The three --security-opt are what bubblewrap, the harness's sandbox, needs
 # to start inside a container; without them it refuses every command.
 
@@ -352,6 +374,7 @@ exec docker run --rm --name "$NAME" "${TTY[@]}" \
     -e "SPEAR_STATE_DIR=/state" \
     -e "HOME=/state/home" \
     -v "$STATE:/state" \
+    "${INDEX[@]}" \
     "${BINDS[@]}" \
     -w "$WORKDIR" \
     "${ENTRY[@]}" \

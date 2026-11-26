@@ -136,6 +136,22 @@ class ACommentIsNotTheStandard(unittest.TestCase):
                       answer)
 
 
+class TheNoteNamesEveryBoundStandard(unittest.TestCase):
+    """With a companion bound, the note named only the active standard: "No
+    requirement of ARM-DDI0487 M.c is stated here", over an answer that cited
+    the GIC specification throughout."""
+
+    def test_companions_are_named_after_the_active_standard(self):
+        binding = {"standard_id": "ARM-DDI0487", "revision": "M.c",
+                   "companions": [{"standard_id": "ARM-IHI0069", "revision": "H.b"}]}
+
+        self.assertEqual(normative_precedence._names("ARM-DDI0487", "M.c", binding),
+                         "ARM-DDI0487 M.c or ARM-IHI0069 H.b")
+        self.assertEqual(normative_precedence._names("ARM-DDI0487", "M.c"),
+                         "ARM-DDI0487 M.c")
+        self.assertEqual(normative_precedence._names(), "the bound standard")
+
+
 class DeviationsAreReportable(unittest.TestCase):
     """CASE 2 -- the implementation contradicts the standard."""
 

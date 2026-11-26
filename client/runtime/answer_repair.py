@@ -51,6 +51,8 @@ REPAIRABLE = frozenset({
     # A provision credited with the wrong force is a wording problem: the
     # evidence in hand already says which provision imposes what.
     normative_claims.MISATTRIBUTED_FORCE,
+    # A position copied wrong: the description in hand states the right one.
+    normative_claims.MISPOSITIONED_FIELD,
 })
 
 #: And ones it cannot. A bound nothing states is not a wording problem.
@@ -72,6 +74,7 @@ CONCLUSION_BEARING = frozenset({
 PRESENTATION_ONLY = frozenset({
     normative_claims.UNGROUNDED_IDENTIFIER,
     normative_claims.AMBIGUOUS_CITATION,
+    normative_claims.MISPOSITIONED_FIELD,
 })
 
 #: How a turn says it is not answering. Matched against the opening of a
@@ -137,6 +140,28 @@ def repeats_flagged_identifier(repaired, problems):
     return None
 
 
+#: How a sentence reads when it was cut off: a plain word, a comma or an opening
+#: bracket as the last thing on its last line of prose. A repair that stops
+#: there is a fragment, whatever made it stop.
+
+_CUT_OFF = re.compile(r"(?<![\w.-])[^\W\d_]+$|[,(\[{]$")
+
+#: Lines that end without punctuation by nature.
+
+_UNPUNCTUATED = re.compile(r"^\s*(?:[-*+•]|\d+[.)]|#|\||```|>)")
+
+
+def interrupted(text):
+    """Does the draft stop in the middle of a sentence?"""
+
+    lines = [line for line in (text or "").splitlines() if line.strip()]
+
+    if not lines or _UNPUNCTUATED.match(lines[-1]):
+        return False
+
+    return bool(_CUT_OFF.search(lines[-1].rstrip()))
+
+
 def outcome(original, repaired, problems):
     """What the repair did, as a fact about the two drafts.
 
@@ -145,7 +170,7 @@ def outcome(original, repaired, problems):
     finding was repairable, that is a worse outcome than the original, and
     accepting it hid a correct conclusion behind a refusal.
     """
-    if not repaired:
+    if not repaired or interrupted(repaired):
         return REPAIR_FAILED
 
     if repeats_flagged_identifier(repaired, problems):
@@ -221,6 +246,12 @@ def _finding_lines(problems):
                          f"{problem['supported']}. If another provision above "
                          "imposes the obligation, attribute it to that one.")
 
+        elif kind == normative_claims.MISPOSITIONED_FIELD:
+            lines.append(f"  - You placed {problem['identifier']} at bit "
+                         f"{problem['claimed']}; the description above places "
+                         f"it at {problem['stated']}. Copy the position from "
+                         "the description.")
+
     return lines
 
 
@@ -232,7 +263,7 @@ def prompt(question, rejected, evidence, problems):
         f"QUESTION: {question}",
         "",
         "YOUR REJECTED ANSWER:",
-        f"  {(rejected or '').strip()[:1200]}",
+        f"  {(rejected or '').strip()}",
         "",
         "WHY IT WAS REJECTED:",
         *_finding_lines(problems),

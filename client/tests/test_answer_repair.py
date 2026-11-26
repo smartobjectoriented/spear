@@ -82,6 +82,16 @@ class ThePromptConstrainsRatherThanAnswers(unittest.TestCase):
         self.assertIn("Yes, a Reply may carry two tags.", text)
         self.assertIn("contradicts", text)
 
+    def test_it_carries_the_whole_rejected_answer(self):
+        """The repair must keep what was not rejected, so it must see all of
+        it: a cut-off answer came back copied up to the cut, and ended there."""
+        long_answer = "Yes, a Reply may carry two tags. " * 80 + "The last sentence."
+
+        text = ar.prompt("May a Reply carry two tags?", long_answer,
+                         self.evidence, self.problems)
+
+        self.assertIn(long_answer, text)
+
     def test_it_forbids_further_retrieval_in_words(self):
         self.assertIn("cannot retrieve more", self.prompt())
 
@@ -328,7 +338,8 @@ class FindingsAreSortedByWhatTheyBearOn(unittest.TestCase):
     def test_wording_findings_leave_the_conclusion_alone(self):
         self.assertEqual(
             ar.PRESENTATION_ONLY,
-            {nc.UNGROUNDED_IDENTIFIER, nc.AMBIGUOUS_CITATION})
+            {nc.UNGROUNDED_IDENTIFIER, nc.AMBIGUOUS_CITATION,
+             nc.MISPOSITIONED_FIELD})
 
     def test_conclusion_findings_may_change_it(self):
         self.assertEqual(
@@ -468,3 +479,26 @@ class OneAttemptStillMeansOne(unittest.TestCase):
                    ask=ask)
 
         self.assertEqual(len(asked), 1)
+
+
+class ACutOffDraftIsNoRepair(unittest.TestCase):
+    """A repair that stops mid-sentence is a fragment; accepting it showed
+    the reader half a sentence in place of a complete answer."""
+
+    def test_a_sentence_stopped_on_a_word_is_interrupted(self):
+        self.assertTrue(ar.interrupted("It does not.\n\nIf you want, I can pull the"))
+        self.assertTrue(ar.interrupted("The handler calls foo("))
+        self.assertTrue(ar.interrupted("It applies to both,"))
+
+    def test_finished_prose_lists_code_and_references_are_not(self):
+        for text in ("Rule 5.2-1 applies.", "Which one do you want?",
+                     "- the last item", "1. step one", "```\ncode\n```",
+                     "see smp.c:1231", "the value is 0x10", "**Summary**",
+                     "see ICC_SGI1R_EL1", ""):
+            self.assertFalse(ar.interrupted(text), text)
+
+    def test_a_cut_off_rewrite_fails_instead_of_answering(self):
+        self.assertEqual(
+            ar.outcome("No. Rule 5.2-1 applies.", "No. Rule 5.2-1 says that",
+                       [{"kind": nc.INCOHERENT_CONCLUSION}]),
+            ar.REPAIR_FAILED)

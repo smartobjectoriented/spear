@@ -172,7 +172,11 @@ class TaskController:
 
                 if ((persisted.retrieval_fingerprint or persisted.index_fingerprint)
                         != (current.retrieval_fingerprint or current.index_fingerprint)):
+                    companions = context.standard_binding.get("companions")
                     context.standard_binding = current.to_dict()
+
+                    if companions:
+                        context.standard_binding["companions"] = companions
 
                     if context.session is not None:
                         AgentRuntime.persist_session_event(
@@ -208,6 +212,21 @@ class TaskController:
                 "Distinguish requirements, recommendations, informative text, and examples.",
                 "Do not invent values or silently switch revisions; report insufficient or conflicting sources.",
             )) + "\n"
+
+            # Companions are searched, read and cited like the bound standard;
+            # the model is told which they are so it can say where a clause
+            # comes from.
+
+            companions = [item for item in context.standard_binding.get("companions") or ()
+                          if isinstance(item, dict)]
+
+            if companions:
+                identity += "\n".join((
+                    "\nCOMPANION STANDARDS (bound beside it; standard.search covers them too)",
+                    *[f"{item.get('standard_id')} revision {item.get('revision')}"
+                      for item in companions],
+                    "Cite each clause with the standard it comes from.",
+                )) + "\n"
 
             # What outranks what, and what may speak for the standard. Both
             # are attached to the BINDING, which is the one place a rule

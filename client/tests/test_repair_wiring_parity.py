@@ -101,3 +101,45 @@ class TheRepairStaysOneShot(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class AFragmentIsNotARepair(unittest.TestCase):
+    """What the runtime hands back when the tool-less draft reached for a
+    tool or ran out of tokens: nothing, so the original is withheld."""
+
+    def ask(self, turn):
+        from unittest.mock import patch
+
+        runtime = agent_runtime.AgentRuntime()
+
+        with patch.object(agent_runtime.AgentRuntime, "complete_model_turn",
+                          return_value=turn) as complete:
+            text = runtime._repair_ask(object(), "rewrite it")
+
+        return text, complete.call_args.kwargs
+
+    def test_a_draft_with_a_tool_call_is_dropped(self):
+        from models.model_backend import ModelToolCall, ModelTurn, StopReason
+
+        text, _ = self.ask(ModelTurn(
+            "I can pull the", (ModelToolCall("c1", "standard.search", {}),),
+            StopReason.TOOL_USE))
+
+        self.assertEqual(text, "")
+
+    def test_a_draft_that_hit_the_limit_is_dropped(self):
+        from models.model_backend import ModelTurn, StopReason
+
+        text, _ = self.ask(ModelTurn("It says", (), StopReason.MAX_TOKENS))
+
+        self.assertEqual(text, "")
+
+    def test_a_finished_draft_is_returned_and_recorded_as_a_repair(self):
+        from models.model_backend import ModelTurn, StopReason
+
+        text, kwargs = self.ask(ModelTurn("Rule 5.2-1 applies.", (),
+                                          StopReason.END_TURN))
+
+        self.assertEqual(text, "Rule 5.2-1 applies.")
+        self.assertEqual(kwargs["purpose"], "normative_repair")
+        self.assertFalse(kwargs["use_tools"])

@@ -51,6 +51,7 @@ UNSUPPORTED_CARDINALITY = "UNSUPPORTED_CARDINALITY"
 AMBIGUOUS_CITATION = "AMBIGUOUS_CITATION"
 #: A named provision credited with a force its role cannot carry.
 MISATTRIBUTED_FORCE = "MISATTRIBUTED_FORCE"
+MISPOSITIONED_FIELD = "MISPOSITIONED_FIELD"
 
 #: Where a name that is not the document's own came from: the operator's
 #: request or the repository the turn read. Either may say which
@@ -752,6 +753,73 @@ def ambiguity_findings(answer, evidence):
             for problem in ambiguous]
 
 
+#: How a register description states a field's place: "IRM, bit [40]",
+#: "INTID, bits [27:24]".
+
+_STATED_POSITION = re.compile(
+    r"\b([A-Z][A-Za-z0-9_]{1,31}),\s*bits?\s*\[(\d{1,3})(?::(\d{1,3}))?\]")
+
+#: How an answer gives one: the same form, a parenthesised gloss between the
+#: name and the bits, or a table row with the field and its bits in cells.
+
+_CLAIMED_POSITION = re.compile(
+    r"\b([A-Z][A-Za-z0-9_]{1,31})[`*]*(?:\s*\([^)\n]{0,60}\))?\s*[,:]?\s*"
+    r"(?:[—–-]\s*)?bits?\s*\[(\d{1,3})(?::(\d{1,3}))?\]")
+_CLAIMED_ROW = re.compile(
+    r"^\s*\|\s*[`*]*([A-Z][A-Za-z0-9_]{1,31})[`*]*[^|\n]*\|\s*[`*]*"
+    r"(?:bits?\s*)?\[(\d{1,3})(?::(\d{1,3}))?\]", re.M)
+
+
+def _position(high, low):
+    return (int(high), int(low if low is not None else high))
+
+
+def _render_position(position):
+    high, low = position
+
+    return f"[{high}]" if high == low else f"[{high}:{low}]"
+
+
+def position_findings(answer, evidence):
+    """A field placed where no retrieved description puts it.
+
+    Copying a register description is where a number slips: "IRM, bit [40]"
+    came back as bit [4]. Only fields the evidence itself positions are
+    checked, and a claim stands if it matches ANY position stated for that
+    name -- the same field name recurs across registers at different places.
+    """
+
+    stated = {}
+
+    for unit in evidence.units:
+        for match in _STATED_POSITION.finditer(unit.text):
+            stated.setdefault(match.group(1), set()).add(
+                _position(match.group(2), match.group(3)))
+
+    if not stated:
+        return []
+
+    problems, seen = [], set()
+
+    for pattern in (_CLAIMED_POSITION, _CLAIMED_ROW):
+        for match in pattern.finditer(answer or ""):
+            name = match.group(1)
+            claimed = _position(match.group(2), match.group(3))
+
+            if name not in stated or claimed in stated[name] or (name, claimed) in seen:
+                continue
+
+            seen.add((name, claimed))
+            problems.append({
+                "kind": MISPOSITIONED_FIELD, "identifier": name,
+                "claimed": _render_position(claimed),
+                "stated": ", ".join(_render_position(item)
+                                    for item in sorted(stated[name], reverse=True)),
+            })
+
+    return problems
+
+
 def findings(answer, evidence, *, question="", permitted=(), binding=None, requested=()):
     return (ambiguity_findings(answer, evidence)
             + identifier_findings(answer, evidence, permitted=permitted,
@@ -759,7 +827,8 @@ def findings(answer, evidence, *, question="", permitted=(), binding=None, reque
             + modality_findings(answer, evidence, question=question)
             + coherence_findings(answer, evidence, question=question)
             + cardinality_findings(answer, evidence, question=question)
-            + attribution_findings(answer, evidence))
+            + attribution_findings(answer, evidence)
+            + position_findings(answer, evidence))
 
 
 def _note(problems, evidence):
@@ -786,6 +855,10 @@ def _note(problems, evidence):
             lines.append(f"  - a bound of {problem['asserted']} is asserted; "
                          "no retrieved clause states one. Counting flags, "
                          "types or examples does not establish a limit.")
+        elif kind == MISPOSITIONED_FIELD:
+            lines.append(f"  - {problem['identifier']} is placed at bit "
+                         f"{problem['claimed']}; the retrieved description "
+                         f"places it at {problem['stated']}.")
         elif kind == MISATTRIBUTED_FORCE:
             lines.append(f"  - {problem['reference']} is credited with "
                          f"{problem['claimed']} force; its role is "

@@ -30,6 +30,12 @@ fails bundle validation on leakage. Synthetic data is only for pipeline tests.
 FT4 must evaluate an adapter against held-out and general control tasks before
 any deployment or merge.
 
+`/good` and `/bad` are recorded against the episode of the last answered
+turn, in `manifests/operator-verdicts.jsonl` beside the sealed episodes. A
+`/bad` episode is never an SFT target, whatever its automatic labels say,
+and its final answer is an undesirable preference observation; a `/good` one
+is a desirable observation.
+
 ## Operator fine-tuning jobs (FT4A)
 
 Fine-tuning is an operator control-plane operation. It is not registered in

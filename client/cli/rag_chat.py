@@ -378,6 +378,11 @@ def main():
 
         return text
 
+    # The session of the last answered turn: /good and /bad are recorded
+    # against its training episode.
+
+    last_session_id = None
+
     while True:
         STATUS.end_turn()
 
@@ -693,12 +698,31 @@ def main():
                                "verdict": user_input[1:],
                                "question": q[:500]})
 
+                # The captured episode carries the automatic labels; the
+                # verdict goes beside it, so a /bad answer never becomes a
+                # positive example and a /good one is known to be good.
+
+                recorded = False
+
+                if TRAINING_STORE is not None and last_session_id:
+                    try:
+                        episode_id = TRAINING_STORE.latest_episode_id(last_session_id)
+
+                        if episode_id:
+                            TRAINING_STORE.record_verdict(episode_id, user_input[1:])
+                            recorded = True
+                    except Exception:
+                        recorded = False
+
+                where = " and on its training episode" if recorded else ""
+
                 if user_input == "/good":
                     n = save_experience(q, a)
                     print(f"Saved as fine-tuning sample "
-                          f"({n} in experience.jsonl)\n")
+                          f"({n} in experience.jsonl){where}\n")
                 else:
-                    print("Noted as bad (archived, not used for training)\n")
+                    print(f"Noted as bad (archived, not used for training)"
+                          f"{where}\n")
             else:
                 print("No complete exchange to rate.\n")
 
@@ -1027,6 +1051,7 @@ def main():
         session_handle = SessionHandle(
             SESSION_STORE, new_session_id(), session_configuration,
         )
+        last_session_id = session_handle.session_id
         # What the tree is actually built and tested with, discovered once.
         # It feeds the verification policy as well as the build gate: a run of
         # the project's own test command is the project's own verification,

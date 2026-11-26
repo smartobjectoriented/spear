@@ -34,7 +34,7 @@ from training.training_store import TrainingStore, TrainingStoreError
 
 
 PREFERENCE_SCHEMA_VERSION = 1
-OUTCOME_POLICY_VERSION = 1
+OUTCOME_POLICY_VERSION = 2
 PREFERENCE_EXPORTER_VERSION = 1
 CONTEXT_INDEX_SCHEMA_VERSION = 1
 
@@ -272,6 +272,10 @@ class OutcomeLabelPolicy:
         "plan_progress", "recovery_after_failure",
     })
 
+    def __init__(self, verdicts: Mapping[str, str] | None = None) -> None:
+        #: The operator's /good and /bad, by episode.
+        self.verdicts = dict(verdicts or {})
+
     def label(self, episode: TrainingEpisode, turn: TrainingTurn
               ) -> tuple[OutcomeLabel, tuple[str, ...], EvidenceStrength]:
         """Label one turn from observed outcomes, or refuse to.
@@ -286,6 +290,17 @@ class OutcomeLabelPolicy:
 
         if not turn.primary_candidate or turn.role.lower() in {"explorer", "reviewer"}:
             return OutcomeLabel.UNKNOWN, ("auxiliary_turn",), EvidenceStrength.WEAK
+
+        # The operator's verdict on the answer outranks every automatic label:
+        # it is the one judgement made by someone who read it.
+
+        verdict = self.verdicts.get(episode.episode_id)
+
+        if verdict and not turn.tool_calls and turn is episode.turns[-1]:
+            if verdict == "bad":
+                return OutcomeLabel.UNDESIRABLE, ("operator_rejected",), EvidenceStrength.STRONG
+
+            return OutcomeLabel.DESIRABLE, ("operator_approved",), EvidenceStrength.STRONG
 
         labels = set(turn.labels)
         statuses = [call.status for call in turn.tool_calls]
@@ -461,7 +476,8 @@ class PreferenceDatasetBuilder:
         self.store = store if isinstance(store, TrainingStore) else TrainingStore(store)
         self.configuration = configuration or PreferenceConfiguration()
         self.redaction_policy = redaction_policy or TrainingRedactionPolicy.from_environment()
-        self.outcome_policy = outcome_policy or OutcomeLabelPolicy()
+        self.outcome_policy = outcome_policy or OutcomeLabelPolicy(
+            self.store.operator_verdicts())
         self.index = DecisionContextIndex(self.store.root)
 
     def _source_checksum(self, episode_id: str) -> str:

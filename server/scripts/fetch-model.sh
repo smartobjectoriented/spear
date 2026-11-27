@@ -13,7 +13,7 @@
 #
 # wget rather than a hub client, and this is measured rather than assumed: on
 # the GPU host used here a hub client sustained 1.8 MB/s against 40 MB/s for a
-# plain HTTPS pull -- twelve hours against thirty minutes for the same 85 GB.
+# plain HTTPS pull.
 # It is also one fewer Python dependency on a machine that only has to serve.
 #
 # -c so an interrupted fetch resumes instead of starting over.
@@ -40,7 +40,9 @@ if [ "${#missing[@]}" -gt 0 ]; then
     exit 78
 fi
 
-BASE="${SPEAR_SERVER_HF_ENDPOINT:-https://huggingface.co}/$REPO/resolve/main"
+# A pinned revision when the manifest names one: a moving "main" is not the
+# file that was measured.
+BASE="${SPEAR_SERVER_HF_ENDPOINT:-https://huggingface.co}/$REPO/resolve/${SPEAR_SERVER_MODEL_REVISION:-main}"
 
 # <stem>-00001-of-000NN.gguf -> every member. Anything else is one file.
 name="$(basename "$FILE")"

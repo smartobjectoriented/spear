@@ -159,7 +159,7 @@ leaves the previous manifest byte-identical.  Every bundle carries:
    * - ``evaluation-plan.json``
      - Held-out only, including a general-control regression.
    * - ``RUNBOOK.md``
-     - The human procedure, preflight included.
+     - The human procedure.
    * - ``checksums.sha256``
      - What ``validate-bundle`` re-checks.
 
@@ -169,84 +169,13 @@ assistant message; every earlier assistant message is context with
 hard error — that is how a model learns to reproduce the mistake it later
 recovered from.
 
-.. _the-moe-lesson:
+Will it fit?
+============
 
-The MoE lesson
-==============
-
-The bundle emits QLoRA configs for an 80B mixture-of-experts model, and the
-single most expensive thing this project learned is that **"4-bit" is not a
-property of a config, it is a property of a load**.
-
-``load_in_4bit`` makes bitsandbytes replace ``nn.Linear`` modules.  Whether the
-routed experts *are* ``nn.Linear`` depends on the installed ``transformers``:
-
-.. list-table::
-   :header-rows: 1
-   :widths: 30 40 30
-
-   * - ``transformers``
-     - Routed expert layout
-     - ``load_in_4bit`` reaches them
-   * - 4.57.6
-     - ``per_expert_modules (512,)``
-     - yes
-   * - 5.9.0
-     - ``fused_parameter (512, 1024, 2048)``
-     - **no**
-   * - 5.14.1 / 5.16.0.dev0
-     - ``fused_parameter (512, 1024, 2048)``
-     - **no**
-
-Both rows are measured, not read: ``LAYOUT_ONLY=1`` in
-``qwen3-finetune/cloud/load_preflight.py`` materialises the model on the meta
-device from ``config.json`` alone — no weights, no GPU, no disk — and reports
-the layout and the exact parameter counts.  Over the same 77.3 B expert
-parameters that is **145 GiB left in bf16** against **39 GiB in NF4**.
-
-So the emitted config sets ``quantize_moe_experts: true``, which is Axolotl's
-patch of the *loader*: it quantizes every ≥3-D CUDA parameter as it lands and
-disables ``caching_allocator_warmup``, which would otherwise pre-reserve the
-bf16 size and eat the saving.  Two consequences the config generator encodes:
-
-* routed experts are targeted through ``lora_target_parameters``, never
-  ``lora_target_modules`` — they are parameters, not modules;
-* ``lora_target_linear`` must stay false, which Axolotl itself enforces.
-
-Asking for 4-bit without the flag is how a run ended up holding 148 GiB of
-bf16 weights on a rented 179 GiB card, for a job that fits a far smaller one.
-
-Will it fit?  Measure it
-========================
-
-``TrainingHardwareReport.classify()`` takes the load mode, because without it
-the question has no answer: for this model 96 GiB is insufficient or ample
-depending on one flag.  It returns ``LIKELY_FITS`` only on the bf16 path at
-≥160 GiB.  On the quantized path it returns at most ``MAY_FIT``, and
-``MAY_FIT`` means *provision it and run the preflight*, not *go*.  Those
-thresholds are Axolotl's documentation, and this project has already been bitten
-once by a documented figure that did not survive contact with the stack.
-
-The preflight is the measurement:
-
-.. code-block:: console
-
-   $ CONFIG_YAML=configs/axolotl-sft.yml bash qwen3-finetune/cloud/load_preflight.sh
-
-It refuses on disk first, naming the exact number of GB to add; stops the
-inference server, because 5 GiB free out of 97 answers nothing; loads the real
-checkpoint with the real config; reports how many expert parameters were
-actually quantized on load; runs one forward + backward at the real sequence
-length; prints the peak and the headroom; and restarts the server from a
-``trap``, including after the OOM it exists to provoke.  It writes
-``load-preflight.json`` and exits non-zero on anything but ``FITS``.
-
-It reads its numbers from the bundle's own ``axolotl-sft.yml`` when given one,
-otherwise from ``AxolotlProfile`` in ``training_bundle.py``, parsed with
-``ast`` rather than imported — the harness's runtime dependencies have no
-business on a training host, and a preflight that cannot run where the training
-runs is decoration.  It names which source it used, so a verdict cannot be
-mistaken for one covering a config it never saw.
+``TrainingHardwareReport.classify()`` gives a coarse verdict for a 4-bit QLoRA
+run of the dense 27B source: ``LIKELY_FITS`` from 96 GiB, the card the FT-4 and
+FT-5 runs completed on; ``MAY_FIT`` from 48 GiB, which means *try a short run
+first*, not *go*; below that, ``LIKELY_DOES_NOT_FIT``.
 
 The operator surface
 ====================
@@ -282,13 +211,8 @@ The training host is the inference host (:ref:`inference_host`), whose reserved 
 RTX PRO 6000 Blackwell with 96 GiB.  The objective is that this card is
 sufficient and no GPU is rented.
 
-The binding constraint there is **disk, not VRAM**: the bf16 shards of the
-current base model are about 159 GB, more than the free space such a host
-typically has.  4-bit does
-not reduce that — bitsandbytes quantizes at load, from shards that must land on
-disk first.  Growing that filesystem is the cheap fix, and it is why the
-preflight's first check is a disk check that prints the deficit rather than a
-suggestion to rent something.
+The bf16 shards of the base model must land on disk before bitsandbytes
+quantizes them at load: 4-bit does not reduce the disk a run needs.
 
 .. note::
 
@@ -302,7 +226,7 @@ Related material
 ================
 
 ``qwen3-finetune/`` holds the experiment side: the LoRA trainers, the pod
-scripts, the corpus tooling (``scripts/merge_corpora.py``; the builders that
-read a deployment's own sources are deployment-specific and not shipped) and
-the preflight.  It is a working area, not a
+scripts and the corpus tooling (``scripts/merge_corpora.py``; the builders that
+read a deployment's own sources are deployment-specific and not shipped).  It
+is a working area, not a
 product surface — the governed path is the one described above.

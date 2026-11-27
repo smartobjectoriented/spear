@@ -260,7 +260,7 @@ if find "$root/models" -maxdepth 3 -type f \( -name '*.safetensors' -o -name '*.
   printf 'model_snapshot_status=READY\n'
 else printf 'model_snapshot_status=NOT_PRESENT\n'; fi
 ram=$(awk '/MemTotal:/ {print $2}' /proc/meminfo 2>/dev/null || true); printf 'ram_kib=%s\n' "${ram:-unknown}"
-for module in torch transformers peft bitsandbytes former-arch; do
+for module in torch transformers peft bitsandbytes; do
   "$py" - "$module" <<'PY' 2>/dev/null || true
 import importlib, sys
 name = sys.argv[1]
@@ -377,7 +377,6 @@ done
                  else RemoteReadinessState.READY)
 
         checks["environment_readiness"] = state.value
-        checks["former-arch_compatibility"] = state.value
 
         return RemoteReadinessReport(state.value, tuple(dict.fromkeys(reasons)), checks,
                                      self.configuration.host, _now())
@@ -546,7 +545,7 @@ def local_doctor(store: TrainingStore | str | os.PathLike[str],
     checks["launcher"] = "ssh"
     checks["host"] = config.host
     checks["ssh_identity"] = "CONFIGURED" if config.ssh_identity_file else "SYSTEM_DEFAULT"
-    checks["model_source"] = "Qwen/former-model"
+    checks["model_source"] = "Qwen/Qwen3.8-27B"
     checks["model_revision"] = ("PINNED" if (model_revision or config.source_model_revision)
                                 else "MISSING")
 

@@ -1,28 +1,38 @@
 {
   "spear_runtime_manifest": 1,
-
   "profile": {
-    "name": "former-model-q8-cuda13",
-    "description": "The deployment this manifest was measured against: one 96 GB Blackwell card, CUDA 13, a Q8_0 former-model served at 524288 tokens (YaRN x2 over its trained 262144), and a bge-m3 embedding worker whose vectors were shown bit-identical to the worker it replaced.",
-    "validated": "2026-09-14",
+    "name": "qwen38-27b-q8-cuda13",
+    "description": "The deployment this manifest was measured against: one 96 GB Blackwell card, CUDA 13, a Q8_0 Qwen3.8-27B served at its native 262144 tokens, and a bge-m3 embedding worker whose vectors were shown bit-identical to the worker it replaced.",
+    "validated": "2026-11-11",
     "notes": "A profile, not a requirement. Nothing here names a host, an account, a card or a filesystem path: the machine-specific values (root, GPU UUID, port) are supplied to bootstrap-runtime.sh, never written here."
   },
-
   "layout": {
-    "directories": ["llama.cpp", "models/gguf", "embed", "config", "log"],
+    "directories": [
+      "llama.cpp",
+      "models/gguf",
+      "embed",
+      "config",
+      "log"
+    ],
     "excluded": {
       "reason": "Reconstructible runtime only. These exist in some deployments as the sediment of past migrations; they are deliberately NOT part of what a bootstrap rebuilds, and not versioned.",
-      "patterns": ["S1-*", "S3-*", "staging", "log/*", "*.rollback", "config/*.local"]
+      "patterns": [
+        "S1-*",
+        "S3-*",
+        "staging",
+        "log/*",
+        "*.rollback",
+        "config/*.local"
+      ]
     }
   },
-
   "llama_cpp": {
     "repository": "https://github.com/ggml-org/llama.cpp",
-    "revision": "dc64a1620e8ae6f01fb33f09470b7160f69fd0f2",
-    "describe": "b10524-9-gdc64a1620",
-    "build_number": 10533,
-    "commit_short": "dc64a1620",
-    "committed": "2026-08-20",
+    "revision": "0ec4027a2a0183de87c007069adddc06e665f7de",
+    "describe": "b12020",
+    "build_number": 12020,
+    "commit_short": "0ec4027a2",
+    "committed": "2026-10-30",
     "binary": "build/bin/llama-server",
     "cmake": {
       "GGML_CUDA": "ON",
@@ -33,40 +43,24 @@
     "cuda_minimum": "12.8",
     "revision_policy": "An immutable commit, never a branch. A moving ref is not a reproducibility contract: the binary that serves today would differ from the one measured, with nothing recording that it changed."
   },
-
   "model": {
-    "family": "former-model",
+    "family": "qwen3.8",
     "quantisation": "Q8_0",
-    "architecture": "former-arch",
-    "repository": "Qwen/former-model-GGUF",
-    "directory": "former-model-Q8_0",
-    "first_shard": "former-model-Q8_0-00001-of-00004.gguf",
-    "total_bytes": 84812055968,
+    "architecture": "qwen35",
+    "repository": "ggml-org/Qwen3.8-27B-GGUF",
+    "revision": "a316ea527fde32c12487be7574e2db5ac2ad2a7e",
+    "directory": "",
+    "first_shard": "Qwen3.8-27B-Q8_0.gguf",
+    "total_bytes": 28595763648,
     "shards": [
       {
-        "name": "former-model-Q8_0-00001-of-00004.gguf",
-        "size": 26190321568,
-        "sha256": "30b7554fc0c846a5dc3ecf585884c77471f73e3da698a8ba4fabd8e7868c6533"
-      },
-      {
-        "name": "former-model-Q8_0-00002-of-00004.gguf",
-        "size": 26212935584,
-        "sha256": "3f96379de5a5c4655cb378710ea571d5e9cc96f260120a44a6477198efcdc27d"
-      },
-      {
-        "name": "former-model-Q8_0-00003-of-00004.gguf",
-        "size": 26047157792,
-        "sha256": "5dd1ce07eaae95ee430331dc9c6f3120ff88e4211ad3a0cceeaa963f25328504"
-      },
-      {
-        "name": "former-model-Q8_0-00004-of-00004.gguf",
-        "size": 6361641024,
-        "sha256": "76730702c630bf76305139165cb85421858604030851dfd64fe96a5e67cda99d"
+        "name": "Qwen3.8-27B-Q8_0.gguf",
+        "size": 28595763648,
+        "sha256": "aab65c67ef0dad127960efef9247f1832bca105faa1c7a052cc039b223cf86a1"
       }
     ],
-    "integrity_policy": "Size is the cheap check and runs every time; sha256 reads 79 GB and runs only when asked for. The hashes are the publisher's own, recorded so a shard can be proven rather than assumed -- a truncated or half-resumed download has the wrong size, but a corrupted one does not."
+    "integrity_policy": "Size is the cheap check and runs every time; sha256 reads the whole file and runs only when asked for. The hash is the one recorded when this file was fetched at the pinned revision, so a file can be proven rather than assumed -- a truncated or half-resumed download has the wrong size, but a corrupted one does not."
   },
-
   "embedding": {
     "requirements": "server/embed/requirements.txt",
     "constraints": "server/embed/constraints-reds-tested.txt",
@@ -84,11 +78,10 @@
     },
     "semantics": "The CLIENT owns model, prefix, cap, normalisation and batching; the server owns device, dtype and loading. The probe values are what this profile's client asks for, recorded so a bootstrap can verify the answer has the right shape."
   },
-
   "server_defaults": {
-    "SPEAR_SERVER_CTX": "524288",
+    "SPEAR_SERVER_CTX": "262144",
     "SPEAR_SERVER_NATIVE_CTX": "262144",
-    "SPEAR_SERVER_ARCH": "former-arch",
+    "SPEAR_SERVER_ARCH": "qwen35",
     "SPEAR_SERVER_PARALLEL": "1",
     "SPEAR_SERVER_NGL": "99",
     "SPEAR_SERVER_THREADS": "16",
@@ -97,9 +90,13 @@
     "SPEAR_SERVER_NCPUMOE": "0",
     "SPEAR_SERVER_LORA": "none"
   },
-
   "server_fixed_flags": {
     "reason": "Decided by server/inference/serve.sh for every deployment, listed here so verification can prove the launcher still emits them rather than trusting that it does.",
-    "flags": ["--flash-attn on", "--cache-type-k q8_0", "--cache-type-v q8_0", "--jinja"]
+    "flags": [
+      "--flash-attn on",
+      "--cache-type-k q8_0",
+      "--cache-type-v q8_0",
+      "--jinja"
+    ]
   }
 }

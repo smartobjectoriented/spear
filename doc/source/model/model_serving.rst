@@ -13,15 +13,15 @@ the ports, the sampling it sends, the smoke test — is :ref:`backends`.
 Current profile
 ===============
 
-The profile is ``server/runtime/manifest.json``: former-model, Q8_0, in
-four shards (85 GB, 79 GiB), on a 96 GB card.  ``server/inference/serve.sh`` turns the
-deployment's ``config/server.conf`` into this command line:
+The profile is ``server/runtime/manifest.json``: Qwen3.8-27B, a dense model,
+in Q8_0, one 28.6 GB file, on a 96 GB card.  ``server/inference/serve.sh``
+turns the deployment's ``config/server.conf`` into this command line:
 
 .. code-block:: console
 
    llama-server
-       --model <runtime>/models/gguf/former-model-Q8_0-00001-of-00004.gguf
-       --ctx-size 524288
+       --model <runtime>/models/gguf/Qwen3.8-27B-Q8_0.gguf
+       --ctx-size 262144
        --parallel 1
        --n-gpu-layers 99
        --flash-attn on
@@ -29,8 +29,11 @@ deployment's ``config/server.conf`` into this command line:
        --host 127.0.0.1  --port 8010
        --jinja
        --threads 16
-       --rope-scaling yarn --rope-scale 2 --yarn-orig-ctx 262144
-       --override-kv former-arch.context_length=int:524288
+
+The reference deployment points ``SPEAR_SERVER_LLAMA_BIN`` at a wrapper that
+adds the model card's reasoning and sampling settings: ``--reasoning-format
+auto --no-reasoning-preserve``, medium reasoning effort, ``--temp 1.0
+--top-p 0.95 --top-k 20 --min-p 0``.
 
 The flags that matter
 =====================
@@ -39,25 +42,22 @@ The flags that matter
    Required.  It enables the model's chat template, and with it native tool
    calling.  Without it the assistant loses structured tool calls entirely.
 
-``--n-gpu-layers 99``, and no ``--n-cpu-moe``
-   Everything on the card.  On a smaller GPU, ``SPEAR_SERVER_NCPUMOE`` keeps
-   the mixture-of-experts weights in system RAM while attention and the KV
-   cache stay on the GPU — the hybrid offload that makes this model usable on
-   a laptop-class card, at a large cost in speed.
+``--n-gpu-layers 99``
+   Everything on the card.
 
 ``--cache-type-k q8_0 --cache-type-v q8_0``
    Quantised KV cache.  Buys context length at a small quality cost.
 
-``--ctx-size 524288`` and the YaRN flags
-   Twice the 262 144 tokens the model was trained at.  Past that length the
-   RoPE positions are rescaled with YaRN, and the GGUF's ``context_length`` is
-   overridden because ``llama-server`` otherwise caps each slot at it.  Both
-   are added by ``serve.sh`` only when the window exceeds the trained length,
-   since YaRN is static and would otherwise touch every short prompt too.
-   Measured: a fact 40 % into a 311 744-token prompt was recalled exactly, and
-   generation speed did not change.  The :term:`harness` still truncates long tool
-   outputs at ``max_output_chars`` (10 000 by default) so a single verbose
-   build log cannot evict the conversation.
+``--ctx-size 262144``
+   The length the model was trained at.  A window past it is served with YaRN:
+   ``serve.sh`` adds the RoPE scaling and overrides the GGUF's
+   ``context_length`` when ``SPEAR_SERVER_CTX`` exceeds
+   ``SPEAR_SERVER_NATIVE_CTX``, because ``llama-server`` otherwise caps each
+   slot at the trained length.  YaRN is static and would touch every short
+   prompt too, so it is switched on only past that length.  The
+   :term:`harness` still truncates long tool outputs at ``max_output_chars``
+   (10 000 by default) so a single verbose build log cannot evict the
+   conversation.
 
 ``--parallel 1``
    One slot.  This is a single-user assistant; concurrency would only fragment
@@ -80,9 +80,6 @@ the *build* rather than of a deployment:
 
 ``--jinja``
    required for the chat template and therefore for tool calling;
-
-``--n-cpu-moe``
-   for a mixture-of-experts model, unless a deployment says otherwise;
 
 the YaRN flags
    derived from ``SPEAR_SERVER_CTX``, ``SPEAR_SERVER_NATIVE_CTX`` and

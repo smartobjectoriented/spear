@@ -11,12 +11,12 @@ real store. Run `python -m training freeze --source audit/training-data
 semantic OpenAI messages, source checksums, policies, governance, a held-out
 evaluation plan, Axolotl configuration, and a human runbook.
 
-The default source is the Transformers checkpoint
-`Qwen/former-model`, not the deployed GGUF inference artifact. The optional
-`former-model_base` profile uses `Qwen/former-model-Base`. GGUF paths
-are rejected. The initial profile is conservative 4-bit QLoRA and targets only
-attention projections; targeting MoE experts is explicit because it changes
-memory requirements.
+The source is the Transformers checkpoint `Qwen/Qwen3.8-27B` (profile
+`qwen38_27b_sft`), at the revision the operator pins in
+`training-execution.json` (the weights were fetched at
+`8c0b3d30f3ae96f5c7f774de704bf0ada83e422a`), not the deployed GGUF;
+GGUF paths are rejected. The profile is conservative 4-bit QLoRA and targets
+only attention projections.
 
 Every SFT message is annotated with a per-turn `train` flag. Context—including
 prior failed assistant actions—is false; only FT1's selected last assistant
@@ -124,11 +124,8 @@ and missing source revision remain hard gates.
 The expected environment is a dedicated operator-managed Python/Axolotl
 environment, separate from the inference service on port 8010. Current
 Axolotl guidance requires Python >=3.11, PyTorch >=2.11, and an NVIDIA Ampere+
-or AMD GPU. Its former-arch guide describes conservative QLoRA at about 47 GiB
-without expert targeting and about 71 GiB with expert targeting; these are
-coarse planning values, not an EDGEM admission formula. Axolotl's documented
-uv installation and former-arch extra dependencies are not installed
-automatically.
+or AMD GPU. Axolotl's documented uv installation and optional dependencies
+are not installed automatically.
 
 If SSH authentication is unavailable, configure the normal OpenSSH alias so
 `ssh <training-host>` succeeds non-interactively from the SPEAR account. Use an
@@ -147,18 +144,13 @@ UUID and cache paths before executing Axolotl.
 The pinned environment currently contains Axolotl 0.18.0, PyTorch 2.12.1+cu130,
 Transformers 5.14.1, PEFT 0.19.1, bitsandbytes 0.49.1,
 flash-linear-attention 0.4.1, and Cut Cross Entropy 25.1.1. The source model is
-`Qwen/former-model` at immutable revision
-`0000000000000000000000000000000000000000`; only tokenizer/config/chat-template
-assets were fetched, never model weights.
+`Qwen/Qwen3.8-27B` at revision `8c0b3d30f3ae96f5c7f774de704bf0ada83e422a`.
 
-The assigned RTX PRO 6000 Blackwell has 97,887 MiB total VRAM, so hardware
-capacity is `READY` for the coarse approximately 47 GiB no-expert QLoRA
-profile. Current availability is `BUSY` because the known llama-server uses
-82,628 MiB and 14,599 MiB is free. FT4C never stops or signals inference.
-These are separate from data readiness, which remains `COLLECTING` with zero
-real episodes. The bounded synthetic Axolotl preprocess succeeded and showed
-50 ignored labels plus 5 trainable labels, preserving one-target masking;
-`axolotl train` was never executed.
+The assigned RTX PRO 6000 Blackwell has 97,887 MiB total VRAM. A training
+job never stops or signals inference on its own: the controlled handoff below
+does, for a job that owns the GPU lease. The bounded synthetic Axolotl
+preprocess showed 50 ignored labels plus 5 trainable labels, preserving
+one-target masking; `axolotl train` was never executed.
 
 ## Controlled inference handoff (FT4D)
 

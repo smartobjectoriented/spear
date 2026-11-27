@@ -36,6 +36,21 @@ turn, in `manifests/operator-verdicts.jsonl` beside the sealed episodes. A
 and its final answer is an undesirable preference observation; a `/good` one
 is a desirable observation.
 
+`/fix <answer>` (or `/fix @file`) records the operator's corrected answer to
+the last exchange in `manifests/operator-corrections.jsonl`, and replaces the
+answer in the session history. The SFT builder turns it into a final-response
+target over the context of the turn that answered (the last primary turn that
+called no tool, not a later normative repair), even when the episode is
+`/bad`; the preference builder pairs it, desirable, against the answer it
+replaces, undesirable, over that same context: an exact-context pair, the one
+kind the store could not produce on its own.
+
+A standard binding makes an episode licensed data only when the standard is
+licensed: one ingested `--origin PUBLIC` leaves the episode its own origin.
+Reading the bound standard (`standard.search`, `standard.fetch`,
+`standard.get_structure`, `standard.cite`) counts as reading for SFT target
+selection.
+
 ## Operator fine-tuning jobs (FT4A)
 
 Fine-tuning is an operator control-plane operation. It is not registered in

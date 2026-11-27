@@ -10,7 +10,12 @@ from typing import Any
 from runtime.cancellation import OperationCancelled
 from runtime.failure_policy import FailureKind
 from runtime.session_store import SessionEventType
-from models.model_backend import TextBlock
+import json
+
+from models.model_backend import (
+    ConversationMessage, ModelToolCall, ModelTurn, StopReason, TextBlock, ToolResultBlock,
+    ToolUseBlock,
+)
 from runtime.tracing import EventStatus, EventType, new_action_id
 from harness.tool_router import ToolResultEnvelope, ToolResultStatus
 from harness.tool_registry import COMMAND_TOOLS
@@ -75,6 +80,72 @@ _STOP_REASON = {
 
 #: How much of a failed validation's output a repair pass is given.
 REPAIR_OUTPUT_CHARS = 2000
+
+
+def _canonical_conversation(messages) -> tuple[str, list[ConversationMessage]]:
+    """The core's OpenAI-format messages as the training recorder reads them:
+    the system prompt, and the conversation in typed blocks, tool results
+    grouped into the user message that carries them."""
+    system, conversation = "", []
+
+    def add(role, blocks):
+        if conversation and conversation[-1].role == role == "user" \
+                and all(isinstance(block, ToolResultBlock) for block in blocks) \
+                and all(isinstance(block, ToolResultBlock) for block in conversation[-1].content):
+            conversation[-1] = ConversationMessage("user", (*conversation[-1].content, *blocks))
+        else:
+            conversation.append(ConversationMessage(role, tuple(blocks)))
+
+    for message in messages:
+        role, content = message.get("role"), message.get("content")
+        text = content if isinstance(content, str) else "".join(
+            str(part.get("text", "")) for part in content or () if isinstance(part, dict))
+
+        if role == "system":
+            system = f"{system}\n\n{text}" if system else text
+        elif role == "tool":
+            add("user", [ToolResultBlock(str(message.get("tool_call_id", "")), text)])
+        elif role == "assistant":
+            blocks = [TextBlock(text)] if text else []
+
+            for call in message.get("tool_calls") or ():
+                function = call.get("function") or {}
+
+                try:
+                    arguments = json.loads(function.get("arguments") or "{}")
+                except ValueError:
+                    arguments = {"_raw": function.get("arguments")}
+
+                blocks.append(ToolUseBlock(str(call.get("id", "")), str(function.get("name", "")),
+                                           arguments if isinstance(arguments, dict)
+                                           else {"_raw": arguments}))
+
+            add("assistant", blocks)
+        else:
+            add("user", [TextBlock(text)])
+
+    return system, conversation
+
+
+def _model_turn(raw) -> ModelTurn:
+    """A RawTurn in the shape the training recorder stores."""
+    calls = []
+
+    for call in raw.calls:
+        try:
+            arguments = json.loads(call.get("arguments") or "{}")
+        except ValueError:
+            arguments = {"_raw": call.get("arguments")}
+
+        calls.append(ModelToolCall(str(call.get("id", "")), str(call.get("name", "")),
+                                   arguments if isinstance(arguments, dict)
+                                   else {"_raw": arguments}))
+
+    stop = (StopReason.TOOL_USE if calls or raw.finish_reason == "tool_calls" else
+            StopReason.MAX_TOKENS if raw.finish_reason == "length" else
+            StopReason.ERROR if raw.error else StopReason.END_TURN)
+
+    return ModelTurn(raw.text or "", tuple(calls), stop, raw.usage, raw.error)
 
 
 def repairable_failure(context, reason, project, verdict, breaker):
@@ -169,6 +240,34 @@ class CodingCoreMixin:
     # core's host, records every call into the working state, the evidence
     # and the canonical tool log, and gives the answer SPEAR's verdict.
 
+    def _begin_core_turn(self, context: AgentContext, messages, tools_enabled):
+        """Open the training turn for one model call of the core.
+
+        The core calls the model itself, so its turns reached no recorder:
+        from the core's arrival every implementation turn was stored as an
+        episode with no turns, and nothing of it could become training data.
+        """
+        recorder = context.training_recorder
+
+        if recorder is None:
+            return None
+
+        try:
+            system, conversation = _canonical_conversation(messages)
+            recorder.begin_model_turn(
+                system=system, conversation=conversation, tools=context.tools,
+                role=context.role,
+                purpose="primary_agent" if context.role == "main" else context.role,
+                mutation_generation=context.working_state.mutation_generation,
+                tools_enabled=tools_enabled)
+        except Exception as exc:
+            context.observer.notice("training_capture_error", {
+                "stage": "model_input", "error_category": type(exc).__name__})
+            context.training_recorder = None
+            return None
+
+        return recorder
+
     def _run_core(self, context: AgentContext, *,
                   defer_completion: bool = False) -> AgentResult:
         from agent import loop as core_loop
@@ -194,12 +293,28 @@ class CodingCoreMixin:
             repeats.observe(item.name, dict(item.arguments), item.result,
                             item.ok and not item.refused)
             envelope = _core_envelope(item)
+            generation_before = context.working_state.mutation_generation
             self._record_tool_result(context, envelope)
             evidence = context.verification_policy.evidence_for_tool(
                 envelope, dict(item.arguments), context.working_state)
 
             if evidence is not None:
                 self._record_verification(context, evidence)
+
+            # The result goes to the training turn that asked for it, as the
+            # runtime's own loop does; a capture failure detaches the recorder.
+
+            if context.training_recorder is not None:
+                try:
+                    context.training_recorder.record_tool_result(
+                        envelope, mutation_generation_before=generation_before,
+                        mutation_generation_after=context.working_state.mutation_generation,
+                        verification_generation=(evidence.mutation_generation
+                                                 if evidence else None))
+                except Exception as exc:
+                    context.observer.notice("training_capture_error", {
+                        "stage": "tool_result", "error_category": type(exc).__name__})
+                    context.training_recorder = None
 
             if item.changed_paths:
                 did_modify = True
@@ -230,11 +345,35 @@ class CodingCoreMixin:
 
         def model(messages, tools, max_tokens):
             label = "Thinking…" if len(messages) <= 2 + len(history) else "Analyzing results…"
+            recorder = self._begin_core_turn(context, messages, bool(tools))
 
-            with context.observer.model_activity(label) as tick:
-                return backend.complete_messages(
-                    messages, tools, max_tokens=min(max_tokens, RESPONSE_MAX_TOKENS),
-                    on_token=tick)
+            try:
+                with context.observer.model_activity(label) as tick:
+                    raw = backend.complete_messages(
+                        messages, tools, max_tokens=min(max_tokens, RESPONSE_MAX_TOKENS),
+                        on_token=tick)
+            except Exception as exc:
+                if recorder is not None:
+                    try:
+                        recorder.fail_model_turn(
+                            exc, model_action_id=new_action_id("model"),
+                            mutation_generation=context.working_state.mutation_generation)
+                    except Exception:
+                        context.training_recorder = None
+
+                raise
+
+            if recorder is not None:
+                try:
+                    recorder.complete_model_turn(
+                        _model_turn(raw), model_action_id=new_action_id("model"),
+                        mutation_generation=context.working_state.mutation_generation)
+                except Exception as exc:
+                    context.observer.notice("training_capture_error", {
+                        "stage": "model_output", "error_category": type(exc).__name__})
+                    context.training_recorder = None
+
+            return raw
 
         # The core reserves MAX_TOKENS of output and stops for a summary once a
         # prompt passes half of what is left. Against a window that small

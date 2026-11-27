@@ -227,31 +227,73 @@ class TrainingStore:
         if verdict not in {"good", "bad"}:
             raise TrainingStoreError(f"unknown verdict: {verdict}")
 
+        self._append(episode_id, "operator-verdicts.jsonl",
+                     {"episode_id": episode_id, "verdict": verdict})
+
+    def operator_verdicts(self) -> dict[str, str]:
+        """The latest operator verdict on each episode that has one."""
+
+        verdicts: dict[str, str] = {}
+
+        for item in self._journal("operator-verdicts.jsonl"):
+            if item.get("verdict") in {"good", "bad"}:
+                verdicts[str(item.get("episode_id"))] = item["verdict"]
+
+        return verdicts
+
+    #: Longest correction kept: a whole answer, not a document.
+    MAX_CORRECTION_CHARS = 64_000
+
+    def record_correction(self, episode_id: str, text: str) -> None:
+        """Append an operator's corrected answer to an episode (/fix).
+
+        The answer the model gave stays in the sealed episode; the correction
+        goes beside it, like a verdict, and the dataset builders turn the two
+        into a target and a preference pair over the same context.
+        """
+
+        text = (text or "").strip()
+
+        if not text or len(text) > self.MAX_CORRECTION_CHARS:
+            raise TrainingStoreError("a correction is a non-empty answer of at most "
+                                     f"{self.MAX_CORRECTION_CHARS} characters")
+
+        self._append(episode_id, "operator-corrections.jsonl",
+                     {"episode_id": episode_id, "correction": text})
+
+    def operator_corrections(self) -> dict[str, str]:
+        """The latest operator correction of each episode that has one."""
+
+        corrections: dict[str, str] = {}
+
+        for item in self._journal("operator-corrections.jsonl"):
+            if isinstance(item.get("correction"), str) and item["correction"].strip():
+                corrections[str(item.get("episode_id"))] = item["correction"]
+
+        return corrections
+
+    def _append(self, episode_id: str, name: str, entry: Mapping[str, object]) -> None:
         self._path(self.episodes, episode_id, ".json")
-        entry = json.dumps({"episode_id": episode_id, "verdict": verdict,
-                            "at": datetime.now(timezone.utc).isoformat(timespec="seconds")},
-                           sort_keys=True)
+        line = json.dumps({**entry, "at": datetime.now(timezone.utc).isoformat(
+            timespec="seconds")}, sort_keys=True, ensure_ascii=False)
         lock = os.open(self.manifests / ".store.lock", os.O_RDWR | os.O_CREAT, 0o600)
 
         try:
             fcntl.flock(lock, fcntl.LOCK_EX)
 
-            with (self.manifests / "operator-verdicts.jsonl").open("a", encoding="utf-8") as stream:
-                stream.write(entry + "\n")
+            with (self.manifests / name).open("a", encoding="utf-8") as stream:
+                stream.write(line + "\n")
                 stream.flush()
                 os.fsync(stream.fileno())
         finally:
             fcntl.flock(lock, fcntl.LOCK_UN)
             os.close(lock)
 
-    def operator_verdicts(self) -> dict[str, str]:
-        """The latest operator verdict on each episode that has one."""
-
-        journal = self.manifests / "operator-verdicts.jsonl"
-        verdicts: dict[str, str] = {}
+    def _journal(self, name: str) -> Iterator[Mapping[str, object]]:
+        journal = self.manifests / name
 
         if not journal.exists():
-            return verdicts
+            return
 
         with journal.open(encoding="utf-8") as stream:
             for line in stream:
@@ -260,10 +302,8 @@ class TrainingStore:
                 except json.JSONDecodeError:
                     continue
 
-                if item.get("verdict") in {"good", "bad"}:
-                    verdicts[str(item.get("episode_id"))] = item["verdict"]
-
-        return verdicts
+                if isinstance(item, dict):
+                    yield item
 
     def latest_episode_id(self, session_id: str | None = None) -> str | None:
         """The most recently stored episode, of this session when one is named."""

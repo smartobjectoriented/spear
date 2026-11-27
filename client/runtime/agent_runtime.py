@@ -930,7 +930,8 @@ class AgentRuntime(CodingCoreMixin, FinalizationMixin, ModelTurnMixin,
 
                     if policy is not None and call.name in policy.STANDARD_TOOLS:
                         policy.observe_tool_result(call.name,
-                                                   envelope.model_content)
+                                                   envelope.model_content,
+                                                   structured=envelope.text)
 
                     # Every call, for the record of which source files the
                     # turn read. A conformance answer that read none says so.

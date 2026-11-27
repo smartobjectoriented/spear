@@ -142,6 +142,11 @@ Session commands:
    Save the last exchange as a fine-tuning sample, or log a bad one.  Bad ones
    are never trained on.  See :doc:`/model/training`.
 
+``/fix <answer>`` / ``/fix @<file>``
+   Correct the last answer: the correction replaces it in the history, and it
+   becomes a training target and, against the answer given, a preference
+   pair.  See :doc:`/model/training`.
+
 Operator commands
 -----------------
 

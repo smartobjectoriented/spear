@@ -180,7 +180,9 @@ build_harness() {
 }
 
 # $1 = the content image, $2 = the image it becomes with the code on top. The
-# content image's labels are inherited; only the build date is new.
+# content image's labels are inherited; only the build date is new, and
+# spear.content names the content, so the launcher keeps the index volume it
+# filled from it across code updates.
 
 lay_code() {
     echo "== laying $CODE on $1 -> $2 =="
@@ -189,6 +191,7 @@ lay_code() {
         --build-arg "CONTENT_IMAGE=$1" \
         --build-context "code=docker-image://$CODE" \
         --label "$LABEL.built=$(date -Iseconds)" \
+        --label "$LABEL.content=$(docker image inspect -f '{{.Id}}' "$1")" \
         -t "$2" "$EMPTY"
     echo "built $2"
 }

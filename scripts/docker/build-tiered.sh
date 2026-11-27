@@ -2,6 +2,7 @@
 # Build the tiered images: harness -> base -> project.
 #
 #   build-tiered.sh harness
+#   build-tiered.sh code    [--tag IMAGE]...
 #   build-tiered.sh base    [--commons a,b,c] [--entity NAME] [--licensed]
 #                           [--knowledge p,q|all]
 #   build-tiered.sh project [--from spear:<ver>-base] [--tree DIR]
@@ -15,6 +16,12 @@
 # A project adds its own standards too: --licensed takes the licensed documents
 # of --standards DIR (a store holding, say, only one private standard), appended over the
 # base's. So another entity's project image = the reds base + a private standard.
+#
+# Each tier is built as a content image, <tag>-content, and the harness code is
+# laid on it last (Dockerfile.code): a new harness then changes one small layer
+# of the base and of the project, not the tens of GB of content above it. The
+# `code` tier does only that: it lays the current code on the content images
+# already built, base and project, without restaging any content.
 #
 # This is the FROM chain of PACKAGING-REWORK.md. The legacy flat profiles
 # (public|reds|private) stay in build.sh, untouched; this script only knows the
@@ -45,9 +52,9 @@ ATTEST=(--provenance=false --sbom=false)
 
 TIER="${1:-}"; shift || true
 case "$TIER" in
-    harness|base|project) ;;
+    harness|code|base|project) ;;
     ""|-h|--help) sed -n '2,20p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
-    *) die "tier must be harness, base or project, not '$TIER'" ;;
+    *) die "tier must be harness, code, base or project, not '$TIER'" ;;
 esac
 
 # The machine's configuration, exactly as build.sh and the launchers read it:
@@ -77,6 +84,7 @@ TAG="${SPEAR_TAG:-}"
 STANDARDS_STORE="${SPEAR_STANDARDS_STORE:-}"
 LICENSED="${SPEAR_LICENSED:-0}"
 TREES=()
+LAY=()
 [ -n "${SPEAR_PROJECT_TREES:-}" ] && IFS=: read -r -a TREES <<<"$SPEAR_PROJECT_TREES"
 
 while [ $# -gt 0 ]; do
@@ -89,7 +97,7 @@ while [ $# -gt 0 ]; do
         --tree)      TREES+=("$2"); shift 2 ;;
         --standards) STANDARDS_STORE="$2"; shift 2 ;;
         --licensed)  LICENSED=1; shift ;;
-        --tag)       TAG="$2"; shift 2 ;;
+        --tag)       TAG="$2"; LAY+=("$2"); shift 2 ;;
         *) die "unknown option: $1" ;;
     esac
 done
@@ -145,25 +153,73 @@ print("   manifest  " + out)
 PY
 }
 
+RUNTIME="spear:$VERSION-runtime"
+CODE="spear:$VERSION-code"
+
+# The harness's targets: the runtime, the code alone, and both together. With
+# arguments, only those targets: a content tier rebuilds the code, never the
+# runtime it was built on.
+
+build_harness() {
+    local target tag targets=("$@")
+
+    [ "${#targets[@]}" -gt 0 ] || targets=(runtime code harness)
+
+    for target in "${targets[@]}"; do
+        tag="spear:$VERSION-$target"
+        [ "$target" = harness ] && tag="${HARNESS_TAG:-$tag}"
+        echo "== building $tag ($target) =="
+        docker build -f "$REPO/docker/Dockerfile.harness" --target "$target" \
+            "${ATTEST[@]}" \
+            --build-context "repo=$REPO" \
+            --label "$LABEL.profile=harness" \
+            --label "$LABEL.built=$(date -Iseconds)" \
+            --label "$LABEL.redistributable=true" \
+            -t "$tag" "$APP"
+    done
+}
+
+# $1 = the content image, $2 = the image it becomes with the code on top. The
+# content image's labels are inherited; only the build date is new, and
+# spear.content names the content, so the launcher keeps the index volume it
+# filled from it across code updates.
+
+lay_code() {
+    echo "== laying $CODE on $1 -> $2 =="
+    docker build -f "$REPO/docker/Dockerfile.code" \
+        "${ATTEST[@]}" \
+        --build-arg "CONTENT_IMAGE=$1" \
+        --build-context "code=docker-image://$CODE" \
+        --label "$LABEL.built=$(date -Iseconds)" \
+        --label "$LABEL.content=$(docker image inspect -f '{{.Id}}' "$1")" \
+        -t "$2" "$EMPTY"
+    echo "built $2"
+}
+
 case "$TIER" in
 
 harness)
-    TAG="${TAG:-spear:$VERSION-harness}"
-    echo "== building $TAG (harness) =="
-    docker build -f "$REPO/docker/Dockerfile.harness" \
-        "${ATTEST[@]}" \
-        --build-context "repo=$REPO" \
-        --label "$LABEL.profile=harness" \
-        --label "$LABEL.built=$(date -Iseconds)" \
-        --label "$LABEL.redistributable=true" \
-        -t "$TAG" "$APP"
-    echo "built $TAG (harness)"
+    HARNESS_TAG="${TAG:-}" build_harness
+    echo "built ${TAG:-spear:$VERSION-harness} (harness)"
+    ;;
+
+code)
+    build_harness
+    [ "${#LAY[@]}" -gt 0 ] || LAY=("spear:$VERSION-base" "spear:$VERSION-project")
+
+    for image in "${LAY[@]}"; do
+        if exists "$image-content"; then
+            lay_code "$image-content" "$image"
+        else
+            echo "   $image-content not found -- $image left as it is"
+        fi
+    done
     ;;
 
 base)
     [ -n "$COMMONS" ] || die "base needs --commons a,b,c (the common corpora, the build system included)"
     HARNESS="spear:$VERSION-harness"
-    exists "$HARNESS" || die "$HARNESS not found — build it first: spear-image build harness"
+    exists "$RUNTIME" || build_harness
     TAG="${TAG:-spear:$VERSION-base}"
 
     # The registry (whole map), then the commons staged: index cut to them, the
@@ -207,7 +263,7 @@ base)
     echo "== building $TAG (base, entity=$ENTITY, redistributable=$REDIST) =="
     docker build -f "$REPO/docker/Dockerfile.base" \
         "${ATTEST[@]}" \
-        --build-arg "HARNESS_IMAGE=$HARNESS" \
+        --build-arg "RUNTIME_IMAGE=$RUNTIME" \
         --build-context "repo=$REPO" \
         --build-context "index=$STAGE/index" \
         --build-context "rules=$STAGE/content/rules.d" \
@@ -222,13 +278,15 @@ base)
         --label "$LABEL.entity=$ENTITY" \
         --label "$LABEL.built=$(date -Iseconds)" \
         --label "$LABEL.redistributable=$REDIST" \
-        -t "$TAG" "$APP"
-    echo "built $TAG (base)"
+        -t "$TAG-content" "$APP"
+    build_harness code
+    lay_code "$TAG-content" "$TAG"
     ;;
 
 project)
     [ -n "$FROM_BASE" ] || FROM_BASE="spear:$VERSION-base"
-    exists "$FROM_BASE" || die "$FROM_BASE not found — build the base first: spear-image build base ..."
+    exists "$FROM_BASE-content" \
+        || die "$FROM_BASE-content not found — build the base first: spear-image build base ..."
     [ "${#TREES[@]}" -gt 0 ] || die "project needs --tree DIR (the project's spear-private content)"
     TAG="${TAG:-spear:$VERSION-project}"
     HARNESS=""
@@ -275,7 +333,7 @@ project)
     echo "== building $TAG (project, FROM $FROM_BASE) =="
     docker build -f "$REPO/docker/Dockerfile.project" \
         "${ATTEST[@]}" \
-        --build-arg "BASE_IMAGE=$FROM_BASE" \
+        --build-arg "BASE_IMAGE=$FROM_BASE-content" \
         --build-context "repo=$REPO" \
         --build-context "index=$STAGE/index" \
         --build-context "rules=$STAGE/content/rules.d" \
@@ -288,7 +346,8 @@ project)
         --label "$LABEL.entity=$ENTITY" \
         --label "$LABEL.built=$(date -Iseconds)" \
         --label "$LABEL.redistributable=false" \
-        -t "$TAG" "$APP"
-    echo "built $TAG (project)"
+        -t "$TAG-content" "$APP"
+    build_harness code
+    lay_code "$TAG-content" "$TAG"
     ;;
 esac

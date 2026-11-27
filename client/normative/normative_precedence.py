@@ -161,6 +161,11 @@ _NEGATED = re.compile(
 # A question, a quotation of the user, or a statement about what is unknown.
 _INTERROGATIVE = re.compile(r"\?\s*$")
 
+# A heading names what follows ("## What the standard says about SGIs"), and
+# an indirect question asks it; neither states anything the guard could back.
+_HEADING = re.compile(r"^\s*#{1,6}\s")
+_INDIRECT = re.compile(r"\b(?:what|how|whether|where|which|when)\s+$", re.I)
+
 # How far back a citation still carries. Three sentences reaches the bullet
 # that stated the rule from the conclusion drawn two sentences later, which is
 # the shape the model actually writes; it does not reach across a section of
@@ -196,10 +201,17 @@ def states_a_requirement(sentence, binding=None):
     document or merely described -- cannot come to a different answer than
     this module does.
     """
-    if _INTERROGATIVE.search(sentence) or _NEGATED.search(sentence):
+    if (_INTERROGATIVE.search(sentence) or _NEGATED.search(sentence)
+            or _HEADING.match(sentence)):
         return False
 
-    return bool(_subject(binding).search(sentence) or _clause_voiced(sentence))
+    spoken = _subject(binding).search(sentence)
+
+    if (spoken and _INDIRECT.search(sentence[:spoken.start()])
+            and ":" not in sentence[spoken.end():]):
+        spoken = None
+
+    return bool(spoken or _clause_voiced(sentence))
 
 
 def stated_content(sentence, binding=None):

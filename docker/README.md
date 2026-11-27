@@ -54,6 +54,14 @@ Two settings in `local.conf` say where an image lives, tried in this order:
 The tiers themselves — `harness` → `base` → `project` — and what each carries
 are below under the lower-level `build` commands.
 
+The harness code is the last layer of every tier. Each tier is first built as
+a content image, `<tag>-content`, on the code-free `spear:<version>-runtime`,
+and `docker/Dockerfile.code` lays `spear:<version>-code` on it. A change to the
+code alone is then `spear-image build code`: it re-lays the code on the
+content images already built, and a pull fetches that one small layer instead
+of the whole image. Content tools (Claude Code through `add-claude.sh`, say)
+go on the `-content` image, followed by `build code`.
+
 ## Managing images
 
 From the repository root, once per shell:

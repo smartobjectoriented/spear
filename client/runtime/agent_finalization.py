@@ -105,7 +105,7 @@ class FinalizationMixin:
             return False
 
         policy.observe_tool_result(injected.tool, envelope.model_content,
-                                   origin=injected.origin)
+                                   origin=injected.origin, structured=envelope.text)
         context.conversation.append(ConversationMessage(
             "assistant", (ToolUseBlock(call_id, injected.tool,
                                        dict(injected.arguments)),),

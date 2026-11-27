@@ -210,6 +210,24 @@ def _provision_lines(evidence):
         lines.append(f"  [{cited}]  modality: {record.modality}\n"
                      f"      {record.text[:400]}")
 
+    return lines or _unit_lines(evidence)
+
+
+def _unit_lines(evidence, limit=40):
+    """The retrieved units themselves, for a document that declares no
+    provisions: a register description is evidence too, and an empty list
+    told the model that the fields it had quoted came from nowhere."""
+    lines, seen = [], set()
+
+    for unit in evidence.units:
+        if unit.source_id in seen or len(lines) >= limit:
+            continue
+
+        seen.add(unit.source_id)
+        text = " ".join(unit.text.split())
+        lines.append(f"  [§{unit.section or '?'}, source {unit.source_id}]\n"
+                     f"      {text[:400]}")
+
     return lines
 
 
@@ -222,7 +240,7 @@ def _finding_lines(problems):
         if kind == normative_claims.UNGROUNDED_IDENTIFIER:
             lines.append(
                 f"  - `{problem['identifier']}` is named in your answer and "
-                "appears in no provision below. Do not use it again, and do "
+                "appears in no evidence below. Do not use it again, and do "
                 "not substitute a variant spelling, an expansion or a "
                 "synonym for it. If it was not needed to answer the "
                 "question, leave it out and keep the rest of the answer as "

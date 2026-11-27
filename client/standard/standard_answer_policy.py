@@ -33,6 +33,7 @@ from evidence import code_evidence
 from evidence import conformance_guard
 from evidence import conformance_mode
 from standard import diagram_geometry
+from standard import standard_tools
 from evidence import evidence_bootstrap
 from evidence import evidence_progress
 from evidence import evidence_recovery
@@ -174,12 +175,16 @@ class StandardAnswerPolicy:
 
     # -- observation ------------------------------------------------------
 
-    def observe_tool_result(self, name, text, *, origin=MODEL):
+    def observe_tool_result(self, name, text, *, origin=MODEL, structured=None):
         """One tool result, exactly as the model was shown it.
 
         Every ledger reads from here and none of them writes anywhere: the
         payload is parsed, never modified, and a result that is not JSON or is
         a refusal contributes nothing but its provenance.
+
+        A fetch is shown as rendered text, so its payload is the structured
+        result (`structured`, the envelope's whole text) cut back to that
+        rendering.
         """
         self.provenance.observe(text)
 
@@ -187,6 +192,15 @@ class StandardAnswerPolicy:
             payload = json.loads(text) if text else None
         except ValueError:
             payload = None
+
+        if payload is None and structured and name == "standard.fetch":
+            try:
+                whole = json.loads(structured)
+            except ValueError:
+                whole = None
+
+            if isinstance(whole, dict) and not whole.get("error"):
+                payload = standard_tools.shown_fetch(whole, text)
 
         empty = False
 
@@ -321,6 +335,39 @@ class StandardAnswerPolicy:
 
     # -- the boundary -----------------------------------------------------
 
+    def _rule_guards(self, text):
+        """The conformance and precedence guards, recorded on the policy."""
+
+        # A compliance verdict the turn is not entitled to. Between the two
+        # guards on purpose: it reads the evidence-guarded text, and what it
+        # writes in place of a verdict is built from the clause ledger, so
+        # the provenance guard behind it has nothing to find there.
+
+        guarded, findings, replaced, conformance_fired = conformance_guard.guard(
+            text, self.clauses, standard_id=self.standard_id,
+            revision=self.revision, binding=self.binding)
+        self.conformance_fired = conformance_fired
+        self.conformance_findings = list(findings)
+        self.replaced_verdicts = list(replaced)
+
+        # ...and the same question on the other subject: a statement of what
+        # the STANDARD requires, backed by a clause this turn retrieved.
+        # Beside the conformance guard because they are one idea seen from
+        # two sides -- what the code does about a rule, and what the rule
+        # says -- and before the provenance guard for its reason: what it
+        # writes is built from the ledger, so nothing downstream finds a
+        # source in it.
+
+        guarded, requirements, replaced_requirements, precedence_fired = (
+            normative_precedence.guard(
+                guarded, self.clauses, standard_id=self.standard_id,
+                revision=self.revision, binding=self.binding))
+        self.precedence_fired = precedence_fired
+        self.precedence_findings = list(requirements)
+        self.replaced_requirements = list(replaced_requirements)
+
+        return guarded
+
     def finalize(self, answer, *, rounds=None, stopped_by=None):
         """The user-visible answer, and only what the evidence supports of it."""
         self.raw_answer = answer or ""
@@ -349,33 +396,8 @@ class StandardAnswerPolicy:
         self.guard_fired = replaced
         self.guard_violations = list(violations)
 
-        # A compliance verdict the turn is not entitled to. Between the two
-        # guards on purpose: it reads the evidence-guarded text, and what it
-        # writes in place of a verdict is built from the clause ledger, so
-        # the provenance guard behind it has nothing to find there.
-
-        guarded, findings, replaced, conformance_fired = conformance_guard.guard(
-            guarded, self.clauses, standard_id=self.standard_id,
-            revision=self.revision, binding=self.binding)
-        self.conformance_fired = conformance_fired
-        self.conformance_findings = list(findings)
-        self.replaced_verdicts = list(replaced)
-
-        # ...and the same question on the other subject: a statement of what
-        # the STANDARD requires, backed by a clause this turn retrieved.
-        # Beside the conformance guard because they are one idea seen from
-        # two sides -- what the code does about a rule, and what the rule
-        # says -- and before the provenance guard for its reason: what it
-        # writes is built from the ledger, so nothing downstream finds a
-        # source in it.
-
-        guarded, requirements, replaced_requirements, precedence_fired = (
-            normative_precedence.guard(
-                guarded, self.clauses, standard_id=self.standard_id,
-                revision=self.revision, binding=self.binding))
-        self.precedence_fired = precedence_fired
-        self.precedence_findings = list(requirements)
-        self.replaced_requirements = list(replaced_requirements)
+        evidence_guarded = guarded
+        guarded = self._rule_guards(guarded)
 
         # What the answer CLAIMS, against what the evidence SAYS. The guards
         # above establish that a supporting clause was retrieved; none of them
@@ -397,15 +419,18 @@ class StandardAnswerPolicy:
 
         requested = normative_claims.identifiers_in(self.question)
 
-        before_repair = guarded
         guarded, claim_problems, claims_fired = normative_claims.guard(
             guarded, self.claim_evidence, question=self.question,
             permitted=permitted, binding=self.binding, requested=requested)
 
         # One constrained rewrite, when the evidence in hand can settle what
         # was wrong with the prose. No new retrieval, no loop, and the same
-        # guard again on what comes back -- a repair that fails is withheld
-        # exactly as the original was.
+        # guards again on what comes back -- a repair that fails is withheld
+        # exactly as the original was. It rewrites the answer as the model
+        # wrote it: handed the rule guards' notes in place of its sentences,
+        # it kept the notes as prose of its own.
+
+        before_repair = evidence_guarded
 
         if (claims_fired and self.repair_ask is not None
                 and answer_repair.is_repairable(claim_problems)):
@@ -428,7 +453,8 @@ class StandardAnswerPolicy:
                     permitted=permitted, binding=self.binding, requested=requested)
 
                 if not retry_fired:
-                    guarded, claim_problems, claims_fired = checked, [], False
+                    guarded = self._rule_guards(checked)
+                    claim_problems, claims_fired = [], False
                     self.repair_accepted = True
                 else:
                     claim_problems = list(retry_problems)

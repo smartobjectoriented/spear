@@ -11,9 +11,6 @@ scripts/merge_corpora.py        merge JSONL sample sets, keeping their system
 scripts/merge_and_convert.sh    merge the adapter and quantize to GGUF
 scripts/build_edit_discipline.py  samples for whole-file edit behaviour
 scripts/{wget,resilient}_download.sh   resumable weight downloads
-cloud/load_preflight.{sh,py}    does this card actually hold the model, loaded
-                                the way training will load it? Measured, not
-                                deduced.
 cloud/train_qlora_*.py          per-base trainers
 cloud/runpod_train*.sh          drive a rented pod
 setup.sh · activate.sh          environment

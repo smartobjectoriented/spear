@@ -2,7 +2,7 @@
 
 A deployment that cannot be rebuilt is a deployment nobody may touch. What
 makes rebuilding possible is not the script -- it is the manifest: an
-immutable llama.cpp commit, exact shard sizes with the publisher's hashes, a
+immutable llama.cpp commit, exact shard sizes with their recorded hashes, a
 tested constraints file. The script is only what carries them out.
 
 So most of these tests are about the manifest, and the ones about the script
@@ -119,9 +119,9 @@ class TheManifestIsAContract(unittest.TestCase):
         """
         defaults = MANIFEST["server_defaults"]
 
-        self.assertEqual(defaults["SPEAR_SERVER_CTX"], "524288")
+        self.assertEqual(defaults["SPEAR_SERVER_CTX"], "262144")
         self.assertEqual(defaults["SPEAR_SERVER_NATIVE_CTX"], "262144")
-        self.assertEqual(defaults["SPEAR_SERVER_ARCH"], "former-arch")
+        self.assertEqual(defaults["SPEAR_SERVER_ARCH"], "qwen35")
         self.assertEqual(defaults["SPEAR_SERVER_PARALLEL"], "1")
         self.assertEqual(defaults["SPEAR_SERVER_NGL"], "99")
         self.assertEqual(defaults["SPEAR_SERVER_THREADS"], "16")
@@ -371,7 +371,7 @@ class ItIsIdempotent(unittest.TestCase):
         for shard in MANIFEST["model"]["shards"]:
             with open(models / shard["name"], "wb") as handle:
                 handle.truncate(shard["size"])
-        bad = MANIFEST["model"]["shards"][2]
+        bad = MANIFEST["model"]["shards"][-1]
         with open(models / bad["name"], "wb") as handle:
             handle.truncate(12345)
 

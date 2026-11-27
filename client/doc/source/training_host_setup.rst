@@ -1,8 +1,7 @@
 SPEAR training host setup
 ============================
 
-This is an operator runbook for a future ``<training-host>`` former-model
-experiment. FT4B diagnostics found that the current SPEAR execution account
+This is an operator runbook for a ``<training-host>`` Qwen3.8-27B fine-tune. FT4B diagnostics found that the current SPEAR execution account
 cannot authenticate through the bare ``<training-host>`` target, while the explicit
 operator destination/identity works. No setup command below has been executed by
 SPEAR. Do not use these instructions to modify the inference service or its
@@ -32,21 +31,13 @@ environment's Axolotl binary.
 
 Installed versions are Axolotl 0.18.0, PyTorch 2.12.1+cu130, Transformers
 5.14.1, PEFT 0.19.1, bitsandbytes 0.49.1, flash-linear-attention 0.4.1, and
-Cut Cross Entropy 25.1.1. Tokenizer/config/chat-template-only assets for
-``Qwen/former-model`` were downloaded at revision
-``0000000000000000000000000000000000000000``; no model weights were fetched.
+Cut Cross Entropy 25.1.1. The source is ``Qwen/Qwen3.8-27B`` at revision
+``8c0b3d30f3ae96f5c7f774de704bf0ada83e422a``.
 
-Capacity and availability are separate: the assigned GPU has 97,887 MiB total
-(suitable for the approximately 47 GiB no-expert QLoRA reference profile), but
-14,599 MiB free while the existing llama-server uses 82,628 MiB. Current
-availability is therefore ``BUSY``; FT4C does not stop or signal that workload.
-Future operator-controlled training may stop the known inference service and
-re-check free VRAM before launch.
-
-The training filesystem currently has roughly 100,937,000 KiB free. The
-configured coarse model-storage reserve is 160 GiB, so doctor reports
-``MODEL_STORAGE_CAPACITY=INSUFFICIENT`` and the full Qwen snapshot remains
-deferred. No weights are downloaded while data is collecting.
+Capacity and availability are separate: the assigned GPU has 97,887 MiB
+total, and the training run needs the inference service stopped or the
+remaining memory checked first. Operator-controlled training may stop the
+known inference service and re-check free VRAM before launch.
 
 Inference management discovery
 ------------------------------
@@ -103,10 +94,9 @@ pattern is conceptually::
   uv pip install --no-build-isolation 'axolotl[deepspeed]'
 
 Choose the CUDA/PyTorch matrix appropriate for the actual GPU and approved
-host image. Keep the environment isolated from inference. For former-arch,
-install only the extra performance dependencies that the operator elects to
-use after reviewing the current Axolotl model guide (for example Cut Cross
-Entropy and the documented FLA version); do not enable optional kernels by
+host image. Keep the environment isolated from inference. Install only the
+extra performance dependencies that the operator elects to use after
+reviewing the current Axolotl documentation; do not enable optional kernels by
 default.
 
 Trusted execution contract
@@ -137,17 +127,14 @@ hardware capacity from TOTAL VRAM, current GPU availability from free VRAM and
 known workload activity, and dataset readiness. A BUSY current GPU is not a
 hardware-capacity failure.
 
-former-arch planning notes
--------------------------
+Source model
+------------
 
-The source must be the Transformers/Hugging Face
-``Qwen/former-model`` checkpoint at an immutable commit revision. GGUF is
-an inference artifact and is rejected as a training source. The first profile
-is conservative QLoRA: 4-bit loading, attention-only LoRA targets, no expert
-targeting, gradient checkpointing, small micro-batch, and no packing. Axolotl's
-former-arch guide gives approximately 47 GiB for no-expert-targeting QLoRA and
-approximately 71 GiB when targeting experts; these are coarse planning values,
-not an admission guarantee. Existing GPU processes must not be killed to make
+The source must be the Transformers/Hugging Face ``Qwen/Qwen3.8-27B``
+checkpoint at an immutable commit revision. GGUF is an inference artifact and
+is rejected as a training source. The profile is conservative QLoRA: 4-bit
+loading, attention-only LoRA targets, gradient checkpointing, small
+micro-batch, and no packing. Existing GPU processes must not be killed to make
 room. Configure a minimum free-VRAM policy if the operator needs one.
 
 Non-training validation
@@ -172,5 +159,4 @@ References
 ----------
 
 * https://docs.axolotl.ai/docs/installation.html
-* https://docs.axolotl.ai/docs/models/former-arch.html
 * https://docs.axolotl.ai/docs/cli.html

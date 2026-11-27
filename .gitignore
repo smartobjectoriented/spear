@@ -2,11 +2,7 @@
 # Poids de modèles — plusieurs dizaines de Go, jamais dans git.
 # ─────────────────────────────────────────────────────────────────────────
 /models/
-# Served GGUFs. The first name is the directory this deployment still has
-# on disk (47 GB): renaming the RULE without moving the DIRECTORY is how
-# 47 GB becomes visible to `git add -A`. The second is where the server
-# layout puts them.
-/edgem-gguf/
+# Served GGUFs, where the server layout puts them.
 /models/gguf/
 
 # ─────────────────────────────────────────────────────────────────────────

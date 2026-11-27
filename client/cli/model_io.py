@@ -310,11 +310,9 @@ def chat_once(client, messages, use_tools=True, spinner=None):
         # --served-model-name, so make it configurable (SPEAR_MODEL_NAME).
         model=os.environ.get("SPEAR_MODEL_NAME", "qwen3"),
         messages=messages,
-        # Sampling temperature (SPEAR_TEMP). 0.25 gives more conservative,
-        # consistent edits on former-model (less prone to over-eager
-        # refactors like dropping includes). NOTE: on the older dense/A3B model
-        # a low temp starved the sampler into repetition loops; if that recurs,
-        # raise SPEAR_TEMP back toward 0.7.
+        # Sampling temperature (SPEAR_TEMP). A low value gives conservative,
+        # consistent edits; if it starves the sampler into repetition loops,
+        # raise SPEAR_TEMP toward 0.7.
         temperature=float(os.environ.get("SPEAR_TEMP", "0.25")),
         top_p=0.8,
         # Big enough that a full file rewrite (write_file with the whole new

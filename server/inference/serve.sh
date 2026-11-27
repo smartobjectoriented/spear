@@ -198,7 +198,7 @@ if [ "${SPEAR_SERVER_NATIVE_CTX:-0}" -gt 0 ] \
     # named after the architecture, which a shell cannot read from the file.
     [ -n "${SPEAR_SERVER_ARCH:-}" ] || {
         echo "serve.sh: SPEAR_SERVER_ARCH is required past the trained context" >&2
-        echo "  (the GGUF general.architecture, e.g. former-arch)" >&2
+        echo "  (the GGUF general.architecture, e.g. qwen35)" >&2
         exit 78
     }
     ARGS+=(--rope-scaling yarn --rope-scale "$SCALE"

@@ -63,6 +63,16 @@ deployment's own file: commands and server names are not public material.
    * - ``write``
      - ``refuse`` (default), ``confirm`` (asked through the session's
        permission mode) or ``allow``
+   * - ``deny``
+     - tools never offered, whatever the server lists: a browser server's
+       ``browser_run_code_unsafe``, say
+   * - ``linked_files``
+     - a directory the server writes its output to. A result that links a file
+       in it (a browser's page snapshot) is shown with the file's content; no
+       other file is opened
+   * - ``max_result_chars``
+     - how much of one result the turn is shown (default 20000); the cut says
+       to ask for less
    * - ``enabled``, ``timeout``
      - ``false`` to keep an entry without using it; seconds one request may take
 
@@ -101,9 +111,15 @@ How much it is shown depends on the size of the family:
   are shown whole and can be invoked at once;
 * a larger family is shown as an index -- one line per capability, with its
   READ or WRITE class -- and a capability's arguments are shown when the turn
-  asks for them with ``spear-capability describe <id>``. One that has not been
-  described cannot be invoked. ``spear-capability list`` prints the index
-  again.
+  asks for them with ``spear-capability describe <id>``. An invoke of one that
+  has not been described runs when its arguments fit its schema; when they do
+  not, it is answered with the description. ``spear-capability list`` prints
+  the index again.
+
+A provider runs outside the terminal's sandbox, and the sandbox cannot reach the
+machine's own loopback: a local service a provider reaches (a web application
+on ``127.0.0.1`` driven by a browser server) is not reachable from a terminal
+command. The capabilities section says so to the model.
 
 A call is checked before it reaches the provider: the capability must be one
 this turn admits, its arguments must be ones its schema declares, and a WRITE

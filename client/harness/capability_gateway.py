@@ -10,9 +10,10 @@ that SPEAR answers itself and never hands to a shell:
 
 Every call is judged here, against this turn's own decision -- which
 providers its workspace and task class admit -- never against what a
-provider or a result claims. An indexed capability is not executable until
-it has been described; a described one is executable only with the
-arguments its schema declares; a WRITE capability runs only if the
+provider or a result claims. A capability is executable only with the
+arguments its schema declares -- an indexed one that has not been described
+is answered with its description when they do not fit, so a call that does
+fit costs no second round trip; a WRITE capability runs only if the
 deployment allows it and the session's permission mode agrees.
 """
 
@@ -248,18 +249,20 @@ class Gateway:
 
         capability_id = item.id
 
-        if capability_id not in self.described:
-            return self._refuse(NOT_DESCRIBED, f"{capability_id} has not been described in "
-                                f"this task. Run `{COMMAND} describe {capability_id}` first, "
-                                f"then invoke it with the arguments it declares.", item=item)
-
         try:
             arguments = json.loads(raw)
         except ValueError as exc:
-            return self._refuse(VALIDATION, f"{capability_id}: the arguments are not valid "
-                                f"JSON ({exc}).", 2, item=item)
+            arguments, problem = None, f"the arguments are not valid JSON ({exc})."
+        else:
+            problem = contract(item, arguments)
 
-        problem = contract(item, arguments)
+        if problem and capability_id not in self.described:
+            self.described.add(capability_id)
+
+            return self._refuse(NOT_DESCRIBED, f"{capability_id}: {problem} It had not been "
+                                f"described in this task; here is what it declares, invoke "
+                                f"it again with these arguments:\n{cap.described(item)}",
+                                2, item=item)
 
         if problem:
             return self._refuse(VALIDATION, f"{capability_id}: {problem}", 2, item=item)

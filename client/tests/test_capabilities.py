@@ -30,11 +30,11 @@ SERVER = str(Path(__file__).resolve().parent / "mcp_fixture_server.py")
 
 def config(provider_id="tracker", *flags, scope="global", read=("get_project_status",
                                                                "lookup_component"),
-           write="refuse", tasks=None, timeout=5.0):
+           write="refuse", tasks=None, timeout=5.0, **options):
     return cap.ProviderConfig(id=provider_id, transport="stdio",
                               command=(sys.executable, SERVER, *flags),
                               scope=cap._scope(scope), tasks=tasks, read=frozenset(read),
-                              write=write, timeout=timeout)
+                              write=write, timeout=timeout, **options)
 
 
 class Recorder:
@@ -180,9 +180,11 @@ class Exposure(unittest.TestCase):
         self.assertNotIn("properties", text)
         self.assertIn("- big/read_metric_17 [WRITE]", text)
 
-        refused = door.run("spear-capability invoke big/lookup_component '{\"name\": \"x\"}'")
-        self.assertEqual(refused[0], 1)
-        self.assertIn("has not been described", refused[1])
+        refused = door.run("spear-capability invoke big/lookup_component '{\"nom\": \"x\"}'")
+        self.assertEqual(refused[0], 2)
+        self.assertIn("had not been described", refused[1])
+        self.assertIn('"required": ["name"]', refused[1])
+        door.described.clear()
 
         code, described = door.run("spear-capability describe big/lookup_component")
         self.assertEqual(code, 0)
@@ -511,6 +513,74 @@ class Selection(unittest.TestCase):
         rendered = self.turn("app-a")
 
         self.assertIsNone(rendered[cs.IMPLEMENTATION]["gateway"])
+
+
+class BrowserFrictions(unittest.TestCase):
+    """What a browser server needs: seen driving one through Playwright MCP."""
+
+    def test_an_undescribed_call_that_fits_runs(self):
+        door, _, trace, registry = gateway(config("big", "--extra", "37"))
+        self.addCleanup(registry.close)
+
+        code, out = door.run("spear-capability invoke big/lookup_component "
+                             "'{\"name\": \"uart\"}'")
+
+        self.assertEqual(code, 0)
+        self.assertIn("uart: owner team-a", out)
+
+    def test_a_denied_tool_is_never_offered(self):
+        door, text, _, registry = gateway(config(deny=frozenset({"create_note"})))
+        self.addCleanup(registry.close)
+
+        self.assertNotIn("tracker/create_note", door.items)
+        self.assertNotIn("create_note", text)
+        self.assertEqual(door.run("spear-capability invoke tracker/create_note "
+                                  "'{\"title\": \"t\"}'")[0], 1)
+
+    def test_a_linked_file_in_the_output_directory_is_shown(self):
+        with tempfile.TemporaryDirectory() as root:
+            output = Path(root, "output")
+            output.mkdir()
+            Path(output, "page.yml").write_text("- button \"Save\" [ref=e9]\n")
+            Path(root, "secret.txt").write_text("not for the model")
+
+            for link, shown in (("output/page.yml", True), ("secret.txt", False)):
+                with self.subTest(link=link):
+                    provider = mcp_provider.MCPProvider(
+                        config("tracker", "--link", link, linked_files=str(output)), cwd=root)
+                    self.addCleanup(provider.close)
+                    text = provider.invoke("lookup_component", {"name": "uart"}).text
+
+                    self.assertEqual('[ref=e9]' in text, shown)
+                    self.assertNotIn("not for the model", text)
+
+    def test_the_result_limit_is_the_deployments_and_says_how_to_see_more(self):
+        provider = mcp_provider.MCPProvider(config("tracker", "--pad", "500", max_result_chars=100))
+        self.addCleanup(provider.close)
+        text = provider.invoke("lookup_component", {"name": "uart"}).text
+
+        self.assertLess(len(text), 300)
+        self.assertIn("ask for less", text)
+
+    def test_the_index_says_the_sandbox_cannot_reach_the_loopback(self):
+        _, text, _, registry = gateway(config())
+        self.addCleanup(registry.close)
+
+        self.assertIn("127.0.0.1", text)
+
+    def test_the_new_keys_are_read_from_the_file(self):
+        with tempfile.TemporaryDirectory() as root:
+            path = Path(root, "capabilities.json")
+            path.write_text(json.dumps({"providers": [{
+                "id": "browser", "command": ["x"], "scope": "global",
+                "deny": ["browser_run_code_unsafe"], "linked_files": "~/out",
+                "max_result_chars": 60000}]}))
+            (loaded,), problems = cap.load_configs(str(path))
+
+        self.assertEqual(problems, [])
+        self.assertEqual(loaded.deny, frozenset({"browser_run_code_unsafe"}))
+        self.assertEqual(loaded.linked_files, os.path.expanduser("~/out"))
+        self.assertEqual(loaded.max_result_chars, 60000)
 
 
 if __name__ == "__main__":

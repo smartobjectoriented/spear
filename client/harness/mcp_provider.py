@@ -23,6 +23,7 @@ from __future__ import annotations
 import json
 import os
 import queue
+import re
 import subprocess
 import threading
 
@@ -31,8 +32,10 @@ from harness.capabilities import (Capability, CapabilityError, CapabilityProtoco
                           capability)
 
 PROTOCOL_VERSION = "2025-06-18"
+
+# A markdown link to a file, as a server cites the files it wrote.
+_LINK = re.compile(r"\]\(([^)\s]+)\)")
 CLIENT = {"name": "spear", "version": "1"}
-_RESULT_CHARS = 20_000
 
 
 class MCPProvider:
@@ -156,6 +159,9 @@ class MCPProvider:
                                               f"are not a list")
 
             for tool in tools:
+                if isinstance(tool, dict) and str(tool.get("name")) in self.config.deny:
+                    continue
+
                 try:
                     found.append(capability(
                         self.config, str(tool["name"]), tool.get("description") or "",
@@ -191,12 +197,48 @@ class MCPProvider:
         if not parts and result.get("structuredContent") is not None:
             parts.append(json.dumps(result["structuredContent"], ensure_ascii=False))
 
-        text = "\n".join(parts)
+        text = self._with_linked_files("\n".join(parts))
+        limit = self.config.max_result_chars
 
-        if len(text) > _RESULT_CHARS:
-            text = text[:_RESULT_CHARS] + f"\n[... {len(text) - _RESULT_CHARS} chars omitted]"
+        if len(text) > limit:
+            text = (text[:limit] + f"\n[... {len(text) - limit} chars omitted: ask for less "
+                    f"-- a narrower target, a smaller depth, one item -- to see the rest]")
 
         return Invocation(text, bool(result.get("isError")))
+
+    def _with_linked_files(self, text):
+        """The result with the files it links in the provider's output
+        directory shown after it.
+
+        A browser server writes the page snapshot it took after an action to
+        a file and links it, and that file is in no tree the turn may read:
+        the model then had to ask for the snapshot again after every click.
+        Only files under the configured directory are opened.
+        """
+        root = self.config.linked_files
+
+        if not root:
+            return text
+
+        root = os.path.realpath(root)
+        base = self._cwd or os.getcwd()
+        shown = []
+
+        for link in dict.fromkeys(_LINK.findall(text)):
+            path = os.path.realpath(os.path.join(base, link.split("#", 1)[0]))
+
+            if os.path.commonpath([root, path]) != root or not os.path.isfile(path):
+                continue
+
+            try:
+                with open(path, "r", encoding="utf-8", errors="replace") as handle:
+                    body = handle.read(self.config.max_result_chars + 1)
+            except OSError:
+                continue
+
+            shown.append(f"\n[linked file {os.path.basename(path)}]\n{body.rstrip()}")
+
+        return text + "".join(shown)
 
     def close(self) -> None:
         process, self._process, self._listed = self._process, None, None

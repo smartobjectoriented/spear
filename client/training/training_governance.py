@@ -62,15 +62,19 @@ class TrainingDataGovernancePolicy:
     def origin_for(episode: TrainingEpisode) -> str:
         """An episode's data origin, defaulting the way the docstring above says."""
 
-        # A standard binding overrides whatever the episode claims: work done
-        # against a licensed standard is licensed data whatever produced it.
+        # A licensed standard overrides whatever the episode claims: work done
+        # against it is licensed data whatever produced it. A public one
+        # (ingested --origin PUBLIC) restricts nothing, so the episode keeps
+        # its own origin; a binding that does not say is taken as licensed.
 
         binding = episode.provenance.get("standard_binding")
 
         if isinstance(binding, Mapping):
             value = str(binding.get("data_origin") or
                         DataOrigin.LICENSED_STANDARD.value).upper()
-            return value if value in {item.value for item in DataOrigin} else "UNKNOWN"
+
+            if value != "PUBLIC":
+                return value if value in {item.value for item in DataOrigin} else "UNKNOWN"
 
         # An unrecognised origin becomes UNKNOWN, which no profile allows: a
         # value nobody can classify must not fall through as usable data.

@@ -344,6 +344,21 @@ def _tool_view(tools: Sequence[ToolDefinition]) -> tuple[str, Mapping[str, objec
     return hashlib.sha256(encoded).hexdigest(), snapshot
 
 
+def answer_turn(episode) -> "TrainingTurn | None":
+    """The turn that answered: the last primary turn that called no tool.
+
+    Not simply the last turn: a normative repair comes after it, from a
+    prompt the conversation never held, and a correction of the answer is a
+    correction of what the model should have said to the conversation.
+    """
+
+    for turn in reversed(episode.turns):
+        if turn.primary_candidate and not turn.tool_calls:
+            return turn
+
+    return None
+
+
 def _answered_by(turn: TrainingTurn, final_response: str) -> bool:
     """Is the user-visible answer this primary turn's own output?
 

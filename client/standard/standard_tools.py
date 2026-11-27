@@ -251,6 +251,53 @@ def render_fetch_for_model(fetched: Mapping[str, object], *, budget: int,
 
     return "\n".join([core] + extras) if extras else core
 
+_INCOMPLETE = re.compile(r"\[INCOMPLETE: characters (\d+)-(\d+) of \d+")
+_CONTINUED = re.compile(r"continued from character (\d+) of \d+")
+
+
+def shown_fetch(fetched: Mapping[str, object], rendered: str) -> dict:
+    """The part of a fetch result the model was actually shown.
+
+    The guards read evidence as structured units, and what reaches the model
+    is `render_fetch_for_model`'s text, which is not JSON: read as JSON it was
+    nothing, and a field the model quoted from a fetched unit or from its
+    neighbours was then judged to come from nowhere. This is the structured
+    result cut back to that rendering -- the unit's text as far as it was
+    shown, and the parent, rows, neighbours and cross-references the
+    rendering kept, each with the preview it was given.
+    """
+    shown = dict(fetched)
+    unit = dict(fetched.get("unit") or {})
+    full = str(unit.get("text") or "")
+    cut = _INCOMPLETE.search(rendered)
+    continued = _CONTINUED.search(rendered)
+
+    if cut:
+        unit["text"] = full[int(cut.group(1)):int(cut.group(2))]
+    elif continued:
+        unit["text"] = full[int(continued.group(1)):]
+
+    shown["unit"] = unit
+
+    def kept(item):
+        if not isinstance(item, Mapping) or str(item.get("source_id") or "") not in rendered:
+            return None
+
+        item = dict(item)
+        text = " ".join(str(item.get("text") or "").split())
+        item["text"] = text[:_CONTEXT_PREVIEW_CHARS].rstrip()
+
+        return item
+
+    parent = kept(fetched.get("parent"))
+    shown["parent"] = parent
+
+    for key in ("table_rows", "neighbors", "resolved_cross_references"):
+        shown[key] = [item for item in map(kept, fetched.get(key) or []) if item]
+
+    return shown
+
+
 # How a caller comes by a source id at all. There is no listing of the corpus,
 # so pointing at one would be inventing a path that does not exist.
 

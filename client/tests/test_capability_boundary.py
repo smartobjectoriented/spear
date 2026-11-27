@@ -209,12 +209,14 @@ class Audit(unittest.TestCase):
                                                 gw.REFUSED])
         self.assertIn(EventType.EXTERNAL_CAPABILITY_INVOKED, trace.kinds())
 
-    def test_a_large_family_records_an_undescribed_call(self):
+    def test_a_large_family_answers_an_unfitting_call_with_the_description(self):
         door, _, trace, registry = gateway(config("big", "--extra", "37"))
         self.addCleanup(registry.close)
+        door.run(OWNER.replace("tracker/", "big/").replace('"name"', '"nom"'))
         door.run(OWNER.replace("tracker/", "big/"))
 
         self.assertEqual(self.outcomes(trace), [gw.NOT_DESCRIBED])
+        self.assertIn(EventType.EXTERNAL_CAPABILITY_INVOKED, trace.kinds())
 
     def test_provider_failures_are_told_apart(self):
         for flags, outcome in ((("--slow", "2"), gw.TIMEOUT),

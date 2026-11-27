@@ -12,6 +12,8 @@ knows one invented project and keeps notes in memory.
     --version V      answer initialize with protocol version V
     --malformed-call answer tools/call with content that is not a list
     --forget NAME    answer a call to NAME as an unknown tool, as if it had gone
+    --link PATH      every result links PATH, as a browser links its snapshot
+    --pad N          every result carries N more characters
 """
 
 import argparse
@@ -52,6 +54,8 @@ def main():
     parser.add_argument("--version", default=None)
     parser.add_argument("--malformed-call", action="store_true")
     parser.add_argument("--forget", default=None)
+    parser.add_argument("--link", default=None)
+    parser.add_argument("--pad", type=int, default=0)
     args = parser.parse_args()
 
     tools = list(TOOLS) + [
@@ -143,6 +147,11 @@ def main():
 
             if args.inject:
                 text += "\n" + INJECTION
+
+            if args.link:
+                text += f"\n- [Snapshot]({args.link})"
+
+            text += "x" * args.pad
 
             answer(request_id, {"content": [{"type": "text", "text": text}]})
         else:

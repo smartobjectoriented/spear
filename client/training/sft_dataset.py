@@ -13,14 +13,14 @@ import math
 import os
 import re
 from collections import Counter, defaultdict
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass, field, replace
 from enum import StrEnum
 from pathlib import Path
 from typing import Mapping, Sequence
 
 from training.training_data import (
     TrainingEligibility, TrainingEpisode, TrainingProvenance,
-    TrainingRedactionPolicy, TrainingTurn,
+    TrainingRedactionPolicy, TrainingTurn, answer_turn,
 )
 from training.training_store import TrainingStore, TrainingStoreError
 from training.training_splits import SplitConfiguration, split_group_for_episode
@@ -391,6 +391,8 @@ class SFTSelectionPolicy:
     READ_SEARCH_NAMES = frozenset({
         "read_file", "read_files", "search_files", "search_code", "find_files",
         "list_files", "grep", "rg", "retrieve", "memory_search", "search_corpus",
+        # Reading the bound standard is reading too.
+        "standard.search", "standard.fetch", "standard.get_structure", "standard.cite",
     })
     REASON_NAMES = {
         "failed_tool_action": "failed_action",
@@ -641,6 +643,23 @@ class SFTDatasetBuilder:
             fingerprint=fingerprint, split=self.configuration.split.assign(split_group),
         )
 
+    def _correction_sample(self, episode: TrainingEpisode, correction: str,
+                           checksum: str) -> SFTSample:
+        """The operator's corrected answer as a final-response target."""
+
+        turn = answer_turn(episode)
+
+        if turn is None:
+            raise SFTDatasetError("a corrected episode has no answering turn")
+
+        corrected = replace(turn, turn_id=f"{turn.turn_id}:correction",
+                            assistant_output=correction, tool_calls=())
+        sample = self._make_sample(episode, corrected, SFTSampleType.FINAL_RESPONSE, checksum)
+
+        return replace(sample, review_flags=(*sample.review_flags, "operator_correction"),
+                       quality_gates_passed=(*sample.quality_gates_passed,
+                                             "operator_correction"))
+
     def build(self) -> SFTBuildResult:
         """Curate every exportable sample the stored episodes support."""
 
@@ -656,6 +675,7 @@ class SFTDatasetBuilder:
 
         metadata = sorted(self.store.iterate_metadata(), key=lambda item: str(item.get("episode_id")))
         verdicts = self.store.operator_verdicts()
+        corrections = self.store.operator_corrections()
 
         for item in metadata:
             episode_id = str(item.get("episode_id", ""))
@@ -688,6 +708,16 @@ class SFTDatasetBuilder:
                 rejection_counts["project_filtered"] += len(episode.turns)
                 continue
 
+            # The operator's corrected answer is a target over the context of
+            # the answer it replaces, whatever became of the rest.
+
+            if episode_id in corrections:
+                try:
+                    candidates.append(self._correction_sample(
+                        episode, corrections[episode_id], checksum))
+                except SFTDatasetError:
+                    rejection_counts["malformed"] += 1
+
             # An answer the operator called bad is never a target, whatever
             # the automatic labels say.
 
@@ -709,7 +739,16 @@ class SFTDatasetBuilder:
                 if _hash(existing) != _hash(snapshot):
                     raise SFTDatasetError("tool-view hash collision")
 
+            corrected = answer_turn(episode) if episode_id in corrections else None
+
             for turn in episode.turns:
+                # The answer the operator corrected is replaced by the
+                # correction above; it is not a target of its own.
+
+                if corrected is not None and turn.turn_id == corrected.turn_id:
+                    rejection_counts["operator_corrected"] += 1
+                    continue
+
                 sample_type, reasons = self.selection_policy.select(
                     episode, turn, allow_external_web=self.configuration.allow_external_web,
                 )

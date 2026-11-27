@@ -312,7 +312,7 @@ def handle_bang_command(cmd_line):
 #: one list, so a command cannot be completed and go unlisted, or the reverse.
 SESSION_COMMANDS = ("/search", "/cd", "/reindex", "/corpus", "/history",
                     "/skills", "/remember", "/recall", "/knowledge", "/forget",
-                    "/good", "/bad", "/undo", "/clear", "/model", "/tools")
+                    "/good", "/bad", "/fix", "/undo", "/clear", "/model", "/tools")
 OPERATOR_COMMANDS = ("/standard", "/finetune")
 
 

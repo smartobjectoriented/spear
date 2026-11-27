@@ -27,7 +27,7 @@ from training.sft_dataset import (
 )
 from training.training_data import (
     TrainingEligibility, TrainingEpisode, TrainingProvenance,
-    TrainingRedactionPolicy, TrainingTurn,
+    TrainingRedactionPolicy, TrainingTurn, answer_turn,
 )
 from training.training_splits import SplitConfiguration, split_group_for_episode
 from training.training_store import TrainingStore, TrainingStoreError
@@ -614,6 +614,7 @@ class PreferenceDatasetBuilder:
         checksums: dict[str, str] = {}
         schemas: dict[str, Mapping[str, object]] = {}
         exclusions: Counter[str] = Counter()
+        corrections = self.store.operator_corrections()
 
         for metadata in sorted(self.store.iterate_metadata(),
                                key=lambda item: str(item.get("episode_id"))):
@@ -642,6 +643,8 @@ class PreferenceDatasetBuilder:
 
                 schemas.setdefault(view_hash, snapshot)
 
+            first = len(observations)
+
             for turn in episode.turns:
                 try:
                     observation = self._observe_turn(episode, turn, checksum)
@@ -656,7 +659,47 @@ class PreferenceDatasetBuilder:
 
                 observations.append(observation)
 
+            if episode_id in corrections:
+                self._add_correction(episode, corrections[episode_id], checksum,
+                                     observations, first, exclusions)
+
         return observations, checksums, schemas, exclusions
+
+    def _add_correction(self, episode: TrainingEpisode, correction: str, checksum: str,
+                        observations: list[_TurnObservation], first: int,
+                        exclusions: Counter) -> None:
+        """The operator's corrected answer against the model's, over one context.
+
+        The two answer the same conversation, so they are an exact-context
+        pair: the correction desirable, the answer it replaces undesirable,
+        both on the strongest evidence there is -- someone read them.
+        """
+
+        turn = answer_turn(episode)
+        index = next((position for position in range(first, len(observations))
+                      if turn is not None and observations[position].turn_id == turn.turn_id),
+                     None)
+
+        if index is None:
+            exclusions["correction_without_answer"] += 1
+            return
+
+        try:
+            corrected = self._observe_turn(
+                episode, replace(turn, turn_id=f"{turn.turn_id}:correction",
+                                 assistant_output=correction, tool_calls=()), checksum)
+        except PreferenceDatasetError:
+            exclusions["malformed_tool_structure"] += 1
+            return
+
+        observations[index] = replace(
+            observations[index], label=OutcomeLabel.UNDESIRABLE.value,
+            label_basis=("operator_corrected",),
+            evidence_strength=EvidenceStrength.STRONG.value)
+        observations.append(replace(
+            corrected, label=OutcomeLabel.DESIRABLE.value,
+            label_basis=("operator_correction",),
+            evidence_strength=EvidenceStrength.STRONG.value))
 
     @staticmethod
     def _mark_completion_conflicts(observations: list[_TurnObservation]

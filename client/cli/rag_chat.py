@@ -728,6 +728,58 @@ def main():
 
             continue
 
+        if user_input == "/fix" or user_input.startswith(("/fix ", "/fix\n")):
+            # The operator's corrected answer to the LAST exchange: kept beside
+            # its training episode, where it becomes a target and, against the
+            # answer it replaces, a preference pair; and put in the history in
+            # place of that answer, which would otherwise be imitated.
+
+            text = user_input[4:].strip()
+
+            if text.startswith("@"):
+                try:
+                    with open(os.path.expanduser(text[1:].strip()), encoding="utf-8") as handle:
+                        text = handle.read().strip()
+                except OSError as exc:
+                    print(f"{C_ERR}/fix: cannot read {text[1:].strip()}: {exc}{C_RST}\n")
+                    continue
+
+            if not text:
+                print("usage: /fix <the corrected answer>  or  /fix @<file holding it>\n")
+                continue
+
+            if not (len(history) >= 2 and history[-1]["role"] == "assistant"
+                    and history[-2]["role"] == "user"):
+                print("No complete exchange to correct.\n")
+                continue
+
+            episode_id = None
+
+            if TRAINING_STORE is not None and last_session_id:
+                try:
+                    episode_id = TRAINING_STORE.latest_episode_id(last_session_id)
+
+                    if episode_id:
+                        TRAINING_STORE.record_correction(episode_id, text)
+                except Exception as exc:
+                    print(f"{C_ERR}/fix: not recorded: {exc}{C_RST}\n")
+                    continue
+
+            history[-1]["content"] = text
+            save_history(history)
+            archive_entry({"role": "feedback", "verdict": "fix",
+                           "question": history[-2]["content"][:500]})
+
+            if episode_id:
+                print("Correction recorded on its training episode (a target, and a "
+                      "preference pair against the answer given); the history now "
+                      "holds it.\n")
+            else:
+                print("No training episode for this exchange: the history holds the "
+                      "correction, nothing else does.\n")
+
+            continue
+
         if user_input == "/undo":
             # Removes the last exchange (assistant reply + user question).
             # A bad answer left in history acts as a few-shot example the

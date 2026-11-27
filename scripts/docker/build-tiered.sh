@@ -156,18 +156,17 @@ PY
 RUNTIME="spear:$VERSION-runtime"
 CODE="spear:$VERSION-code"
 
-# The harness's targets: the runtime, the code alone, and both together. With
-# arguments, only those targets: a content tier rebuilds the code, never the
-# runtime it was built on.
+# The harness's targets: the runtime and the code alone. With arguments, only
+# those targets: everything but the harness tier rebuilds the code, never the
+# runtime, which a pruned build cache would otherwise rebuild from scratch.
 
 build_harness() {
     local target tag targets=("$@")
 
-    [ "${#targets[@]}" -gt 0 ] || targets=(runtime code harness)
+    [ "${#targets[@]}" -gt 0 ] || targets=(runtime code)
 
     for target in "${targets[@]}"; do
         tag="spear:$VERSION-$target"
-        [ "$target" = harness ] && tag="${HARNESS_TAG:-$tag}"
         echo "== building $tag ($target) =="
         docker build -f "$REPO/docker/Dockerfile.harness" --target "$target" \
             "${ATTEST[@]}" \
@@ -199,12 +198,13 @@ lay_code() {
 case "$TIER" in
 
 harness)
-    HARNESS_TAG="${TAG:-}" build_harness
-    echo "built ${TAG:-spear:$VERSION-harness} (harness)"
+    build_harness
+    lay_code "$RUNTIME" "${TAG:-spear:$VERSION-harness}"
     ;;
 
 code)
-    build_harness
+    build_harness code
+    exists "$RUNTIME" && lay_code "$RUNTIME" "spear:$VERSION-harness"
     [ "${#LAY[@]}" -gt 0 ] || LAY=("spear:$VERSION-base" "spear:$VERSION-project")
 
     for image in "${LAY[@]}"; do
@@ -219,7 +219,7 @@ code)
 base)
     [ -n "$COMMONS" ] || die "base needs --commons a,b,c (the common corpora, the build system included)"
     HARNESS="spear:$VERSION-harness"
-    exists "$RUNTIME" || build_harness
+    exists "$RUNTIME" || build_harness runtime
     TAG="${TAG:-spear:$VERSION-base}"
 
     # The registry (whole map), then the commons staged: index cut to them, the

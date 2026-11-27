@@ -1,4 +1,4 @@
-# A company's commons, built on the harness.
+# A company's commons, built on the harness runtime.
 #
 # It carries what every project of the company needs: the shared build system
 # and corpora (its family included), the prebuilt index, the
@@ -7,10 +7,11 @@
 # Dockerfile.project builds one project's delta on top of this.
 #
 # Every addition overlays the empty directory the harness created, from a named
-# build context staged by scripts/docker/build.sh.
+# build context staged by scripts/docker/build-tiered.sh. The result is the
+# content image, <base>-content; Dockerfile.code lays the code on it.
 
-ARG HARNESS_IMAGE
-FROM ${HARNESS_IMAGE}
+ARG RUNTIME_IMAGE
+FROM ${RUNTIME_IMAGE}
 
 ARG APP=/opt/spear/client
 

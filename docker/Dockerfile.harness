@@ -1,15 +1,17 @@
 # SPEAR harness — the application only, no content. Public and shippable.
 #
-# First link of the FROM chain: Dockerfile.base builds a company's commons on
-# top of this, and Dockerfile.project bakes one project's delta on top of that.
-# This image carries the venv, the embedder and the harness code -- the
-# expensive layers every image above reuses -- and nothing a deployment could
-# not publish: no index, no corpus, no standards, no rules or skills content.
+# Three targets. `runtime` is the first link of the FROM chain: the venv and
+# the embedder, the expensive layers every image above reuses. Dockerfile.base
+# builds a company's commons on it and Dockerfile.project one project's delta
+# on that. `code` is the harness code alone, laid last on each of them by
+# Dockerfile.code; `harness` is the runtime with the code, and carries nothing
+# a deployment could not publish: no index, no corpus, no standards, no rules
+# or skills content.
 #
 # Default build context is client/ (the harness); `repo` is a named context for
 # the two files that live outside it. See scripts/docker/build.sh.
 
-FROM ubuntu:24.04
+FROM ubuntu:24.04 AS runtime
 
 ENV DEBIAN_FRONTEND=noninteractive
 
@@ -64,7 +66,29 @@ from chromadb.utils.embedding_functions import ONNXMiniLM_L6_V2; \
 ONNXMiniLM_L6_V2()(['warm'])" \
     && chmod -R a+rX /opt/spear/chroma-home
 
-# The harness code.
+# Empty content, corpus and state directories, and an empty registry, so the
+# harness finds a directory rather than nothing. A base image fills them.
+
+RUN mkdir -p "$APP/rules.d" "$APP/skills" "$APP/benches" "$APP/chromadb" \
+        /corpora /opt/spear/common/standards /opt/spear/state \
+    && printf '{}\n' > "$APP/projects.json" \
+    && chmod -R 0777 /corpora /opt/spear/common /opt/spear/state "$APP/chromadb"
+
+ENV SPEAR_COMMON_STATE_DIR=/opt/spear/common
+ENV SPEAR_STANDARDS_ROOT=/opt/spear/common/standards
+ENV SPEAR_STATE_DIR=/opt/spear/state
+ENV SPEAR_SHIPPED_DB_PATH=$APP/chromadb
+ENV SPEAR_CORPUS_ROOT=/corpora
+ENV PATH=$APP/bin:$PATH
+WORKDIR /corpora
+ENTRYPOINT ["/opt/spear/entrypoint.sh"]
+
+# The code, alone in an image of its own and laid last on every tier, so that
+# a change to it replaces one small layer instead of every content layer
+# stacked above it. Dockerfile.code lays it on a content image.
+
+FROM scratch AS code
+ARG APP=/opt/spear/client
 
 COPY *.md $APP/
 COPY agent/ $APP/agent/
@@ -81,42 +105,23 @@ COPY training/ $APP/training/
 COPY eval/ $APP/eval/
 COPY deploy/ $APP/deploy/
 
-# Empty content, corpus and state directories, and an empty registry, so the
-# harness finds a directory rather than nothing. A base image fills them.
-
-RUN mkdir -p "$APP/rules.d" "$APP/skills" "$APP/benches" "$APP/chromadb" \
-        /corpora /opt/spear/common/standards /opt/spear/state \
-    && printf '{}\n' > "$APP/projects.json" \
-    && chmod -R 0777 /corpora /opt/spear/common /opt/spear/state "$APP/chromadb"
-
 # The launcher a recipient copies out to run the image, and the entrypoint.
 # Both live in the repo, not in client/, so they come from the `repo` context.
 
-COPY --from=repo scripts/docker/spear /opt/spear/spear
-COPY --from=repo docker/entrypoint.sh /opt/spear/entrypoint.sh
-COPY --from=repo docker/spear-mcp /usr/local/bin/spear-mcp
-COPY --from=repo docker/spear-claude-export /usr/local/bin/spear-claude-export
+COPY --chmod=0755 --from=repo scripts/docker/spear /opt/spear/spear
+COPY --chmod=0755 --from=repo docker/entrypoint.sh /opt/spear/entrypoint.sh
+COPY --chmod=0755 --from=repo docker/spear-mcp /usr/local/bin/spear-mcp
+COPY --chmod=0755 --from=repo docker/spear-claude-export /usr/local/bin/spear-claude-export
 
 # What a shell in the container offers: SPEAR, and Claude Code prepared for
 # the corpus. The latter is only the preparation; docker/Dockerfile.claude
 # adds the program itself to the images that are to carry it.
 
-COPY --from=repo docker/spear-shell docker/spear-chat docker/spear-where \
+COPY --chmod=0755 --from=repo docker/spear-shell docker/spear-chat docker/spear-where \
     docker/spear-bake-state docker/spear-claude-context docker/spear-knowledge \
     docker/spear-claude-setup /usr/local/bin/
 COPY --from=repo docker/claude-managed-settings.json /etc/claude-code/managed-settings.json
-COPY --from=repo docker/claude-launcher /usr/local/bin/claude
-RUN chmod +x /opt/spear/entrypoint.sh /opt/spear/spear /usr/local/bin/spear-mcp \
-    /usr/local/bin/spear-claude-export /usr/local/bin/spear-shell /usr/local/bin/spear-chat \
-    /usr/local/bin/spear-where /usr/local/bin/spear-bake-state /usr/local/bin/claude \
-    /usr/local/bin/spear-claude-context /usr/local/bin/spear-knowledge \
-    /usr/local/bin/spear-claude-setup
+COPY --chmod=0755 --from=repo docker/claude-launcher /usr/local/bin/claude
 
-ENV SPEAR_COMMON_STATE_DIR=/opt/spear/common
-ENV SPEAR_STANDARDS_ROOT=/opt/spear/common/standards
-ENV SPEAR_STATE_DIR=/opt/spear/state
-ENV SPEAR_SHIPPED_DB_PATH=$APP/chromadb
-ENV SPEAR_CORPUS_ROOT=/corpora
-ENV PATH=$APP/bin:$PATH
-WORKDIR /corpora
-ENTRYPOINT ["/opt/spear/entrypoint.sh"]
+FROM runtime AS harness
+COPY --from=code / /

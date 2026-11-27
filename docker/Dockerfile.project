@@ -9,6 +9,10 @@
 # The index context is the FULL index for the commons plus this project's
 # corpora (stage-index.py bakes it), so it replaces the base's rather than
 # merging into it.
+#
+# BASE_IMAGE is the base's content image, <base>-content, not the base itself:
+# built on the code layer, every layer here would change with the code. The
+# result is <project>-content; Dockerfile.code lays the code on it.
 
 ARG BASE_IMAGE
 FROM ${BASE_IMAGE}

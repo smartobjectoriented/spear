@@ -1,0 +1,10 @@
+# The harness code laid on a content image (the runtime, a base's or a
+# project's), as its last layer.
+#
+# Every layer below it is content that changes rarely and weighs tens of GB; the
+# code changes often and weighs a few MB. Laid last, a new harness is one new
+# layer to push and to pull, and the content layers keep their digests.
+
+ARG CONTENT_IMAGE
+FROM ${CONTENT_IMAGE}
+COPY --from=code / /

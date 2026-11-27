@@ -340,15 +340,19 @@ MEMORY="${SPEAR_CONTAINER_MEMORY:-$(awk '/^MemTotal:/ { printf "%dm", $2 * 3 / 4
 # chromadb opens the image's index read-write, and overlayfs then copies the
 # whole database into each new container: some 25 GB and tens of seconds at
 # every start, long enough for chromadb to give up waiting. A named volume
-# holds it instead, filled from the image once and reused while the image
-# stays the same; volumes of earlier images are removed when not in use.
+# holds it instead, filled from the image once and reused while its content
+# stays the same -- the content image the code was laid on (spear.content),
+# so a new harness alone keeps the volume; volumes of earlier images are
+# removed when not in use.
 
 INDEX=()
 SHIPPED="$(docker image inspect -f '{{range .Config.Env}}{{println .}}{{end}}' "$IMAGE" 2>/dev/null \
     | sed -n 's/^SPEAR_SHIPPED_DB_PATH=//p')"
 
 if [ -n "$SHIPPED" ]; then
-    VOLUME="spear-index-$(docker image inspect -f '{{.Id}}' "$IMAGE" | cut -d: -f2 | cut -c1-12)"
+    CONTENT="$(docker image inspect -f '{{ index .Config.Labels "spear.content" }}' "$IMAGE")"
+    [ -n "$CONTENT" ] || CONTENT="$(docker image inspect -f '{{.Id}}' "$IMAGE")"
+    VOLUME="spear-index-$(printf '%s' "$CONTENT" | cut -d: -f2 | cut -c1-12)"
 
     for old in $(docker volume ls -q --filter name=spear-index-); do
         [ "$old" = "$VOLUME" ] || docker volume rm "$old" >/dev/null 2>&1 || true

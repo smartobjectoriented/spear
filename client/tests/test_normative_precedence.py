@@ -177,6 +177,26 @@ class DeviationsAreReportable(unittest.TestCase):
                          [conformance_guard.UNSCOPED_VERDICT])
 
 
+class TitlesAreNotClaims(unittest.TestCase):
+    """A heading or an indirect question names a topic; it states nothing.
+
+    Seen in use: "## What the standard says about generating an SGI" opened
+    a fully cited answer and was replaced by the note.
+    """
+
+    def test_a_heading_is_left_alone(self):
+        answer = "## What the standard says about widgets\n\nSee below."
+        self.assertEqual(guard(answer, sections=[])[3], False)
+
+    def test_an_indirect_question_is_left_alone(self):
+        self.assertFalse(normative_precedence.states_a_requirement(
+            "Here is how the standard defines a widget, clause by clause.", BINDING))
+
+    def test_a_claim_after_the_colon_is_still_guarded(self):
+        self.assertTrue(normative_precedence.states_a_requirement(
+            "This is what the standard requires: every widget shall be blue.", BINDING))
+
+
 class UnsupportedIsNotNonCompliant(unittest.TestCase):
     """CASE 3 -- the standard defines more than the code claims to support."""
 

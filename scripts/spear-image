@@ -98,7 +98,7 @@ case "$action" in
     build)
         profile="$1"
         case "$profile" in
-            harness|base|project)
+            harness|code|base|project)
                 shift
                 exec "$DOCKER_SCRIPTS/build-tiered.sh" "$profile" "$@" ;;
             public|reds|private) shift ;;

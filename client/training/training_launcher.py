@@ -61,11 +61,12 @@ class TrainingExecutionConfiguration:
     cuda_visibility_policy: str = "operator_default"
     cuda_visible_devices: str | None = None
 
-    # Conservative former-arch no-expert QLoRA planning floor; operators may
-    # explicitly set None or a different policy after inspecting the host.
+    # Planning floors for a QLoRA run of the dense 27B source: the card
+    # verdict's MAY_FIT line, and its bf16 shards (about 55 GB) with room to
+    # spare. Operators may set None or another policy after inspecting the host.
 
-    minimum_free_vram_gib: float | None = 47.0
-    minimum_model_storage_gib: float | None = 160.0
+    minimum_free_vram_gib: float | None = 48.0
+    minimum_model_storage_gib: float | None = 64.0
     inference_service_type: str = "manual_wrapper"
     inference_service_wrapper: str | None = None
     inference_service_binary: str | None = None

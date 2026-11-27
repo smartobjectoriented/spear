@@ -278,8 +278,8 @@ def load_tokenizer():
     """The pinned tokenizer, offline. The rendering has to be the real one."""
     from transformers import AutoTokenizer
     return AutoTokenizer.from_pretrained(
-        "Qwen/Qwen3-Coder-Next",
-        revision="a7fbcb5c0e12d62a448eaa0e260346bf5dcc0feb")
+        "Qwen/Qwen3.8-27B",
+        revision="8c0b3d30f3ae96f5c7f774de704bf0ada83e422a")
 
 
 def main(out_dir, tokenizer=None):

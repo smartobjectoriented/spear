@@ -54,7 +54,7 @@ Options:
   --manifest PATH    override the manifest       (or SPEAR_RUNTIME_MANIFEST)
   --verify           report state, write nothing
   --dry-run          report intent, write nothing
-  --checksum         with --verify, hash the model shards (reads ~79 GB)
+  --checksum         with --verify, hash the model shards (reads the whole model)
   --probe            with --verify, encode through the worker end to end
   --skip-model       leave <root>/models alone
   --skip-llama       leave <root>/llama.cpp alone
@@ -115,6 +115,7 @@ LLAMA_BIN_REL=$(m llama_cpp.binary)
 CUDA_ARCH="${SPEAR_SERVER_CUDA_ARCH:-$(m llama_cpp.cuda_architecture)}"
 MODEL_REPO=$(m model.repository)
 MODEL_DIR=$(m model.directory)
+MODEL_REV=$(m model.revision)
 MODEL_FIRST=$(m model.first_shard)
 EMBED_PROTOCOL=$(m embedding.protocol_version)
 EMBED_MODEL=$(m embedding.probe.model)
@@ -253,7 +254,8 @@ else
         # One implementation of "download a sharded GGUF". Naming any member
         # fetches the set, and -c resumes rather than restarting.
         SPEAR_SERVER_MODEL_REPO="$MODEL_REPO" \
-        SPEAR_SERVER_MODEL_FILE="$MODEL_DIR/$MODEL_FIRST" \
+        SPEAR_SERVER_MODEL_REVISION="${MODEL_REV:-main}" \
+        SPEAR_SERVER_MODEL_FILE="${MODEL_DIR:+$MODEL_DIR/}$MODEL_FIRST" \
         SPEAR_SERVER_MODELS_DIR="$MODELS" \
             "$REPO/server/scripts/fetch-model.sh"
         ok "fetched $missing shard(s)"

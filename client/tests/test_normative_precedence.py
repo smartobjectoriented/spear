@@ -339,7 +339,7 @@ class ProvenanceDecidesNormativity(unittest.TestCase):
 class ProseKeepsItsCitation(unittest.TestCase):
     """What the real backend wrote, and what sentence-local grounding did to it.
 
-    Qwen3-Coder-Next, bound to the standard, quoted the rule in full, concluded
+    The served model, bound to the standard, quoted the rule in full, concluded
     from it, and closed with a restatement carrying no citation of its own.
     The first version of this guard replaced that true, retrieved, correctly
     cited claim with a note saying nothing backed it -- a worse sentence than

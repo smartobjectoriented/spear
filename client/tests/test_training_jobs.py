@@ -11,7 +11,7 @@ from training.training_jobs import (
 def job(job_id="ftjob_" + "a" * 24):
     return TrainingJob(
         job_id, "SFT", "training_bundle", "/bundle", "b" * 64, "c" * 64,
-        "Qwen/Qwen3-Coder-Next", "deadbeef", {"train": "d" * 64},
+        "Qwen/Qwen3.8-27B", "deadbeef", {"train": "d" * 64},
         "fake", "fake", f"fake://jobs/{job_id}",
     )
 

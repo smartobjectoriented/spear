@@ -67,7 +67,7 @@ class RemoteReadinessTests(unittest.TestCase):
                   "training_root=usable\ndisk_available_kib=80000\n"
                   "ram_kib=1000000\npackage=torch:2.12.0\n"
                   "package=transformers:5.8.0\npackage=peft:0.18.0\n"
-                  "package=bitsandbytes:available\npackage=qwen3_next:available\n")
+                  "package=bitsandbytes:available\n")
         runner = ProbeRunner([ok("host config"), ok(), ok(output)])
         report = SSHRemoteProbe(self.config(), runner).inspect()
         self.assertEqual(report.state, RemoteReadinessState.READY.value)

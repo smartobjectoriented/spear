@@ -29,7 +29,7 @@ from training.training_splits import SplitConfiguration
 
 
 BUNDLE_SCHEMA_VERSION = 1
-AXOLOTL_PROFILE_VERSION = 1
+AXOLOTL_PROFILE_VERSION = 2
 MASKING_POLICY_VERSION = 1
 
 
@@ -51,18 +51,19 @@ class VRAMFeasibility(StrEnum):
 
 @dataclass(frozen=True)
 class SourceModelProfile:
-    profile: str = "qwen3_coder_next_sft"
-    base_model: str = "Qwen/Qwen3-Coder-Next"
+    profile: str = "qwen38_27b_sft"
+    base_model: str = "Qwen/Qwen3.8-27B"
     source_kind: str = SourceModelKind.INSTRUCT.value
     revision: str | None = None
 
     @classmethod
     def named(cls, name: str) -> "SourceModelProfile":
-        if name == "qwen3_coder_next_sft":
-            return cls()
+        # The model production serves: one model, versioned, and nothing else
+        # to train. The revision is the operator's to pin (training-execution
+        # .json); a start without one is refused.
 
-        if name == "qwen3_coder_next_base":
-            return cls(name, "Qwen/Qwen3-Coder-Next-Base", SourceModelKind.BASE.value)
+        if name == "qwen38_27b_sft":
+            return cls()
 
         raise ValueError(f"unknown source model profile: {name}")
 
@@ -89,42 +90,9 @@ class AxolotlProfile:
     gradient_checkpointing: str = "true"
     lora_r: int = 16
     lora_alpha: int = 32
-    moe_targeting: str = "conservative_no_expert_targeting"
-    expert_target_modules: tuple[str, ...] = ()
-
-    # `load_in_4bit` alone does NOT quantize this model's routed experts under
-    # transformers 5.x, where Qwen3NextExperts fuses them into 3-D
-    # nn.Parameter tensors that bitsandbytes -- which replaces nn.Linear --
-    # cannot reach. Axolotl added quantize_moe_experts for exactly that: it
-    # intercepts the load, quantizes to NF4 and frees the bf16 copies.
-    # Emitting a QLoRA config without it asks for 4-bit and gets 148 GiB of
-    # bf16 experts anyway, which is how a run ended up on a 179 GiB card.
-    # Both halves are measured, not read: LAYOUT_ONLY=1 in
-    # qwen3-finetune/cloud/load_preflight.py builds the model on the meta
-    # device and reports per_expert_modules (512,) on transformers 4.57.6
-    # against fused_parameter (512, 1024, 2048) on 5.9.0, over the same
-    # 77.3B expert parameters -- 145 GiB left in bf16 versus 39 GiB in NF4.
-
-    quantize_moe_experts: bool = True
-
     def __post_init__(self) -> None:
         if self.sequence_len <= 0 or self.micro_batch_size <= 0:
             raise ValueError("invalid Axolotl size setting")
-
-        if self.moe_targeting not in {"conservative_no_expert_targeting",
-                                      "expert_targeting"}:
-            raise ValueError("unknown MoE targeting profile")
-
-        # The profile and the module list have to agree in both directions:
-        # expert targeting materially changes the VRAM the run will need, so it
-        # is never inferred from one of the two being set.
-
-        if self.moe_targeting == "expert_targeting" and not self.expert_target_modules:
-            raise ValueError("expert targeting requires explicit module names")
-
-        if (self.moe_targeting == "conservative_no_expert_targeting" and
-                self.expert_target_modules):
-            raise ValueError("conservative profile cannot target expert modules")
 
 
 @dataclass(frozen=True)
@@ -206,61 +174,24 @@ class TrainingHardwareReport:
             tuple(value.get("warnings", ())),
         )
 
-    def classify(self, *, quantize_moe_experts: bool | None = None,
-                 expert_targeting: bool = False) -> "TrainingHardwareReport":
-        """Feasibility, which depends on HOW the experts are loaded.
+    def classify(self) -> "TrainingHardwareReport":
+        """Coarse feasibility of a 4-bit QLoRA run of the dense 27B source.
 
-        A bare threshold table cannot answer this. For an 80B MoE, 96 GiB is
-        insufficient or ample depending on one flag: with the routed experts
-        left in bf16 the weights alone measured 152 010 MiB on a B200, and
-        with them quantized Axolotl documents ~47 GiB (no expert targeting)
-        and ~71 GiB (with). Told nothing, this stays coarse and pessimistic.
-
-        Nothing here returns LIKELY_FITS on the quantized path: those numbers
-        are Axolotl's, not ours, and the harness has already been bitten once
-        by a documented figure that did not survive contact with the actual
-        stack. MAY_FIT means "provision it and run the load preflight", not
-        "go".
+        The one measured point is a 96 GiB card, on which the FT-4 and FT-5
+        runs completed; below it this cannot say more than MAY_FIT, which
+        means "run the load preflight", not "go".
         """
-        extra: tuple[str, ...] = ()
-
         if self.total_vram_gib is None:
             value = VRAMFeasibility.UNKNOWN
-        elif quantize_moe_experts is False:
-            # Experts stay bf16: the measured 148 GiB of weights, plus
-            # activations, optimizer and logits.
-
-            value = (VRAMFeasibility.LIKELY_FITS if self.total_vram_gib >= 160
-                     else VRAMFeasibility.LIKELY_DOES_NOT_FIT)
-            extra = ("quantize_moe_experts is false: the routed experts load in "
-                     "bf16 and the weights alone need ~148 GiB.",)
-        elif quantize_moe_experts is True:
-            # Never LIKELY_FITS here: the figures are Axolotl's own, and the
-            # docstring above says why a documented number is not a measurement.
-
-            floor = 80.0 if expert_targeting else 56.0
-            value = (VRAMFeasibility.MAY_FIT if self.total_vram_gib >= floor
-                     else VRAMFeasibility.LIKELY_DOES_NOT_FIT)
-            extra = (f"Quantized-expert path: Axolotl documents ~{71 if expert_targeting else 47} "
-                     f"GiB for this model. Unverified here -- confirm with a load "
-                     f"preflight before committing a training run.",)
-        elif self.total_vram_gib >= 160:
-            value = VRAMFeasibility.LIKELY_FITS
         elif self.total_vram_gib >= 96:
+            value = VRAMFeasibility.LIKELY_FITS
+        elif self.total_vram_gib >= 48:
             value = VRAMFeasibility.MAY_FIT
-        elif self.total_vram_gib < 48:
-            value = VRAMFeasibility.LIKELY_DOES_NOT_FIT
         else:
-            value = VRAMFeasibility.UNKNOWN
-
-        if quantize_moe_experts is None:
-            extra = ("MoE load mode not declared: this verdict assumes nothing "
-                     "and is therefore coarse.",)
+            value = VRAMFeasibility.LIKELY_DOES_NOT_FIT
 
         warning = ("Peak memory depends on sequence length, batch size, LoRA targets, "
                    "optimizer, checkpointing, packing, and library versions.")
-
-        self = replace(self, warnings=tuple(self.warnings) + extra)
 
         return TrainingHardwareReport(
             self.cuda_available, self.gpu_models, self.gpu_count,
@@ -344,16 +275,10 @@ class AxolotlConfigGenerator:
             *( [f"revision: {_yaml_scalar(self.model.revision)}"] if self.model.revision else []),
             "tokenizer_type: AutoTokenizer", "trust_remote_code: false",
             "load_in_4bit: true",
-            f"quantize_moe_experts: {_yaml_scalar(p.quantize_moe_experts)}",
             "adapter: qlora", "lora_r: " + str(p.lora_r),
             "lora_alpha: " + str(p.lora_alpha), "lora_dropout: 0.0",
             "lora_target_linear: false", "lora_target_modules:",
             "  - q_proj", "  - k_proj", "  - v_proj", "  - o_proj",
-            # Routed experts are PARAMETERS, not modules: they are fused 3-D
-            # tensors, so naming them under lora_target_modules matches
-            # nothing. Axolotl takes them under lora_target_parameters.
-            *( ["lora_target_parameters:"] if p.expert_target_modules else []),
-            *(f"  - {item}" for item in p.expert_target_modules),
             f"sequence_len: {p.sequence_len}",
             f"micro_batch_size: {p.micro_batch_size}",
             f"gradient_accumulation_steps: {p.gradient_accumulation_steps}",
@@ -665,10 +590,6 @@ class TrainingBundleBuilder:
                                        if self.configuration.hardware_report else
                                        {"vram_feasibility": VRAMFeasibility.UNKNOWN.value,
                                         "reason": "training_host_not_specified"}),
-            "moe_targeting": {"profile": self.configuration.axolotl.moe_targeting,
-                              "experts_targeted": self.configuration.axolotl.moe_targeting ==
-                              "expert_targeting",
-                              "warning": "Expert targeting materially changes VRAM requirements."},
             "future_output_lineage_schema": {
                 "source_base_model": "required", "base_revision_hash": "required",
                 "training_bundle_id": "required", "dataset_checksums": "required",
@@ -847,13 +768,10 @@ class TrainingBundleBuilder:
                  "1. Validate `checksums.sha256` and run `python -m training validate-bundle ...`.",
                  "2. Inspect governance, readiness, and held-out evaluation plan.",
                  "3. Verify masking with Axolotl preprocessing debug output.",
-                 "4. Measure, do not assume, that the card holds this config: the "
-                 "readiness verdict is a table, the preflight is a measurement.", "",
+                 "4. Preprocess on the training host, then train.", "",
                  "```sh",
                  *(["axolotl preprocess configs/axolotl-sft.yml --debug"] if has_sft else
                    ["# No active training config: continue collecting/reviewing data."]),
-                 *(["CONFIG_YAML=configs/axolotl-sft.yml bash "
-                    "qwen3-finetune/cloud/load_preflight.sh"] if has_sft else []),
                  *(["axolotl train configs/axolotl-sft.yml"]
                    if has_sft and not smoke_test_only else []),
                  "```", "",

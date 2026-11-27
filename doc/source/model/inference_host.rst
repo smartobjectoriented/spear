@@ -26,7 +26,7 @@ What you are building
    ~/spear/            checkout (tens of MB)        spear-chat --reds
    ~/spear-runtime/                                   │  SSH tunnel
      llama.cpp/        pinned build                   │  127.0.0.1:8082
-     models/gguf/      the weights, 79 GiB            ▼
+     models/gguf/      the weights, 27 GiB            ▼
      embed/            embedding worker venv   ◄──── ssh … run-worker.sh
      config/           server.conf, gpu.conf
      log/
@@ -63,8 +63,8 @@ over SSH.  Nothing on the host is exposed but ``sshd``.
        ``python3-dev``, ``curl``, ``wget``
      -
    * - Disk, under the account's home
-     - ~100 GB: model 85 GB (79 GiB), embedder venv 5 GB, embedder cache
-       4.3 GB, llama.cpp build 1 GB
+     - ~40 GB: model 28.6 GB, embedder venv 5 GB, embedder cache 4.3 GB,
+       llama.cpp build 1 GB
      -
    * - RAM
      - not critical once the weights are on the GPU
@@ -73,13 +73,10 @@ over SSH.  Nothing on the host is exposed but ``sshd``.
      - one account that owns the checkout and the runtime
      - see below
 
-**Sizing the GPU.**  The profile serves Qwen3-Coder-Next Q8_0: 79 GiB of
-weights.  Its KV cache is small because only 12 of its 48 layers use full
-attention, with 2 KV heads of 256: at ``q8_0`` that is about 13 KB per token,
-6.8 GB for the 524 288-token window.  Measured: 89.5 of 97.9 GB in use at
-512K.  On a smaller card, lower ``SPEAR_SERVER_CTX`` (step 4); on a card that
-cannot hold the weights at all, ``SPEAR_SERVER_NCPUMOE`` keeps the
-mixture-of-experts weights in system RAM, at a large cost in speed.
+**Sizing the GPU.**  The profile serves Qwen3.8-27B Q8_0: 26.6 GiB of
+weights, and the KV cache of the 262 144-token window beside them.  Measured:
+36.9 of 97.9 GB in use.  On a smaller card, lower ``SPEAR_SERVER_CTX``
+(step 4).
 
 **The account.**  Everything below lives in one account's home and needs no
 root, except installing the system unit (step 6).  On a machine shared with
@@ -126,8 +123,8 @@ build everything the manifest describes:
    $ scripts/bootstrap-runtime.sh --root ~/spear-runtime --gpu GPU-xxxxxxxx-…
 
 The dry run says what it would do and writes nothing.  The real run clones
-and builds the pinned llama.cpp, downloads the four model shards (budget
-about an hour per 60 GB), builds the embedder's virtualenv, and writes
+and builds the pinned llama.cpp, downloads the model file at its pinned
+revision, builds the embedder's virtualenv, and writes
 ``config/server.conf`` and ``config/gpu.conf``.  It is idempotent: interrupt
 it, run it again, and it keeps what is already correct.
 
@@ -152,20 +149,16 @@ with the exact command line the launcher would run.
 is the deployment's from then on; no later bootstrap overwrites it.  Every key
 is described in ``server/config/server.conf.example``.  The ones to review:
 
-``SPEAR_SERVER_CTX=524288``
-   The context window.  The model is trained at 262 144 tokens, so the
-   profile serves twice that with YaRN, enabled by the next two keys.
-   Lower it if the card is smaller: at or below 262 144 no scaling is used.
+``SPEAR_SERVER_CTX=262144``
+   The context window: the length the model was trained at.  Lower it if the
+   card is smaller.
 
-``SPEAR_SERVER_NATIVE_CTX=262144`` and ``SPEAR_SERVER_ARCH=qwen3next``
-   The trained length and the model architecture.  When ``SPEAR_SERVER_CTX``
-   exceeds the first, ``serve.sh`` adds ``--rope-scaling yarn --rope-scale 2
-   --yarn-orig-ctx 262144`` **and** overrides
-   ``qwen3next.context_length``.  The override is not optional:
-   ``llama-server`` caps each slot at the trained length it reads from the
-   GGUF, so without it a 512K request serves 256K and says so only in its log.
-   YaRN is static — it applies to short prompts too — which is why it is
-   switched on only past the trained length.
+``SPEAR_SERVER_NATIVE_CTX=262144`` and ``SPEAR_SERVER_ARCH=qwen35``
+   The trained length and the model architecture.  Only a window past the
+   first uses them: ``serve.sh`` then adds YaRN RoPE scaling **and** overrides
+   ``qwen35.context_length``, because ``llama-server`` caps each slot at the
+   trained length it reads from the GGUF.  YaRN is static — it applies to
+   short prompts too — which is why it is switched on only past that length.
 
 ``SPEAR_SERVER_PORT=8010``, ``SPEAR_SERVER_HOST=127.0.0.1``
    Keep the host on loopback.  Clients use the port in their tunnel (step 8).
@@ -191,10 +184,9 @@ Loading takes a minute or two.  From a second shell:
    $ until curl -sf http://127.0.0.1:8010/health >/dev/null; do sleep 2; done
    $ curl -s http://127.0.0.1:8010/props | python3 -c \
        'import sys,json;print(json.load(sys.stdin)["default_generation_settings"]["n_ctx"])'
-   524288
+   262144
 
-If that prints 262144, the architecture override is missing (step 4).  Stop
-the server with Ctrl-C.
+Stop the server with Ctrl-C.
 
 6. Supervision
 ==============
@@ -315,19 +307,13 @@ A leading ``~/`` is expanded on the host.  Indexing (``/reindex``,
    host   $ curl -s http://127.0.0.1:8010/props | grep -o '"n_ctx":[0-9]*'
    client $ spear-chat --reds          # the banner shows the model and the window
 
-What the reference deployment measures at 512K:
+What the reference deployment measures:
 
 .. list-table::
    :widths: 50 50
 
    * - VRAM in use
-     - 89.5 of 97.9 GB
-   * - Generation
-     - 156 tokens/s (157 at 98K: YaRN costs nothing measurable)
-   * - Prompt processing
-     - ~2 100 tokens/s — a 512K prompt takes about four minutes
-   * - Retrieval past the trained length
-     - a fact placed 40 % into a 311 744-token prompt, recalled exactly
+     - 36.9 of 97.9 GB, at the 262 144-token window
 
 10. Updating and rolling back
 =============================

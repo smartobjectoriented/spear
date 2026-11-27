@@ -258,10 +258,6 @@ class NoStaleProductPrefixEscapes(unittest.TestCase):
 
     JUSTIFIED = {
         # --- persistent identifiers, named where they are defined ---
-        ".gitignore":
-            "guards a 47 GB directory this deployment still has on disk; "
-            "renaming the rule without moving the directory exposes it",
-
         # --- historical evidence: transcripts and measured incidents ---
         "client/TRAINING_DATA.md":
             "narrates a run against a path that was actually tried",
@@ -269,8 +265,6 @@ class NoStaleProductPrefixEscapes(unittest.TestCase):
             "the same narrative: the path Axolotl was not usable at",
         "doc/source/model_serving.rst":
             "a recorded backend probe and its literal reply",
-        "pod-artifacts-qwen3coder/gguf-download.log":
-            "a download log from one run; evidence, not source",
 
         # --- checks that must name what they forbid ---
         "client/tests/test_public_boundary.py":

@@ -140,7 +140,7 @@ class Serving(unittest.TestCase):
     def test_a_window_past_the_trained_one_turns_yarn_on(self):
         self.serve(env=self.complete(SPEAR_SERVER_CTX="524288",
                                      SPEAR_SERVER_NATIVE_CTX="262144",
-                                     SPEAR_SERVER_ARCH="qwen3next"))
+                                     SPEAR_SERVER_ARCH="qwen35"))
         served = self.served()
         self.assertEqual(served["--rope-scaling"], "yarn")
         self.assertEqual(served["--rope-scale"], "2")
@@ -150,8 +150,8 @@ class Serving(unittest.TestCase):
         """Without it llama-server served 262144 of the 524288 asked for."""
         self.serve(env=self.complete(SPEAR_SERVER_CTX="524288",
                                      SPEAR_SERVER_NATIVE_CTX="262144",
-                                     SPEAR_SERVER_ARCH="qwen3next"))
-        self.assertIn("qwen3next.context_length=int:524288",
+                                     SPEAR_SERVER_ARCH="qwen35"))
+        self.assertIn("qwen35.context_length=int:524288",
                       self.argv.read_text())
 
     def test_yarn_without_the_architecture_is_refused(self):

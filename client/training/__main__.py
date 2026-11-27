@@ -43,8 +43,8 @@ def _parser() -> argparse.ArgumentParser:
 
         if name == "freeze":
             item.add_argument("--output", required=True)
-            item.add_argument("--profile", default="qwen3_coder_next_sft",
-                              choices=("qwen3_coder_next_sft", "qwen3_coder_next_base"))
+            item.add_argument("--profile", default="qwen38_27b_sft",
+                              choices=("qwen38_27b_sft",))
             item.add_argument("--base-model")
             item.add_argument("--tokenizer-path")
             item.add_argument("--hardware-report", action="store_true")

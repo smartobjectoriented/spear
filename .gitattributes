@@ -16,6 +16,3 @@ corpora/posix-api/ export-ignore
 # headers. Provenance first, then it can ship.
 corpora/musl-headers/ export-ignore
 
-# Build and download logs from one pod run. Evidence worth keeping, not source
-# anyone needs to clone.
-pod-artifacts-qwen3coder/ export-ignore

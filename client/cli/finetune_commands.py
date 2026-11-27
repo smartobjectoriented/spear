@@ -244,7 +244,7 @@ def _format_doctor(local: LocalDoctorReport,
                     "source_model_revision", "environment_fingerprint",
                     "axolotl_available",
                     "axolotl_version", "package", "disk_available_kib",
-                    "training_root", "qwen3_next_compatibility"):
+                    "training_root"):
             if key in checks:
                 value = checks[key]
 

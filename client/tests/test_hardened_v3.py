@@ -27,7 +27,7 @@ from tests.test_spear_envelope import SANDBOX
 
 POLICY = CommandPolicy()
 
-# The command Coder-Next ran at step 78 of sye-uboot-patch/3, its paths
+# The command the model ran at step 78 of sye-uboot-patch/3, its paths
 # shortened: refused as a heredoc and as a script, it ran as `python3 -c`.
 
 OBSERVED = (

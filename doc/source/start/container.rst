@@ -58,6 +58,23 @@ Only ``scripts/`` goes on ``PATH``.  ``scripts/docker/`` holds a ``build.sh``,
 and a shell that has also sourced another tree's ``env.sh`` with a
 ``build.sh`` of its own would then have two.
 
+A workstation for the REDS project image
+----------------------------------------
+
+On a machine that only runs the image, one script does everything once: it
+trusts the REDS registry's certificate, logs in, pulls the project image,
+installs the ``spear`` launcher and writes ``~/.config/spear/local.conf``.
+
+.. code-block:: console
+
+   $ . ./env.sh                       # puts scripts/ on PATH
+   $ spear-client-setup.sh            # asks for the registry's pull password
+
+The pull password is not in the repository; ask for it, then type it when
+asked or give it in ``SPEAR_REGISTRY_PASSWORD``.  Run the script again to
+update the image.  ``spear-chat`` also needs your ``~/.ssh/id_ed25519.pub``
+on the inference host.
+
 Base and project: get and update
 ---------------------------------
 

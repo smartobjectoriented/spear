@@ -109,6 +109,36 @@ _POLITE_REQUEST = re.compile(
 
 _SENTENCE = re.compile(r"[^.?!\n]+(?:[.?!]+|$)")
 
+# The verbs the write pattern lists are also nouns. After a determiner or a
+# hardware noun they name a thing, not an order: "down to the GIC register
+# write" was read as "write", and an explanation turn was sent back to edit
+# the tree.
+_NOUN_USE = re.compile(
+    r"\b(?:a|an|the|this|that|these|those|each|every|one|single|its|their|"
+    r"register|memory|mmio|atomic|posted|pending|partial|byte|word|disk|"
+    r"buffered|last|first|next|previous)\s+"
+    r"(?:writes?|updates?|fix(?:es)?|patch(?:es)?|edits?|moves?|adds?|"
+    r"removes?|deletes?)\b",
+    re.I)
+
+
+# "apply the fix", "make these changes": there the noun is what is asked for.
+_ACTION_BEFORE = re.compile(
+    r"\b(?:do|make|apply|carry\s+out|perform)\s+(?:all\s+)?(?:\w+\s+){0,2}$", re.I)
+
+
+def without_noun_uses(text):
+    """`text` with the write verbs that are used as nouns taken out."""
+    text = text or ""
+
+    def drop(match):
+        if _ACTION_BEFORE.search(text[:match.start()]):
+            return match.group(0)
+
+        return match.group(0).split()[0]
+
+    return _NOUN_USE.sub(drop, text)
+
 
 def sentences(text):
     """The message cut into sentences; a question keeps its mark."""
@@ -138,7 +168,7 @@ def mutation_intent(text, write_pattern, *, answered=False):
     A sentence only counts toward "write" when it is not itself advisory:
     "Could we add a flag?" contains `add` and asks nothing to be added.
     """
-    items = sentences(text)
+    items = sentences(without_noun_uses(text))
     advisory = False
 
     for item in items:

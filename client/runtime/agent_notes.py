@@ -436,7 +436,7 @@ def is_write_request(question: str) -> bool:
     if intent != "unknown":
         return intent == "write"
 
-    return bool(_WRITE_REQUEST_RE.search(question or ""))
+    return bool(_WRITE_REQUEST_RE.search(request_intent.without_noun_uses(question)))
 
 
 def may_demand_write(context) -> bool:

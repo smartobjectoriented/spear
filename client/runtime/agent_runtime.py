@@ -91,6 +91,25 @@ WRITE_REDIRECT_SPACING = int(os.environ.get("SPEAR_WRITE_REDIRECT_SPACING", "6")
 # established and its diff does not account for.
 CLAUSE_REDIRECT_LIMIT = int(os.environ.get("SPEAR_CLAUSE_REDIRECTS", "3"))
 
+# A turn that stalls having only searched is sent once to the files.
+READ_REDIRECT_LIMIT = int(os.environ.get("SPEAR_READ_REDIRECTS", "1"))
+
+_FILE_READ_TOOLS = frozenset({"bash", "terminal", "read_file", "search_files"})
+
+READ_DEMAND = (
+    "The searches keep returning the same pages, and no file has been opened "
+    "this turn. Stop searching. Open the files those results point to -- the "
+    "configuration, the source, the paths they name -- with read_file or "
+    "cat/sed -n/grep -n, and answer from what the files say, citing path:line. "
+    "Do not call search_corpus or standard.* again this turn.")
+
+
+def retrieval_only(tool_log):
+    """Whether every call this turn was a search and none opened a file."""
+    names = [entry.split(" ", 1)[0] for entry in tool_log]
+
+    return bool(names) and not any(name in _FILE_READ_TOOLS for name in names)
+
 
 class AgentRuntime(CodingCoreMixin, FinalizationMixin, ModelTurnMixin,
                    RecordingMixin):
@@ -152,6 +171,7 @@ class AgentRuntime(CodingCoreMixin, FinalizationMixin, ModelTurnMixin,
         order_remaining = None
         build_reprompts = 0
         clause_reprompts = 0
+        read_reprompts = 0
         did_modify = nudged = verify_reprompts = budget_event_emitted = False
         only_tools: tuple[str, ...] | None = None
         wrap_up_warned = landed = False
@@ -1340,6 +1360,28 @@ class AgentRuntime(CodingCoreMixin, FinalizationMixin, ModelTurnMixin,
                              "after": "stall"},
                         )
 
+                        continue
+
+                    # A question answered from search results alone: the
+                    # micro5 E-stop turn ran search_corpus eighteen times on
+                    # the same two doc pages, never opened the HAL file or the
+                    # source they named, and ended saying it had verified
+                    # nothing. The way out is to read, so offer only that.
+
+                    if (read_reprompts < READ_REDIRECT_LIMIT
+                            and retrieval_only(tool_log)):
+                        read_reprompts += 1
+                        reason = RuntimeTerminalReason.COMPLETED
+                        context.progress_monitor.record_progress(
+                            "read redirect")
+                        context.conversation.append(ConversationMessage(
+                            "user", (TextBlock(READ_DEMAND),),
+                            authored_by="harness"))
+                        only_tools = tuple(
+                            tool.name for tool in (context.tools or ())
+                            if tool.name in _FILE_READ_TOOLS)
+                        context.observer.notice(
+                            "retrieval_loop", {"tool_calls": len(tool_log)})
                         continue
 
                     # Nothing above took the turn back. Say so, and say what

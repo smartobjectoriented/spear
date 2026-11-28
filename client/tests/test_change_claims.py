@@ -150,7 +150,11 @@ class CompletionClaimTests(unittest.TestCase):
     def test_describing_what_the_code_does_is_not_a_claim(self):
         for text in ("cmdWireEncodeAck is implemented in command_wire.c.",
                      "The standard requires that AckV be set in command_wire.c.",
-                     "doc/ack-task.md describes the change to make."):
+                     "doc/ack-task.md describes the change to make.",
+                     # A mux explanation, verbatim: run-time data, not work.
+                     "It returns (mux.c:69). The output pins keep whatever "
+                     "value was last written by the previous valid period.",
+                     "Each sample was written into the FIFO by streamer.c."):
             with self.subTest(text=text):
                 self.assertEqual("", unsupported_change_claim(text, READS, False))
 

@@ -293,6 +293,15 @@ _CHANGE_CLAIM_RE = re.compile(
     re.I)
 _FILE_TOKEN_RE = re.compile(r"[\w./-]+\.[A-Za-z]\w{0,4}\b")
 
+# A passive whose subject is run-time data describes what the code does, not
+# what the turn did: "the outputs keep whatever value was last written by the
+# previous period" flagged a read-only explanation of a multiplexer.
+_RUNTIME_SUBJECT_RE = re.compile(
+    r"\b(?:values?|pins?|samples?|data|bytes?|bits?|registers?|frames?"
+    r"|words?|messages?|buffers?|flags?|counters?|packets?|entries|entry"
+    r"|elements?|records?|set-?points?|outputs?|inputs?|signals?)\W*$",
+    re.I)
+
 # The mirror image of _CHANGE_CLAIM_RE: not "I updated the file" but "I'll
 # update the file". One reports a write that did not happen; the other
 # promises one and stops.
@@ -562,6 +571,18 @@ def make_it_demand(text: str) -> str:
     )
 
 
+def _reports_a_change(text):
+    """Whether the text reports a write, the first person always counting."""
+    for match in _CHANGE_CLAIM_RE.finditer(text):
+        if match.group(0).lower().startswith("i "):
+            return True
+
+        if not _RUNTIME_SUBJECT_RE.search(text[max(0, match.start() - 40):match.start()]):
+            return True
+
+    return False
+
+
 def unsupported_change_claim(text: str, tool_log: Sequence[str],
                              did_modify: bool) -> str:
     """A note to append when the answer claims a write the turn never made.
@@ -583,7 +604,7 @@ def unsupported_change_claim(text: str, tool_log: Sequence[str],
     if any(entry.split(" ", 1)[0] in _WRITE_TOOLS for entry in tool_log):
         return ""
 
-    if not _CHANGE_CLAIM_RE.search(text) or not _FILE_TOKEN_RE.search(text):
+    if not _reports_a_change(text) or not _FILE_TOKEN_RE.search(text):
         return ""
 
     return ("\n\n⚠ Nothing was written this turn: no file was created or "

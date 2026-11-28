@@ -94,6 +94,12 @@ class AnInventedIdentifierIsRejected(unittest.TestCase):
 
         self.assertEqual(nc.identifier_findings(prose, evidence(REQUIRE_ONE)), [])
 
+    def test_a_size_unit_is_not_an_identifier(self):
+        """KiB and GiB have a field name's shape; they are units."""
+        prose = "The FIP sits at 256 KiB in a 64 MiB flash; the guest gets 1 GiB."
+
+        self.assertEqual(nc.identifier_findings(prose, evidence(REQUIRE_ONE)), [])
+
     def test_project_metadata_may_ground_an_identifier(self):
         found = nc.identifier_findings("The GadgetX register is read.",
                                        evidence(REQUIRE_ONE),

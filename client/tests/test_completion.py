@@ -213,6 +213,29 @@ class TheCoreStatesNoSampling(unittest.TestCase):
         self.assertEqual(sent["max_tokens"], 65536)
         self.assertEqual(sent["timeout"], 1800.0)
 
+    def test_a_stream_cut_mid_answer_fails_the_turn(self):
+        import httpx
+        from models.model_backend import complete_raw_messages
+
+        def cut():
+            yield SimpleNamespace(usage=None, choices=[])
+            raise httpx.RemoteProtocolError("peer closed connection")
+
+        class Completions:
+            calls = 0
+
+            def create(self, **kwargs):
+                Completions.calls += 1
+                return cut()
+
+        client = SimpleNamespace(chat=SimpleNamespace(completions=Completions()))
+        turn = complete_raw_messages(client, model="qwen3",
+                                     messages=[{"role": "user", "content": "x"}],
+                                     tools=[], max_tokens=64, sleep=lambda _: None)
+
+        self.assertIn("RemoteProtocolError", turn.error)
+        self.assertEqual(Completions.calls, 3)
+
 class AProbedMakefileIsNotAPromiseOfTests(unittest.TestCase):
     def probe(self, makefile):
         root = tempfile.mkdtemp()

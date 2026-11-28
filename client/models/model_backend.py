@@ -16,6 +16,7 @@ from dataclasses import dataclass
 from enum import StrEnum
 from typing import Callable, Literal, Mapping, Protocol, Sequence
 
+import httpx
 from openai import APIConnectionError, APIStatusError, APITimeoutError
 
 
@@ -319,40 +320,44 @@ class OpenAICompatibleBackend:
 
         text, calls, finish_reason = [], {}, None
 
-        for chunk in stream:
-            if not getattr(chunk, "choices", None):
-                continue
+        try:
+            for chunk in stream:
+                if not getattr(chunk, "choices", None):
+                    continue
 
-            choice = chunk.choices[0]
-            finish_reason = getattr(choice, "finish_reason", None) or finish_reason
-            delta = getattr(choice, "delta", None)
+                choice = chunk.choices[0]
+                finish_reason = getattr(choice, "finish_reason", None) or finish_reason
+                delta = getattr(choice, "delta", None)
 
-            if delta is None:
-                continue
+                if delta is None:
+                    continue
 
-            if getattr(delta, "content", None):
-                text.append(delta.content)
+                if getattr(delta, "content", None):
+                    text.append(delta.content)
 
-                if on_token:
-                    on_token()
+                    if on_token:
+                        on_token()
 
-            for tool_delta in getattr(delta, "tool_calls", None) or ():
-                item = calls.setdefault(tool_delta.index, {"id": None, "name": "", "arguments": []})
+                for tool_delta in getattr(delta, "tool_calls", None) or ():
+                    item = calls.setdefault(tool_delta.index, {"id": None, "name": "", "arguments": []})
 
-                if getattr(tool_delta, "id", None):
-                    item["id"] = tool_delta.id
+                    if getattr(tool_delta, "id", None):
+                        item["id"] = tool_delta.id
 
-                function = getattr(tool_delta, "function", None)
+                    function = getattr(tool_delta, "function", None)
 
-                if function is not None:
-                    if getattr(function, "name", None):
-                        item["name"] += function.name
+                    if function is not None:
+                        if getattr(function, "name", None):
+                            item["name"] += function.name
 
-                    if getattr(function, "arguments", None):
-                        item["arguments"].append(function.arguments)
+                        if getattr(function, "arguments", None):
+                            item["arguments"].append(function.arguments)
 
-                if on_token:
-                    on_token()
+                    if on_token:
+                        on_token()
+        except (APIConnectionError, APITimeoutError, httpx.TransportError) as exc:
+            return ModelTurn("".join(text), (), StopReason.ERROR,
+                             error=f"{type(exc).__name__}: {exc}")
 
         canonical_calls: list[ModelToolCall] = []
 
@@ -481,7 +486,11 @@ def complete_raw_messages(client, *, model: str, messages, tools, max_tokens: in
                 return RawTurn("", (), None, error=f"HTTP {exc.status_code}: {exc}")
 
             failure = f"HTTP {exc.status_code}: {exc}"
-        except (APIConnectionError, APITimeoutError) as exc:
+        except (APIConnectionError, APITimeoutError, httpx.TransportError) as exc:
+            # The SDK wraps transport errors raised when the request is sent,
+            # not those raised while the stream is read: a connection cut
+            # mid-answer surfaces as a bare httpx error.
+
             failure = f"{type(exc).__name__}: {exc}"
 
         attempt += 1

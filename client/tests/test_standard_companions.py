@@ -153,6 +153,17 @@ class Tools(_Store):
         cited = self.execute("standard.cite", {"source_id": source_id})
         self.assertTrue(cited.success, cited.text)
 
+    def test_a_revision_alone_names_the_standard_that_carries_it(self):
+        payload = self.search(query="doorbell register", revision="C-1")
+
+        self.assertTrue(payload["results"])
+        self.assertEqual({item["standard_id"] for item in payload["results"]}, {"CTRL-STD"})
+
+    def test_a_revision_no_bound_standard_carries_is_denied(self):
+        denied = self.execute("standard.search", {"query": "doorbell", "revision": "X-9"})
+
+        self.assertFalse(denied.success)
+
     def test_a_standard_that_is_not_bound_is_denied(self):
         denied = self.execute("standard.search", {"query": "doorbell",
                                                   "standard_id": "NOT-BOUND"})

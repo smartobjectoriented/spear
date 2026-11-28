@@ -519,6 +519,16 @@ def _binding(context: ToolExecutionContext, arguments: Mapping[str, object]) -> 
 
     revision = arguments.get("revision")
 
+    # A revision alone names the bound standard that carries it: "H.b" is
+    # the companion's, and comparing it with the active standard's refused
+    # a correct call until the turn looped on it.
+
+    if wanted is None and revision is not None:
+        carrying = [item for item in bindings if item.revision == revision]
+
+        if len(carrying) == 1:
+            binding = carrying[0]
+
     if revision is not None and revision != binding.revision:
         raise PermissionError(
             f"requested revision does not equal the active StandardBinding of "

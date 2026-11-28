@@ -411,6 +411,9 @@ class CliRuntimeObserver:
         elif kind == "identical_result":
             print(f"  {C_DIM}↪ {metadata.get('tool')} returned a result "
                   f"already seen this turn — saying so{C_RST}")
+        elif kind == "retrieval_loop":
+            print(f"  {C_DIM}↪ only searches so far — sending it to the "
+                  f"files{C_RST}")
         elif kind == "stalled_without_redirect":
             spent = metadata.get("redirects_spent", {})
             print(f"  {C_DIM}↪ looping and nothing sent it back "

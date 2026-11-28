@@ -1900,3 +1900,43 @@ class RefusalNoteTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ASearchOnlyStallIsSentToTheFiles(unittest.TestCase):
+    """The micro5 E-stop turn: eighteen search_corpus calls on the same two
+    doc pages, no file opened, then "I could not check"."""
+
+    WALL = "doc/source/components/plc/plc_micro5.rst: Emergency stop\n" * 30
+
+    def test_the_turn_is_told_to_open_the_files(self):
+        from runtime.agent_runtime import READ_DEMAND
+
+        backend = ScriptedBackend(
+            [tool_turn(str(i), "search_corpus", query=f"estop micro5 {i}")
+             for i in range(8)]
+            + [tool_turn("r", "bash", command="cat micro5.hal")]
+            + [text_turn("plc.micro5.stop-operation is not connected.")] * 3)
+        observer = RecordingObserver()
+        context = make_context(
+            backend, executor=GroundedToolExecutor([self.WALL] * 8 + ["net x"]),
+            observer=observer, rounds=20, actions=20,
+            conversation=(ConversationMessage(
+                "user", (TextBlock("explain what the E-stop does"),)),))
+        context.tools = (ToolDefinition("bash", "run", {"type": "object"}),
+                         ToolDefinition("search_corpus", "search",
+                                        {"type": "object"}))
+        AgentRuntime().run(context)
+
+        kinds = [kind for kind, _ in observer.notices]
+        self.assertIn("retrieval_loop", kinds)
+        self.assertNotIn("stalled_without_redirect", kinds)
+        self.assertTrue(any(
+            READ_DEMAND in getattr(block, "text", "")
+            for message in context.conversation for block in message.content))
+
+    def test_a_turn_that_read_a_file_is_not_redirected(self):
+        from runtime.agent_runtime import retrieval_only
+
+        self.assertTrue(retrieval_only(["search_corpus {}\nx", "standard.search {}\ny"]))
+        self.assertFalse(retrieval_only(["search_corpus {}\nx", "bash {}\ny"]))
+        self.assertFalse(retrieval_only([]))

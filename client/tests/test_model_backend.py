@@ -150,6 +150,19 @@ class OpenAICompatibleBackendTests(unittest.TestCase):
         self.assertEqual(turn.tool_calls, ())
         self.assertIn("invalid JSON", turn.error)
 
+    def test_a_stream_cut_mid_answer_is_a_failed_turn(self):
+        import httpx
+
+        def cut():
+            yield chunk(content="partial")
+            raise httpx.RemoteProtocolError("peer closed connection")
+
+        turn = OpenAICompatibleBackend(FakeClient([cut()])).complete(
+            system="s", conversation=self.conversation, tools=[self.tool], use_tools=True
+        )
+        self.assertEqual(turn.stop_reason, StopReason.ERROR)
+        self.assertIn("RemoteProtocolError", turn.error)
+
     def test_a_written_tool_call_stays_text(self):
         """Only a call the API returns as one is a call. Recovered from the
         text, these ran searches on a turn that had been offered no tool."""

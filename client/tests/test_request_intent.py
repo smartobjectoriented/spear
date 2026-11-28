@@ -106,5 +106,29 @@ class InTheLoop(unittest.TestCase):
         self.assertEqual(len(context.backend.calls), 1)
 
 
+
+class AWriteVerbUsedAsANoun(unittest.TestCase):
+    """"the GIC register write" names a thing; it asks for nothing."""
+
+    def setUp(self):
+        from runtime.agent_notes import is_write_request
+
+        self.is_write = is_write_request
+
+    def test_an_explanation_naming_a_write_is_not_a_request(self):
+        for text in ("Explain how an IPI goes from the caller down to the GIC "
+                     "register write, and how CPU #1 handles it.",
+                     "Why is the write to ICC_SGI1R_EL1 followed by an isb?",
+                     "Explain the fix in commit abc."):
+            with self.subTest(text=text):
+                self.assertFalse(self.is_write(text))
+
+    def test_the_noun_asked_for_is_still_a_request(self):
+        for text in ("apply the fix", "Fix the register write in gic_send_sgi.",
+                     "make all the required minor fixes", "Please apply this patch.",
+                     "Write a test for gic_send_sgi."):
+            with self.subTest(text=text):
+                self.assertTrue(self.is_write(text))
+
 if __name__ == "__main__":
     unittest.main()

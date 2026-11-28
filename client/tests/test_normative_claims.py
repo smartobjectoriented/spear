@@ -291,6 +291,25 @@ class TheGateWithholdsRatherThanShows(unittest.TestCase):
         self.assertEqual(nc.principal(answer), "Yes, it may.")
 
 
+
+class ADeniedForceIsNotClaimed(unittest.TestCase):
+    """"there is no requirement" asserts the absence of one."""
+
+    def test_a_force_word_the_sentence_denies_claims_nothing(self):
+        for sentence in ("No edit is made: there is no requirement to satisfy.",
+                         "A barrier is not required.",
+                         "The PE does not have to issue a DSB."):
+            with self.subTest(sentence=sentence):
+                self.assertIsNone(nc.claim_level(sentence))
+
+    def test_a_prohibition_is_still_a_requirement(self):
+        self.assertEqual(nc.claim_level("The Controllee must not send an ACK."),
+                         nc.REQUIREMENT)
+
+    def test_the_next_undenied_word_is_the_claim(self):
+        self.assertEqual(nc.claim_level("It is not mandatory, but the PE should issue a DSB."),
+                         nc.RECOMMENDATION)
+
 if __name__ == "__main__":
     unittest.main()
 

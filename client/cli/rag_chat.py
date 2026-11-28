@@ -55,7 +55,10 @@ from evidence import project_build
 from standard.standard_commands import (
     StandardCommandError, handle_standard_command, standard_help_lines,
 )
-from cli import corpus_search, model_io, session_workspace, standard_session
+from cli import (
+    conversation_sessions, corpus_search, model_io, session_workspace,
+    standard_session,
+)
 from cli.chat_settings import (
     APP_DIR, CHECKPOINT_ROOT, CONTEXT_ENGINE, LEARNED_RULES_FILE,
     LLAMA_SERVER_URL, RESULT_STORE, RULES_BUDGET, SESSION_STORE,
@@ -90,7 +93,8 @@ from cli.reply_edits import (
 )
 from cli.session_history import (
     HISTORY_INJECT, MAX_HISTORY, TRAJECTORY_FILE, archive_entry,
-    load_history, save_experience, save_history, save_trajectory,
+    fresh_session, load_history, save_experience, save_history,
+    save_trajectory,
 )
 from cli.session_workspace import (
     command_result_text, extra_roots_note, is_excluded_path,
@@ -219,6 +223,83 @@ def corpus_prompt():
     return system_instructions, system_source, global_rules, project_rules
 
 
+def reset_conversation_state():
+    """Forget what the last answer engaged: the turn a follow-up would refer
+    back to is gone with the history (/clear) or belongs to another
+    conversation (/session switch)."""
+    standard_session.STANDARD_ENGAGED_BEFORE = False
+    standard_session.STANDARD_PRIOR_CLAUSES = ()
+    standard_session.STANDARD_PRIOR_ANSWER = ""
+    standard_session.STANDARD_PRIOR_REQUIREMENTS = requirement_set.RequirementSet()
+
+
+def use_conversation(name, lock):
+    """Point the history at conversation `name` and hold its lock."""
+    path = conversation_sessions.history_file(
+        session_workspace.DEFAULT_HISTORY_FILE, name)
+    lock.acquire(path)
+    session_workspace.CONVERSATION = name
+    session_workspace.HISTORY_FILE = path
+
+
+def session_command(argument, history, lock):
+    """/session: list, create, switch to or remove a named conversation.
+
+    Returns the history to continue with.
+    """
+    words = argument.split()
+    action = words[0] if words else "list"
+    name = words[1] if len(words) == 2 else None
+    current = session_workspace.CONVERSATION
+    default_file = session_workspace.DEFAULT_HISTORY_FILE
+
+    try:
+        if action == "list" and len(words) <= 1:
+            print("\n".join(conversation_sessions.summary_lines(
+                default_file, current, lock)) + "\n")
+
+            return history
+
+        if action in ("new", "switch") and len(words) == 2:
+            target = None if name == "default" else name
+            path = conversation_sessions.history_file(default_file, target)
+
+            if action == "new" and os.path.exists(path):
+                raise conversation_sessions.ConversationError(
+                    f"session {name} exists: /session switch {name}")
+
+            if (action == "switch" and target not in (current, None)
+                    and not os.path.exists(path)
+                    and not conversation_sessions.ConversationLock.held_elsewhere(path)):
+                raise conversation_sessions.ConversationError(
+                    f"no session named {name}: /session new {name}")
+
+            save_history(history)
+            use_conversation(target, lock)
+            reset_conversation_state()
+            history = load_history()
+
+            if not os.path.exists(path):
+                save_history(history)
+
+            print(f"Session {conversation_sessions.describe(target)}: "
+                  f"{len(history)} messages.\n")
+
+            return history
+
+        if action == "rm" and len(words) == 2:
+            conversation_sessions.remove(default_file, name, current)
+            print(f"Session {name} removed.\n")
+
+            return history
+
+        print(conversation_sessions.USAGE + "\n")
+    except conversation_sessions.ConversationError as exc:
+        print(f"{C_ERR}/session: {exc}{C_RST}\n")
+
+    return history
+
+
 def main():
     global TRACE_PROVIDER, TRACE_MODEL
 
@@ -231,6 +312,16 @@ def main():
 
     banner_art()
     set_project(resolve_project_at_startup())
+    conversation_lock = conversation_sessions.ConversationLock()
+
+    if not fresh_session():
+        try:
+            conversation_lock.acquire(session_workspace.HISTORY_FILE)
+        except conversation_sessions.ConversationError as exc:
+            print(f"{C_ERR}session "
+                  f"{conversation_sessions.describe(session_workspace.CONVERSATION)}"
+                  f": {exc}{C_RST}")
+            return
 
     # Where /cd resolves a relative path from: the directory it last entered.
 
@@ -521,8 +612,19 @@ def main():
                       f"session was launched — relaunch spear there{C_RST}\n")
             else:
                 save_history(history)
-                focus = target
+                previous = dict(session_workspace.PROJECT_SPEC)
                 set_project(corpus_at(target))
+
+                if not fresh_session():
+                    try:
+                        conversation_lock.acquire(session_workspace.HISTORY_FILE)
+                    except conversation_sessions.ConversationError as exc:
+                        set_project(previous)
+                        print(f"{C_ERR}/cd: {exc}{C_RST}\n")
+
+                        continue
+
+                focus = target
                 (system_instructions, system_source,
                  global_rules, project_rules) = corpus_prompt()
                 base_prompt = system_instructions + global_rules + project_rules + TOOL_GUIDE
@@ -569,14 +671,18 @@ def main():
         if user_input in ("/clear", "/new"):
             history = []
             save_history(history)
-
-            # The turn a follow-up would refer back to is gone with it.
-
-            standard_session.STANDARD_ENGAGED_BEFORE = False
-            standard_session.STANDARD_PRIOR_CLAUSES = ()
-            standard_session.STANDARD_PRIOR_ANSWER = ""
-            standard_session.STANDARD_PRIOR_REQUIREMENTS = requirement_set.RequirementSet()
+            reset_conversation_state()
             print("History cleared.\n")
+
+            continue
+
+        if user_input == "/session" or user_input.startswith("/session "):
+            if fresh_session():
+                print(f"{C_ERR}/session: a --fresh session keeps no "
+                      f"history{C_RST}\n")
+            else:
+                history = session_command(user_input[len("/session"):],
+                                          history, conversation_lock)
 
             continue
 
@@ -1286,6 +1392,7 @@ def main():
                 "data_origin": os.environ.get(
                     "SPEAR_TRAINING_DATA_ORIGIN", "NORMAL_USAGE",
                 ).upper(),
+                "conversation": session_workspace.CONVERSATION,
                 "user_input_chars": len(user_input),
                 "raw_content_recorded": False,
             },

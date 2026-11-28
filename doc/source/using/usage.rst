@@ -108,7 +108,7 @@ Direct tools, no model in the loop:
 Session commands:
 
    ``/search <q>`` ``/reindex`` ``/history`` ``/skills`` ``/undo``
-   ``/clear`` (``/new``) ``/tools`` ``/model`` (``/switch``)
+   ``/clear`` (``/new``) ``/session`` ``/tools`` ``/model`` (``/switch``)
 
 ``/model`` (or ``/switch``)
    Change backend or model without leaving the session.
@@ -117,6 +117,17 @@ Session commands:
    Start a fresh conversation. The corpus, its :term:`workspace knowledge` and its index
    are unaffected; only the conversation is dropped, from the store as well. To
    start one session without it and keep it for later, launch with ``--fresh``.
+
+``/session [list|new <name>|switch <name>|rm <name>]``
+   Named conversations on the same corpus. Each keeps its own history beside
+   the default one, so a second line of work does not overwrite the first.
+   ``spear-chat --session <name>`` opens one from the start, and
+   ``switch default`` returns to the unnamed one. A conversation is open in
+   one spear-chat at a time: a second process, in another terminal or another
+   container on the same state directory, is refused it and told to pick
+   another, which is how two sessions run side by side on one tree. A switch
+   drops what the previous answer engaged, as ``/clear`` does. Training
+   episodes record the conversation's name in their provenance.
 
 ``/corpus [list|add|rm|scan]``
    The registry, without leaving the session.  Registering does not switch

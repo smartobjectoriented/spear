@@ -408,6 +408,7 @@ class TrainingRecorder:
                  provider: str | None = None, model: str | None = None,
                  generation_config: Mapping[str, object] | None = None,
                  harness_commit: str | None = None,
+                 conversation: str | None = None,
                  redaction_policy: TrainingRedactionPolicy | None = None,
                  standard_binding: Mapping[str, object] | None = None) -> None:
         self.store = store
@@ -422,6 +423,7 @@ class TrainingRecorder:
         self.model = model
         self.generation_config = dict(generation_config or {})
         self.harness_commit = harness_commit
+        self.conversation = conversation
         self.redaction_policy = redaction_policy or TrainingRedactionPolicy.from_environment()
         self.standard_binding = dict(standard_binding) if standard_binding else None
         self.turns: list[TrainingTurn] = []
@@ -704,6 +706,7 @@ class TrainingRecorder:
             "provenance": {
                 "harness_git_commit": self.harness_commit,
                 "project": self.project, "data_origin": self.data_origin,
+                "conversation": self.conversation,
                 "workspace_fingerprint": workspace_fingerprint,
                 "model_backend": self.provider, "model": self.model,
                 "generation_configuration": self.generation_config,

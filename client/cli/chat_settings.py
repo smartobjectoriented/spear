@@ -44,6 +44,9 @@ ENV_OPTIONS = {
     # tools: one records what the model said, the other hands it back for
     # free so a harness change can be judged without paying for the model
     # twice.
+    "--session": ("SPEAR_SESSION",
+                  "open this named conversation of the corpus instead of its "
+                  "default one; each is held by one spear-chat at a time"),
     "--record": ("SPEAR_RECORD_TURNS",
                  "record this session's model turns to a file"),
     "--replay": ("SPEAR_REPLAY_TURNS",

@@ -82,6 +82,12 @@ _CLAIM = (
         r"\b(?:may|can|permitted|allowed|optional|is able to)\b", re.I)),
 )
 
+#: A force word the sentence denies: "there is no requirement", "is not
+#: required", "does not require". That claims the absence of the force, not
+#: the force. A negation AFTER the word ("must not", "shall not") is a
+#: prohibition and still a requirement, so only what comes before is read.
+_DENIED_FORCE = re.compile(r"(?:\b(?:no|not|never|without)|n't)\W+(?:\w+\W+)?$", re.I)
+
 #: "<Provision X> ... is a binding requirement" -- a claim about what a NAMED
 #: provision is, rather than a claim the provision supports. Deliberately
 #: tight: the force word must follow the citation closely and in the same
@@ -437,7 +443,8 @@ def claim_level(sentence, question=""):
     spoken = None
 
     for level, pattern in _CLAIM:
-        if pattern.search(sentence or ""):
+        if any(not _DENIED_FORCE.search((sentence or "")[:match.start()])
+               for match in pattern.finditer(sentence or "")):
             spoken = level
             break
 

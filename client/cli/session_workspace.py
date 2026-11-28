@@ -20,6 +20,7 @@ from harness.workspace import SandboxSpec, Workspace, effective_mount_root
 from harness import attach_control, provenance, target_policy, write_protection
 from runtime.tracing import EventStatus, EventType, new_action_id
 from cli.chat_settings import AUDIT_LOGGER, STATE_DIR
+from cli import conversation_sessions
 from cli.corpus_registry import load_projects
 from cli.terminal_ui import C_ACCENT, C_BOLD, C_DIM, C_RST, tool_result
 
@@ -124,7 +125,8 @@ def set_project(spec):
       always operate on the current tree the user launched in, so an
       edit/bash can never touch the wrong checkout."""
     global PROJECT, PROJECT_ROOT, CORPUS_ROOT, PROJECT_KIND, WORKSPACE
-    global COLLECTION_NAME, HISTORY_FILE, MEMORIES_FILE, PROJECT_SPEC
+    global COLLECTION_NAME, HISTORY_FILE, DEFAULT_HISTORY_FILE, MEMORIES_FILE
+    global PROJECT_SPEC
 
     # The resolved spec, kept because it is not always IN projects.json: an
     # umbrella session is synthesised from what sits under the cwd, and looking
@@ -179,7 +181,9 @@ def set_project(spec):
 
     tag = hashlib.md5(CORPUS_ROOT.encode()).hexdigest()[:8]
     COLLECTION_NAME = spec.get("collection") or f"adhoc_{tag}"
-    HISTORY_FILE = f"{STATE_DIR}/history-adhoc-{tag}.json"
+    DEFAULT_HISTORY_FILE = f"{STATE_DIR}/history-adhoc-{tag}.json"
+    HISTORY_FILE = conversation_sessions.history_file(DEFAULT_HISTORY_FILE,
+                                                      CONVERSATION)
     MEMORIES_FILE = f"{STATE_DIR}/memories-adhoc-{tag}.md"
 
     # One explicit memory store, named. The benchmark needs to hand a run its
@@ -191,6 +195,14 @@ def set_project(spec):
 
 
 PROJECT_SPEC = {}
+
+# The conversation this process holds, None for the corpus's default one.
+
+try:
+    CONVERSATION = conversation_sessions.validate_name(
+        os.environ.get("SPEAR_SESSION", "").strip() or None)
+except conversation_sessions.ConversationError as exc:
+    raise SystemExit(f"--session: {exc}") from None
 
 # Bound at import for piped/module use; re-resolved in main() for the CLI.
 # The current directory, because that is the one thing true of every

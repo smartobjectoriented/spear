@@ -339,6 +339,9 @@ class TaskController:
                 provider=context.provider, model=context.model,
                 generation_config=generation,
                 harness_commit=discover_git_commit(os.path.dirname(__file__)),
+                conversation=(str(context.task_trace_metadata.get("conversation"))
+                              if context.task_trace_metadata.get("conversation")
+                              else None),
                 standard_binding=context.standard_binding,
             )
 

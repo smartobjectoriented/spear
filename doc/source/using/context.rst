@@ -86,7 +86,8 @@ Practical consequences
 * To compare, say so. A comparison is a MIXED question and is given both sides.
 * ``/clear`` starts a fresh conversation when a session has drifted far from
   what you now want to ask; ``spear-chat --fresh`` starts a session without
-  the stored conversation and leaves it for later.
+  the stored conversation and leaves it for later. ``/session new <name>``
+  keeps both: it starts another conversation and leaves this one as it is.
 * ``/history`` shows what the session is carrying.
 
 .. seealso::

@@ -53,6 +53,16 @@ class SafeModeReadOnlyShellTests(unittest.TestCase):
                         "cat a.txt | wc -l"):
             self.assertTrue(self._granted(command, ExecutionMode.SAFE), command)
 
+    def test_an_arrow_inside_quotes_is_not_a_redirection(self):
+        for command in ('grep -rn "chip->send_ipi" a.txt | head',
+                        "grep -n 'dev->ops' a.txt",
+                        'sed -n 1,2p a.txt; grep -rn "x\\|p->q" a.txt | head'):
+            self.assertTrue(self._granted(command, ExecutionMode.SAFE), command)
+
+    def test_a_quoted_redirection_target_is_still_a_write(self):
+        for command in ('echo "->" > "out.txt"', "echo hi >'q.txt'"):
+            self.assertFalse(self._granted(command, ExecutionMode.SAFE), command)
+
     def test_writing_pipelines_are_still_refused_in_safe(self):
         for command in ("echo x > a.txt",
                         "cat a.txt | tee copy.txt",

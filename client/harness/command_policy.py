@@ -31,6 +31,33 @@ from harness.workspace import SandboxSpec, Workspace, effective_mount_root
 _FD_DUPLICATE = re.compile(r"[<>]&(?:\d+|-)(?![\w./])")
 
 
+def _mask_quoted(command: str) -> str:
+    """`command` with the inside of every quoted string blanked out.
+
+    Lengths are kept, so a match found in the result spans the same text in
+    `command`.
+    """
+
+    out, quote, escaped = [], None, False
+
+    for char in command:
+        if quote is None:
+            out.append(char)
+
+            if char in "'\"" and not escaped:
+                quote = char
+
+            escaped = char == "\\" and not escaped
+        elif char == quote and not (quote == '"' and escaped):
+            out.append(char)
+            quote, escaped = None, False
+        else:
+            out.append(" ")
+            escaped = quote == '"' and char == "\\" and not escaped
+
+    return "".join(out)
+
+
 @dataclass(frozen=True)
 class CommandAssessment:
     command: str
@@ -881,8 +908,18 @@ class CommandPolicy:
                   for match in cls._LITERAL_ASSIGNMENT.finditer(command)}
         found = []
 
-        for match in re.finditer(r"(?<![=])\d*>{1,2}\|?(&?)\s*([^\s;|&()<>]*)", command):
-            duplicate, target = match.groups()
+        # A `>` inside quotes is text, not an operator: `grep "chip->ops"`
+        # read as a redirection to `ops"` cost a read-only search the tree.
+
+        for match in re.finditer(r"(?<![=])\d*>{1,2}\|?(&?)\s*([^\s;|&()<>]*)",
+                                 _mask_quoted(command)):
+            duplicate, _ = match.groups()
+            start, end = match.span(2)
+
+            if command[start:start + 1] in ("'", '"'):
+                end = command.find(command[start], start + 1) + 1 or len(command)
+
+            target = command[start:end].strip("'\"")
 
             if duplicate and re.fullmatch(r"\d+|-", target):
                 continue

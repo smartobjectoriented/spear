@@ -199,6 +199,9 @@ _BUILTIN_NOT_IDENTIFIERS = frozenset({
     "NO", "AND", "OR", "NOT", "THE", "ALL", "ANY", "ONE", "TWO", "MAY",
     "SHALL", "SHOULD", "MUST", "RULE", "SECTION", "TABLE", "FIGURE", "ANSI",
     "IEEE", "ISO", "IEC", "RFC", "NIST",
+    # Binary size units have the field-name shape (lower case, then a
+    # capital): a boot chain quoting "256 KiB" was withheld whole for it.
+    "KIB", "MIB", "GIB", "TIB", "PIB", "EIB",
 })
 
 _NOT_IDENTIFIERS = _BUILTIN_NOT_IDENTIFIERS | frozenset(
